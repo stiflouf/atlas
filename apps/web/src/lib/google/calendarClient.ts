@@ -37,3 +37,19 @@ export async function listerEvenements(
 
   return evenements;
 }
+
+// Récupère un événement précis par id — utilisé quand on doit ré-établir le contexte d'un
+// rendez-vous déjà rencontré (ex. ouverture de la page de préparation), sans conserver
+// d'état entre le chargement de l'agenda et cette consultation.
+export async function recupererEvenement(
+  accessToken: string,
+  eventId: string
+): Promise<GoogleCalendarEvent | undefined> {
+  const res = await fetch(`${EVENTS_URL}/${encodeURIComponent(eventId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (res.status === 404 || res.status === 410) return undefined;
+  if (!res.ok) throw new Error(`Google Calendar API : ${res.status}`);
+  return (await res.json()) as GoogleCalendarEvent;
+}
