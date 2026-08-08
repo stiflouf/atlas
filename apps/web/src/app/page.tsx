@@ -7,6 +7,8 @@ import { rendezVousDuJour, relances, actionsPrevues } from "@/data/agenda";
 import { getDossiersAvecAttention, type DossierBien } from "@/data/dossier";
 import { getBienById } from "@/data/biens";
 import type { Bien } from "@/types/bien";
+import { heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
+import { statutRendezVous } from "@/lib/rendezVous";
 
 function formatDate(): string {
   return new Date().toLocaleDateString("fr-FR", {
@@ -23,19 +25,18 @@ function getGreeting(hour: number): string {
   return "Bonsoir";
 }
 
-function parseHeureEnMinutes(heure: string): number {
-  const [h, m] = heure.replace("h", ":").split(":");
-  return parseInt(h, 10) * 60 + parseInt(m || "0", 10);
-}
-
 export default function AujourdHui() {
   const dateStr = formatDate();
-  const now = new Date();
-  const greeting = getGreeting(now.getHours());
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const maintenant = new Date();
+  const greeting = getGreeting(heureDuJour(maintenant));
+  const maintenantEnMinutes = minutesDepuisMinuit(maintenant);
 
-  const rdvAVenir = rendezVousDuJour.filter((rdv) => parseHeureEnMinutes(rdv.heure) >= nowMinutes);
-  const rdvPasses = rendezVousDuJour.length - rdvAVenir.length;
+  const rdvAvecStatut = rendezVousDuJour.map((rdv) => ({
+    rdv,
+    statut: statutRendezVous(rdv, maintenantEnMinutes),
+  }));
+  const rdvActifs = rdvAvecStatut.filter(({ statut }) => statut !== "termine");
+  const rdvTermines = rdvAvecStatut.length - rdvActifs.length;
 
   const dossiersAttention: { dossier: DossierBien; bien: Bien }[] = [];
   for (const dossier of getDossiersAvecAttention()) {
@@ -55,23 +56,23 @@ export default function AujourdHui() {
         </p>
       </div>
 
-      {/* Rendez-vous à venir */}
+      {/* Rendez-vous */}
       <section className="mb-8">
         <SectionTitle>
-          {rdvAVenir.length > 0
-            ? `${rdvAVenir.length} rendez-vous à venir`
+          {rdvActifs.length > 0
+            ? `${rdvActifs.length} rendez-vous restant${rdvActifs.length > 1 ? "s" : ""}`
             : "Aucun rendez-vous restant aujourd'hui"}
         </SectionTitle>
-        {rdvAVenir.length > 0 && (
+        {rdvActifs.length > 0 && (
           <div className="flex flex-col gap-2">
-            {rdvAVenir.map((rdv) => (
-              <AgendaCard key={rdv.id} rdv={rdv} />
+            {rdvActifs.map(({ rdv, statut }) => (
+              <AgendaCard key={rdv.id} rdv={rdv} statut={statut} />
             ))}
           </div>
         )}
-        {rdvPasses > 0 && (
+        {rdvTermines > 0 && (
           <p className="text-[12px] text-[#94a3b8] mt-2">
-            {rdvPasses} déjà passé{rdvPasses > 1 ? "s" : ""} aujourd'hui
+            {rdvTermines} déjà terminé{rdvTermines > 1 ? "s" : ""} aujourd'hui
           </p>
         )}
       </section>

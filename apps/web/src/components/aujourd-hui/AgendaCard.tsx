@@ -2,6 +2,7 @@ import Link from "next/link";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import type { RendezVous, TypeRdv } from "@/types/agenda";
+import type { StatutRendezVous } from "@/lib/rendezVous";
 import { getClientById } from "@/data/clients";
 
 const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default" | "muted" | "success" }> = {
@@ -12,7 +13,7 @@ const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default"
   reunion: { label: "Réunion", variant: "muted" },
 };
 
-export default function AgendaCard({ rdv }: { rdv: RendezVous }) {
+export default function AgendaCard({ rdv, statut }: { rdv: RendezVous; statut: StatutRendezVous }) {
   const { label, variant } = typeConfig[rdv.type];
   const client = rdv.client ? getClientById(rdv.client.id) : undefined;
   const callHref = client ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
@@ -24,6 +25,12 @@ export default function AgendaCard({ rdv }: { rdv: RendezVous }) {
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[13px] font-medium text-[#64748b] tabular-nums">{rdv.heure}</span>
             <Badge variant={variant}>{label}</Badge>
+            {statut === "en_cours" && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#16a34a]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a]" />
+                En cours
+              </span>
+            )}
           </div>
           <p className="text-[14px] font-medium text-[#0f172a] leading-snug">{rdv.titre}</p>
           {rdv.lieu && (

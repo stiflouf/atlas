@@ -5,6 +5,8 @@ export type TypeAction = "appel" | "message" | "email";
 export type RendezVous = {
   id: string;
   heure: string;
+  // Durée en minutes, si connue. Sinon une durée par défaut est utilisée selon le type.
+  dureeMinutes?: number;
   type: TypeRdv;
   titre: string;
   lieu?: string;
