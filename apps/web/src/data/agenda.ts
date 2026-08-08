@@ -57,19 +57,14 @@ export const relances: Relance[] = [
 export const actionsPrevues: ActionPrevue[] = [
   {
     id: "action-001",
-    label: "Compléter le dossier Moreau",
-    contexte: "Documents manquants : carte d'identité + avis d'imposition",
-    echeance: "2026-08-09",
+    label: "Préparer les éléments de négociation pour Jean-Marc Tissier",
+    contexte: "En vue de la relance prioritaire prévue aujourd'hui",
+    echeance: "2026-08-08",
   },
   {
     id: "action-002",
-    label: "Relire le compromis avant signature",
-    contexte: "Signature prévue jeudi 14 août — Dossier Vincennes",
-    echeance: "2026-08-13",
-  },
-  {
-    id: "action-003",
-    label: "Publier l'annonce Vincennes",
-    contexte: "Photos disponibles — en attente de validation du prix",
+    label: "Mettre à jour le tableau de suivi des mandats actifs",
+    contexte: "Point hebdomadaire avec l'agence",
+    echeance: "2026-08-09",
   },
 ];

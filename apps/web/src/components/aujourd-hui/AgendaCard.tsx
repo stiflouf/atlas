@@ -2,6 +2,7 @@ import Link from "next/link";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import type { RendezVous, TypeRdv } from "@/types/agenda";
+import { getClientById } from "@/data/clients";
 
 const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default" | "muted" | "success" }> = {
   visite: { label: "Visite", variant: "accent" },
@@ -13,6 +14,8 @@ const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default"
 
 export default function AgendaCard({ rdv }: { rdv: RendezVous }) {
   const { label, variant } = typeConfig[rdv.type];
+  const client = rdv.client ? getClientById(rdv.client.id) : undefined;
+  const callHref = client ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
 
   return (
     <Card>
@@ -40,6 +43,14 @@ export default function AgendaCard({ rdv }: { rdv: RendezVous }) {
           >
             Préparer&nbsp;→
           </Link>
+        )}
+        {!rdv.preparationDisponible && rdv.type === "appel" && callHref && (
+          <a
+            href={callHref}
+            className="shrink-0 self-center min-h-[44px] flex items-center text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+          >
+            Appeler&nbsp;→
+          </a>
         )}
       </div>
     </Card>
