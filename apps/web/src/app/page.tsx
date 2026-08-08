@@ -3,15 +3,16 @@ import RelanceCard from "@/components/aujourd-hui/RelanceCard";
 import ActionItem from "@/components/aujourd-hui/ActionItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { rendezVousDuJour, relances, actionsPrevues } from "@/data/agenda";
+import { relances, actionsPrevues } from "@/data/agenda";
 import { dossiers } from "@/data/dossier";
 import { getActionsPourBien } from "@/data/actions";
 import { getBienById } from "@/data/biens";
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
-import { heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
+import { formatDateISO, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
 import { statutRendezVous } from "@/lib/rendezVous";
 import { actionPrioritaire, raisonAction, scoreAction } from "@/lib/actionPriority";
+import { getAgendaSemaine } from "@/lib/google/agendaSource";
 
 function formatDate(): string {
   return new Date().toLocaleDateString("fr-FR", {
@@ -28,11 +29,18 @@ function getGreeting(hour: number): string {
   return "Bonsoir";
 }
 
-export default function AujourdHui() {
+export default async function AujourdHui() {
   const dateStr = formatDate();
   const maintenant = new Date();
   const greeting = getGreeting(heureDuJour(maintenant));
   const maintenantEnMinutes = minutesDepuisMinuit(maintenant);
+  const aujourdHuiISO = formatDateISO(maintenant);
+
+  const { rendezVous, source } = await getAgendaSemaine();
+  // La fenêtre de lecture couvre 7 jours (utile aux prochains sprints) ; cet écran ne montre
+  // que le jour courant. Les rendez-vous mockés n'ont pas de `date` : ils sont toujours
+  // considérés comme "aujourd'hui".
+  const rendezVousDuJour = rendezVous.filter((rdv) => !rdv.date || rdv.date === aujourdHuiISO);
 
   const rdvAvecStatut = rendezVousDuJour.map((rdv) => ({
     rdv,
@@ -68,6 +76,34 @@ export default function AujourdHui() {
             ? `${rdvActifs.length} rendez-vous restant${rdvActifs.length > 1 ? "s" : ""}`
             : "Aucun rendez-vous restant aujourd'hui"}
         </SectionTitle>
+
+        {source === "google_calendar" && (
+          <div className="text-[12px] text-[#94a3b8] mb-3">
+            Source : Google Calendar ·{" "}
+            <form action="/api/auth/google/logout" method="POST" className="inline">
+              <button type="submit" className="font-medium underline">
+                Déconnecter
+              </button>
+            </form>
+          </div>
+        )}
+        {source === "demo" && (
+          <div className="text-[12px] text-[#94a3b8] mb-3">
+            Source : Données de démonstration ·{" "}
+            <a href="/api/auth/google/login" className="text-[#4338ca] font-medium">
+              Connecter Google Calendar
+            </a>
+          </div>
+        )}
+        {source === "demo_erreur" && (
+          <div className="text-[12px] text-[#b45309] mb-3">
+            Google Calendar indisponible — données de démonstration affichées ·{" "}
+            <a href="/api/auth/google/login?reconnexion=1" className="font-medium underline">
+              Se reconnecter
+            </a>
+          </div>
+        )}
+
         {rdvActifs.length > 0 && (
           <div className="flex flex-col gap-2">
             {rdvActifs.map(({ rdv, statut }) => (
