@@ -11,7 +11,7 @@ import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import { heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
 import { statutRendezVous } from "@/lib/rendezVous";
-import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
+import { actionPrioritaire, raisonAction, scoreAction } from "@/lib/actionPriority";
 
 function formatDate(): string {
   return new Date().toLocaleDateString("fr-FR", {
@@ -47,6 +47,7 @@ export default function AujourdHui() {
     const action = actionPrioritaire(getActionsPourBien(dossier.bienId), maintenant);
     if (bien && action) dossiersAttention.push({ bien, action });
   }
+  dossiersAttention.sort((a, b) => scoreAction(b.action, maintenant) - scoreAction(a.action, maintenant));
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
