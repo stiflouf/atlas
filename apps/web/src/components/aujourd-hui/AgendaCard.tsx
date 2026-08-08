@@ -11,6 +11,7 @@ const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default"
   appel: { label: "Appel", variant: "muted" },
   signature: { label: "Signature", variant: "success" },
   reunion: { label: "Réunion", variant: "muted" },
+  evenement: { label: "Événement", variant: "muted" },
 };
 
 export default function AgendaCard({ rdv, statut }: { rdv: RendezVous; statut: StatutRendezVous }) {
@@ -23,9 +24,11 @@ export default function AgendaCard({ rdv, statut }: { rdv: RendezVous; statut: S
       <div className="flex items-start justify-between gap-4 p-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[13px] font-medium text-[#64748b] tabular-nums">{rdv.heure}</span>
+            <span className="text-[13px] font-medium text-[#64748b] tabular-nums">
+              {rdv.journeeEntiere ? "Toute la journée" : rdv.heure}
+            </span>
             <Badge variant={variant}>{label}</Badge>
-            {statut === "en_cours" && (
+            {statut === "en_cours" && !rdv.journeeEntiere && (
               <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#16a34a]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#16a34a]" />
                 En cours

@@ -28,3 +28,14 @@ export function parseHeureEnMinutes(heure: string): number {
   const [h, m] = heure.replace("h", ":").split(":");
   return parseInt(h, 10) * 60 + parseInt(m || "0", 10);
 }
+
+// Formate une date en "10h00", dans le fuseau donné.
+export function formatHeureFr(date: Date, fuseau: string = FUSEAU_HORAIRE_APP): string {
+  const { heure, minute } = partieHoraire(date, fuseau);
+  return `${heure}h${String(minute).padStart(2, "0")}`;
+}
+
+// Formate une date en "YYYY-MM-DD", dans le fuseau donné (jour calendaire local).
+export function formatDateISO(date: Date, fuseau: string = FUSEAU_HORAIRE_APP): string {
+  return new Intl.DateTimeFormat("fr-CA", { timeZone: fuseau }).format(date);
+}
