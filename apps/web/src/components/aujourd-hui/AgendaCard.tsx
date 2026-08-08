@@ -3,7 +3,11 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import type { RendezVous, TypeRdv } from "@/types/agenda";
 import type { StatutRendezVous } from "@/lib/rendezVous";
+import type { ContexteRendezVous } from "@/types/contexteRendezVous";
+import { SEUIL_AMBIGU, SEUIL_FORT } from "@/lib/matching/resoudre";
 import { getClientById } from "@/data/clients";
+import { getBienById } from "@/data/biens";
+import ConfirmationBienRdv from "./ConfirmationBienRdv";
 
 const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default" | "muted" | "success" }> = {
   visite: { label: "Visite", variant: "accent" },
@@ -14,10 +18,44 @@ const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default"
   evenement: { label: "Événement", variant: "muted" },
 };
 
-export default function AgendaCard({ rdv, statut }: { rdv: RendezVous; statut: StatutRendezVous }) {
+function labelCourtBien(titre: string): string {
+  return titre.split(" — ")[0] ?? titre;
+}
+
+export default function AgendaCard({
+  rdv,
+  statut,
+  contexte,
+}: {
+  rdv: RendezVous;
+  statut: StatutRendezVous;
+  contexte?: ContexteRendezVous;
+}) {
   const { label, variant } = typeConfig[rdv.type];
   const client = rdv.client ? getClientById(rdv.client.id) : undefined;
   const callHref = client ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
+
+  // Le contexte n'est exploité que s'il dépasse le seuil "ambigu" au global : en dessous,
+  // Atlas n'a rien d'assez solide à proposer et se comporte comme avant ce sprint.
+  const contexteExploitable = Boolean(contexte && contexte.overallConfidence >= SEUIL_AMBIGU);
+  const bienConfiant =
+    contexteExploitable && contexte?.bien && contexte.bien.confidence >= SEUIL_FORT ? contexte.bien : undefined;
+  const clientConfiant =
+    contexteExploitable && contexte?.client && contexte.client.confidence >= SEUIL_FORT
+      ? contexte.client
+      : undefined;
+  const estVisite = contexteExploitable && contexte?.typeMetier?.type === "visite";
+  const preparationDisponible = rdv.preparationDisponible || Boolean(bienConfiant && clientConfiant && estVisite);
+
+  const candidatsBanniere =
+    !preparationDisponible && contexteExploitable && contexte?.necessiteConfirmationBien
+      ? (contexte.bienCandidats ?? [])
+          .map((c) => {
+            const bien = getBienById(c.bienId);
+            return bien ? { bienId: c.bienId, titre: labelCourtBien(bien.titre) } : undefined;
+          })
+          .filter((c): c is { bienId: string; titre: string } => Boolean(c))
+      : [];
 
   return (
     <Card>
@@ -46,7 +84,7 @@ export default function AgendaCard({ rdv, statut }: { rdv: RendezVous; statut: S
           )}
         </div>
 
-        {rdv.preparationDisponible && (
+        {preparationDisponible && (
           <Link
             href={`/visites/${rdv.id}/preparer`}
             className="shrink-0 self-center min-h-[44px] flex items-center text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
@@ -54,13 +92,16 @@ export default function AgendaCard({ rdv, statut }: { rdv: RendezVous; statut: S
             Préparer&nbsp;→
           </Link>
         )}
-        {!rdv.preparationDisponible && rdv.type === "appel" && callHref && (
+        {!preparationDisponible && rdv.type === "appel" && callHref && (
           <a
             href={callHref}
             className="shrink-0 self-center min-h-[44px] flex items-center text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
           >
             Appeler&nbsp;→
           </a>
+        )}
+        {!preparationDisponible && candidatsBanniere.length > 0 && (
+          <ConfirmationBienRdv rdvId={rdv.id} candidats={candidatsBanniere} />
         )}
       </div>
     </Card>

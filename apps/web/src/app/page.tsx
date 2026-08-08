@@ -6,13 +6,15 @@ import SectionTitle from "@/components/ui/SectionTitle";
 import { relances, actionsPrevues } from "@/data/agenda";
 import { dossiers } from "@/data/dossier";
 import { getActionsPourBien } from "@/data/actions";
-import { getBienById } from "@/data/biens";
+import { biens, getBienById } from "@/data/biens";
+import { clients } from "@/data/clients";
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import { formatDateISO, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
 import { statutRendezVous } from "@/lib/rendezVous";
 import { actionPrioritaire, raisonAction, scoreAction } from "@/lib/actionPriority";
 import { getAgendaSemaine } from "@/lib/google/agendaSource";
+import { construireContexte } from "@/lib/matching";
 
 function formatDate(): string {
   return new Date().toLocaleDateString("fr-FR", {
@@ -45,6 +47,7 @@ export default async function AujourdHui() {
   const rdvAvecStatut = rendezVousDuJour.map((rdv) => ({
     rdv,
     statut: statutRendezVous(rdv, maintenantEnMinutes),
+    contexte: construireContexte(rdv, { biens, clients }),
   }));
   const rdvActifs = rdvAvecStatut.filter(({ statut }) => statut !== "termine");
   const rdvTermines = rdvAvecStatut.length - rdvActifs.length;
@@ -106,8 +109,8 @@ export default async function AujourdHui() {
 
         {rdvActifs.length > 0 && (
           <div className="flex flex-col gap-2">
-            {rdvActifs.map(({ rdv, statut }) => (
-              <AgendaCard key={rdv.id} rdv={rdv} statut={statut} />
+            {rdvActifs.map(({ rdv, statut, contexte }) => (
+              <AgendaCard key={rdv.id} rdv={rdv} statut={statut} contexte={contexte} />
             ))}
           </div>
         )}
