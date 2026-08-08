@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { echangerCodeContreTokens } from "@/lib/google/oauth";
 import { lireEtSupprimerStateTemporaire } from "@/lib/google/state";
-import { ecrireTokens } from "@/lib/google/tokens";
+import { ecrireConnexionGoogle } from "@/lib/google/connexion";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
   try {
     const tokens = await echangerCodeContreTokens(code);
-    await ecrireTokens({ refreshToken: tokens.refreshToken });
+    await ecrireConnexionGoogle(tokens.refreshToken, tokens.scope);
   } catch (e) {
     console.error("[google-calendar] échec de l'échange de code OAuth :", e);
     return NextResponse.redirect(new URL("/?google=erreur", url.origin));

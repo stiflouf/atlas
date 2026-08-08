@@ -33,6 +33,7 @@ export type TokensGoogle = {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+  scope: string;
 };
 
 export async function echangerCodeContreTokens(code: string): Promise<TokensGoogle> {
@@ -59,6 +60,7 @@ export async function echangerCodeContreTokens(code: string): Promise<TokensGoog
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
     expiresAt: Date.now() + data.expires_in * 1000,
+    scope: data.scope,
   };
 }
 
@@ -82,7 +84,7 @@ export async function rafraichirAccessToken(
 }
 
 // La révocation est une bonne pratique de déconnexion, pas une garantie : on ne bloque jamais
-// la déconnexion locale (suppression du cookie) si l'appel à Google échoue.
+// la déconnexion locale (suppression de la connexion en base) si l'appel à Google échoue.
 export async function revoquerToken(token: string): Promise<void> {
   try {
     await fetch(`${REVOKE_URL}?token=${encodeURIComponent(token)}`, { method: "POST" });

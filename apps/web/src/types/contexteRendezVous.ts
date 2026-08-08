@@ -13,7 +13,9 @@ export type SourceCorrespondance =
   | "prenom_client" // prénom seul trouvé
   | "type_calendar_connu" // le rendez-vous a déjà un type concret (mock)
   | "mot_cle_type" // mot-clé explicite trouvé dans le titre
-  | "aucun_indice"; // aucune règle n'a pu se prononcer
+  | "aucun_indice" // aucune règle n'a pu se prononcer
+  | "validation_humaine" // le conseiller a confirmé ou corrigé ce bien (persisté, Sprint 4)
+  | "cache_persiste"; // résultat automatique précédent réutilisé sans recalcul (empreinte inchangée)
 
 export type CandidatBien = { bienId: string; confidence: number; matchedBy: SourceCorrespondance };
 export type CandidatClient = { clientId: string; confidence: number; matchedBy: SourceCorrespondance };

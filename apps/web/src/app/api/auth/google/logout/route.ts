@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { revoquerToken } from "@/lib/google/oauth";
-import { lireTokens, supprimerTokens } from "@/lib/google/tokens";
+import { lireConnexionGoogle, supprimerConnexionGoogle } from "@/lib/google/connexion";
 
-// POST plutôt que GET : cette route mute l'état (révocation + suppression de cookie),
-// elle ne doit pas pouvoir être déclenchée par un simple lien ou un prefetch.
+// POST plutôt que GET : cette route mute l'état (révocation + suppression en base), elle ne
+// doit pas pouvoir être déclenchée par un simple lien ou un prefetch.
 export async function POST(request: Request) {
-  const tokens = await lireTokens();
-  if (tokens?.refreshToken) {
-    await revoquerToken(tokens.refreshToken);
+  const connexion = await lireConnexionGoogle();
+  if (connexion?.refreshToken) {
+    await revoquerToken(connexion.refreshToken);
   }
-  await supprimerTokens();
+  await supprimerConnexionGoogle();
   return NextResponse.redirect(new URL("/", request.url));
 }

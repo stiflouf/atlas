@@ -1,6 +1,6 @@
 import { rendezVousDuJour } from "@/data/agenda";
 import type { RendezVous } from "@/types/agenda";
-import { lireTokens } from "./tokens";
+import { lireConnexionGoogle } from "./connexion";
 import { rafraichirAccessToken } from "./oauth";
 import { listerEvenements } from "./calendarClient";
 import { toRendezVous } from "./adapter";
@@ -14,13 +14,22 @@ const JOURS_FENETRE = 7;
 // ou si l'appel échoue (token révoqué, API indisponible, etc.). L'appelant reste responsable
 // d'afficher honnêtement la source retournée — jamais de mock présenté comme réel.
 export async function getAgendaSemaine(): Promise<{ rendezVous: RendezVous[]; source: SourceAgenda }> {
-  const tokens = await lireTokens();
-  if (!tokens) {
+  let connexion;
+  try {
+    connexion = await lireConnexionGoogle();
+  } catch (erreur) {
+    // Base de données injoignable : on ne peut même pas savoir si Google est connecté.
+    // Repli silencieux sur la démo plutôt que de casser l'écran.
+    console.error("[google-calendar] base de données indisponible :", erreur);
+    return { rendezVous: rendezVousDuJour, source: "demo" };
+  }
+
+  if (!connexion) {
     return { rendezVous: rendezVousDuJour, source: "demo" };
   }
 
   try {
-    const { accessToken } = await rafraichirAccessToken(tokens.refreshToken);
+    const { accessToken } = await rafraichirAccessToken(connexion.refreshToken);
 
     const maintenant = new Date();
     const dansUneSemaine = new Date(maintenant.getTime() + JOURS_FENETRE * 24 * 60 * 60 * 1000);
