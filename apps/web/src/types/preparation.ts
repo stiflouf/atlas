@@ -38,11 +38,14 @@ export type PreparationVisite = {
   acquereur: ProfilAcquereur;
   dateVisite: string;
   heureVisite: string;
+  resumeBien: string;
   pointsForts: string[];
   vigilances: string[];
   questionsASuggerer: string[];
   objectionsProbables: Objection[];
   contextQuartier: ContexteQuartier;
   analyseMarche: AnalyseMarche;
-  histoireLocale?: string;
+  // Éléments de contexte humain (histoire, anecdotes, patrimoine, évolution du secteur)
+  // que le conseiller peut mobiliser si l'échange s'y prête — jamais une trame à réciter.
+  contexteHumain?: string[];
 };

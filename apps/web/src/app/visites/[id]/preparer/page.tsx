@@ -58,6 +58,12 @@ export default async function PreparerVisite({ params }: PageProps) {
         </div>
       </div>
 
+      {/* Résumé du bien */}
+      <section className="mb-8">
+        <SectionTitle>Résumé du bien</SectionTitle>
+        <p className="text-[14px] text-[#64748b] leading-relaxed">{prep.resumeBien}</p>
+      </section>
+
       {/* Profil acquéreur */}
       <section className="mb-8 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
         <div className="flex items-center gap-2 mb-3">
@@ -215,15 +221,28 @@ export default async function PreparerVisite({ params }: PageProps) {
         </div>
       </section>
 
-      {/* Histoire locale */}
-      {prep.histoireLocale && (
+      {/* Contexte humain — à raconter si pertinent */}
+      {prep.contexteHumain && prep.contexteHumain.length > 0 && (
         <section className="mb-8">
-          <SectionTitle>Histoire locale</SectionTitle>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-            <p className="text-[14px] text-[#64748b] leading-relaxed">{prep.histoireLocale}</p>
+          <SectionTitle>À raconter si pertinent</SectionTitle>
+          <p className="text-[13px] text-[#94a3b8] mb-3 leading-relaxed">
+            Quelques repères de contexte — à utiliser ou non, selon la manière dont se passe la visite.
+          </p>
+          <div className="flex flex-col gap-2">
+            {prep.contexteHumain.map((item, i) => (
+              <div key={i} className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3">
+                <p className="text-[14px] text-[#64748b] leading-relaxed">{item}</p>
+              </div>
+            ))}
           </div>
         </section>
       )}
+
+      {/* Rappel du principe Atlas */}
+      <p className="text-[12px] text-[#94a3b8] leading-relaxed border-t border-[#f1f5f9] pt-4 mb-6">
+        Ces éléments sont des suggestions pour vous aider à préparer la visite — ils ne remplacent ni
+        votre jugement, ni la relation que vous construisez avec l'acquéreur.
+      </p>
     </div>
   );
 }

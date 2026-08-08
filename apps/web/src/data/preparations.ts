@@ -10,6 +10,9 @@ export const preparations: PreparationVisite[] = [
     dateVisite: "2026-08-07",
     heureVisite: "10h00",
 
+    resumeBien:
+      "3 pièces de 68m² au 4e étage d'un immeuble Haussmann rénové en 2019, plein sud, à 3 minutes du métro Oberkampf. Affiché 17% sous le prix moyen du secteur, avec des charges faibles — mais sans ascenseur ni parking.",
+
     pointsForts: [
       "Luminosité exceptionnelle — double exposition plein sud, lumière toute la journée",
       "Métro Oberkampf (ligne 9) à 3 minutes à pied — trajet direct vers le 8e",
@@ -111,8 +114,12 @@ export const preparations: PreparationVisite[] = [
       ],
     },
 
-    histoireLocale:
-      "Le quartier Oberkampf tire son nom de Christophe-Philippe Oberkampf (1738–1815), industriel allemand naturalisé français qui fonda la Manufacture royale de toiles peintes de Jouy-en-Josas. La rue porte son nom depuis 1864. Le Cirque d'Hiver, à 500m, a été inauguré en 1852 sous Napoléon III et accueille toujours des spectacles. Le quartier a connu une forte gentrification dans les années 1990-2000, tout en conservant son caractère populaire et cosmopolite. C'est aujourd'hui l'un des secteurs les plus dynamiques et recherchés de la Rive Droite.",
+    contexteHumain: [
+      "Le quartier tire son nom de Christophe-Philippe Oberkampf (1738–1815), industriel qui fonda la Manufacture royale de toiles peintes de Jouy-en-Josas ; la rue porte son nom depuis 1864.",
+      "Le Cirque d'Hiver, à 500m, inauguré en 1852 sous Napoléon III, accueille toujours des spectacles aujourd'hui.",
+      "Le quartier a connu une forte gentrification dans les années 1990-2000, tout en conservant son caractère populaire et cosmopolite — l'un des secteurs les plus dynamiques de la Rive Droite.",
+      "L'immeuble lui-même, construit à la fin du XIXe siècle, illustre bien ce mélange : architecture haussmannienne classique et rénovation intérieure entièrement contemporaine.",
+    ],
   },
 ];
 
