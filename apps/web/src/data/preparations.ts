@@ -123,6 +123,9 @@ export const preparations: PreparationVisite[] = [
   },
 ];
 
-export function getPreparationByRdvId(rdvId: string): PreparationVisite | undefined {
-  return preparations.find((p) => `prep-${rdvId}` === p.id);
+// Recherche par (bien, client) plutôt que par id de rendez-vous : une préparation curatée
+// concerne un couple bien/acquéreur, pas un événement de calendrier précis — c'est ce couple
+// que le moteur de correspondance (Sprint 3) résout, quelle que soit la source du rendez-vous.
+export function getPreparationPourBienEtClient(bienId: string, clientId: string): PreparationVisite | undefined {
+  return preparations.find((p) => p.bien.id === bienId && p.acquereur.id === clientId);
 }
