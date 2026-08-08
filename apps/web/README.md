@@ -35,11 +35,49 @@ The easiest way to deploy your Next.js app is to use the [Vercel Platform](https
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
+## Base de données (Sprint 4)
+
+Depuis le Sprint 4, l'app a besoin d'un Postgres accessible **même en mode démo** : la connexion
+Google Calendar est un fait serveur stocké en base (`connexions_google`), plus un cookie —
+`getAgendaSemaine()` interroge donc la base pour savoir si Google est connecté avant même de
+décider d'utiliser les mocks. Voir `docs/adr/006-memory-architecture.md` pour le détail des choix.
+
+### 1. Démarrer Postgres localement
+
+```bash
+docker compose -f infra/docker-compose.yml up -d
+```
+
+### 2. Renseigner `DATABASE_URL`
+
+Dans `.env.local` (voir `.env.local.example`) :
+
+```
+DATABASE_URL=postgresql://atlas:atlas@localhost:5432/atlas
+```
+
+### 3. Appliquer les migrations
+
+```bash
+pnpm db:migrate
+```
+
+Les fichiers SQL sont dans `src/db/migrations/` et commités — c'est ce SQL, pas le schéma
+Drizzle, qui fait foi du schéma physique. `pnpm db:generate` régénère une migration après une
+modification de `src/db/schema.ts`.
+
+### Si tu avais déjà connecté Google Calendar avant ce sprint
+
+Le refresh token vivait dans un cookie (`atlas_google_tokens`), qui n'est plus lu par le code.
+Une reconnexion via *"Connecter Google Calendar"* sera nécessaire une fois — c'est attendu, pas
+un bug.
+
 ## Google Calendar (Sprint 2)
 
 L'écran "Aujourd'hui" peut afficher les vrais rendez-vous du conseiller depuis Google Calendar
 (lecture seule) au lieu des données de démonstration. Sans connexion configurée, l'app continue
-de fonctionner normalement avec les mocks.
+de fonctionner normalement avec les mocks (à condition que Postgres soit démarré, voir
+ci-dessus).
 
 ### 1. Créer les credentials OAuth dans Google Cloud Console
 
@@ -102,3 +140,21 @@ Puis renseigner :
    afficher *"Google Calendar indisponible — données de démonstration affichées"* avec un lien
    *"Se reconnecter"* (celui-ci force à nouveau l'écran de consentement pour obtenir un nouveau
    refresh token).
+
+## Tester la mémoire persistée (Sprint 4)
+
+Pour observer la priorité "validation humaine > cache > moteur de matching" :
+
+1. Connecter Google Calendar (voir ci-dessus) et créer un événement dont le lieu ou le titre
+   correspond partiellement à deux biens du catalogue mocké (`data/biens.ts`), pour déclencher
+   une ambiguïté — la bannière *"Ce rendez-vous concerne-t-il [bien] ?"* doit apparaître.
+2. Cliquer *Oui* (ou *Choisir un autre bien*) : le lien *Préparer* apparaît immédiatement.
+   Rafraîchir la page entière (pas juste naviguer) : la bannière ne doit **plus** réapparaître —
+   la décision est lue depuis `memoire_contextuelle`, pas recalculée.
+3. Modifier le titre ou le lieu de cet événement dans Google Calendar : au rechargement, la
+   décision humaine doit rester appliquée (elle prime, même si l'événement a changé).
+4. Créer un événement clairement rattaché à un seul bien (adresse exacte) : au premier
+   chargement il est résolu automatiquement ; en inspectant la table `memoire_contextuelle`
+   (`statut_validation = 'auto'`), on doit y retrouver une ligne. Modifier un champ pertinent de
+   l'événement (titre ou lieu) et recharger : la ligne doit être mise à jour (nouvelle
+   `empreinte_contenu`) plutôt que dupliquée.
