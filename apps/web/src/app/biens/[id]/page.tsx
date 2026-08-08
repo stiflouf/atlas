@@ -5,6 +5,8 @@ import Badge from "@/components/ui/Badge";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/data/biens";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
+import { getActionsPourBien } from "@/data/actions";
+import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 
 function formatPrix(prix: number): string {
@@ -29,6 +31,8 @@ export default async function FicheBien({ params }: PageProps) {
   if (!bien) notFound();
 
   const dossier = getDossierByBienId(bien.id);
+  const actions = getActionsPourBien(bien.id);
+  const actionPrincipale = actionPrioritaire(actions);
   const prochaineVisite = rendezVousDuJour.find(
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
   );
@@ -86,8 +90,8 @@ export default async function FicheBien({ params }: PageProps) {
                 Dernière activité le {formatDate(dossier.derniereActivite)}
               </span>
             </div>
-            {dossier.raisonAttention && (
-              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{dossier.raisonAttention}</p>
+            {actionPrincipale && (
+              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonAction(actionPrincipale)}</p>
             )}
           </div>
         )}
@@ -103,7 +107,7 @@ export default async function FicheBien({ params }: PageProps) {
       </div>
 
       {/* Onglets */}
-      {dossier && <BienTabs bien={bien} dossier={dossier} />}
+      {dossier && <BienTabs bien={bien} dossier={dossier} actions={actions} />}
     </div>
   );
 }

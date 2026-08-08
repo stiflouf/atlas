@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
+import type { ActionMetier } from "@/types/action";
 import { rendezVousDuJour } from "@/data/agenda";
 
 type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "actions";
@@ -20,7 +21,15 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default function BienTabs({ bien, dossier }: { bien: Bien; dossier: DossierBien }) {
+export default function BienTabs({
+  bien,
+  dossier,
+  actions,
+}: {
+  bien: Bien;
+  dossier: DossierBien;
+  actions: ActionMetier[];
+}) {
   const [active, setActive] = useState<Tab>("contexte");
 
   const visitesAVenir = rendezVousDuJour.filter((rdv) => rdv.bien?.id === bien.id);
@@ -145,15 +154,23 @@ export default function BienTabs({ bien, dossier }: { bien: Bien; dossier: Dossi
 
       {active === "actions" && (
         <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
-          {dossier.actions.map((action) => (
-            <div key={action.id} className="flex items-start gap-3 py-3">
-              <div className="w-4 h-4 mt-0.5 rounded border border-[#e2e8f0] shrink-0" />
-              <div>
-                <p className="text-[14px] text-[#0f172a]">{action.label}</p>
-                {action.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{action.contexte}</p>}
+          {actions.length === 0 ? (
+            <p className="text-[14px] text-[#94a3b8] py-3">Aucune action en cours sur ce dossier.</p>
+          ) : (
+            actions.map((action) => (
+              <div key={action.id} className="flex items-start gap-3 py-3">
+                <div
+                  className={`w-4 h-4 mt-0.5 rounded border shrink-0 ${
+                    action.statut === "termine" ? "bg-[#f1f5f9] border-[#e2e8f0]" : "border-[#e2e8f0]"
+                  }`}
+                />
+                <div>
+                  <p className="text-[14px] text-[#0f172a]">{action.titre}</p>
+                  {action.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{action.contexte}</p>}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
     </div>

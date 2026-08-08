@@ -4,11 +4,14 @@ import ActionItem from "@/components/aujourd-hui/ActionItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { rendezVousDuJour, relances, actionsPrevues } from "@/data/agenda";
-import { getDossiersAvecAttention, type DossierBien } from "@/data/dossier";
+import { dossiers } from "@/data/dossier";
+import { getActionsPourBien } from "@/data/actions";
 import { getBienById } from "@/data/biens";
 import type { Bien } from "@/types/bien";
+import type { ActionMetier } from "@/types/action";
 import { heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
 import { statutRendezVous } from "@/lib/rendezVous";
+import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 
 function formatDate(): string {
   return new Date().toLocaleDateString("fr-FR", {
@@ -38,10 +41,11 @@ export default function AujourdHui() {
   const rdvActifs = rdvAvecStatut.filter(({ statut }) => statut !== "termine");
   const rdvTermines = rdvAvecStatut.length - rdvActifs.length;
 
-  const dossiersAttention: { dossier: DossierBien; bien: Bien }[] = [];
-  for (const dossier of getDossiersAvecAttention()) {
+  const dossiersAttention: { bien: Bien; action: ActionMetier }[] = [];
+  for (const dossier of dossiers) {
     const bien = getBienById(dossier.bienId);
-    if (bien) dossiersAttention.push({ dossier, bien });
+    const action = actionPrioritaire(getActionsPourBien(dossier.bienId), maintenant);
+    if (bien && action) dossiersAttention.push({ bien, action });
   }
 
   return (
@@ -96,8 +100,8 @@ export default function AujourdHui() {
         <section className="mb-8">
           <SectionTitle>Dossiers nécessitant une action</SectionTitle>
           <div className="flex flex-col gap-2">
-            {dossiersAttention.map(({ dossier, bien }) => (
-              <DossierActionCard key={dossier.bienId} bien={bien} raison={dossier.raisonAttention!} />
+            {dossiersAttention.map(({ bien, action }) => (
+              <DossierActionCard key={bien.id} bien={bien} raison={raisonAction(action)} />
             ))}
           </div>
         </section>
