@@ -4,10 +4,22 @@ import { ArrowLeft, Building2 } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/data/biens";
+import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
+import { rendezVousDuJour } from "@/data/agenda";
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
 }
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+const statutConfig: Record<StatutDossier, { label: string; variant: "default" | "accent" | "success" }> = {
+  en_commercialisation: { label: "En commercialisation", variant: "default" },
+  offre_en_cours: { label: "Offre en cours", variant: "accent" },
+  compromis_signe: { label: "Compromis signé", variant: "success" },
+};
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -15,6 +27,11 @@ export default async function FicheBien({ params }: PageProps) {
   const { id } = await params;
   const bien = getBienById(id);
   if (!bien) notFound();
+
+  const dossier = getDossierByBienId(bien.id);
+  const prochaineVisite = rendezVousDuJour.find(
+    (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
+  );
 
   const dateMandat = new Date(bien.dateMandat).toLocaleDateString("fr-FR", {
     day: "numeric",
@@ -57,10 +74,36 @@ export default async function FicheBien({ params }: PageProps) {
           <Badge variant="accent">{bien.reference}</Badge>
           <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
         </div>
+
+        {/* État du dossier — visible immédiatement */}
+        {dossier && (
+          <div className="mt-4 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={statutConfig[dossier.statut].variant}>
+                {statutConfig[dossier.statut].label}
+              </Badge>
+              <span className="text-[12px] text-[#94a3b8]">
+                Dernière activité le {formatDate(dossier.derniereActivite)}
+              </span>
+            </div>
+            {dossier.raisonAttention && (
+              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{dossier.raisonAttention}</p>
+            )}
+          </div>
+        )}
+
+        {prochaineVisite && (
+          <Link
+            href={`/visites/${prochaineVisite.id}/preparer`}
+            className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+          >
+            Préparer une visite →
+          </Link>
+        )}
       </div>
 
       {/* Onglets */}
-      <BienTabs bien={bien} />
+      {dossier && <BienTabs bien={bien} dossier={dossier} />}
     </div>
   );
 }
