@@ -2,15 +2,16 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { enregistrerValidationBien } from "@/actions/validationRendezVous";
 
 type Candidat = { bienId: string; titre: string };
 type Etat = "attente" | "choix" | "confirme" | "ignore";
 
-// Validation humaine d'un bien ambigu. L'état reste local à ce composant — il n'est pas
-// persisté (pas de base de données pour ce sprint) : un rafraîchissement de page réaffichera
-// la question. Le lien "Préparer" pointe toujours vers /visites/{rdvId}/preparer, qui résout
-// son propre contexte de façon indépendante ; le bien choisi ici sert uniquement de retour
-// visuel immédiat au conseiller, pas à transmettre un choix à la page suivante.
+// Validation humaine d'un bien ambigu. La décision est persistée (Sprint 4, ADR-006) : au
+// prochain chargement, elle sera utilisée avant toute règle automatique. La transition de l'UI
+// reste optimiste — elle ne bloque pas sur la réponse du serveur — et l'appel est best-effort :
+// un échec d'écriture réaffichera simplement la question au prochain chargement, sans casser
+// l'interaction en cours.
 export default function ConfirmationBienRdv({
   rdvId,
   candidats,
@@ -20,6 +21,21 @@ export default function ConfirmationBienRdv({
 }) {
   const [etat, setEtat] = useState<Etat>("attente");
   const [choisi, setChoisi] = useState<Candidat>(candidats[0]);
+
+  function valider(candidat: Candidat, decision: "confirme" | "corrige") {
+    setChoisi(candidat);
+    setEtat("confirme");
+    enregistrerValidationBien(rdvId, decision, candidat.bienId).catch((erreur) => {
+      console.error("[confirmation-bien] échec de l'enregistrement :", erreur);
+    });
+  }
+
+  function ignorer() {
+    setEtat("ignore");
+    enregistrerValidationBien(rdvId, "ignore", null).catch((erreur) => {
+      console.error("[confirmation-bien] échec de l'enregistrement :", erreur);
+    });
+  }
 
   if (etat === "ignore" || candidats.length === 0) return null;
 
@@ -41,18 +57,11 @@ export default function ConfirmationBienRdv({
     return (
       <div className="flex flex-col items-end gap-1 text-[12px]">
         {candidats.map((c) => (
-          <button
-            key={c.bienId}
-            onClick={() => {
-              setChoisi(c);
-              setEtat("confirme");
-            }}
-            className="text-[#4338ca] font-medium"
-          >
+          <button key={c.bienId} onClick={() => valider(c, "corrige")} className="text-[#4338ca] font-medium">
             {c.titre}
           </button>
         ))}
-        <button onClick={() => setEtat("ignore")} className="text-[#94a3b8]">
+        <button onClick={ignorer} className="text-[#94a3b8]">
           Annuler
         </button>
       </div>
@@ -63,13 +72,7 @@ export default function ConfirmationBienRdv({
     <div className="text-[12px] text-[#64748b] max-w-[200px] text-right">
       <p className="mb-1.5 leading-snug">Ce rendez-vous concerne-t-il {candidats[0].titre} ?</p>
       <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
-        <button
-          onClick={() => {
-            setChoisi(candidats[0]);
-            setEtat("confirme");
-          }}
-          className="font-medium text-[#4338ca]"
-        >
+        <button onClick={() => valider(candidats[0], "confirme")} className="font-medium text-[#4338ca]">
           Oui
         </button>
         {candidats.length > 1 && (
@@ -77,7 +80,7 @@ export default function ConfirmationBienRdv({
             Choisir un autre bien
           </button>
         )}
-        <button onClick={() => setEtat("ignore")} className="text-[#94a3b8]">
+        <button onClick={ignorer} className="text-[#94a3b8]">
           Ignorer
         </button>
       </div>

@@ -15,6 +15,13 @@ import { statutRendezVous } from "@/lib/rendezVous";
 import { actionPrioritaire, raisonAction, scoreAction } from "@/lib/actionPriority";
 import { getAgendaSemaine } from "@/lib/google/agendaSource";
 import { construireContexte } from "@/lib/matching";
+import { resoudreContextesPersistes } from "@/lib/contexteRepository";
+
+// Sans cookie (Sprint 4 a retiré le cookie de tokens Google), plus aucune API Next "dynamique"
+// n'est appelée ici — une requête Postgres ne suffit pas à elle seule à empêcher la génération
+// statique. Cette page dépend de l'heure courante, de l'état live de Google Calendar et des
+// décisions humaines en base : elle doit être recalculée à chaque requête, jamais figée au build.
+export const dynamic = "force-dynamic";
 
 function formatDate(): string {
   return new Date().toLocaleDateString("fr-FR", {
@@ -44,10 +51,17 @@ export default async function AujourdHui() {
   // considérés comme "aujourd'hui".
   const rendezVousDuJour = rendezVous.filter((rdv) => !rdv.date || rdv.date === aujourdHuiISO);
 
+  // Les rendez-vous Google passent par la mémoire persistée (validation humaine > cache >
+  // moteur, cf. ADR-006) ; les mocks n'en ont pas besoin, leur contexte est déjà explicite.
+  const contextes =
+    source === "google_calendar"
+      ? await resoudreContextesPersistes(rendezVousDuJour, { biens, clients })
+      : new Map(rendezVousDuJour.map((rdv) => [rdv.id, construireContexte(rdv, { biens, clients })]));
+
   const rdvAvecStatut = rendezVousDuJour.map((rdv) => ({
     rdv,
     statut: statutRendezVous(rdv, maintenantEnMinutes),
-    contexte: construireContexte(rdv, { biens, clients }),
+    contexte: contextes.get(rdv.id)!,
   }));
   const rdvActifs = rdvAvecStatut.filter(({ statut }) => statut !== "termine");
   const rdvTermines = rdvAvecStatut.length - rdvActifs.length;
