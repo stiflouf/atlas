@@ -1,0 +1,191 @@
+{
+  "id": "471d0711-7508-46a6-9bc8-688b2e9f0cc8",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.connexions_google": {
+      "name": "connexions_google",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "'default'"
+        },
+        "refresh_token_chiffre": {
+          "name": "refresh_token_chiffre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.memoire_contextuelle": {
+      "name": "memoire_contextuelle",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type_element": {
+          "name": "type_element",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "identifiant_externe": {
+          "name": "identifiant_externe",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type_metier": {
+          "name": "type_metier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'autre'"
+        },
+        "confidence_bien": {
+          "name": "confidence_bien",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence_client": {
+          "name": "confidence_client",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence_type": {
+          "name": "confidence_type",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "overall_confidence": {
+          "name": "overall_confidence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut_validation": {
+          "name": "statut_validation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'auto'"
+        },
+        "empreinte_contenu": {
+          "name": "empreinte_contenu",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "memoire_contextuelle_source_identifiant_externe_unique": {
+          "name": "memoire_contextuelle_source_identifiant_externe_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "source",
+            "identifiant_externe"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "memoire_contextuelle_type_metier_check": {
+          "name": "memoire_contextuelle_type_metier_check",
+          "value": "\"memoire_contextuelle\".\"type_metier\" IN ('visite','estimation','appel','signature','prospection','autre')"
+        },
+        "memoire_contextuelle_statut_validation_check": {
+          "name": "memoire_contextuelle_statut_validation_check",
+          "value": "\"memoire_contextuelle\".\"statut_validation\" IN ('auto','confirme','corrige','ignore')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
