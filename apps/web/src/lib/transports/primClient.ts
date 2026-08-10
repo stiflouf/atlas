@@ -46,7 +46,8 @@ export async function rechercherArretsProches(
         modes: (p.stop_area.commercial_modes ?? []).map((m) => m.name),
         lignes: (p.stop_area.lines ?? []).map((l) => l.code).filter((c): c is string => Boolean(c)),
         distanceMetres: Math.round(Number(p.distance)),
-      }));
+      }))
+      .sort((a, b) => a.distanceMetres - b.distanceMetres);
 
     return { arrets, source: "prim_idfm_navitia", recupereLe: new Date().toISOString() };
   } catch (erreur) {

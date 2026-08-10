@@ -1,9 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MapPin, User } from "lucide-react";
+import { ArrowLeft, User } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
-import PrepObjections from "@/components/visite/PrepObjections";
 import { getPreparationPourBienEtClient } from "@/data/preparations";
 import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
 import { getBienById } from "@/data/biens";
@@ -142,7 +141,7 @@ export default async function PreparerVisite({ params }: PageProps) {
   const prep =
     getPreparationPourBienEtClient(bien.id, acquereur.id) ?? construirePreparationMinimale(rdv, bien, acquereur);
 
-  const { acquereur: aq, contextQuartier: quartier } = prep;
+  const { acquereur: aq } = prep;
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -325,7 +324,7 @@ export default async function PreparerVisite({ params }: PageProps) {
       {/* Résumé du bien */}
       <section className="mb-8">
         <SectionTitle>Résumé du bien</SectionTitle>
-        <p className="text-[14px] text-[#64748b] leading-relaxed">{prep.resumeBien}</p>
+        <p className="text-[14px] text-[#64748b] leading-relaxed">{bien.description}</p>
       </section>
 
       {/* Profil acquéreur */}
@@ -361,94 +360,19 @@ export default async function PreparerVisite({ params }: PageProps) {
         )}
       </section>
 
-      {/* Points forts */}
-      {prep.pointsForts && prep.pointsForts.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>Points forts à mettre en valeur</SectionTitle>
-          <div className="flex flex-col gap-2">
-            {prep.pointsForts.map((point, i) => (
-              <div key={i} className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 flex items-start gap-3">
-                <span className="text-[#4338ca] font-medium shrink-0 mt-0.5">·</span>
-                <p className="text-[14px] text-[#0f172a] leading-snug">{point}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Vigilances */}
-      {prep.vigilances && prep.vigilances.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>Points de vigilance</SectionTitle>
-          <div className="flex flex-col gap-2">
-            {prep.vigilances.map((v, i) => (
-              <div key={i} className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 flex items-start gap-3">
-                <span className="text-[#dc2626] shrink-0 mt-0.5 text-[13px] font-medium">!</span>
-                <p className="text-[14px] text-[#64748b] leading-snug">{v}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Questions */}
+      {/* Questions suggérées — aide au conseiller, pas une donnée factuelle sur le bien/l'acquéreur */}
       {prep.questionsASuggerer && prep.questionsASuggerer.length > 0 && (
         <section className="mb-8">
-          <SectionTitle>Questions à poser</SectionTitle>
+          <SectionTitle>Questions suggérées pour la visite</SectionTitle>
+          <p className="text-[13px] text-[#94a3b8] mb-3 leading-relaxed">
+            Une aide pour préparer l'entretien — pas une information sur le bien ou l'acquéreur.
+          </p>
           <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9]">
             {prep.questionsASuggerer.map((q, i) => (
               <p key={i} className="py-3 text-[14px] text-[#0f172a] leading-snug">
                 {q}
               </p>
             ))}
-          </div>
-        </section>
-      )}
-
-      {/* Objections */}
-      {prep.objectionsProbables && prep.objectionsProbables.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>Objections probables</SectionTitle>
-          <PrepObjections objections={prep.objectionsProbables} />
-        </section>
-      )}
-
-      {/* Contexte quartier */}
-      {quartier && quartier.description && (
-        <section className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <MapPin size={13} className="text-[#94a3b8]" strokeWidth={1.8} />
-            <SectionTitle>Quartier</SectionTitle>
-          </div>
-          <p className="text-[14px] text-[#64748b] leading-relaxed mb-4">{quartier.description}</p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Transports</p>
-              {quartier.transports.map((t) => (
-                <p key={t} className="text-[13px] text-[#0f172a] py-0.5">{t}</p>
-              ))}
-            </div>
-            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Commerces</p>
-              {quartier.commerces.map((c) => (
-                <p key={c} className="text-[13px] text-[#0f172a] py-0.5">{c}</p>
-              ))}
-            </div>
-            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Écoles</p>
-              {quartier.ecoles.map((e) => (
-                <p key={e} className="text-[13px] text-[#0f172a] py-0.5">{e}</p>
-              ))}
-            </div>
-            {quartier.pointsAttention.length > 0 && (
-              <div className="bg-[#fef2f2] rounded-lg p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#dc2626] mb-2">À mentionner</p>
-                {quartier.pointsAttention.map((p) => (
-                  <p key={p} className="text-[13px] text-[#64748b] py-0.5">{p}</p>
-                ))}
-              </div>
-            )}
           </div>
         </section>
       )}
