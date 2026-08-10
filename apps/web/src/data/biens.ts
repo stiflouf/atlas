@@ -6,7 +6,7 @@ export const biens: Bien[] = [
     reference: "ATL-2024-001",
     titre: "Appartement Oberkampf — 3 pièces lumineux",
     type: "appartement",
-    adresse: "123 rue de la Paix",
+    adresse: "123 rue Oberkampf",
     ville: "Paris",
     codePostal: "75011",
     surface: 68,
