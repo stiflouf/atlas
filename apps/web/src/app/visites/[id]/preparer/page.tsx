@@ -15,6 +15,8 @@ import { rechercherArretsProches } from "@/lib/transports/primClient";
 import { rechercherVelibProches } from "@/lib/transports/velibClient";
 import { rechercherEcolesProches } from "@/lib/ecoles/annuaireEducationClient";
 import type { EtablissementProche } from "@/types/ecoles";
+import { rechercherCommercesProches } from "@/lib/commerces/overpassClient";
+import { rechercherPatrimoineProche } from "@/lib/patrimoine/merimeeClient";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -97,14 +99,30 @@ export default async function PreparerVisite({ params }: PageProps) {
 
   // Les enrichissements géographiques ne s'exécutent que sur une localisation fiable — une
   // adresse douteuse ne doit jamais servir de base à d'autres appels.
-  const [transports, velib, ecoles] =
+  const [transports, velib, ecoles, commerces, patrimoine] =
     qualiteGeocodage === "fiable" && localisation
       ? await Promise.all([
           rechercherArretsProches(localisation.coordonnees),
           rechercherVelibProches(localisation.coordonnees),
           rechercherEcolesProches(localisation.coordonnees),
+          rechercherCommercesProches(localisation.coordonnees),
+          rechercherPatrimoineProche(localisation.coordonnees, bien.codePostal),
         ])
-      : [undefined, undefined, undefined];
+      : [undefined, undefined, undefined, undefined, undefined];
+
+  // Restaurants/cafés volontairement exclus de l'affichage pour l'instant (récupérés dans
+  // `commerces` mais sans signal de pertinence autre que la distance).
+  const groupesCommerces: { label: string; items: { nom: string; distanceMetres: number }[] }[] = commerces
+    ? [
+        { label: "alimentation", items: commerces.alimentation },
+        { label: "boulangerie", items: commerces.boulangeries },
+        { label: "pharmacie", items: commerces.pharmacies },
+        { label: "marché", items: commerces.marches },
+        { label: "parc", items: commerces.parcs },
+        { label: "équipement sportif", items: commerces.sport },
+        { label: "santé", items: commerces.sante },
+      ]
+    : [];
 
   const groupesEcoles: { niveau: string; items: EtablissementProche[] }[] = ecoles
     ? [
@@ -223,6 +241,57 @@ export default async function PreparerVisite({ params }: PageProps) {
               {new Date(ecoles.recupereLe).toLocaleString("fr-FR")}
             </p>
           )}
+        </section>
+      )}
+
+      {/* Commerces et services à proximité */}
+      {groupesCommerces.some(({ items }) => items.length > 0) && (
+        <section className="mb-8">
+          <SectionTitle>Commerces et services à proximité</SectionTitle>
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+            {groupesCommerces.flatMap(({ label, items }) =>
+              items.map((p) => (
+                <p key={`${label}-${p.nom}`} className="py-3 text-[14px] text-[#0f172a] leading-snug">
+                  {p.nom} — {label} — {p.distanceMetres} m
+                </p>
+              ))
+            )}
+          </div>
+          {commerces && (
+            <p className="text-[11px] text-[#94a3b8]">
+              Source :{" "}
+              <a href="https://www.openstreetmap.org/copyright" className="underline">
+                © OpenStreetMap contributors
+              </a>{" "}
+              (ODbL) · récupéré le {new Date(commerces.recupereLe).toLocaleString("fr-FR")}
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Patrimoine à proximité */}
+      {patrimoine && patrimoine.monuments.length > 0 && (
+        <section className="mb-8">
+          <SectionTitle>Patrimoine à proximité</SectionTitle>
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+            {patrimoine.monuments.map((m) => (
+              <div key={m.reference} className="py-3">
+                <p className="text-[14px] font-medium text-[#0f172a] leading-snug">{m.nom}</p>
+                <p className="text-[12px] text-[#64748b] mt-0.5">
+                  {m.type && `${m.type.charAt(0).toUpperCase()}${m.type.slice(1)}`}
+                  {m.type && " · "}
+                  {m.distanceMetres} m
+                </p>
+                {m.extraitHistorique && (
+                  <p className="text-[13px] text-[#475569] leading-snug mt-1">{m.extraitHistorique}</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-[#94a3b8]">
+            Source : Ministère de la Culture — Base Mérimée · récupéré le{" "}
+            {new Date(patrimoine.recupereLe).toLocaleString("fr-FR")}
+          </p>
         </section>
       )}
 
