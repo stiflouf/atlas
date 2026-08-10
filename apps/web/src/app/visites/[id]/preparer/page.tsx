@@ -17,6 +17,7 @@ import { rechercherEcolesProches } from "@/lib/ecoles/annuaireEducationClient";
 import type { EtablissementProche } from "@/types/ecoles";
 import { rechercherCommercesProches } from "@/lib/commerces/overpassClient";
 import { rechercherPatrimoineProche } from "@/lib/patrimoine/merimeeClient";
+import { selectionnerElementsARaconter } from "@/lib/araconter/selectionMerimee";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -122,6 +123,10 @@ export default async function PreparerVisite({ params }: PageProps) {
         { label: "équipement sportif", items: commerces.sport },
         { label: "santé", items: commerces.sante },
       ]
+    : [];
+
+  const elementsARaconter = patrimoine
+    ? selectionnerElementsARaconter(patrimoine.monuments, "Base Mérimée", patrimoine.recupereLe)
     : [];
 
   const groupesEcoles: { niveau: string; items: EtablissementProche[] }[] = ecoles
@@ -292,6 +297,26 @@ export default async function PreparerVisite({ params }: PageProps) {
             Source : Ministère de la Culture — Base Mérimée · récupéré le{" "}
             {new Date(patrimoine.recupereLe).toLocaleString("fr-FR")}
           </p>
+        </section>
+      )}
+
+      {/* À raconter si pertinent */}
+      {elementsARaconter.length > 0 && (
+        <section className="mb-8">
+          <SectionTitle>À raconter si pertinent</SectionTitle>
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+            {elementsARaconter.map((e) => (
+              <div key={e.reference} className="py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-1">
+                  🏛 Histoire · {e.distanceMetres} m
+                </p>
+                <p className="text-[14px] text-[#0f172a] leading-snug">{e.texte}</p>
+                <p className="text-[11px] text-[#94a3b8] mt-1">
+                  Source : {e.source} — {e.reference}
+                </p>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
