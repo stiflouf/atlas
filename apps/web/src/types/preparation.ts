@@ -14,21 +14,6 @@ export type ContexteQuartier = {
   pointsAttention: string[];
 };
 
-export type Comparable = {
-  adresse: string;
-  surface: number;
-  prix: number;
-  prixM2: number;
-  dateVente: string;
-};
-
-export type AnalyseMarche = {
-  prixMoyenM2: number;
-  tendance: string;
-  ecartAvecMarche: string;
-  comparables: Comparable[];
-};
-
 // Structure typée pour correspondre exactement à ce que l'IA retournera.
 // En Sprint 1 les données sont mockées ; aucun changement UI ne sera nécessaire
 // quand on branchera la vraie IA.
@@ -48,6 +33,5 @@ export type PreparationVisite = {
   questionsASuggerer?: string[];
   objectionsProbables?: Objection[];
   contextQuartier?: ContexteQuartier;
-  analyseMarche?: AnalyseMarche;
   contexteHumain?: string[];
 };

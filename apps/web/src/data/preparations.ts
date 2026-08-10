@@ -85,35 +85,6 @@ export const preparations: PreparationVisite[] = [
       ],
     },
 
-    analyseMarche: {
-      prixMoyenM2: 9200,
-      tendance: "Légère baisse de 2% sur 12 mois dans le 11e arrondissement",
-      ecartAvecMarche: "Le bien est affiché 17% sous la moyenne du secteur",
-      comparables: [
-        {
-          adresse: "87 rue Oberkampf — 3P / 72m²",
-          surface: 72,
-          prix: 675000,
-          prixM2: 9375,
-          dateVente: "2026-04-15",
-        },
-        {
-          adresse: "12 rue Saint-Maur — 3P / 65m²",
-          surface: 65,
-          prix: 598000,
-          prixM2: 9200,
-          dateVente: "2026-02-28",
-        },
-        {
-          adresse: "34 rue de la Folie-Méricourt — 3P / 70m²",
-          surface: 70,
-          prix: 631000,
-          prixM2: 9014,
-          dateVente: "2025-11-10",
-        },
-      ],
-    },
-
     contexteHumain: [
       "Le quartier tire son nom de Christophe-Philippe Oberkampf (1738–1815), industriel qui fonda la Manufacture royale de toiles peintes de Jouy-en-Josas ; la rue porte son nom depuis 1864.",
       "Le Cirque d'Hiver, à 500m, inauguré en 1852 sous Napoléon III, accueille toujours des spectacles aujourd'hui.",

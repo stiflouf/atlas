@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, MapPin, User, TrendingDown } from "lucide-react";
+import { ArrowLeft, MapPin, User } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
 import PrepObjections from "@/components/visite/PrepObjections";
@@ -18,6 +18,7 @@ import type { EtablissementProche } from "@/types/ecoles";
 import { rechercherCommercesProches } from "@/lib/commerces/overpassClient";
 import { rechercherPatrimoineProche } from "@/lib/patrimoine/merimeeClient";
 import { selectionnerElementsARaconter } from "@/lib/araconter/selectionMerimee";
+import { rechercherTransactionsComparables } from "@/lib/marche/dvfClient";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -100,7 +101,7 @@ export default async function PreparerVisite({ params }: PageProps) {
 
   // Les enrichissements géographiques ne s'exécutent que sur une localisation fiable — une
   // adresse douteuse ne doit jamais servir de base à d'autres appels.
-  const [transports, velib, ecoles, commerces, patrimoine] =
+  const [transports, velib, ecoles, commerces, patrimoine, marcheDvf] =
     qualiteGeocodage === "fiable" && localisation
       ? await Promise.all([
           rechercherArretsProches(localisation.coordonnees),
@@ -108,8 +109,9 @@ export default async function PreparerVisite({ params }: PageProps) {
           rechercherEcolesProches(localisation.coordonnees),
           rechercherCommercesProches(localisation.coordonnees),
           rechercherPatrimoineProche(localisation.coordonnees, bien.codePostal),
+          rechercherTransactionsComparables(localisation.coordonnees, bien.type, bien.surface),
         ])
-      : [undefined, undefined, undefined, undefined, undefined];
+      : [undefined, undefined, undefined, undefined, undefined, undefined];
 
   // Restaurants/cafés volontairement exclus de l'affichage pour l'instant (récupérés dans
   // `commerces` mais sans signal de pertinence autre que la distance).
@@ -140,7 +142,7 @@ export default async function PreparerVisite({ params }: PageProps) {
   const prep =
     getPreparationPourBienEtClient(bien.id, acquereur.id) ?? construirePreparationMinimale(rdv, bien, acquereur);
 
-  const { acquereur: aq, analyseMarche: marche, contextQuartier: quartier } = prep;
+  const { acquereur: aq, contextQuartier: quartier } = prep;
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -451,47 +453,51 @@ export default async function PreparerVisite({ params }: PageProps) {
         </section>
       )}
 
-      {/* Analyse de marché */}
-      {marche && (marche.prixMoyenM2 > 0 || marche.comparables.length > 0) && (
+      {/* Marché — transactions réelles à proximité, jamais une estimation */}
+      {marcheDvf && marcheDvf.transactions.length > 0 && (
         <section className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <TrendingDown size={13} className="text-[#94a3b8]" strokeWidth={1.8} />
-            <SectionTitle>Marché</SectionTitle>
-          </div>
+          <SectionTitle>Marché</SectionTitle>
+          <p className="text-[13px] text-[#94a3b8] mb-3 leading-relaxed">
+            Transactions de vente réellement enregistrées à proximité, de surface comparable — des
+            références de marché pour le conseiller, pas une estimation du bien.
+          </p>
 
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 mb-3">
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <div>
-                <p className="text-[11px] text-[#94a3b8] uppercase tracking-wider">Prix moyen secteur</p>
-                <p className="text-[16px] font-semibold text-[#0f172a] mt-0.5">{formatPrixM2(marche.prixMoyenM2)}</p>
-              </div>
-              <div>
-                <p className="text-[11px] text-[#94a3b8] uppercase tracking-wider">Ce bien</p>
-                <p className="text-[16px] font-semibold text-[#4338ca] mt-0.5">
-                  {formatPrixM2(Math.round(bien.prix / bien.surface))}
-                </p>
-              </div>
-            </div>
-            <p className="text-[13px] text-[#64748b] mt-3 leading-snug">{marche.ecartAvecMarche}</p>
-            <p className="text-[13px] text-[#94a3b8] mt-1">{marche.tendance}</p>
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 mb-3">
+            <p className="text-[11px] text-[#94a3b8] uppercase tracking-wider">Prix affiché de ce bien</p>
+            <p className="text-[16px] font-semibold text-[#4338ca] mt-0.5">
+              {formatPrixM2(Math.round(bien.prix / bien.surface))}
+            </p>
           </div>
 
           <div className="flex flex-col gap-2">
-            {marche.comparables.map((comp) => (
-              <div key={comp.adresse} className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 flex items-start justify-between gap-4">
+            {marcheDvf.transactions.map((t) => (
+              <div
+                key={t.reference}
+                className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 flex items-start justify-between gap-4"
+              >
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-[#64748b] truncate">{comp.adresse}</p>
+                  <p className="text-[13px] text-[#64748b]">
+                    {t.surfaceM2.toFixed(0)} m² · {t.distanceMetres} m
+                  </p>
                   <p className="text-[11px] text-[#94a3b8] mt-0.5">
-                    Vendu le {new Date(comp.dateVente).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                    Vendu le{" "}
+                    {new Date(t.dateVente).toLocaleDateString("fr-FR", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-[14px] font-medium text-[#0f172a]">{formatPrix(comp.prix)}</p>
-                  <p className="text-[11px] text-[#94a3b8]">{formatPrixM2(comp.prixM2)}</p>
+                  <p className="text-[14px] font-medium text-[#0f172a]">{formatPrix(t.prixVente)}</p>
+                  <p className="text-[11px] text-[#94a3b8]">{formatPrixM2(t.prixM2)}</p>
                 </div>
               </div>
             ))}
           </div>
+          <p className="text-[11px] text-[#94a3b8] mt-2">
+            Source : {marcheDvf.source} · récupéré le {new Date(marcheDvf.recupereLe).toLocaleString("fr-FR")}
+          </p>
         </section>
       )}
 
