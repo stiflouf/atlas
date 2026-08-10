@@ -13,6 +13,8 @@ import { geocoderAdresse } from "@/lib/geocodage/ignClient";
 import { evaluerQualiteGeocodage } from "@/lib/geocodage/qualite";
 import { rechercherArretsProches } from "@/lib/transports/primClient";
 import { rechercherVelibProches } from "@/lib/transports/velibClient";
+import { rechercherEcolesProches } from "@/lib/ecoles/annuaireEducationClient";
+import type { EtablissementProche } from "@/types/ecoles";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -95,13 +97,22 @@ export default async function PreparerVisite({ params }: PageProps) {
 
   // Les enrichissements géographiques ne s'exécutent que sur une localisation fiable — une
   // adresse douteuse ne doit jamais servir de base à d'autres appels.
-  const [transports, velib] =
+  const [transports, velib, ecoles] =
     qualiteGeocodage === "fiable" && localisation
       ? await Promise.all([
           rechercherArretsProches(localisation.coordonnees),
           rechercherVelibProches(localisation.coordonnees),
+          rechercherEcolesProches(localisation.coordonnees),
         ])
-      : [undefined, undefined];
+      : [undefined, undefined, undefined];
+
+  const groupesEcoles: { niveau: string; items: EtablissementProche[] }[] = ecoles
+    ? [
+        { niveau: "École", items: ecoles.ecoles },
+        { niveau: "Collège", items: ecoles.colleges },
+        { niveau: "Lycée", items: ecoles.lycees },
+      ]
+    : [];
 
   const prep =
     getPreparationPourBienEtClient(bien.id, acquereur.id) ?? construirePreparationMinimale(rdv, bien, acquereur);
@@ -186,6 +197,31 @@ export default async function PreparerVisite({ params }: PageProps) {
           )}
           {transports?.arrets.length === 0 && velib?.stations.length === 0 && (
             <p className="text-[13px] text-[#94a3b8]">Aucun arrêt ni station Vélib' à moins de 500 m.</p>
+          )}
+        </section>
+      )}
+
+      {/* Écoles à proximité */}
+      {groupesEcoles.some(({ items }) => items.length > 0) && (
+        <section className="mb-8">
+          <SectionTitle>Écoles à proximité</SectionTitle>
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+            {groupesEcoles.flatMap(({ niveau, items }) =>
+              items.map((e) => (
+                <p key={`${niveau}-${e.nom}`} className="py-3 text-[14px] text-[#0f172a] leading-snug">
+                  {niveau} {e.nom}
+                  {e.statut && ` — ${e.statut}`}
+                  {" — "}
+                  {e.distanceMetres} m
+                </p>
+              ))
+            )}
+          </div>
+          {ecoles && (
+            <p className="text-[11px] text-[#94a3b8]">
+              Source : Annuaire de l'Éducation Nationale · récupéré le{" "}
+              {new Date(ecoles.recupereLe).toLocaleString("fr-FR")}
+            </p>
           )}
         </section>
       )}
