@@ -9,6 +9,7 @@ import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
 import { getBienById } from "@/data/biens";
 import { getClientById } from "@/data/clients";
 import { formatDateISO } from "@/lib/temps";
+import { geocoderAdresse } from "@/lib/geocodage/ignClient";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -83,6 +84,10 @@ export default async function PreparerVisite({ params }: PageProps) {
   const acquereur = getClientById(contexte.client.clientId);
   if (!bien || !acquereur) notFound();
 
+  // Géocodage de l'adresse du bien (pas celle du rendez-vous Google, potentiellement
+  // différente) — best-effort, aucune coordonnée de repli si l'IGN ne répond pas.
+  const localisation = await geocoderAdresse(`${bien.adresse} ${bien.codePostal} ${bien.ville}`);
+
   const prep =
     getPreparationPourBienEtClient(bien.id, acquereur.id) ?? construirePreparationMinimale(rdv, bien, acquereur);
 
@@ -107,6 +112,13 @@ export default async function PreparerVisite({ params }: PageProps) {
           <span className="text-[15px] font-semibold text-[#0f172a]">{formatPrix(bien.prix)}</span>
           <span className="text-[13px] text-[#94a3b8]">{bien.surface} m² · {bien.pieces} pièces</span>
         </div>
+        {localisation && (
+          <p className="text-[12px] text-[#94a3b8] mt-2">
+            Localisation : {localisation.coordonnees.lat.toFixed(5)}, {localisation.coordonnees.lon.toFixed(5)}
+            {" — "}
+            {localisation.labelTrouve} (score {localisation.score.toFixed(2)}) · IGN Géoplateforme
+          </p>
+        )}
       </div>
 
       {/* Résumé du bien */}
