@@ -32,6 +32,9 @@ export function construireContexte(rdv: RendezVous, referentiel: Referentiel): C
     client,
     typeMetier,
     necessiteConfirmationBien,
-    overallConfidence: calculerConfianceGlobale(bien, client, typeMetier),
+    // Le bien ambigu contribue quand même via son meilleur candidat : sinon un bien plausible
+    // mais non tranché retombe à 0 et peut faire chuter la confiance globale sous le seuil qui
+    // déclenche la bannière de confirmation, alors qu'il y a bien un signal à faire valider.
+    overallConfidence: calculerConfianceGlobale(bien ?? bienCandidats?.[0], client, typeMetier),
   };
 }
