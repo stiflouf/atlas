@@ -1,9 +1,9 @@
 import type { Coordonnees } from "@/types/geocodage";
 import type { StationVelibProche, VelibProximite } from "@/types/transports";
 import { distanceHaversineMetres } from "@/lib/geo/distance";
+import { RAYON_METRES_TRANSPORTS as RAYON_METRES } from "./constantes";
 
 const STATIONS_URL = "https://velib-metropole-opendata.smovengo.cloud/opendata/Velib_Metropole/station_information.json";
-const RAYON_METRES = 500;
 
 type StationGbfs = { name: string; lat: number; lon: number };
 type ReponseGbfs = { data: { stations: StationGbfs[] } };

@@ -1,9 +1,9 @@
 import type { Coordonnees } from "@/types/geocodage";
 import type { ArretTransportProche, TransportsProximite } from "@/types/transports";
+import { RAYON_METRES_TRANSPORTS as RAYON_METRES } from "./constantes";
 
 const BASE_URL = "https://prim.iledefrance-mobilites.fr/marketplace/v2/navitia";
 const COVERAGE = "idfm";
-const RAYON_METRES = 500;
 
 type LigneNavitia = { code?: string; commercial_mode?: { name?: string } };
 type StopAreaNavitia = { name: string; lines?: LigneNavitia[]; commercial_modes?: { name: string }[] };
