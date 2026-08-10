@@ -10,6 +10,7 @@ import { getBienById } from "@/data/biens";
 import { getClientById } from "@/data/clients";
 import { formatDateISO } from "@/lib/temps";
 import { geocoderAdresse } from "@/lib/geocodage/ignClient";
+import { evaluerQualiteGeocodage } from "@/lib/geocodage/qualite";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -86,7 +87,9 @@ export default async function PreparerVisite({ params }: PageProps) {
 
   // Géocodage de l'adresse du bien (pas celle du rendez-vous Google, potentiellement
   // différente) — best-effort, aucune coordonnée de repli si l'IGN ne répond pas.
-  const localisation = await geocoderAdresse(`${bien.adresse} ${bien.codePostal} ${bien.ville}`);
+  const adresseBien = `${bien.adresse}, ${bien.codePostal} ${bien.ville}`;
+  const localisation = await geocoderAdresse(adresseBien);
+  const qualiteGeocodage = localisation ? evaluerQualiteGeocodage(localisation.score) : undefined;
 
   const prep =
     getPreparationPourBienEtClient(bien.id, acquereur.id) ?? construirePreparationMinimale(rdv, bien, acquereur);
@@ -112,12 +115,23 @@ export default async function PreparerVisite({ params }: PageProps) {
           <span className="text-[15px] font-semibold text-[#0f172a]">{formatPrix(bien.prix)}</span>
           <span className="text-[13px] text-[#94a3b8]">{bien.surface} m² · {bien.pieces} pièces</span>
         </div>
-        {localisation && (
+        {localisation && qualiteGeocodage === "fiable" && (
           <p className="text-[12px] text-[#94a3b8] mt-2">
             Localisation : {localisation.coordonnees.lat.toFixed(5)}, {localisation.coordonnees.lon.toFixed(5)}
             {" — "}
-            {localisation.labelTrouve} (score {localisation.score.toFixed(2)}) · IGN Géoplateforme
+            {localisation.labelTrouve} (confiance {Math.round(localisation.score * 100)}%) · IGN Géoplateforme
           </p>
+        )}
+        {localisation && qualiteGeocodage !== "fiable" && (
+          <div className="mt-3 bg-[#fef2f2] rounded-lg p-3">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-[#dc2626] mb-1">
+              {qualiteGeocodage === "a_verifier" ? "Adresse à vérifier" : "Adresse non fiable"}
+            </p>
+            <p className="text-[13px] text-[#64748b] leading-snug">
+              Atlas a interprété « {adresseBien} » comme « {localisation.labelTrouve} » — confiance{" "}
+              {Math.round(localisation.score * 100)}%.
+            </p>
+          </div>
         )}
       </div>
 
