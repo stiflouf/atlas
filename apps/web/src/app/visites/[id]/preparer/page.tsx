@@ -11,6 +11,8 @@ import { getClientById } from "@/data/clients";
 import { formatDateISO } from "@/lib/temps";
 import { geocoderAdresse } from "@/lib/geocodage/ignClient";
 import { evaluerQualiteGeocodage } from "@/lib/geocodage/qualite";
+import { rechercherArretsProches } from "@/lib/transports/primClient";
+import { rechercherVelibProches } from "@/lib/transports/velibClient";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -91,6 +93,16 @@ export default async function PreparerVisite({ params }: PageProps) {
   const localisation = await geocoderAdresse(adresseBien);
   const qualiteGeocodage = localisation ? evaluerQualiteGeocodage(localisation.score) : undefined;
 
+  // Les enrichissements géographiques ne s'exécutent que sur une localisation fiable — une
+  // adresse douteuse ne doit jamais servir de base à d'autres appels.
+  const [transports, velib] =
+    qualiteGeocodage === "fiable" && localisation
+      ? await Promise.all([
+          rechercherArretsProches(localisation.coordonnees),
+          rechercherVelibProches(localisation.coordonnees),
+        ])
+      : [undefined, undefined];
+
   const prep =
     getPreparationPourBienEtClient(bien.id, acquereur.id) ?? construirePreparationMinimale(rdv, bien, acquereur);
 
@@ -134,6 +146,49 @@ export default async function PreparerVisite({ params }: PageProps) {
           </div>
         )}
       </div>
+
+      {/* Transports à proximité */}
+      {(transports || velib) && (
+        <section className="mb-8">
+          <SectionTitle>Transports à proximité</SectionTitle>
+          {transports && transports.arrets.length > 0 && (
+            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+              {transports.arrets.map((a) => (
+                <p key={a.nom} className="py-3 text-[14px] text-[#0f172a] leading-snug">
+                  {(a.modes.join(" / ") || "Arrêt") + " " + a.nom}
+                  {a.lignes.length > 0 &&
+                    ` — ligne${a.lignes.length > 1 ? "s" : ""} ${a.lignes.join(" / ")}`}
+                  {" — "}
+                  {a.distanceMetres} m
+                </p>
+              ))}
+            </div>
+          )}
+          {transports && (
+            <p className="text-[11px] text-[#94a3b8] mb-3">
+              Source : PRIM (Île-de-France Mobilités) · récupéré le{" "}
+              {new Date(transports.recupereLe).toLocaleString("fr-FR")}
+            </p>
+          )}
+          {velib && velib.stations.length > 0 && (
+            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+              {velib.stations.map((s) => (
+                <p key={s.nom} className="py-3 text-[14px] text-[#0f172a] leading-snug">
+                  Station Vélib' {s.nom} — {s.distanceMetres} m
+                </p>
+              ))}
+            </div>
+          )}
+          {velib && (
+            <p className="text-[11px] text-[#94a3b8]">
+              Source : Vélib' Métropole (GBFS) · récupéré le {new Date(velib.recupereLe).toLocaleString("fr-FR")}
+            </p>
+          )}
+          {transports?.arrets.length === 0 && velib?.stations.length === 0 && (
+            <p className="text-[13px] text-[#94a3b8]">Aucun arrêt ni station Vélib' à moins de 500 m.</p>
+          )}
+        </section>
+      )}
 
       {/* Résumé du bien */}
       <section className="mb-8">
