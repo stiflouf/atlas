@@ -3,19 +3,31 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import type { RendezVous, TypeRdv } from "@/types/agenda";
 import type { StatutRendezVous } from "@/lib/rendezVous";
-import type { ContexteRendezVous } from "@/types/contexteRendezVous";
+import type { ContexteRendezVous, TypeMetierRdv } from "@/types/contexteRendezVous";
 import { SEUIL_AMBIGU, SEUIL_FORT } from "@/lib/matching/resoudre";
 import { getClientById } from "@/data/clients";
 import { getBienById } from "@/data/biens";
 import ConfirmationBienRdv from "./ConfirmationBienRdv";
 
-const typeConfig: Record<TypeRdv, { label: string; variant: "accent" | "default" | "muted" | "success" }> = {
+type BadgeConfig = { label: string; variant: "accent" | "default" | "muted" | "success" };
+
+const typeConfig: Record<TypeRdv, BadgeConfig> = {
   visite: { label: "Visite", variant: "accent" },
   estimation: { label: "Estimation", variant: "default" },
   appel: { label: "Appel", variant: "muted" },
   signature: { label: "Signature", variant: "success" },
   reunion: { label: "Réunion", variant: "muted" },
   evenement: { label: "Événement", variant: "muted" },
+};
+
+// Type métier déduit par Atlas (lib/matching/matchType.ts) — utilisé uniquement pour les RDV
+// Google encore génériques ("evenement"), jamais pour remplacer un type déjà connu du calendrier.
+const typeMetierConfig: Partial<Record<TypeMetierRdv, BadgeConfig>> = {
+  visite: { label: "Visite", variant: "accent" },
+  estimation: { label: "Estimation", variant: "default" },
+  appel: { label: "Appel", variant: "muted" },
+  signature: { label: "Signature", variant: "success" },
+  prospection: { label: "Prospection", variant: "muted" },
 };
 
 function labelCourtBien(titre: string): string {
@@ -31,7 +43,13 @@ export default function AgendaCard({
   statut: StatutRendezVous;
   contexte?: ContexteRendezVous;
 }) {
-  const { label, variant } = typeConfig[rdv.type];
+  // Google ne fournit qu'un type générique : si Atlas a déduit un type métier probable du
+  // contexte (titre), on l'affiche à la place — sans jamais modifier `rdv.type` lui-même.
+  const typeDeduit =
+    rdv.type === "evenement" && contexte?.typeMetier && contexte.typeMetier.confidence > 0
+      ? typeMetierConfig[contexte.typeMetier.type]
+      : undefined;
+  const { label, variant } = typeDeduit ?? typeConfig[rdv.type];
   const client = rdv.client ? getClientById(rdv.client.id) : undefined;
   const callHref = client ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
 
