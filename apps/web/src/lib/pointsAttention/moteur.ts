@@ -4,10 +4,9 @@ import type { TransportsProximite, VelibProximite } from "@/types/transports";
 import type { PointAttention } from "@/types/pointsAttention";
 import { RAYON_METRES_TRANSPORTS } from "@/lib/transports/constantes";
 
-// Ce que chaque règle peut lire. Volontairement limité aux champs structurés déjà fiables
-// aujourd'hui — les futurs champs bien.etage / bien.ascenseur / acquereur.contraintesMobilite /
-// acquereur.piecesMin / acquereur.surfaceMin viendront s'y ajouter quand ils existeront, sans
-// rien casser des règles déjà écrites.
+// Ce que chaque règle peut lire. Bien/acquereur exposent maintenant des champs structurés
+// (étage, ascenseur, parking, extérieur, pièces/surface min, accessibilité...) en plus des champs
+// de base — de futurs champs pourront s'y ajouter sans rien casser des règles déjà écrites.
 export type ContextePointsAttention = {
   bien: Bien;
   acquereur: ProfilAcquereur;
@@ -69,10 +68,85 @@ const regleAucunTransportProche: ReglePointAttention = {
   },
 };
 
+// Croisements bien × acquéreur — champs structurés uniquement, aucune lecture de texte libre.
+// "Absent" (undefined) signifie toujours "inconnu" : une règle ne se déclenche que si les deux
+// champs qu'elle croise sont explicitement renseignés.
+
+const regleAccessibilite: ReglePointAttention = {
+  id: "accessibilite_requise",
+  evaluer: ({ bien, acquereur }) => {
+    if (acquereur.accessibiliteRequise !== true) return undefined;
+    if (bien.etage === undefined || bien.ascenseur === undefined) return undefined;
+    if (bien.etage <= 0 || bien.ascenseur !== false) return undefined;
+    return {
+      id: "accessibilite_requise",
+      texte: `Ce bien est au ${bien.etage}e étage sans ascenseur, alors que l'accessibilité du logement est indiquée comme nécessaire pour cette recherche.`,
+      provenance: "Bien (étage, ascenseur) × Acquéreur (accessibilité requise)",
+    };
+  },
+};
+
+const reglePiecesInsuffisantes: ReglePointAttention = {
+  id: "pieces_insuffisantes",
+  evaluer: ({ bien, acquereur }) => {
+    if (acquereur.piecesMin === undefined) return undefined;
+    if (bien.pieces >= acquereur.piecesMin) return undefined;
+    return {
+      id: "pieces_insuffisantes",
+      texte: `Le bien a moins de pièces (${bien.pieces}) que le minimum recherché par l'acquéreur (${acquereur.piecesMin}).`,
+      provenance: "Bien (nombre de pièces) × Acquéreur (pièces minimum recherché)",
+    };
+  },
+};
+
+const regleSurfaceInsuffisante: ReglePointAttention = {
+  id: "surface_insuffisante",
+  evaluer: ({ bien, acquereur }) => {
+    if (acquereur.surfaceMin === undefined) return undefined;
+    if (bien.surface >= acquereur.surfaceMin) return undefined;
+    return {
+      id: "surface_insuffisante",
+      texte: `Le bien est plus petit (${bien.surface} m²) que la surface minimum recherchée par l'acquéreur (${acquereur.surfaceMin} m²).`,
+      provenance: "Bien (surface) × Acquéreur (surface minimum recherchée)",
+    };
+  },
+};
+
+const regleParkingManquant: ReglePointAttention = {
+  id: "parking_manquant",
+  evaluer: ({ bien, acquereur }) => {
+    if (acquereur.necessiteParking !== true) return undefined;
+    if (bien.parking === undefined || bien.parking !== false) return undefined;
+    return {
+      id: "parking_manquant",
+      texte: "Un parking est requis par l'acquéreur, mais ce bien n'en propose pas.",
+      provenance: "Bien (parking) × Acquéreur (parking nécessaire)",
+    };
+  },
+};
+
+const regleExterieurManquant: ReglePointAttention = {
+  id: "exterieur_manquant",
+  evaluer: ({ bien, acquereur }) => {
+    if (acquereur.necessiteExterieur !== true) return undefined;
+    if (bien.exterieur === undefined || bien.exterieur !== "aucun") return undefined;
+    return {
+      id: "exterieur_manquant",
+      texte: "Un extérieur (balcon, terrasse ou jardin) est requis par l'acquéreur, mais ce bien n'en a aucun.",
+      provenance: "Bien (extérieur) × Acquéreur (extérieur nécessaire)",
+    };
+  },
+};
+
 const regles: ReglePointAttention[] = [
   reglePrixSuperieurBudgetMax,
   regleMandatNonActif,
   regleAucunTransportProche,
+  regleAccessibilite,
+  reglePiecesInsuffisantes,
+  regleSurfaceInsuffisante,
+  regleParkingManquant,
+  regleExterieurManquant,
 ];
 
 export function produirePointsAttention(contexte: ContextePointsAttention): PointAttention[] {

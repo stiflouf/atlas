@@ -25,6 +25,9 @@ export const biens: Bien[] = [
     ],
     description:
       "Bel appartement de 3 pièces dans un immeuble Haussmann entièrement rénové en 2019. Très lumineux grâce à son double exposition plein sud. Cuisine entièrement équipée. À 3 minutes à pied du métro Oberkampf (ligne 9). Copropriété saine avec charges faibles.",
+    etage: 4,
+    ascenseur: false,
+    parking: false,
   },
   {
     id: "bien-002",
@@ -49,6 +52,8 @@ export const biens: Bien[] = [
     ],
     description:
       "Maison familiale de 5 pièces entièrement rénovée en 2022, avec un jardin de 180m² exposé sud-ouest. Garage double. Idéalement située à 5 minutes du RER A et à proximité immédiate du Bois de Vincennes. Secteur scolaire très recherché.",
+    parking: true,
+    exterieur: "jardin",
   },
 ];
 

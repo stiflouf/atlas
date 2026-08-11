@@ -20,6 +20,8 @@ export const clients: ProfilAcquereur[] = [
     notes:
       "Couple avec un enfant de 2 ans. Travaillent tous les deux dans le 8e. Souhaitent rester dans Paris mais pas forcément Rive Droite. Sophie a des contraintes de mobilité — l'absence d'ascenseur est un point à surveiller.",
     datePremiereContact: "2026-03-14",
+    piecesMin: 3,
+    accessibiliteRequise: true,
   },
   {
     id: "client-002",
@@ -40,6 +42,9 @@ export const clients: ProfilAcquereur[] = [
     notes:
       "Famille de 4 personnes (2 enfants 7 et 10 ans). Télétravail partiel — besoin d'un bureau. Budget solide, apport de 200k€. Très intéressés par Vincennes ou Saint-Mandé.",
     datePremiereContact: "2026-04-03",
+    piecesMin: 5,
+    necessiteParking: true,
+    necessiteExterieur: true,
   },
   {
     id: "client-003",

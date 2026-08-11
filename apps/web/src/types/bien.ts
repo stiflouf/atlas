@@ -1,5 +1,6 @@
 export type TypeBien = "appartement" | "maison" | "studio" | "loft" | "local_commercial";
 export type StatutMandat = "actif" | "suspendu" | "expire";
+export type Exterieur = "aucun" | "balcon" | "terrasse" | "jardin";
 
 export type Bien = {
   id: string;
@@ -16,4 +17,10 @@ export type Bien = {
   dateMandat: string;
   caracteristiques: string[];
   description: string;
+  // Champs structurés pour les croisements bien × acquéreur (moteur de points d'attention).
+  // Absent = non documenté/inconnu, jamais interprété comme une valeur négative.
+  etage?: number;
+  ascenseur?: boolean;
+  parking?: boolean;
+  exterieur?: Exterieur;
 };
