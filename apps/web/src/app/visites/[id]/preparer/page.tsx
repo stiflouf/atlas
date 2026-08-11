@@ -19,6 +19,7 @@ import { rechercherPatrimoineProche } from "@/lib/patrimoine/merimeeClient";
 import { selectionnerElementsARaconter } from "@/lib/araconter/selectionMerimee";
 import { rechercherTransactionsComparables } from "@/lib/marche/dvfClient";
 import { produirePointsAttention } from "@/lib/pointsAttention/moteur";
+import { produirePointsForts } from "@/lib/pointsForts/moteur";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -145,6 +146,7 @@ export default async function PreparerVisite({ params }: PageProps) {
   const { acquereur: aq } = prep;
 
   const pointsAttention = produirePointsAttention({ bien, acquereur, transports, velib });
+  const pointsForts = produirePointsForts({ bien, acquereur });
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -192,6 +194,21 @@ export default async function PreparerVisite({ params }: PageProps) {
           <div className="flex flex-col gap-2">
             {pointsAttention.map((p) => (
               <div key={p.id} className="bg-[#fef2f2] rounded-lg px-4 py-3">
+                <p className="text-[14px] text-[#0f172a] leading-snug">{p.texte}</p>
+                <p className="text-[11px] text-[#94a3b8] mt-1">{p.provenance}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Points forts pour la visite */}
+      {pointsForts.length > 0 && (
+        <section className="mb-8">
+          <SectionTitle>Points forts pour la visite</SectionTitle>
+          <div className="flex flex-col gap-2">
+            {pointsForts.map((p) => (
+              <div key={p.id} className="bg-[#f0fdf4] rounded-lg px-4 py-3">
                 <p className="text-[14px] text-[#0f172a] leading-snug">{p.texte}</p>
                 <p className="text-[11px] text-[#94a3b8] mt-1">{p.provenance}</p>
               </div>
