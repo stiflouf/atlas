@@ -9,15 +9,6 @@ import { terminerActionAction } from "@/actions/terminerAction";
 
 type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "actions";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "contexte", label: "Contexte" },
-  { id: "historique", label: "Historique" },
-  { id: "notes", label: "Notes" },
-  { id: "visites", label: "Visites" },
-  { id: "documents", label: "Documents" },
-  { id: "actions", label: "Actions" },
-];
-
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
@@ -28,13 +19,30 @@ export default function BienTabs({
   actions,
 }: {
   bien: Bien;
-  dossier: DossierBien;
+  dossier?: DossierBien;
   actions: ActionMetier[];
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
+  // Contexte et Actions reposent sur des données réelles (bien, actionRepository), toujours
+  // disponibles. Historique/Notes/Documents/Visites n'ont pas d'équivalent réel aujourd'hui
+  // (aucune table d'audit, de notes, de documents ou de suivi de visites effectuées) : masqués
+  // plutôt que de fabriquer un DossierBien artificiel pour un bien réel.
+  const TABS: { id: Tab; label: string }[] = [
+    { id: "contexte", label: "Contexte" },
+    ...(dossier
+      ? ([
+          { id: "historique", label: "Historique" },
+          { id: "notes", label: "Notes" },
+          { id: "visites", label: "Visites" },
+          { id: "documents", label: "Documents" },
+        ] as const)
+      : []),
+    { id: "actions", label: "Actions" },
+  ];
+
   const visitesAVenir = rendezVousDuJour.filter((rdv) => rdv.bien?.id === bien.id);
-  const visitesPassees = [...dossier.visitesEffectuees].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const visitesPassees = dossier ? [...dossier.visitesEffectuees].sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
 
   return (
     <div>
@@ -70,7 +78,7 @@ export default function BienTabs({
         </div>
       )}
 
-      {active === "historique" && (
+      {active === "historique" && dossier && (
         <div className="flex flex-col">
           {dossier.historique.map((evt, i) => (
             <div key={i} className="flex gap-4 pb-6 relative">
@@ -89,7 +97,7 @@ export default function BienTabs({
         </div>
       )}
 
-      {active === "notes" && (
+      {active === "notes" && dossier && (
         <div>
           <div className="bg-[#fafafa] rounded-lg p-4 border border-[#f1f5f9]">
             {dossier.notes.split("\n\n").map((paragraph, i) => (
@@ -139,7 +147,7 @@ export default function BienTabs({
         </div>
       )}
 
-      {active === "documents" && (
+      {active === "documents" && dossier && (
         <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           {dossier.documents.map((doc) => (
             <div key={doc.nom} className="flex items-center justify-between gap-4 px-4 py-3">

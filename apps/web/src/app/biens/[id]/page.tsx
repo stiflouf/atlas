@@ -114,8 +114,9 @@ export default async function FicheBien({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Onglets */}
-      {dossier && <BienTabs bien={bien} dossier={dossier} actions={actions} />}
+      {/* Onglets — Contexte et Actions sont toujours réels ; les autres n'apparaissent que si un
+          dossier existe (voir BienTabs, aucun DossierBien artificiel fabriqué ici). */}
+      <BienTabs bien={bien} dossier={dossier} actions={actions} />
     </div>
   );
 }
