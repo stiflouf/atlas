@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import type { ActionMetier } from "@/types/action";
+import type { NoteBien } from "@/types/noteBien";
 import BienTabs from "./BienTabs";
 
 function bienTest(surcharge: Partial<Bien> = {}): Bien {
@@ -40,21 +41,22 @@ function dossierTest(): DossierBien {
 const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Actions"];
 
 describe("BienTabs", () => {
-  it("n'affiche que Contexte et Actions pour un bien réel sans dossier", () => {
+  it("n'affiche que Contexte, Notes et Actions pour un bien réel sans dossier", () => {
     const html = renderToStaticMarkup(
-      <BienTabs bien={bienTest()} actions={[] as ActionMetier[]} />
+      <BienTabs bien={bienTest()} actions={[] as ActionMetier[]} notes={[] as NoteBien[]} />
     );
 
     expect(html).toContain("Contexte");
+    expect(html).toContain("Notes");
     expect(html).toContain("Actions");
-    for (const onglet of ["Historique", "Notes", "Visites", "Documents"]) {
+    for (const onglet of ["Historique", "Visites", "Documents"]) {
       expect(html).not.toContain(onglet);
     }
   });
 
   it("conserve tous les onglets existants quand un dossier (mock) est fourni", () => {
     const html = renderToStaticMarkup(
-      <BienTabs bien={bienTest()} dossier={dossierTest()} actions={[] as ActionMetier[]} />
+      <BienTabs bien={bienTest()} dossier={dossierTest()} actions={[] as ActionMetier[]} notes={[] as NoteBien[]} />
     );
 
     for (const onglet of TOUS_LES_ONGLETS) {
@@ -78,12 +80,24 @@ describe("BienTabs", () => {
       },
     ];
     const html = renderToStaticMarkup(
-      <BienTabs bien={bienTest({ creeLe: "2026-01-01T09:00:00.000Z" })} actions={actions} />
+      <BienTabs
+        bien={bienTest({ creeLe: "2026-01-01T09:00:00.000Z" })}
+        actions={actions}
+        notes={[] as NoteBien[]}
+      />
     );
 
     expect(html).toContain("Historique");
-    for (const onglet of ["Notes", "Visites", "Documents"]) {
+    for (const onglet of ["Visites", "Documents"]) {
       expect(html).not.toContain(onglet);
     }
+  });
+
+  it("affiche l'onglet Notes pour un bien réel même sans aucune note", () => {
+    const html = renderToStaticMarkup(
+      <BienTabs bien={bienTest()} actions={[] as ActionMetier[]} notes={[] as NoteBien[]} />
+    );
+
+    expect(html).toContain("Notes");
   });
 });

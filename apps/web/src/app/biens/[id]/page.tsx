@@ -6,6 +6,7 @@ import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getActionsPourBien } from "@/lib/actionRepository";
+import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 
@@ -32,6 +33,7 @@ export default async function FicheBien({ params }: PageProps) {
 
   const dossier = getDossierByBienId(bien.id);
   const actions = await getActionsPourBien(bien.id);
+  const notes = await listerNotesPourBien(bien.id);
   const actionPrincipale = actionPrioritaire(actions);
   const prochaineVisite = rendezVousDuJour.find(
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
@@ -114,9 +116,9 @@ export default async function FicheBien({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Onglets — Contexte et Actions sont toujours réels ; les autres n'apparaissent que si un
-          dossier existe (voir BienTabs, aucun DossierBien artificiel fabriqué ici). */}
-      <BienTabs bien={bien} dossier={dossier} actions={actions} />
+      {/* Onglets — Contexte, Actions et Notes sont toujours réels ; les autres n'apparaissent que
+          si un dossier existe (voir BienTabs, aucun DossierBien artificiel fabriqué ici). */}
+      <BienTabs bien={bien} dossier={dossier} actions={actions} notes={notes} />
     </div>
   );
 }

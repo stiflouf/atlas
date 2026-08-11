@@ -147,3 +147,16 @@ export const actions = pgTable(
     check("actions_priorite_check", sql`${table.priorite} IN ('haute','normale','basse')`),
   ]
 );
+
+// Notes libres sur un bien réel. Contrairement à actions/memoireContextuelle, bienId est une
+// vraie FK : une note ne peut être créée que depuis la fiche d'un bien déjà réel (pas de
+// formulaire équivalent sur un bien mocké), donc pas de cas mixte id-mock/id-réel à accommoder.
+// Pas de modifieLe : append-only, aucune édition prévue pour l'instant.
+export const notesBien = pgTable("notes_bien", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bienId: uuid("bien_id")
+    .notNull()
+    .references(() => biens.id, { onDelete: "cascade" }),
+  contenu: text("contenu").notNull(),
+  creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+});

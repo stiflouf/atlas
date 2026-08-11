@@ -4,8 +4,10 @@ import { useState } from "react";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import type { ActionMetier } from "@/types/action";
+import type { NoteBien } from "@/types/noteBien";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
+import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 
 type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "actions";
@@ -18,18 +20,21 @@ export default function BienTabs({
   bien,
   dossier,
   actions,
+  notes,
 }: {
   bien: Bien;
   dossier?: DossierBien;
   actions: ActionMetier[];
+  notes: NoteBien[];
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
-  // Contexte et Actions reposent sur des données réelles (bien, actionRepository), toujours
-  // disponibles. Notes/Documents/Visites n'ont pas d'équivalent réel aujourd'hui (aucune table
-  // d'audit, de notes, de documents ou de suivi de visites effectuées) : masqués plutôt que de
-  // fabriquer un DossierBien artificiel pour un bien réel. Historique, lui, est dérivé de faits
-  // réels (bien.creeLe, action.creeLe/termineLe) quand aucun dossier mock n'existe.
+  // Contexte, Actions et Notes reposent sur des données réelles (bien, actionRepository,
+  // noteBienRepository), toujours disponibles — Notes reste affiché même vide, c'est justement
+  // là que le conseiller ajoute sa première note. Documents/Visites n'ont pas d'équivalent réel
+  // aujourd'hui (aucun stockage de documents, aucun suivi de visites effectuées) : masqués
+  // plutôt que de fabriquer un DossierBien artificiel pour un bien réel. Historique, lui, est
+  // dérivé de faits réels (bien.creeLe, action.creeLe/termineLe) quand aucun dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
     ? dossier.historique
     : deriverHistoriqueBien(bien, actions);
@@ -37,13 +42,8 @@ export default function BienTabs({
   const TABS: { id: Tab; label: string }[] = [
     { id: "contexte", label: "Contexte" },
     ...(evenementsHistorique.length > 0 ? ([{ id: "historique", label: "Historique" }] as const) : []),
-    ...(dossier
-      ? ([
-          { id: "notes", label: "Notes" },
-          { id: "visites", label: "Visites" },
-          { id: "documents", label: "Documents" },
-        ] as const)
-      : []),
+    { id: "notes", label: "Notes" },
+    ...(dossier ? ([{ id: "visites", label: "Visites" }, { id: "documents", label: "Documents" }] as const) : []),
     { id: "actions", label: "Actions" },
   ];
 
@@ -132,6 +132,41 @@ export default function BienTabs({
             ))}
           </div>
           <p className="text-[11px] text-[#94a3b8] mt-3">Notes privées — non communiquées aux acquéreurs.</p>
+        </div>
+      )}
+
+      {active === "notes" && !dossier && (
+        <div className="flex flex-col gap-4">
+          <form action={ajouterNoteBienAction} className="flex flex-col gap-2">
+            <input type="hidden" name="bienId" value={bien.id} />
+            <textarea
+              name="contenu"
+              rows={3}
+              required
+              placeholder="Ajouter une note..."
+              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+            />
+            <button
+              type="submit"
+              className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+            >
+              Ajouter une note
+            </button>
+          </form>
+
+          {notes.length === 0 ? (
+            <p className="text-[14px] text-[#94a3b8]">Aucune note pour l'instant.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {notes.map((note) => (
+                <div key={note.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                  <p className="text-[11px] text-[#94a3b8] mb-1">{formatDate(note.creeLe)}</p>
+                  <p className="text-[14px] text-[#0f172a] leading-relaxed whitespace-pre-wrap">{note.contenu}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-[#94a3b8]">Notes privées — non communiquées aux acquéreurs.</p>
         </div>
       )}
 
