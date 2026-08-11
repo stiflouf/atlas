@@ -4,6 +4,12 @@
 
 ---
 
+> **Développeur ?** Ce document est la vision produit. Pour cloner, installer et comprendre le
+> code, direction [`apps/web/README.md`](apps/web/README.md) — et [`docs/`](docs/) pour la
+> documentation technique approfondie (architecture, modèle de données, règles métier, décisions).
+
+---
+
 # Vision
 
 Nous croyons que le métier de conseiller immobilier est avant tout un métier humain.
