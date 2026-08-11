@@ -2,8 +2,6 @@
 // (ex. importé depuis un calendrier externe). Pas de déduction depuis le texte pour l'instant —
 // la classification viendra dans un sprint dédié.
 export type TypeRdv = "visite" | "estimation" | "appel" | "signature" | "reunion" | "evenement";
-export type PrioriteRelance = "haute" | "normale";
-export type TypeAction = "appel" | "message" | "email";
 
 export type RendezVous = {
   id: string;
@@ -21,23 +19,4 @@ export type RendezVous = {
   bien?: { id: string; adresse: string };
   client?: { id: string; nom: string; prenom: string };
   preparationDisponible: boolean;
-};
-
-export type Relance = {
-  id: string;
-  clientId: string;
-  client: { nom: string; prenom: string };
-  motif: string;
-  priorite: PrioriteRelance;
-  joursAttente: number;
-  actionSuggeree: string;
-  actionType: TypeAction;
-  visitId?: string;
-};
-
-export type ActionPrevue = {
-  id: string;
-  label: string;
-  contexte?: string;
-  echeance?: string;
 };

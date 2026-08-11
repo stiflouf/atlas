@@ -1,5 +1,8 @@
 import type { ActionMetier } from "@/types/action";
 
+// Données de démonstration — utilisées tant qu'aucune action réelle n'existe en base
+// (voir lib/actionRepository.ts). Couvre les 3 cas d'usage : action liée à un bien,
+// à un acquéreur, ou à aucun des deux (tâche générale).
 export const actionsMetier: ActionMetier[] = [
   {
     id: "act-001",
@@ -8,9 +11,9 @@ export const actionsMetier: ActionMetier[] = [
       "Offre orale évoquée après la 2e visite du 1er août, aucune relance envoyée depuis une semaine.",
     statut: "a_faire",
     priorite: "haute",
-    type: "suivi_offre",
-    entite: { type: "bien", id: "bien-001" },
-    dateCreation: "2026-08-01",
+    type: "relance",
+    bienId: "bien-001",
+    creeLe: "2026-08-01",
   },
   {
     id: "act-002",
@@ -18,9 +21,9 @@ export const actionsMetier: ActionMetier[] = [
     contexte: "Photos reçues le 28 juin.",
     statut: "a_faire",
     priorite: "basse",
-    type: "commercial",
-    entite: { type: "bien", id: "bien-001" },
-    dateCreation: "2026-06-28",
+    type: "autre",
+    bienId: "bien-001",
+    creeLe: "2026-06-28",
   },
   {
     id: "act-003",
@@ -28,9 +31,9 @@ export const actionsMetier: ActionMetier[] = [
     contexte: "À mentionner dans la promesse de vente.",
     statut: "a_faire",
     priorite: "normale",
-    type: "administratif",
-    entite: { type: "bien", id: "bien-001" },
-    dateCreation: "2026-06-01",
+    type: "document",
+    bienId: "bien-001",
+    creeLe: "2026-06-01",
   },
   {
     id: "act-004",
@@ -39,9 +42,9 @@ export const actionsMetier: ActionMetier[] = [
     statut: "a_faire",
     priorite: "haute",
     echeance: "2026-08-14",
-    type: "juridique",
-    entite: { type: "bien", id: "bien-002" },
-    dateCreation: "2026-08-05",
+    type: "document",
+    bienId: "bien-002",
+    creeLe: "2026-08-05",
   },
   {
     id: "act-005",
@@ -49,12 +52,50 @@ export const actionsMetier: ActionMetier[] = [
     contexte: "Formalité avant signature.",
     statut: "a_faire",
     priorite: "normale",
-    type: "administratif",
-    entite: { type: "bien", id: "bien-002" },
-    dateCreation: "2026-08-05",
+    type: "appel",
+    bienId: "bien-002",
+    creeLe: "2026-08-05",
+  },
+  {
+    id: "act-006",
+    titre: "Envoyer un message de relance personnalisé à Jean-Marc Tissier",
+    contexte: "Prospect chaud — aucune réponse depuis 12 jours.",
+    statut: "a_faire",
+    priorite: "haute",
+    type: "message",
+    acquereurId: "client-004",
+    creeLe: "2026-07-27",
+  },
+  {
+    id: "act-007",
+    titre: "Appeler Pierre Fontaine avant 18h",
+    contexte: "Délai de réflexion sur l'offre expire demain.",
+    statut: "a_faire",
+    priorite: "haute",
+    echeance: "2026-08-08",
+    type: "appel",
+    acquereurId: "client-003",
+    creeLe: "2026-08-07",
+  },
+  {
+    id: "act-008",
+    titre: "Préparer les éléments de négociation pour Jean-Marc Tissier",
+    contexte: "En vue de la relance prioritaire prévue aujourd'hui.",
+    statut: "a_faire",
+    priorite: "normale",
+    echeance: "2026-08-08",
+    type: "autre",
+    acquereurId: "client-004",
+    creeLe: "2026-08-06",
+  },
+  {
+    id: "act-009",
+    titre: "Mettre à jour le tableau de suivi des mandats actifs",
+    contexte: "Point hebdomadaire avec l'agence.",
+    statut: "a_faire",
+    priorite: "basse",
+    echeance: "2026-08-09",
+    type: "autre",
+    creeLe: "2026-08-04",
   },
 ];
-
-export function getActionsPourBien(bienId: string): ActionMetier[] {
-  return actionsMetier.filter((a) => a.entite.type === "bien" && a.entite.id === bienId);
-}

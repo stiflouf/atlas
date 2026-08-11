@@ -5,7 +5,7 @@ import Badge from "@/components/ui/Badge";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
-import { getActionsPourBien } from "@/data/actions";
+import { getActionsPourBien } from "@/lib/actionRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 
@@ -31,7 +31,7 @@ export default async function FicheBien({ params }: PageProps) {
   if (!bien) notFound();
 
   const dossier = getDossierByBienId(bien.id);
-  const actions = getActionsPourBien(bien.id);
+  const actions = await getActionsPourBien(bien.id);
   const actionPrincipale = actionPrioritaire(actions);
   const prochaineVisite = rendezVousDuJour.find(
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible

@@ -1,13 +1,11 @@
+import Link from "next/link";
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
-import RelanceCard from "@/components/aujourd-hui/RelanceCard";
 import ActionItem from "@/components/aujourd-hui/ActionItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { relances, actionsPrevues } from "@/data/agenda";
-import { dossiers } from "@/data/dossier";
-import { getActionsPourBien } from "@/data/actions";
-import { listerBiens, getBienById } from "@/lib/bienRepository";
+import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
+import { listerActions } from "@/lib/actionRepository";
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import { formatDateISO, formatDateRelative, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
@@ -53,7 +51,7 @@ export default async function AujourdHui() {
   // getAgendaSemaine() garantit déjà une fenêtre de 7 jours : pas besoin de la recalculer ici.
   const rdvAVenir = rendezVousAVenir(rendezVous, aujourdHuiISO);
 
-  const [biens, clients] = await Promise.all([listerBiens(), listerClients()]);
+  const [biens, clients, actions] = await Promise.all([listerBiens(), listerClients(), listerActions()]);
 
   // Les rendez-vous Google passent par la mémoire persistée (validation humaine > cache >
   // moteur, cf. ADR-006) ; les mocks n'en ont pas besoin, leur contexte est déjà explicite.
@@ -78,24 +76,51 @@ export default async function AujourdHui() {
     dateLabel: formatDateRelative(rdv.date as string, aujourdHuiISO),
   }));
 
+  // Dérivé directement des actions réelles (ou mock démo) + des biens réels : plus de dépendance
+  // à data/dossier.ts pour cette section. Un bien introuvable (id mocké obsolète, etc.) est
+  // simplement ignoré plutôt que de faire échouer la page.
+  const biensParId = new Map(biens.map((bien) => [bien.id, bien]));
+  const actionsActives = actions.filter((a) => a.statut === "a_faire");
+
+  const actionsParBien = new Map<string, ActionMetier[]>();
+  for (const action of actionsActives) {
+    if (!action.bienId) continue;
+    const liste = actionsParBien.get(action.bienId) ?? [];
+    liste.push(action);
+    actionsParBien.set(action.bienId, liste);
+  }
+
   const dossiersAttention: { bien: Bien; action: ActionMetier }[] = [];
-  for (const dossier of dossiers) {
-    const bien = await getBienById(dossier.bienId);
-    const action = actionPrioritaire(getActionsPourBien(dossier.bienId), maintenant);
+  for (const [bienId, actionsDuBien] of actionsParBien) {
+    const bien = biensParId.get(bienId);
+    const action = actionPrioritaire(actionsDuBien, maintenant);
     if (bien && action) dossiersAttention.push({ bien, action });
   }
   dossiersAttention.sort((a, b) => scoreAction(b.action, maintenant) - scoreAction(a.action, maintenant));
 
+  // Actions actives sans bien rattaché (générales ou liées uniquement à un acquéreur).
+  const autresActions = actionsActives
+    .filter((a) => !a.bienId)
+    .sort((a, b) => scoreAction(b, maintenant) - scoreAction(a, maintenant));
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       {/* En-tête */}
-      <div className="mb-8">
-        <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">
-          Aujourd'hui
-        </h1>
-        <p className="text-[13px] text-[#94a3b8] mt-1 capitalize">
-          {greeting} — {dateStr}
-        </p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">
+            Aujourd'hui
+          </h1>
+          <p className="text-[13px] text-[#94a3b8] mt-1 capitalize">
+            {greeting} — {dateStr}
+          </p>
+        </div>
+        <Link
+          href="/actions/nouveau"
+          className="shrink-0 mt-1 text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+        >
+          + Nouvelle action
+        </Link>
       </div>
 
       {/* Rendez-vous */}
@@ -161,20 +186,6 @@ export default async function AujourdHui() {
         </section>
       )}
 
-      {/* Relances */}
-      {relances.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>
-            {relances.length} relance{relances.length > 1 ? "s" : ""} en attente
-          </SectionTitle>
-          <div className="flex flex-col gap-2">
-            {relances.map((r) => (
-              <RelanceCard key={r.id} relance={r} />
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* Dossiers nécessitant une action */}
       {dossiersAttention.length > 0 && (
         <section className="mb-8">
@@ -187,15 +198,20 @@ export default async function AujourdHui() {
         </section>
       )}
 
-      {/* Tâches à préparer */}
-      <section>
-        <SectionTitle>Tâches à préparer</SectionTitle>
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] px-4 divide-y divide-[#f1f5f9]">
-          {actionsPrevues.map((action) => (
-            <ActionItem key={action.id} action={action} />
-          ))}
-        </div>
-      </section>
+      {/* Autres actions (sans bien rattaché) */}
+      {autresActions.length > 0 && (
+        <section>
+          <SectionTitle>
+            {autresActions.length} autre{autresActions.length > 1 ? "s" : ""} action
+            {autresActions.length > 1 ? "s" : ""}
+          </SectionTitle>
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] px-4 divide-y divide-[#f1f5f9]">
+            {autresActions.map((action) => (
+              <ActionItem key={action.id} action={action} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

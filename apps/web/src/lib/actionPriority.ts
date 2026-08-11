@@ -34,7 +34,7 @@ function comparerActions(a: ActionMetier, b: ActionMetier, maintenant: Date): nu
   const diff = scoreAction(b, maintenant) - scoreAction(a, maintenant);
   if (diff !== 0) return diff;
   // À score égal, la plus ancienne (celle qui attend depuis le plus longtemps) passe devant.
-  return new Date(a.dateCreation).getTime() - new Date(b.dateCreation).getTime();
+  return new Date(a.creeLe).getTime() - new Date(b.creeLe).getTime();
 }
 
 export function trierParPriorite(actions: ActionMetier[], maintenant: Date = new Date()): ActionMetier[] {

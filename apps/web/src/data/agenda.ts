@@ -1,4 +1,4 @@
-import type { RendezVous, Relance, ActionPrevue } from "@/types/agenda";
+import type { RendezVous } from "@/types/agenda";
 
 export const rendezVousDuJour: RendezVous[] = [
   {
@@ -28,43 +28,5 @@ export const rendezVousDuJour: RendezVous[] = [
     titre: "Appel — Suivi offre Batignolles",
     client: { id: "client-003", nom: "Fontaine", prenom: "Pierre" },
     preparationDisponible: false,
-  },
-];
-
-export const relances: Relance[] = [
-  {
-    id: "relance-001",
-    clientId: "client-004",
-    client: { nom: "Tissier", prenom: "Jean-Marc" },
-    motif: "Prospect chaud — aucune réponse depuis 12 jours",
-    priorite: "haute",
-    joursAttente: 12,
-    actionSuggeree: "Lui envoyer un message de relance personnalisé",
-    actionType: "message",
-  },
-  {
-    id: "relance-002",
-    clientId: "client-003",
-    client: { nom: "Fontaine", prenom: "Pierre" },
-    motif: "Délai de réflexion sur l'offre expire demain",
-    priorite: "haute",
-    joursAttente: 0,
-    actionSuggeree: "Appeler avant 18h pour connaître la décision",
-    actionType: "appel",
-  },
-];
-
-export const actionsPrevues: ActionPrevue[] = [
-  {
-    id: "action-001",
-    label: "Préparer les éléments de négociation pour Jean-Marc Tissier",
-    contexte: "En vue de la relance prioritaire prévue aujourd'hui",
-    echeance: "2026-08-08",
-  },
-  {
-    id: "action-002",
-    label: "Mettre à jour le tableau de suivi des mandats actifs",
-    contexte: "Point hebdomadaire avec l'agence",
-    echeance: "2026-08-09",
   },
 ];

@@ -120,3 +120,30 @@ export const acquereurs = pgTable(
     ),
   ]
 );
+
+// Actions métier réelles (relances, tâches, suivi de dossier). bienId/acquereurId restent des
+// colonnes text nullables sans FK, même principe que memoireContextuelle : une action peut
+// concerner un bien ou un acquéreur encore mocké (id non-UUID) tant que la bascule démo->réel
+// n'est pas complète pour ce catalogue-là, et peut aussi ne concerner ni l'un ni l'autre
+// (tâche générale).
+export const actions = pgTable(
+  "actions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    titre: text("titre").notNull(),
+    contexte: text("contexte"),
+    type: text("type").notNull().default("autre"),
+    statut: text("statut").notNull().default("a_faire"),
+    priorite: text("priorite").notNull().default("normale"),
+    echeance: date("echeance"),
+    bienId: text("bien_id"),
+    acquereurId: text("acquereur_id"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    termineLe: timestamp("termine_le", { withTimezone: true }),
+  },
+  (table) => [
+    check("actions_type_check", sql`${table.type} IN ('appel','email','message','document','relance','autre')`),
+    check("actions_statut_check", sql`${table.statut} IN ('a_faire','termine')`),
+    check("actions_priorite_check", sql`${table.priorite} IN ('haute','normale','basse')`),
+  ]
+);
