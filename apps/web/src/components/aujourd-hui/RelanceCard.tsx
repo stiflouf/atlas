@@ -1,6 +1,6 @@
 import Card from "@/components/ui/Card";
 import type { Relance, TypeAction } from "@/types/agenda";
-import { getClientById } from "@/data/clients";
+import { getClientById } from "@/lib/clientRepository";
 
 const actionLabel: Record<TypeAction, string> = {
   appel: "Appeler →",
@@ -8,16 +8,16 @@ const actionLabel: Record<TypeAction, string> = {
   email: "Envoyer un mail →",
 };
 
-function actionHref(relance: Relance): string | undefined {
-  const client = getClientById(relance.clientId);
+async function actionHref(relance: Relance): Promise<string | undefined> {
+  const client = await getClientById(relance.clientId);
   if (!client) return undefined;
   if (relance.actionType === "appel") return `tel:${client.telephone.replace(/\s+/g, "")}`;
   if (relance.actionType === "email") return `mailto:${client.email}`;
   return `sms:${client.telephone.replace(/\s+/g, "")}`;
 }
 
-export default function RelanceCard({ relance }: { relance: Relance }) {
-  const href = actionHref(relance);
+export default async function RelanceCard({ relance }: { relance: Relance }) {
+  const href = await actionHref(relance);
 
   return (
     <Card>

@@ -1,6 +1,6 @@
 import { rendezVousDuJour as rendezVousMock } from "@/data/agenda";
-import { biens } from "@/data/biens";
-import { clients } from "@/data/clients";
+import { listerBiens } from "@/lib/bienRepository";
+import { listerClients } from "@/lib/clientRepository";
 import type { RendezVous } from "@/types/agenda";
 import type { ContexteRendezVous } from "@/types/contexteRendezVous";
 import { construireContexte } from "@/lib/matching";
@@ -21,6 +21,7 @@ export type RendezVousAvecContexte = { rdv: RendezVous; contexte: ContexteRendez
 export async function getRendezVousAvecContexte(rdvId: string): Promise<RendezVousAvecContexte | undefined> {
   const rdvMock = rendezVousMock.find((r) => r.id === rdvId);
   if (rdvMock) {
+    const [biens, clients] = await Promise.all([listerBiens(), listerClients()]);
     return { rdv: rdvMock, contexte: construireContexte(rdvMock, { biens, clients }) };
   }
 
@@ -37,6 +38,7 @@ export async function getRendezVousAvecContexte(rdvId: string): Promise<RendezVo
     const rdv = toRendezVous(event);
     if (!rdv) return undefined;
 
+    const [biens, clients] = await Promise.all([listerBiens(), listerClients()]);
     const contexte = await resoudreContextePersiste(rdv, { biens, clients });
     return { rdv, contexte };
   } catch (erreur) {

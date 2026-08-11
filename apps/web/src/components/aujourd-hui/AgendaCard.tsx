@@ -5,8 +5,8 @@ import type { RendezVous, TypeRdv } from "@/types/agenda";
 import type { StatutRendezVous } from "@/lib/rendezVous";
 import type { ContexteRendezVous, TypeMetierRdv } from "@/types/contexteRendezVous";
 import { SEUIL_AMBIGU, SEUIL_FORT } from "@/lib/matching/resoudre";
-import { getClientById } from "@/data/clients";
-import { getBienById } from "@/data/biens";
+import { getClientById } from "@/lib/clientRepository";
+import { getBienById } from "@/lib/bienRepository";
 import ConfirmationBienRdv from "./ConfirmationBienRdv";
 
 type BadgeConfig = { label: string; variant: "accent" | "default" | "muted" | "success" };
@@ -34,7 +34,7 @@ function labelCourtBien(titre: string): string {
   return titre.split(" — ")[0] ?? titre;
 }
 
-export default function AgendaCard({
+export default async function AgendaCard({
   rdv,
   statut,
   contexte,
@@ -50,7 +50,7 @@ export default function AgendaCard({
       ? typeMetierConfig[contexte.typeMetier.type]
       : undefined;
   const { label, variant } = typeDeduit ?? typeConfig[rdv.type];
-  const client = rdv.client ? getClientById(rdv.client.id) : undefined;
+  const client = rdv.client ? await getClientById(rdv.client.id) : undefined;
   const callHref = client ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
 
   // Le contexte n'est exploité que s'il dépasse le seuil "ambigu" au global : en dessous,
@@ -65,15 +65,18 @@ export default function AgendaCard({
   const estVisite = contexteExploitable && contexte?.typeMetier?.type === "visite";
   const preparationDisponible = rdv.preparationDisponible || Boolean(bienConfiant && clientConfiant && estVisite);
 
-  const candidatsBanniere =
+  const candidatsBanniereBruts =
     !preparationDisponible && contexteExploitable && contexte?.necessiteConfirmationBien
-      ? (contexte.bienCandidats ?? [])
-          .map((c) => {
-            const bien = getBienById(c.bienId);
+      ? await Promise.all(
+          (contexte.bienCandidats ?? []).map(async (c) => {
+            const bien = await getBienById(c.bienId);
             return bien ? { bienId: c.bienId, titre: labelCourtBien(bien.titre) } : undefined;
           })
-          .filter((c): c is { bienId: string; titre: string } => Boolean(c))
+        )
       : [];
+  const candidatsBanniere = candidatsBanniereBruts.filter(
+    (c): c is { bienId: string; titre: string } => Boolean(c)
+  );
 
   return (
     <Card>

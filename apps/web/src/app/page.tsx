@@ -6,8 +6,8 @@ import SectionTitle from "@/components/ui/SectionTitle";
 import { relances, actionsPrevues } from "@/data/agenda";
 import { dossiers } from "@/data/dossier";
 import { getActionsPourBien } from "@/data/actions";
-import { biens, getBienById } from "@/data/biens";
-import { clients } from "@/data/clients";
+import { listerBiens, getBienById } from "@/lib/bienRepository";
+import { listerClients } from "@/lib/clientRepository";
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import { formatDateISO, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
@@ -51,6 +51,8 @@ export default async function AujourdHui() {
   // considérés comme "aujourd'hui".
   const rendezVousDuJour = rendezVous.filter((rdv) => !rdv.date || rdv.date === aujourdHuiISO);
 
+  const [biens, clients] = await Promise.all([listerBiens(), listerClients()]);
+
   // Les rendez-vous Google passent par la mémoire persistée (validation humaine > cache >
   // moteur, cf. ADR-006) ; les mocks n'en ont pas besoin, leur contexte est déjà explicite.
   const contextes =
@@ -68,7 +70,7 @@ export default async function AujourdHui() {
 
   const dossiersAttention: { bien: Bien; action: ActionMetier }[] = [];
   for (const dossier of dossiers) {
-    const bien = getBienById(dossier.bienId);
+    const bien = await getBienById(dossier.bienId);
     const action = actionPrioritaire(getActionsPourBien(dossier.bienId), maintenant);
     if (bien && action) dossiersAttention.push({ bien, action });
   }

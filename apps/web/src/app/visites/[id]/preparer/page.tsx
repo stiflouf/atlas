@@ -7,8 +7,8 @@ import VieAutourDuBien from "@/components/visite/VieAutourDuBien";
 import PatrimoineEtHistoire from "@/components/visite/PatrimoineEtHistoire";
 import { getPreparationPourBienEtClient } from "@/data/preparations";
 import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
-import { getBienById } from "@/data/biens";
-import { getClientById } from "@/data/clients";
+import { getBienById } from "@/lib/bienRepository";
+import { getClientById } from "@/lib/clientRepository";
 import { formatDateISO } from "@/lib/temps";
 import { geocoderAdresse } from "@/lib/geocodage/ignClient";
 import { evaluerQualiteGeocodage } from "@/lib/geocodage/qualite";
@@ -92,8 +92,8 @@ export default async function PreparerVisite({ params }: PageProps) {
     );
   }
 
-  const bien = getBienById(contexte.bien.bienId);
-  const acquereur = getClientById(contexte.client.clientId);
+  const bien = await getBienById(contexte.bien.bienId);
+  const acquereur = await getClientById(contexte.client.clientId);
   if (!bien || !acquereur) notFound();
 
   // Géocodage de l'adresse du bien (pas celle du rendez-vous Google, potentiellement
