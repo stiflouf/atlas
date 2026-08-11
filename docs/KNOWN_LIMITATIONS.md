@@ -41,9 +41,11 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   Corriger une erreur de saisie nécessite une intervention directe en base.
 - **Actions** peuvent être créées et terminées, mais pas éditées (titre, priorité, échéance
   figés après création) ni supprimées.
-- **Biens et acquéreurs** n'ont **aucune page d'édition** — uniquement une page de création
-  (`/biens/nouveau`, `/clients/nouveau`). Une fois créé, un bien ou un acquéreur réel ne peut être
-  corrigé que directement en base.
+- **Biens et acquéreurs** ont une page d'édition (`/biens/[id]/modifier`, `/clients/[id]/modifier`,
+  réservée aux entités réelles — un bien/acquéreur mocké n'a pas de bouton "Modifier"), mais
+  **aucune suppression** n'existe pour l'un ni pour l'autre. `modifie_le` est rafraîchi
+  explicitement à chaque édition (`modifierBien()`/`modifierAcquereur()`, mêmes validations
+  serveur que la création — voir `docs/adr/007-repositories-server-components.md`).
 
 ## Limites du moteur de matching
 
@@ -97,8 +99,9 @@ potentiellement `actions`/`notes_bien`/`comptes_rendus_visite` pour savoir qui a
   menu.
 - **Tests** : mélange de tests purs (aucune dépendance externe) et de tests d'intégration qui
   exigent un Postgres local démarré et migré (`compteRenduVisiteRepository.test.ts`,
-  `noteBienRepository.test.ts`, `actionRepository.test.ts`) — aucune configuration de CI n'a été
-  trouvée dans le repo pour les exécuter automatiquement. **À confirmer** si une CI existe hors
+  `noteBienRepository.test.ts`, `actionRepository.test.ts`, `bienRepository.test.ts`,
+  `clientRepository.test.ts`) — aucune configuration de CI n'a été trouvée dans le repo pour les
+  exécuter automatiquement. **À confirmer** si une CI existe hors
   du repo (GitHub Actions, etc.).
 
 ## Architecture cible non construite

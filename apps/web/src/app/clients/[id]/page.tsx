@@ -6,6 +6,8 @@ import ActionItem from "@/components/aujourd-hui/ActionItem";
 import { getClientById } from "@/lib/clientRepository";
 import { getActionsPourAcquereur } from "@/lib/actionRepository";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const stadeLabel: Record<string, string> = {
   decouverte: "Découverte",
   recherche_active: "Recherche active",
@@ -63,12 +65,22 @@ export default async function FicheClient({ params }: PageProps) {
           <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>
         </div>
 
-        <Link
-          href={`/actions/nouveau?acquereurId=${client.id}`}
-          className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
-        >
-          + Ajouter une action
-        </Link>
+        <div className="flex flex-wrap gap-3 mt-4">
+          <Link
+            href={`/actions/nouveau?acquereurId=${client.id}`}
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+          >
+            + Ajouter une action
+          </Link>
+          {UUID_REGEX.test(client.id) && (
+            <Link
+              href={`/clients/${client.id}/modifier`}
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+            >
+              Modifier
+            </Link>
+          )}
+        </div>
       </div>
 
       <section className="mb-8">

@@ -76,6 +76,17 @@ conseiller). Puis boucle complète "après la visite" : table dédiée `comptes_
 enrichissant à leur tour l'historique du bien et la mémoire du dossier pour une prochaine visite du
 même couple bien/acquéreur.
 
+## 11. Édition des biens et acquéreurs réels
+
+Sprint de documentation technique (`docs/`, ADR 007-011) puis reprise des fonctionnalités :
+`/biens/[id]/modifier` et `/clients/[id]/modifier`, réservées aux entités réelles. Formulaires de
+création et d'édition factorisés (`BienFormulaire`/`AcquereurFormulaire`, parsing/validation
+partagés dans `bienFormulaire.ts`/`acquereurFormulaire.ts`) — même validation serveur, même
+préremplissage tri-état (`undefined` → "Inconnu", jamais "Non" par défaut) dans les deux modes.
+`modifierBien()`/`modifierAcquereur()` rafraîchissent explicitement `modifie_le` et retournent
+`undefined` si l'id ne correspond à aucune ligne réelle, plutôt que de supposer une modification
+effective.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

@@ -2,66 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { creerBien } from "@/lib/bienRepository";
-import type { TypeBien, StatutMandat, Exterieur } from "@/types/bien";
+import { parseBienFormData } from "@/lib/bienFormulaire";
 
-// Un select à 3 états (Inconnu/Oui/Non) — jamais une checkbox — pour ne jamais pouvoir soumettre
-// "false" par accident quand l'information est simplement inconnue.
-function parseTriEtat(valeur: FormDataEntryValue | null): boolean | undefined {
-  if (valeur === "oui") return true;
-  if (valeur === "non") return false;
-  return undefined;
-}
-
-function parseExterieur(valeur: FormDataEntryValue | null): Exterieur | undefined {
-  if (valeur === "aucun" || valeur === "balcon" || valeur === "terrasse" || valeur === "jardin") return valeur;
-  return undefined;
-}
-
-// Validation serveur minimale : incohérences évidentes uniquement, pas de règle métier avancée.
 export async function creerBienAction(formData: FormData): Promise<void> {
-  const surface = Number(formData.get("surface"));
-  const pieces = Number(formData.get("pieces"));
-  const prix = Number(formData.get("prix"));
-  const etageBrut = formData.get("etage");
-  const etage = etageBrut && String(etageBrut).trim() !== "" ? Number(etageBrut) : undefined;
-
-  if (!Number.isFinite(surface) || surface <= 0) {
-    throw new Error("Surface invalide : doit être strictement supérieure à 0.");
-  }
-  if (!Number.isFinite(pieces) || pieces <= 0) {
-    throw new Error("Nombre de pièces invalide : doit être strictement supérieur à 0.");
-  }
-  if (!Number.isFinite(prix) || prix < 0) {
-    throw new Error("Prix invalide : doit être positif ou nul.");
-  }
-  if (etage !== undefined && (!Number.isFinite(etage) || etage < 0)) {
-    throw new Error("Étage invalide : doit être positif ou nul.");
-  }
-
-  const caracteristiques = String(formData.get("caracteristiques") ?? "")
-    .split("\n")
-    .map((ligne) => ligne.trim())
-    .filter(Boolean);
-
-  const bien = await creerBien({
-    reference: String(formData.get("reference") ?? "").trim(),
-    titre: String(formData.get("titre") ?? "").trim(),
-    type: String(formData.get("type")) as TypeBien,
-    adresse: String(formData.get("adresse") ?? "").trim(),
-    ville: String(formData.get("ville") ?? "").trim(),
-    codePostal: String(formData.get("codePostal") ?? "").trim(),
-    surface,
-    pieces,
-    prix,
-    statutMandat: String(formData.get("statutMandat")) as StatutMandat,
-    dateMandat: String(formData.get("dateMandat")),
-    caracteristiques,
-    description: String(formData.get("description") ?? "").trim(),
-    etage,
-    ascenseur: parseTriEtat(formData.get("ascenseur")),
-    parking: parseTriEtat(formData.get("parking")),
-    exterieur: parseExterieur(formData.get("exterieur")),
-  });
-
+  const bien = await creerBien(parseBienFormData(formData));
   redirect(`/biens/${bien.id}`);
 }

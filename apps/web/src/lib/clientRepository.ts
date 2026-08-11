@@ -88,3 +88,33 @@ export async function creerAcquereur(input: NouvelAcquereur): Promise<ProfilAcqu
     .returning();
   return ligneVersAcquereur(ligne);
 }
+
+// Update pur, même principe que creerAcquereur. modifieLe posé explicitement (voir
+// bienRepository.modifierBien pour le détail). Retourne undefined si id ne correspond à aucune
+// ligne réelle plutôt que de supposer une modification effective.
+export async function modifierAcquereur(id: string, input: NouvelAcquereur): Promise<ProfilAcquereur | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(acquereursTable)
+    .set({
+      prenom: input.prenom,
+      nom: input.nom,
+      email: input.email,
+      telephone: input.telephone,
+      budgetMin: input.budgetMin,
+      budgetMax: input.budgetMax,
+      criteres: input.criteres,
+      stadeProjet: input.stadeProjet,
+      notes: input.notes,
+      datePremiereContact: input.datePremiereContact,
+      piecesMin: input.piecesMin ?? null,
+      surfaceMin: input.surfaceMin ?? null,
+      accessibiliteRequise: input.accessibiliteRequise ?? null,
+      necessiteParking: input.necessiteParking ?? null,
+      necessiteExterieur: input.necessiteExterieur ?? null,
+      modifieLe: new Date(),
+    })
+    .where(eq(acquereursTable.id, id))
+    .returning();
+  return ligne ? ligneVersAcquereur(ligne) : undefined;
+}

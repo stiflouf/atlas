@@ -189,8 +189,8 @@ voir la procédure détaillée dans `docs/BUSINESS_RULES.md#mémoire-contextuell
 | Route | Rôle |
 |---|---|
 | `/` | Accueil — agenda du jour + à venir, actions prioritaires |
-| `/biens`, `/biens/nouveau`, `/biens/[id]` | Liste, création, fiche bien (onglets Contexte/Historique/Notes/Visites/Documents/Actions) |
-| `/clients`, `/clients/nouveau`, `/clients/[id]` | Liste, création, fiche acquéreur |
+| `/biens`, `/biens/nouveau`, `/biens/[id]`, `/biens/[id]/modifier` | Liste, création, fiche bien (onglets Contexte/Historique/Notes/Visites/Documents/Actions), édition — bien réel uniquement |
+| `/clients`, `/clients/nouveau`, `/clients/[id]`, `/clients/[id]/modifier` | Liste, création, fiche acquéreur, édition — acquéreur réel uniquement |
 | `/actions/nouveau` | Création d'une action (préremplissable via `?bienId=`/`?acquereurId=`) |
 | `/visites/[id]/preparer` | Préparation de visite + formulaire de compte rendu après la visite |
 | `/api/auth/google/{login,callback,logout}` | Flux OAuth Google Calendar |

@@ -11,6 +11,8 @@ import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
 }
@@ -115,6 +117,14 @@ export default async function FicheBien({ params }: PageProps) {
           >
             + Ajouter une action
           </Link>
+          {UUID_REGEX.test(bien.id) && (
+            <Link
+              href={`/biens/${bien.id}/modifier`}
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+            >
+              Modifier
+            </Link>
+          )}
         </div>
       </div>
 

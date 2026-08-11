@@ -97,3 +97,37 @@ export async function creerBien(input: NouveauBien): Promise<Bien> {
     .returning();
   return ligneVersBien(ligne);
 }
+
+// Update pur, même principe que creerBien : validation métier déjà faite par l'appelant.
+// modifieLe est posé explicitement — Drizzle .defaultNow() ne s'applique qu'à l'insertion, une
+// mise à jour ne le rafraîchit jamais automatiquement. Retourne undefined si id ne correspond à
+// aucune ligne réelle (id mocké ou déjà supprimé) plutôt que de supposer qu'une ligne a été
+// modifiée — l'appelant (Server Action) doit gérer ce cas explicitement, jamais un faux succès.
+export async function modifierBien(id: string, input: NouveauBien): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(biensTable)
+    .set({
+      reference: input.reference,
+      titre: input.titre,
+      type: input.type,
+      adresse: input.adresse,
+      ville: input.ville,
+      codePostal: input.codePostal,
+      surface: input.surface,
+      pieces: input.pieces,
+      prix: input.prix,
+      statutMandat: input.statutMandat,
+      dateMandat: input.dateMandat,
+      caracteristiques: input.caracteristiques,
+      description: input.description,
+      etage: input.etage ?? null,
+      ascenseur: input.ascenseur ?? null,
+      parking: input.parking ?? null,
+      exterieur: input.exterieur ?? null,
+      modifieLe: new Date(),
+    })
+    .where(eq(biensTable.id, id))
+    .returning();
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
