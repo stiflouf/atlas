@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Building2 } from "lucide-react";
+import { Home, Building2, Users } from "lucide-react";
 
 const items = [
   { label: "Aujourd'hui", href: "/", icon: Home },
   { label: "Biens", href: "/biens", icon: Building2 },
+  { label: "Clients", href: "/clients", icon: Users },
 ];
 
 type Props = { variant: "sidebar" | "bottom" };
