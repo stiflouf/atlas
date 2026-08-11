@@ -1,8 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
+import VieAutourDuBien from "@/components/visite/VieAutourDuBien";
+import PatrimoineEtHistoire from "@/components/visite/PatrimoineEtHistoire";
 import { getPreparationPourBienEtClient } from "@/data/preparations";
 import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
 import { getBienById } from "@/data/biens";
@@ -217,159 +219,9 @@ export default async function PreparerVisite({ params }: PageProps) {
         </section>
       )}
 
-      {/* Transports à proximité */}
-      {(transports || velib) && (
-        <section className="mb-8">
-          <SectionTitle>Transports à proximité</SectionTitle>
-          {transports && transports.arrets.length > 0 && (
-            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
-              {transports.arrets.map((a) => (
-                <p key={a.nom} className="py-3 text-[14px] text-[#0f172a] leading-snug">
-                  {(a.modes.join(" / ") || "Arrêt") + " " + a.nom}
-                  {a.lignes.length > 0 &&
-                    ` — ligne${a.lignes.length > 1 ? "s" : ""} ${a.lignes.join(" / ")}`}
-                  {" — "}
-                  {a.distanceMetres} m
-                </p>
-              ))}
-            </div>
-          )}
-          {transports && (
-            <p className="text-[11px] text-[#94a3b8] mb-3">
-              Source : PRIM (Île-de-France Mobilités) · récupéré le{" "}
-              {new Date(transports.recupereLe).toLocaleString("fr-FR")}
-            </p>
-          )}
-          {velib && velib.stations.length > 0 && (
-            <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
-              {velib.stations.map((s) => (
-                <p key={s.nom} className="py-3 text-[14px] text-[#0f172a] leading-snug">
-                  Station Vélib' {s.nom} — {s.distanceMetres} m
-                </p>
-              ))}
-            </div>
-          )}
-          {velib && (
-            <p className="text-[11px] text-[#94a3b8]">
-              Source : Vélib' Métropole (GBFS) · récupéré le {new Date(velib.recupereLe).toLocaleString("fr-FR")}
-            </p>
-          )}
-          {transports?.arrets.length === 0 && velib?.stations.length === 0 && (
-            <p className="text-[13px] text-[#94a3b8]">Aucun arrêt ni station Vélib' à moins de 500 m.</p>
-          )}
-        </section>
-      )}
-
-      {/* Écoles à proximité */}
-      {groupesEcoles.some(({ items }) => items.length > 0) && (
-        <section className="mb-8">
-          <SectionTitle>Écoles à proximité</SectionTitle>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
-            {groupesEcoles.flatMap(({ niveau, items }) =>
-              items.map((e) => (
-                <p key={`${niveau}-${e.nom}`} className="py-3 text-[14px] text-[#0f172a] leading-snug">
-                  {niveau} {e.nom}
-                  {e.statut && ` — ${e.statut}`}
-                  {" — "}
-                  {e.distanceMetres} m
-                </p>
-              ))
-            )}
-          </div>
-          {ecoles && (
-            <p className="text-[11px] text-[#94a3b8]">
-              Source : Annuaire de l'Éducation Nationale · récupéré le{" "}
-              {new Date(ecoles.recupereLe).toLocaleString("fr-FR")}
-            </p>
-          )}
-        </section>
-      )}
-
-      {/* Commerces et services à proximité */}
-      {groupesCommerces.some(({ items }) => items.length > 0) && (
-        <section className="mb-8">
-          <SectionTitle>Commerces et services à proximité</SectionTitle>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
-            {groupesCommerces.flatMap(({ label, items }) =>
-              items.map((p) => (
-                <p key={`${label}-${p.nom}`} className="py-3 text-[14px] text-[#0f172a] leading-snug">
-                  {p.nom} — {label} — {p.distanceMetres} m
-                </p>
-              ))
-            )}
-          </div>
-          {commerces && (
-            <p className="text-[11px] text-[#94a3b8]">
-              Source :{" "}
-              <a href="https://www.openstreetmap.org/copyright" className="underline">
-                © OpenStreetMap contributors
-              </a>{" "}
-              (ODbL) · récupéré le {new Date(commerces.recupereLe).toLocaleString("fr-FR")}
-            </p>
-          )}
-        </section>
-      )}
-
-      {/* Patrimoine à proximité */}
-      {patrimoine && patrimoine.monuments.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>Patrimoine à proximité</SectionTitle>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
-            {patrimoine.monuments.map((m) => (
-              <div key={m.reference} className="py-3">
-                <p className="text-[14px] font-medium text-[#0f172a] leading-snug">{m.nom}</p>
-                <p className="text-[12px] text-[#64748b] mt-0.5">
-                  {m.type && `${m.type.charAt(0).toUpperCase()}${m.type.slice(1)}`}
-                  {m.type && " · "}
-                  {m.distanceMetres} m
-                </p>
-                {m.extraitHistorique && (
-                  <p className="text-[13px] text-[#475569] leading-snug mt-1">{m.extraitHistorique}</p>
-                )}
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-[#94a3b8]">
-            Source : Ministère de la Culture — Base Mérimée · récupéré le{" "}
-            {new Date(patrimoine.recupereLe).toLocaleString("fr-FR")}
-          </p>
-        </section>
-      )}
-
-      {/* À raconter si pertinent */}
-      {elementsARaconter.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>À raconter si pertinent</SectionTitle>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
-            {elementsARaconter.map((e) => (
-              <div key={e.reference} className="py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-1">
-                  🏛 Histoire · {e.distanceMetres} m
-                </p>
-                <p className="text-[14px] text-[#0f172a] leading-snug">{e.texte}</p>
-                <p className="text-[11px] text-[#94a3b8] mt-1">
-                  Source : {e.source} — {e.reference}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Résumé du bien */}
-      <section className="mb-8">
-        <SectionTitle>Résumé du bien</SectionTitle>
-        <p className="text-[14px] text-[#64748b] leading-relaxed">{bien.description}</p>
-      </section>
-
       {/* Profil acquéreur */}
       <section className="mb-8 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <User size={15} className="text-[#94a3b8]" strokeWidth={1.8} />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">
-            Acquéreur
-          </span>
-        </div>
+        <SectionTitle>Acquéreur</SectionTitle>
         <p className="text-[15px] font-medium text-[#0f172a]">
           {aq.prenom} {aq.nom}
         </p>
@@ -395,22 +247,11 @@ export default async function PreparerVisite({ params }: PageProps) {
         )}
       </section>
 
-      {/* Questions suggérées — aide au conseiller, pas une donnée factuelle sur le bien/l'acquéreur */}
-      {prep.questionsASuggerer && prep.questionsASuggerer.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>Questions suggérées pour la visite</SectionTitle>
-          <p className="text-[13px] text-[#94a3b8] mb-3 leading-relaxed">
-            Une aide pour préparer l'entretien — pas une information sur le bien ou l'acquéreur.
-          </p>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9]">
-            {prep.questionsASuggerer.map((q, i) => (
-              <p key={i} className="py-3 text-[14px] text-[#0f172a] leading-snug">
-                {q}
-              </p>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Résumé du bien */}
+      <section className="mb-8">
+        <SectionTitle>Résumé du bien</SectionTitle>
+        <p className="text-[14px] text-[#64748b] leading-relaxed">{bien.description}</p>
+      </section>
 
       {/* Marché — transactions réelles à proximité, jamais une estimation */}
       {marcheDvf && marcheDvf.transactions.length > 0 && (
@@ -459,6 +300,40 @@ export default async function PreparerVisite({ params }: PageProps) {
           </p>
         </section>
       )}
+
+      {/* Questions suggérées — aide au conseiller, pas une donnée factuelle sur le bien/l'acquéreur */}
+      {prep.questionsASuggerer && prep.questionsASuggerer.length > 0 && (
+        <section className="mb-8">
+          <SectionTitle>Questions suggérées pour la visite</SectionTitle>
+          <p className="text-[13px] text-[#94a3b8] mb-3 leading-relaxed">
+            Une aide pour préparer l'entretien — pas une information sur le bien ou l'acquéreur.
+          </p>
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9]">
+            {prep.questionsASuggerer.map((q, i) => (
+              <p key={i} className="py-3 text-[14px] text-[#0f172a] leading-snug">
+                {q}
+              </p>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Vie pratique autour du bien — Transports + Vélib' + Écoles + Commerces */}
+      <VieAutourDuBien
+        transports={transports}
+        velib={velib}
+        ecoles={ecoles}
+        groupesEcoles={groupesEcoles}
+        commerces={commerces}
+        groupesCommerces={groupesCommerces}
+      />
+
+      {/* Patrimoine & histoire — Patrimoine à proximité + À raconter si pertinent */}
+      <PatrimoineEtHistoire
+        monuments={patrimoine?.monuments ?? []}
+        recupereLe={patrimoine?.recupereLe}
+        elementsARaconter={elementsARaconter}
+      />
 
       {/* Rappel du principe Atlas */}
       <p className="text-[12px] text-[#94a3b8] leading-relaxed border-t border-[#f1f5f9] pt-4 mb-6">
