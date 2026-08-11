@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Building2 } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import BienTabs from "@/components/bien/BienTabs";
-import { getBienById } from "@/data/biens";
+import { getBienById } from "@/lib/bienRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getActionsPourBien } from "@/data/actions";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
@@ -27,7 +27,7 @@ type PageProps = { params: Promise<{ id: string }> };
 
 export default async function FicheBien({ params }: PageProps) {
   const { id } = await params;
-  const bien = getBienById(id);
+  const bien = await getBienById(id);
   if (!bien) notFound();
 
   const dossier = getDossierByBienId(bien.id);

@@ -1,20 +1,31 @@
 import Link from "next/link";
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2, ChevronRight, Plus } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { biens } from "@/data/biens";
+import { listerBiens } from "@/lib/bienRepository";
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
 }
 
-export default function BiensPage() {
+export default async function BiensPage() {
+  const biens = await listerBiens();
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
-      <div className="mb-8">
-        <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">Biens</h1>
-        <p className="text-[14px] text-[#94a3b8] mt-1">{biens.length} mandats actifs</p>
+      <div className="mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">Biens</h1>
+          <p className="text-[14px] text-[#94a3b8] mt-1">{biens.length} mandats actifs</p>
+        </div>
+        <Link
+          href="/biens/nouveau"
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg shrink-0"
+        >
+          <Plus size={14} />
+          Ajouter un bien
+        </Link>
       </div>
 
       <section>
