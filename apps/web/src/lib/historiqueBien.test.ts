@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
+import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import { deriverHistoriqueBien } from "./historiqueBien";
 
 function bienTest(surcharge: Partial<Bien> = {}): Bien {
@@ -80,6 +81,50 @@ describe("deriverHistoriqueBien", () => {
       "2026-07-01T00:00:00.000Z",
       "2026-06-01T00:00:00.000Z",
       "2026-01-01T00:00:00.000Z",
+    ]);
+  });
+
+  it("produit « Visite effectuée — {label} » sans jamais inclure le texte du retour", () => {
+    const compteRendu: CompteRenduVisite = {
+      id: "cr-1",
+      bienId: "bien-test",
+      acquereurId: "acquereur-test",
+      dateVisite: "2026-08-03",
+      retour: "Texte libre confidentiel qui ne doit jamais apparaître dans l'historique.",
+      interet: "interesse",
+      creeLe: "2026-08-03T18:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [compteRendu]);
+
+    expect(evenements).toEqual([{ date: "2026-08-03", texte: "Visite effectuée — Intéressé" }]);
+  });
+
+  it("inclut toutes les visites du bien, quel que soit l'acquéreur", () => {
+    const visiteA: CompteRenduVisite = {
+      id: "cr-a",
+      bienId: "bien-test",
+      acquereurId: "acquereur-a",
+      dateVisite: "2026-08-01",
+      retour: "Retour A",
+      interet: "pas_interesse",
+      creeLe: "2026-08-01T10:00:00.000Z",
+    };
+    const visiteB: CompteRenduVisite = {
+      id: "cr-b",
+      bienId: "bien-test",
+      acquereurId: "acquereur-b",
+      dateVisite: "2026-08-05",
+      retour: "Retour B",
+      interet: "a_reflechir",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [visiteA, visiteB]);
+
+    expect(evenements.map((e) => e.texte)).toEqual([
+      "Visite effectuée — À réfléchir",
+      "Visite effectuée — Pas intéressé",
     ]);
   });
 });

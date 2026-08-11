@@ -1,4 +1,5 @@
 import type { ActionMetier } from "@/types/action";
+import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import { scoreAction } from "@/lib/actionPriority";
 
 export type OrigineAction = "bien" | "acquereur";
@@ -35,4 +36,17 @@ export function selectionnerHistoriqueRecent(actionsBien: ActionMetier[], maximu
     .sort((a, b) => (a.termineLe < b.termineLe ? 1 : -1))
     .slice(0, maximum)
     .map((a) => ({ date: a.termineLe, texte: `Action terminée : ${a.titre}` }));
+}
+
+// Autonome : filtre par acquereurId, trie par dateVisite décroissante, puis plafonne — ne dépend
+// jamais implicitement de l'ordre déjà fourni par le repository appelant.
+export function selectionnerComptesRendusRecents(
+  comptesRendus: CompteRenduVisite[],
+  acquereurId: string,
+  maximum = 3
+): CompteRenduVisite[] {
+  return comptesRendus
+    .filter((cr) => cr.acquereurId === acquereurId)
+    .sort((a, b) => (a.dateVisite < b.dateVisite ? 1 : -1))
+    .slice(0, maximum);
 }

@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { ActionMetier } from "@/types/action";
-import { selectionnerActionsEnCours, selectionnerHistoriqueRecent } from "./memoireDossier";
+import type { CompteRenduVisite } from "@/types/compteRenduVisite";
+import { selectionnerActionsEnCours, selectionnerComptesRendusRecents, selectionnerHistoriqueRecent } from "./memoireDossier";
+
+function compteRenduTest(surcharge: Partial<CompteRenduVisite> = {}): CompteRenduVisite {
+  return {
+    id: "cr-test",
+    bienId: "bien-test",
+    acquereurId: "acquereur-a",
+    dateVisite: "2026-08-01",
+    retour: "Retour de test",
+    interet: "interesse",
+    creeLe: "2026-08-01T18:00:00.000Z",
+    ...surcharge,
+  };
+}
 
 function actionTest(surcharge: Partial<ActionMetier> = {}): ActionMetier {
   return {
@@ -74,5 +88,42 @@ describe("selectionnerHistoriqueRecent", () => {
     const resultat = selectionnerHistoriqueRecent(actions, 2);
 
     expect(resultat.map((e) => e.texte)).toEqual(["Action terminée : Récente", "Action terminée : Intermédiaire"]);
+  });
+});
+
+describe("selectionnerComptesRendusRecents", () => {
+  it("ne retient que les comptes rendus du bon acquéreur", () => {
+    const deLAcquereur = compteRenduTest({ id: "cr-a", acquereurId: "acquereur-a" });
+    const dUnAutre = compteRenduTest({ id: "cr-b", acquereurId: "acquereur-b" });
+
+    const resultat = selectionnerComptesRendusRecents([deLAcquereur, dUnAutre], "acquereur-a");
+
+    expect(resultat.map((cr) => cr.id)).toEqual(["cr-a"]);
+  });
+
+  it("trie par dateVisite décroissante même si la liste fournie n'est pas déjà triée", () => {
+    // Volontairement dans le désordre et avec une date la plus ancienne en tête, pour vérifier
+    // que la fonction ne dépend jamais implicitement de l'ordre fourni par l'appelant.
+    const ancien = compteRenduTest({ id: "ancien", dateVisite: "2026-06-01" });
+    const recent = compteRenduTest({ id: "recent", dateVisite: "2026-08-10" });
+    const intermediaire = compteRenduTest({ id: "intermediaire", dateVisite: "2026-07-15" });
+
+    const resultat = selectionnerComptesRendusRecents([ancien, recent, intermediaire], "acquereur-a");
+
+    expect(resultat.map((cr) => cr.id)).toEqual(["recent", "intermediaire", "ancien"]);
+  });
+
+  it("plafonne au maximum demandé", () => {
+    const comptesRendus = [
+      compteRenduTest({ id: "cr-1", dateVisite: "2026-08-01" }),
+      compteRenduTest({ id: "cr-2", dateVisite: "2026-08-02" }),
+      compteRenduTest({ id: "cr-3", dateVisite: "2026-08-03" }),
+      compteRenduTest({ id: "cr-4", dateVisite: "2026-08-04" }),
+    ];
+
+    const resultat = selectionnerComptesRendusRecents(comptesRendus, "acquereur-a", 3);
+
+    expect(resultat).toHaveLength(3);
+    expect(resultat.map((cr) => cr.id)).toEqual(["cr-4", "cr-3", "cr-2"]);
   });
 });

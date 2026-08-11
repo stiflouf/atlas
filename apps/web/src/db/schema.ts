@@ -160,3 +160,32 @@ export const notesBien = pgTable("notes_bien", {
   contenu: text("contenu").notNull(),
   creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Compte rendu après une visite. bienId/acquereurId sont de vraies FK, même rationale que
+// notes_bien : un compte rendu n'est créable que depuis /visites/[id]/preparer, où bien et
+// acquéreur sont déjà résolus et réels. dateVisite (date réelle de la visite, préremplie depuis
+// le rendez-vous mais modifiable) est volontairement distincte de creeLe (instant de saisie).
+// Pas de modifieLe : append-only, aucune édition prévue pour l'instant.
+export const comptesRendusVisite = pgTable(
+  "comptes_rendus_visite",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id, { onDelete: "cascade" }),
+    acquereurId: uuid("acquereur_id")
+      .notNull()
+      .references(() => acquereurs.id, { onDelete: "cascade" }),
+    dateVisite: date("date_visite").notNull(),
+    retour: text("retour").notNull(),
+    interet: text("interet").notNull().default("inconnu"),
+    prochaineEtape: text("prochaine_etape"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "comptes_rendus_visite_interet_check",
+      sql`${table.interet} IN ('interesse','a_reflechir','pas_interesse','inconnu')`
+    ),
+  ]
+);

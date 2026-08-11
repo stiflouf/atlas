@@ -5,6 +5,7 @@ import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import type { ActionMetier } from "@/types/action";
 import type { NoteBien } from "@/types/noteBien";
+import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
@@ -21,11 +22,13 @@ export default function BienTabs({
   dossier,
   actions,
   notes,
+  comptesRendus,
 }: {
   bien: Bien;
   dossier?: DossierBien;
   actions: ActionMetier[];
   notes: NoteBien[];
+  comptesRendus: CompteRenduVisite[];
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
@@ -34,10 +37,11 @@ export default function BienTabs({
   // là que le conseiller ajoute sa première note. Documents/Visites n'ont pas d'équivalent réel
   // aujourd'hui (aucun stockage de documents, aucun suivi de visites effectuées) : masqués
   // plutôt que de fabriquer un DossierBien artificiel pour un bien réel. Historique, lui, est
-  // dérivé de faits réels (bien.creeLe, action.creeLe/termineLe) quand aucun dossier mock n'existe.
+  // dérivé de faits réels (bien.creeLe, action.creeLe/termineLe, comptes rendus de visite) quand
+  // aucun dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
     ? dossier.historique
-    : deriverHistoriqueBien(bien, actions);
+    : deriverHistoriqueBien(bien, actions, comptesRendus);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "contexte", label: "Contexte" },

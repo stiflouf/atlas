@@ -11,7 +11,14 @@ import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { getActionsPourBien, getActionsPourAcquereur } from "@/lib/actionRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
-import { selectionnerActionsEnCours, selectionnerHistoriqueRecent } from "@/lib/memoireDossier";
+import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
+import {
+  selectionnerActionsEnCours,
+  selectionnerComptesRendusRecents,
+  selectionnerHistoriqueRecent,
+} from "@/lib/memoireDossier";
+import { enregistrerCompteRenduVisiteAction } from "@/actions/enregistrerCompteRenduVisite";
+import { LABEL_INTERET, type Interet } from "@/types/compteRenduVisite";
 import { formatDateISO } from "@/lib/temps";
 import { geocoderAdresse } from "@/lib/geocodage/ignClient";
 import { evaluerQualiteGeocodage } from "@/lib/geocodage/qualite";
@@ -110,16 +117,20 @@ export default async function PreparerVisite({ params }: PageProps) {
   const acquereur = await getClientById(contexte.client.clientId);
   if (!bien || !acquereur) notFound();
 
-  // Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (notes,
-  // actions), jamais interprété ni résumé. N'alimente ni pointsAttention ni pointsForts.
-  const [actionsDuBien, actionsDeLAcquereur, notesDuBien] = await Promise.all([
+  // Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (comptes
+  // rendus, notes, actions), jamais interprété ni résumé. N'alimente ni pointsAttention ni
+  // pointsForts.
+  const [actionsDuBien, actionsDeLAcquereur, notesDuBien, comptesRendusDuBien] = await Promise.all([
     getActionsPourBien(bien.id),
     getActionsPourAcquereur(acquereur.id),
     listerNotesPourBien(bien.id),
+    listerComptesRendusPourBien(bien.id),
   ]);
   const notesRecentes = notesDuBien.slice(0, 3);
   const actionsEnCours = selectionnerActionsEnCours(actionsDuBien, actionsDeLAcquereur);
   const historiqueRecent = selectionnerHistoriqueRecent(actionsDuBien);
+  const comptesRendusRecents = selectionnerComptesRendusRecents(comptesRendusDuBien, acquereur.id);
+  const dateVisiteParDefaut = rdv.date ?? formatDateISO(new Date());
 
   // Géocodage de l'adresse du bien (pas celle du rendez-vous Google, potentiellement
   // différente) — best-effort, aucune coordonnée de repli si l'IGN ne répond pas.
@@ -272,11 +283,51 @@ export default async function PreparerVisite({ params }: PageProps) {
         )}
       </section>
 
-      {/* Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (notes,
-          actions). Jamais résumé, jamais interprété, aucune écriture possible depuis cette page. */}
-      {(notesRecentes.length > 0 || actionsEnCours.length > 0 || historiqueRecent.length > 0) && (
+      {/* Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (comptes
+          rendus, notes, actions). Jamais résumé, jamais interprété, aucune écriture possible
+          depuis cette section (le formulaire d'enregistrement est plus bas, séparé). */}
+      {(comptesRendusRecents.length > 0 ||
+        notesRecentes.length > 0 ||
+        actionsEnCours.length > 0 ||
+        historiqueRecent.length > 0) && (
         <section className="mb-8">
           <SectionTitle>Mémoire du dossier</SectionTitle>
+
+          {comptesRendusRecents.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Comptes rendus précédents avec {aq.prenom} {aq.nom}
+              </p>
+              <div className="flex flex-col gap-2">
+                {comptesRendusRecents.map((cr) => (
+                  <div key={cr.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <p className="text-[11px] text-[#94a3b8]">{formatDateCourte(cr.dateVisite)}</p>
+                      <Badge
+                        variant={
+                          cr.interet === "interesse"
+                            ? "success"
+                            : cr.interet === "pas_interesse"
+                              ? "muted"
+                              : "default"
+                        }
+                      >
+                        {LABEL_INTERET[cr.interet]}
+                      </Badge>
+                    </div>
+                    <p className="text-[14px] text-[#0f172a] leading-relaxed whitespace-pre-wrap">
+                      {cr.retour}
+                    </p>
+                    {cr.prochaineEtape && (
+                      <p className="text-[13px] text-[#94a3b8] mt-2 border-t border-[#f1f5f9] pt-2">
+                        Prochaine étape : {cr.prochaineEtape}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {notesRecentes.length > 0 && (
             <div className="mb-4">
@@ -435,6 +486,70 @@ export default async function PreparerVisite({ params }: PageProps) {
         recupereLe={patrimoine?.recupereLe}
         elementsARaconter={elementsARaconter}
       />
+
+      {/* Compte rendu après la visite — jamais de génération automatique d'action ; la
+          "prochaine étape" reste un texte libre, à transformer manuellement en action si besoin
+          via le bouton "+ Ajouter une action" existant sur la fiche du bien. */}
+      <section className="mb-8 border-t border-[#f1f5f9] pt-6">
+        <SectionTitle>Compte rendu de la visite</SectionTitle>
+        <form action={enregistrerCompteRenduVisiteAction} className="flex flex-col gap-4">
+          <input type="hidden" name="bienId" value={bien.id} />
+          <input type="hidden" name="acquereurId" value={acquereur.id} />
+
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Date de la visite</label>
+            <input
+              type="date"
+              name="dateVisite"
+              defaultValue={dateVisiteParDefaut}
+              required
+              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+            />
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Intérêt de l'acquéreur</label>
+            <div className="flex flex-wrap gap-3">
+              {(Object.keys(LABEL_INTERET) as Interet[]).map((valeur) => (
+                <label key={valeur} className="inline-flex items-center gap-1.5 text-[13px] text-[#0f172a]">
+                  <input type="radio" name="interet" value={valeur} defaultChecked={valeur === "inconnu"} />
+                  {LABEL_INTERET[valeur]}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Retour libre</label>
+            <textarea
+              name="retour"
+              rows={4}
+              required
+              placeholder="Ce que vous avez observé, ce que l'acquéreur a dit..."
+              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+            />
+          </div>
+
+          <div>
+            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">
+              Prochaine étape (optionnel)
+            </label>
+            <textarea
+              name="prochaineEtape"
+              rows={2}
+              placeholder="Ex. Envoyer une contre-proposition, relancer dans une semaine..."
+              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+          >
+            Enregistrer le compte rendu
+          </button>
+        </form>
+      </section>
 
       {/* Rappel du principe Atlas */}
       <p className="text-[12px] text-[#94a3b8] leading-relaxed border-t border-[#f1f5f9] pt-4 mb-6">
