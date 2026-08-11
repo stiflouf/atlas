@@ -30,6 +30,7 @@ function ligneVersBien(ligne: LigneBien): Bien {
     ascenseur: ligne.ascenseur ?? undefined,
     parking: ligne.parking ?? undefined,
     exterieur: (ligne.exterieur as Exterieur | null) ?? undefined,
+    creeLe: ligne.creeLe.toISOString(),
   };
 }
 

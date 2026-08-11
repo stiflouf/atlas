@@ -23,4 +23,7 @@ export type Bien = {
   ascenseur?: boolean;
   parking?: boolean;
   exterieur?: Exterieur;
+  // Absent pour les biens mockés (data/biens.ts) : aucune notion de date de création pour des
+  // données statiques. Présent pour tout bien réel (colonne DB non nulle).
+  creeLe?: string;
 };

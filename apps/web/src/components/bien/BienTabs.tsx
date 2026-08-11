@@ -6,6 +6,7 @@ import type { DossierBien } from "@/data/dossier";
 import type { ActionMetier } from "@/types/action";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
+import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 
 type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "actions";
 
@@ -25,14 +26,19 @@ export default function BienTabs({
   const [active, setActive] = useState<Tab>("contexte");
 
   // Contexte et Actions reposent sur des données réelles (bien, actionRepository), toujours
-  // disponibles. Historique/Notes/Documents/Visites n'ont pas d'équivalent réel aujourd'hui
-  // (aucune table d'audit, de notes, de documents ou de suivi de visites effectuées) : masqués
-  // plutôt que de fabriquer un DossierBien artificiel pour un bien réel.
+  // disponibles. Notes/Documents/Visites n'ont pas d'équivalent réel aujourd'hui (aucune table
+  // d'audit, de notes, de documents ou de suivi de visites effectuées) : masqués plutôt que de
+  // fabriquer un DossierBien artificiel pour un bien réel. Historique, lui, est dérivé de faits
+  // réels (bien.creeLe, action.creeLe/termineLe) quand aucun dossier mock n'existe.
+  const evenementsHistorique: EvenementHistorique[] = dossier
+    ? dossier.historique
+    : deriverHistoriqueBien(bien, actions);
+
   const TABS: { id: Tab; label: string }[] = [
     { id: "contexte", label: "Contexte" },
+    ...(evenementsHistorique.length > 0 ? ([{ id: "historique", label: "Historique" }] as const) : []),
     ...(dossier
       ? ([
-          { id: "historique", label: "Historique" },
           { id: "notes", label: "Notes" },
           { id: "visites", label: "Visites" },
           { id: "documents", label: "Documents" },
@@ -90,6 +96,25 @@ export default function BienTabs({
               </div>
               <div className="flex-1 min-w-0 pb-0">
                 <p className="text-[11px] text-[#94a3b8] mb-0.5">{formatDate(evt.date)} · {evt.auteur}</p>
+                <p className="text-[14px] text-[#0f172a] leading-snug">{evt.texte}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {active === "historique" && !dossier && (
+        <div className="flex flex-col">
+          {evenementsHistorique.map((evt, i) => (
+            <div key={`${bien.id}-${evt.date}`} className="flex gap-4 pb-6 relative">
+              <div className="flex flex-col items-center">
+                <div className="w-2 h-2 rounded-full bg-[#4338ca] mt-1.5 shrink-0" />
+                {i < evenementsHistorique.length - 1 && (
+                  <div className="w-px flex-1 bg-[#f1f5f9] mt-1" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 pb-0">
+                <p className="text-[11px] text-[#94a3b8] mb-0.5">{formatDate(evt.date)}</p>
                 <p className="text-[14px] text-[#0f172a] leading-snug">{evt.texte}</p>
               </div>
             </div>

@@ -30,7 +30,7 @@ function dossierTest(): DossierBien {
     bienId: "bien-test",
     statut: "en_commercialisation",
     derniereActivite: "2026-08-01",
-    historique: [],
+    historique: [{ date: "2026-08-01", auteur: "Steven G.", texte: "Signature du mandat." }],
     notes: "",
     documents: [],
     visitesEffectuees: [],
@@ -59,6 +59,31 @@ describe("BienTabs", () => {
 
     for (const onglet of TOUS_LES_ONGLETS) {
       expect(html).toContain(onglet);
+    }
+  });
+
+  it("affiche l'onglet Historique pour un bien réel dès qu'un événement dérivé existe (creeLe ou actions)", () => {
+    // Le contenu de l'onglet (texte des événements) n'est visible qu'après un clic (état client
+    // "active"), non exécuté par renderToStaticMarkup : la génération des textes eux-mêmes est
+    // couverte par lib/historiqueBien.test.ts. Ici on vérifie seulement que l'onglet apparaît.
+    const actions: ActionMetier[] = [
+      {
+        id: "action-1",
+        titre: "Envoyer les diagnostics",
+        statut: "termine",
+        priorite: "normale",
+        type: "document",
+        creeLe: "2026-08-01T10:00:00.000Z",
+        termineLe: "2026-08-05T14:00:00.000Z",
+      },
+    ];
+    const html = renderToStaticMarkup(
+      <BienTabs bien={bienTest({ creeLe: "2026-01-01T09:00:00.000Z" })} actions={actions} />
+    );
+
+    expect(html).toContain("Historique");
+    for (const onglet of ["Notes", "Visites", "Documents"]) {
+      expect(html).not.toContain(onglet);
     }
   });
 });
