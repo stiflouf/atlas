@@ -1,0 +1,294 @@
+# Modèle de données — Atlas (`apps/web`)
+
+Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
+`apps/web/src/db/migrations/` (`0000` à `0004`, vérifiées le 2026-08-11). **Le SQL des migrations
+fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
+doute, se référer au fichier `.sql` correspondant.
+
+Convention transversale essentielle, développée dans ADR-009 : **`NULL` signifie "information
+inconnue"**, jamais "non" ni "zéro". Pour un booléen optionnel (`ascenseur`, `parking`,
+`accessibilite_requise`, `necessite_parking`, `necessite_exterieur`), `false` est une valeur à
+part entière signifiant *explicitement connue comme négative* — pas une valeur par défaut.
+
+## Diagramme entité-relation
+
+```mermaid
+erDiagram
+    biens ||--o{ notes_bien : "bien_id (FK)"
+    biens ||--o{ comptes_rendus_visite : "bien_id (FK)"
+    acquereurs ||--o{ comptes_rendus_visite : "acquereur_id (FK)"
+    biens ||..o{ actions : "bien_id (text, sans FK)"
+    acquereurs ||..o{ actions : "acquereur_id (text, sans FK)"
+    biens ||..o{ memoire_contextuelle : "bien_id (text, sans FK)"
+    acquereurs ||..o{ memoire_contextuelle : "client_id (text, sans FK)"
+
+    connexions_google {
+        text id PK "toujours 'default'"
+        text refresh_token_chiffre
+        text scope
+        timestamptz cree_le
+        timestamptz modifie_le
+    }
+    memoire_contextuelle {
+        uuid id PK
+        text source
+        text type_element
+        text identifiant_externe
+        text bien_id "nullable, pas de FK"
+        text client_id "nullable, pas de FK"
+        text type_metier
+        real overall_confidence
+        text statut_validation
+        text empreinte_contenu
+        timestamptz cree_le
+        timestamptz modifie_le
+    }
+    biens {
+        uuid id PK
+        text reference
+        text titre
+        text type
+        text adresse
+        text ville
+        text code_postal
+        real surface
+        integer pieces
+        integer prix
+        text statut_mandat
+        date date_mandat
+        text_array caracteristiques
+        text description
+        integer etage "nullable"
+        boolean ascenseur "nullable"
+        boolean parking "nullable"
+        text exterieur "nullable"
+        timestamptz cree_le
+        timestamptz modifie_le
+    }
+    acquereurs {
+        uuid id PK
+        text prenom
+        text nom
+        text email
+        text telephone
+        integer budget_min
+        integer budget_max
+        text_array criteres
+        text stade_projet
+        text notes
+        date date_premiere_contact
+        integer pieces_min "nullable"
+        real surface_min "nullable"
+        boolean accessibilite_requise "nullable"
+        boolean necessite_parking "nullable"
+        boolean necessite_exterieur "nullable"
+        timestamptz cree_le
+        timestamptz modifie_le
+    }
+    actions {
+        uuid id PK
+        text titre
+        text contexte "nullable"
+        text type
+        text statut
+        text priorite
+        date echeance "nullable"
+        text bien_id "nullable, pas de FK"
+        text acquereur_id "nullable, pas de FK"
+        timestamptz cree_le
+        timestamptz termine_le "nullable"
+    }
+    notes_bien {
+        uuid id PK
+        uuid bien_id FK
+        text contenu
+        timestamptz cree_le
+    }
+    comptes_rendus_visite {
+        uuid id PK
+        uuid bien_id FK
+        uuid acquereur_id FK
+        date date_visite
+        text retour
+        text interet
+        text prochaine_etape "nullable"
+        timestamptz cree_le
+    }
+```
+
+## `connexions_google`
+
+**Rôle** : fait serveur unique — le conseiller est-il connecté à Google Calendar, et avec quel
+refresh token (chiffré). Table à une seule ligne possible (`id` fixé à `"default"`), pas de notion
+d'utilisateur/session — voir ADR-006.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | text (PK) | non | valeur unique possible : `"default"` |
+| `refresh_token_chiffre` | text | non | AES-256-GCM, voir `lib/google/connexion.ts` |
+| `scope` | text | non | scope OAuth accordé par Google |
+| `cree_le` / `modifie_le` | timestamptz | non | `defaultNow()` |
+
+Pas de contrainte `CHECK`. Aucune FK. Relation fonctionnelle : consultée par
+`getAgendaSemaine()` avant même de décider d'utiliser les mocks (voir `docs/DEMO_VS_REAL.md`).
+
+## `memoire_contextuelle`
+
+**Rôle** : mémoire générique de la correspondance métier (bien/acquéreur/type) qu'Atlas retient
+pour un élément externe donné — aujourd'hui uniquement des événements Google Calendar
+(`source = "google_calendar"`), conçue pour accueillir d'autres connecteurs sans nouvelle table
+(ADR-006).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | `defaultRandom()` |
+| `source` | text | non | ex. `"google_calendar"` |
+| `type_element` | text | non | ex. `"evenement"` |
+| `identifiant_externe` | text | non | id de l'événement source (`gcal-...`) |
+| `bien_id` / `client_id` | text | oui | référence texte, **pas de FK** — voir ADR-010 |
+| `type_metier` | text | non | défaut `"autre"` |
+| `confidence_bien` / `confidence_client` / `confidence_type` | real | oui | sous-scores |
+| `overall_confidence` | real | non | confiance globale calculée |
+| `statut_validation` | text | non | défaut `"auto"` |
+| `empreinte_contenu` | text | oui | SHA-256 des champs utilisés par le matching |
+| `cree_le` / `modifie_le` | timestamptz | non | |
+
+**Contrainte unique** : `(source, identifiant_externe)` — une seule ligne par élément externe.
+
+**Contraintes `CHECK`** :
+- `type_metier IN ('visite','estimation','appel','signature','prospection','autre')`
+- `statut_validation IN ('auto','confirme','corrige','ignore')`
+
+Relation fonctionnelle : lue/écrite exclusivement par `src/lib/contexteRepository.ts`. Détail du
+mécanisme de priorité (validation humaine > cache > moteur) dans `docs/BUSINESS_RULES.md` et
+ADR-006.
+
+## `biens`
+
+**Rôle** : premier bien réel persisté (au-delà des mocks `data/biens.ts`). Colonnes structurelles
+optionnelles nullables sans défaut (ADR-009).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `reference`, `titre`, `adresse`, `ville`, `code_postal` | text | non | |
+| `type` | text | non | `CHECK` |
+| `surface` | real | non | |
+| `pieces` | integer | non | |
+| `prix` | integer | non | |
+| `statut_mandat` | text | non | défaut `"actif"`, `CHECK` |
+| `date_mandat` | date | non | |
+| `caracteristiques` | text[] | non | défaut `[]` |
+| `description` | text | non | défaut `""` |
+| `etage` | integer | **oui** | inconnu = NULL, jamais 0 |
+| `ascenseur`, `parking` | boolean | **oui** | inconnu = NULL, jamais false |
+| `exterieur` | text | **oui** | `CHECK` si non NULL |
+| `cree_le` / `modifie_le` | timestamptz | non | `cree_le` alimente l'historique dérivé (`docs/BUSINESS_RULES.md`) |
+
+**Contraintes `CHECK`** :
+- `type IN ('appartement','maison','studio','loft','local_commercial')`
+- `statut_mandat IN ('actif','suspendu','expire')`
+- `exterieur IS NULL OR exterieur IN ('aucun','balcon','terrasse','jardin')`
+
+Relation fonctionnelle : référencé par FK réelle depuis `notes_bien` et `comptes_rendus_visite` ;
+référencé par id texte (sans FK) depuis `actions` et `memoire_contextuelle` (ADR-010).
+
+## `acquereurs`
+
+**Rôle** : premier acquéreur réel persisté (au-delà des mocks `data/clients.ts`). Mêmes principes
+que `biens`.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `prenom`, `nom`, `email`, `telephone` | text | non | |
+| `budget_min`, `budget_max` | integer | non | |
+| `criteres` | text[] | non | défaut `[]` |
+| `stade_projet` | text | non | défaut `"decouverte"`, `CHECK` |
+| `notes` | text | non | défaut `""` — texte libre, **distinct** de la table `notes_bien` |
+| `date_premiere_contact` | date | non | |
+| `pieces_min` | integer | **oui** | |
+| `surface_min` | real | **oui** | |
+| `accessibilite_requise`, `necessite_parking`, `necessite_exterieur` | boolean | **oui** | inconnu = NULL |
+| `cree_le` / `modifie_le` | timestamptz | non | |
+
+**Contrainte `CHECK`** : `stade_projet IN ('decouverte','recherche_active','offre','compromis','acte')`.
+
+Relation fonctionnelle : référencé par FK réelle depuis `comptes_rendus_visite` ; par id texte
+(sans FK) depuis `actions` et `memoire_contextuelle`.
+
+## `actions`
+
+**Rôle** : actions métier réelles (relances, tâches, suivi de dossier) — remplace les anciens
+mocks séparés "relances"/"tâches à préparer". Peut concerner un bien, un acquéreur, les deux, ou
+aucun des deux (tâche générale).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `titre` | text | non | |
+| `contexte` | text | oui | |
+| `type` | text | non | défaut `"autre"`, `CHECK` |
+| `statut` | text | non | défaut `"a_faire"`, `CHECK` |
+| `priorite` | text | non | défaut `"normale"`, `CHECK` |
+| `echeance` | date | oui | |
+| `bien_id` / `acquereur_id` | text | oui | **pas de FK** — voir ADR-010 |
+| `cree_le` | timestamptz | non | |
+| `termine_le` | timestamptz | oui | posé atomiquement avec `statut="termine"` par `terminerAction()` |
+
+**Contraintes `CHECK`** :
+- `type IN ('appel','email','message','document','relance','autre')`
+- `statut IN ('a_faire','termine')`
+- `priorite IN ('haute','normale','basse')`
+
+Relation fonctionnelle : priorisée par `lib/actionPriority.ts` (voir `docs/BUSINESS_RULES.md`) ;
+alimente l'historique dérivé du bien (`lib/historiqueBien.ts`) via `creee_le`/`termine_le`.
+
+## `notes_bien`
+
+**Rôle** : notes libres sur un bien réel, append-only (ADR-011). Distincte de `acquereurs.notes`
+(qui est un champ texte simple, sans historique).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | non | vraie FK — voir ADR-010 |
+| `contenu` | text | non | texte libre, jamais analysé par un moteur (ADR-008) |
+| `cree_le` | timestamptz | non | |
+
+Pas de `modifie_le` (ADR-011). Aucune contrainte `CHECK`.
+
+## `comptes_rendus_visite`
+
+**Rôle** : compte rendu structuré après une visite, append-only (ADR-011), table dédiée plutôt
+qu'une variante de `notes_bien` (justification complète dans ADR-011).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bien_id` | uuid (FK → `biens.id`, cascade) | non | |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, cascade) | non | |
+| `date_visite` | date | non | date réelle de la visite — **distincte** de `cree_le` |
+| `retour` | text | non | texte libre, jamais analysé (ADR-008) |
+| `interet` | text | non | défaut `"inconnu"`, `CHECK` |
+| `prochaine_etape` | text | oui | texte libre, ne génère jamais d'action automatiquement |
+| `cree_le` | timestamptz | non | instant de saisie |
+
+**Contrainte `CHECK`** : `interet IN ('interesse','a_reflechir','pas_interesse','inconnu')`.
+
+Relation fonctionnelle : alimente l'historique dérivé du bien (`"Visite effectuée — {label}"`,
+jamais le texte de `retour`) et la "Mémoire du dossier" de la page de préparation, filtrée sur le
+couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`.
+
+## Migrations
+
+| Fichier | Tables introduites |
+|---|---|
+| `0000_far_gauntlet.sql` | `connexions_google`, `memoire_contextuelle` |
+| `0001_mysterious_rattler.sql` | `biens`, `acquereurs` |
+| `0002_cultured_masked_marvel.sql` | `actions` |
+| `0003_black_risque.sql` | `notes_bien` |
+| `0004_needy_norrin_radd.sql` | `comptes_rendus_visite` |
+
+Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
+par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.
