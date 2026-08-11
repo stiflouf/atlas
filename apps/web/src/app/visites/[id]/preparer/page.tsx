@@ -9,6 +9,9 @@ import { getPreparationPourBienEtClient } from "@/data/preparations";
 import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
+import { getActionsPourBien, getActionsPourAcquereur } from "@/lib/actionRepository";
+import { listerNotesPourBien } from "@/lib/noteBienRepository";
+import { selectionnerActionsEnCours, selectionnerHistoriqueRecent } from "@/lib/memoireDossier";
 import { formatDateISO } from "@/lib/temps";
 import { geocoderAdresse } from "@/lib/geocodage/ignClient";
 import { evaluerQualiteGeocodage } from "@/lib/geocodage/qualite";
@@ -35,6 +38,17 @@ function formatPrix(prix: number): string {
 
 function formatPrixM2(prixM2: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prixM2) + "/m²";
+}
+
+function formatDateCourte(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+}
+
+// Aperçu court avant le <details>/<summary> natif — pas de troncature définitive : le texte
+// complet reste toujours accessible en un clic, sans JS.
+const APERCU_NOTE_MAX = 140;
+function apercuNote(contenu: string): string {
+  return contenu.length > APERCU_NOTE_MAX ? `${contenu.slice(0, APERCU_NOTE_MAX).trimEnd()}…` : contenu;
 }
 
 const stadeLabel: Record<string, string> = {
@@ -95,6 +109,17 @@ export default async function PreparerVisite({ params }: PageProps) {
   const bien = await getBienById(contexte.bien.bienId);
   const acquereur = await getClientById(contexte.client.clientId);
   if (!bien || !acquereur) notFound();
+
+  // Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (notes,
+  // actions), jamais interprété ni résumé. N'alimente ni pointsAttention ni pointsForts.
+  const [actionsDuBien, actionsDeLAcquereur, notesDuBien] = await Promise.all([
+    getActionsPourBien(bien.id),
+    getActionsPourAcquereur(acquereur.id),
+    listerNotesPourBien(bien.id),
+  ]);
+  const notesRecentes = notesDuBien.slice(0, 3);
+  const actionsEnCours = selectionnerActionsEnCours(actionsDuBien, actionsDeLAcquereur);
+  const historiqueRecent = selectionnerHistoriqueRecent(actionsDuBien);
 
   // Géocodage de l'adresse du bien (pas celle du rendez-vous Google, potentiellement
   // différente) — best-effort, aucune coordonnée de repli si l'IGN ne répond pas.
@@ -246,6 +271,82 @@ export default async function PreparerVisite({ params }: PageProps) {
           </p>
         )}
       </section>
+
+      {/* Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (notes,
+          actions). Jamais résumé, jamais interprété, aucune écriture possible depuis cette page. */}
+      {(notesRecentes.length > 0 || actionsEnCours.length > 0 || historiqueRecent.length > 0) && (
+        <section className="mb-8">
+          <SectionTitle>Mémoire du dossier</SectionTitle>
+
+          {notesRecentes.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Notes récentes
+              </p>
+              <div className="flex flex-col gap-2">
+                {notesRecentes.map((note) => (
+                  <div key={note.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                    <p className="text-[11px] text-[#94a3b8] mb-1">{formatDateCourte(note.creeLe)}</p>
+                    {note.contenu.length > APERCU_NOTE_MAX ? (
+                      <details>
+                        <summary className="text-[14px] text-[#0f172a] leading-relaxed cursor-pointer">
+                          {apercuNote(note.contenu)}{" "}
+                          <span className="text-[12px] text-[#4338ca] font-medium">Lire la suite</span>
+                        </summary>
+                        <p className="text-[14px] text-[#0f172a] leading-relaxed mt-2 whitespace-pre-wrap">
+                          {note.contenu}
+                        </p>
+                      </details>
+                    ) : (
+                      <p className="text-[14px] text-[#0f172a] leading-relaxed whitespace-pre-wrap">
+                        {note.contenu}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {actionsEnCours.length > 0 && (
+            <div className="mb-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+                Actions en cours
+              </p>
+              <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9]">
+                {actionsEnCours.map((action) => (
+                  <div key={action.id} className="py-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={action.origine === "bien" ? "accent" : "default"}>
+                        {action.origine === "bien" ? "Bien" : "Acquéreur"}
+                      </Badge>
+                      <p className="text-[14px] text-[#0f172a]">{action.titre}</p>
+                    </div>
+                    {action.contexte && (
+                      <p className="text-[13px] text-[#94a3b8] mt-0.5">{action.contexte}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {historiqueRecent.length > 0 && (
+            <details>
+              <summary className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] cursor-pointer">
+                Historique récent ({historiqueRecent.length})
+              </summary>
+              <div className="flex flex-col gap-2 mt-2">
+                {historiqueRecent.map((evt) => (
+                  <p key={`${evt.date}-${evt.texte}`} className="text-[13px] text-[#64748b]">
+                    <span className="text-[#94a3b8]">{formatDateCourte(evt.date)}</span> — {evt.texte}
+                  </p>
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
+      )}
 
       {/* Résumé du bien */}
       <section className="mb-8">
