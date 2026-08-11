@@ -1,0 +1,105 @@
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, User } from "lucide-react";
+import Badge from "@/components/ui/Badge";
+import ActionItem from "@/components/aujourd-hui/ActionItem";
+import { getClientById } from "@/lib/clientRepository";
+import { getActionsPourAcquereur } from "@/lib/actionRepository";
+
+const stadeLabel: Record<string, string> = {
+  decouverte: "Découverte",
+  recherche_active: "Recherche active",
+  offre: "En attente d'offre",
+  compromis: "Compromis",
+  acte: "Acte",
+};
+
+function formatPrix(prix: number): string {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
+}
+
+type PageProps = { params: Promise<{ id: string }> };
+
+// Fiche volontairement minimale — pas de tabs, pas de dossier ni d'historique (hors périmètre) :
+// juste l'identité, le CTA de création d'action, et les actions déjà liées à cet acquéreur.
+export default async function FicheClient({ params }: PageProps) {
+  const { id } = await params;
+  const client = await getClientById(id);
+  if (!client) notFound();
+
+  const actions = await getActionsPourAcquereur(client.id);
+  const actionsAFaire = actions.filter((a) => a.statut === "a_faire");
+  const actionsTerminees = actions.filter((a) => a.statut === "termine");
+
+  return (
+    <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
+      <Link
+        href="/clients"
+        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+      >
+        <ArrowLeft size={14} />
+        Clients
+      </Link>
+
+      <div className="mb-8">
+        <div className="flex items-start gap-3 mb-3">
+          <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0 mt-0.5">
+            <User size={18} className="text-[#4338ca]" strokeWidth={1.8} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight">
+              {client.prenom} {client.nom}
+            </h1>
+            <p className="text-[14px] text-[#64748b] mt-0.5">
+              {client.email} · {client.telephone}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 mt-4">
+          <span className="text-[16px] font-semibold text-[#0f172a]">
+            {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
+          </span>
+          <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>
+        </div>
+
+        <Link
+          href={`/actions/nouveau?acquereurId=${client.id}`}
+          className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+        >
+          + Ajouter une action
+        </Link>
+      </div>
+
+      <section className="mb-8">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Actions</p>
+        {actionsAFaire.length === 0 ? (
+          <p className="text-[14px] text-[#94a3b8]">Aucune action en cours.</p>
+        ) : (
+          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] px-4 divide-y divide-[#f1f5f9]">
+            {actionsAFaire.map((action) => (
+              <ActionItem key={action.id} action={action} redirectTo={`/clients/${client.id}`} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {actionsTerminees.length > 0 && (
+        <section>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Terminées</p>
+          <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
+            {actionsTerminees.map((action) => (
+              <div key={action.id} className="flex items-start gap-3 py-3">
+                <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-[#f1f5f9] border-[#e2e8f0]" />
+                <div>
+                  <p className="text-[14px] text-[#0f172a]">{action.titre}</p>
+                  {action.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{action.contexte}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}

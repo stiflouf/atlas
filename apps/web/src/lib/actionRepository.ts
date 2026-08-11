@@ -42,6 +42,11 @@ export async function getActionsPourBien(bienId: string): Promise<ActionMetier[]
   return actions.filter((a) => a.bienId === bienId);
 }
 
+export async function getActionsPourAcquereur(acquereurId: string): Promise<ActionMetier[]> {
+  const actions = await listerActions();
+  return actions.filter((a) => a.acquereurId === acquereurId);
+}
+
 export type NouvelleAction = Omit<ActionMetier, "id" | "statut" | "creeLe" | "termineLe">;
 
 // Insertion pure : la validation métier (titre non vide, etc.) est de la responsabilité de

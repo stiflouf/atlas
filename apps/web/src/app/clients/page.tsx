@@ -17,8 +17,8 @@ function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
 }
 
-// Liste volontairement minimale (nom, budget, stade projet) — pas de fiche client avancée,
-// pas d'édition, pas d'historique : hors périmètre de cette V1.
+// Liste volontairement minimale (nom, budget, stade projet) — la fiche vers laquelle elle
+// pointe (/clients/[id]) l'est tout autant : pas d'édition, pas d'historique, hors périmètre.
 export default async function ClientsPage() {
   const clients = await listerClients();
 
@@ -42,24 +42,26 @@ export default async function ClientsPage() {
         <SectionTitle>Acquéreurs</SectionTitle>
         <div className="flex flex-col gap-2">
           {clients.map((client) => (
-            <Card key={client.id}>
-              <div className="flex items-center gap-4 p-4">
-                <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0">
-                  <User size={18} className="text-[#4338ca]" strokeWidth={1.8} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[14px] font-medium text-[#0f172a] truncate">
-                    {client.prenom} {client.nom}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[13px] text-[#64748b]">
-                      {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
-                    </span>
-                    <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>
+            <Link key={client.id} href={`/clients/${client.id}`}>
+              <Card className="hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow duration-150">
+                <div className="flex items-center gap-4 p-4">
+                  <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0">
+                    <User size={18} className="text-[#4338ca]" strokeWidth={1.8} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] font-medium text-[#0f172a] truncate">
+                      {client.prenom} {client.nom}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[13px] text-[#64748b]">
+                        {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
+                      </span>
+                      <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            </Link>
           ))}
         </div>
       </section>

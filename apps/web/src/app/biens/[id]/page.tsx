@@ -96,14 +96,22 @@ export default async function FicheBien({ params }: PageProps) {
           </div>
         )}
 
-        {prochaineVisite && (
+        <div className="flex flex-wrap gap-3 mt-4">
+          {prochaineVisite && (
+            <Link
+              href={`/visites/${prochaineVisite.id}/preparer`}
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+            >
+              Préparer une visite →
+            </Link>
+          )}
           <Link
-            href={`/visites/${prochaineVisite.id}/preparer`}
-            className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+            href={`/actions/nouveau?bienId=${bien.id}`}
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
           >
-            Préparer une visite →
+            + Ajouter une action
           </Link>
-        )}
+        </div>
       </div>
 
       {/* Onglets */}

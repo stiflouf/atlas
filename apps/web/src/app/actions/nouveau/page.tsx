@@ -12,8 +12,17 @@ const labelCls = "text-[12px] font-medium text-[#64748b] mb-1 block";
 // flag, les select bien/acquéreur figeraient la liste au moment du build.
 export const dynamic = "force-dynamic";
 
-export default async function NouvelleActionPage() {
+type PageProps = { searchParams: Promise<{ bienId?: string; acquereurId?: string }> };
+
+export default async function NouvelleActionPage({ searchParams }: PageProps) {
+  const params = await searchParams;
   const [biens, clients] = await Promise.all([listerBiens(), listerClients()]);
+
+  // Préremplissage depuis une fiche bien/client (?bienId=/?acquereurId=) : uniquement si l'id
+  // correspond réellement à une entrée chargée, sinon le select reste simplement sur "Aucun" —
+  // pas d'erreur pour un id obsolète ou mal formé.
+  const bienIdPreselectionne = biens.some((b) => b.id === params.bienId) ? params.bienId : "";
+  const acquereurIdPreselectionne = clients.some((c) => c.id === params.acquereurId) ? params.acquereurId : "";
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -80,7 +89,7 @@ export default async function NouvelleActionPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className={labelCls}>Bien</label>
-              <select name="bienId" defaultValue="" className={inputCls}>
+              <select name="bienId" defaultValue={bienIdPreselectionne} className={inputCls}>
                 <option value="">Aucun</option>
                 {biens.map((bien) => (
                   <option key={bien.id} value={bien.id}>
@@ -91,7 +100,7 @@ export default async function NouvelleActionPage() {
             </div>
             <div>
               <label className={labelCls}>Acquéreur</label>
-              <select name="acquereurId" defaultValue="" className={inputCls}>
+              <select name="acquereurId" defaultValue={acquereurIdPreselectionne} className={inputCls}>
                 <option value="">Aucun</option>
                 {clients.map((client) => (
                   <option key={client.id} value={client.id}>
