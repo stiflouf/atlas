@@ -10,8 +10,8 @@ import { listerBiens, getBienById } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
-import { formatDateISO, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
-import { statutRendezVous } from "@/lib/rendezVous";
+import { formatDateISO, formatDateRelative, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
+import { rendezVousAVenir, statutRendezVous } from "@/lib/rendezVous";
 import { actionPrioritaire, raisonAction, scoreAction } from "@/lib/actionPriority";
 import { getAgendaSemaine } from "@/lib/google/agendaSource";
 import { construireContexte } from "@/lib/matching";
@@ -50,15 +50,19 @@ export default async function AujourdHui() {
   // que le jour courant. Les rendez-vous mockés n'ont pas de `date` : ils sont toujours
   // considérés comme "aujourd'hui".
   const rendezVousDuJour = rendezVous.filter((rdv) => !rdv.date || rdv.date === aujourdHuiISO);
+  // getAgendaSemaine() garantit déjà une fenêtre de 7 jours : pas besoin de la recalculer ici.
+  const rdvAVenir = rendezVousAVenir(rendezVous, aujourdHuiISO);
 
   const [biens, clients] = await Promise.all([listerBiens(), listerClients()]);
 
   // Les rendez-vous Google passent par la mémoire persistée (validation humaine > cache >
   // moteur, cf. ADR-006) ; les mocks n'en ont pas besoin, leur contexte est déjà explicite.
+  // Une seule résolution pour aujourd'hui + à venir : même Map, pas de double calcul.
+  const rendezVousPertinents = [...rendezVousDuJour, ...rdvAVenir];
   const contextes =
     source === "google_calendar"
-      ? await resoudreContextesPersistes(rendezVousDuJour, { biens, clients })
-      : new Map(rendezVousDuJour.map((rdv) => [rdv.id, construireContexte(rdv, { biens, clients })]));
+      ? await resoudreContextesPersistes(rendezVousPertinents, { biens, clients })
+      : new Map(rendezVousPertinents.map((rdv) => [rdv.id, construireContexte(rdv, { biens, clients })]));
 
   const rdvAvecStatut = rendezVousDuJour.map((rdv) => ({
     rdv,
@@ -67,6 +71,12 @@ export default async function AujourdHui() {
   }));
   const rdvActifs = rdvAvecStatut.filter(({ statut }) => statut !== "termine");
   const rdvTermines = rdvAvecStatut.length - rdvActifs.length;
+
+  const rdvAVenirAvecContexte = rdvAVenir.map((rdv) => ({
+    rdv,
+    contexte: contextes.get(rdv.id)!,
+    dateLabel: formatDateRelative(rdv.date as string, aujourdHuiISO),
+  }));
 
   const dossiersAttention: { bien: Bien; action: ActionMetier }[] = [];
   for (const dossier of dossiers) {
@@ -136,6 +146,20 @@ export default async function AujourdHui() {
           </p>
         )}
       </section>
+
+      {/* À venir (7 prochains jours, hors aujourd'hui) */}
+      {rdvAVenirAvecContexte.length > 0 && (
+        <section className="mb-8">
+          <SectionTitle>
+            {rdvAVenirAvecContexte.length} rendez-vous à venir
+          </SectionTitle>
+          <div className="flex flex-col gap-2">
+            {rdvAVenirAvecContexte.map(({ rdv, contexte, dateLabel }) => (
+              <AgendaCard key={rdv.id} rdv={rdv} statut="a_venir" contexte={contexte} dateLabel={dateLabel} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Relances */}
       {relances.length > 0 && (

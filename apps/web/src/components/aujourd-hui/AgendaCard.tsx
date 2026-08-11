@@ -38,10 +38,12 @@ export default async function AgendaCard({
   rdv,
   statut,
   contexte,
+  dateLabel,
 }: {
   rdv: RendezVous;
   statut: StatutRendezVous;
   contexte?: ContexteRendezVous;
+  dateLabel?: string;
 }) {
   // Google ne fournit qu'un type générique : si Atlas a déduit un type métier probable du
   // contexte (titre), on l'affiche à la place — sans jamais modifier `rdv.type` lui-même.
@@ -84,6 +86,7 @@ export default async function AgendaCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
             <span className="text-[13px] font-medium text-[#64748b] tabular-nums">
+              {dateLabel && `${dateLabel} · `}
               {rdv.journeeEntiere ? "Toute la journée" : rdv.heure}
             </span>
             <Badge variant={variant}>{label}</Badge>

@@ -39,3 +39,20 @@ export function formatHeureFr(date: Date, fuseau: string = FUSEAU_HORAIRE_APP): 
 export function formatDateISO(date: Date, fuseau: string = FUSEAU_HORAIRE_APP): string {
   return new Intl.DateTimeFormat("fr-CA", { timeZone: fuseau }).format(date);
 }
+
+// Formate une date "YYYY-MM-DD" relative à aujourd'hui ("Demain" à J+1, sinon "lun. 18 août"),
+// pour les rendez-vous à venir. Les deux dates sont comparées à midi UTC pour ignorer le fuseau.
+export function formatDateRelative(dateISO: string, aujourdHuiISO: string): string {
+  const versMidiUTC = (iso: string) => {
+    const [annee, mois, jour] = iso.split("-").map(Number);
+    return Date.UTC(annee, mois - 1, jour, 12);
+  };
+  const diffJours = Math.round((versMidiUTC(dateISO) - versMidiUTC(aujourdHuiISO)) / 86_400_000);
+  if (diffJours === 1) return "Demain";
+  return new Intl.DateTimeFormat("fr-FR", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(versMidiUTC(dateISO)));
+}
