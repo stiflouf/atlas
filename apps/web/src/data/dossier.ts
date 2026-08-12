@@ -1,4 +1,4 @@
-export type EvenementHistorique = { date: string; auteur: string; texte: string };
+export type EvenementHistoriqueDossier = { date: string; auteur: string; texte: string };
 export type DocumentDossier = { nom: string; date: string; type: string };
 export type VisiteEffectuee = { id: string; date: string; client: string; retour: string };
 
@@ -11,7 +11,7 @@ export type DossierBien = {
   bienId: string;
   statut: StatutDossier;
   derniereActivite: string;
-  historique: EvenementHistorique[];
+  historique: EvenementHistoriqueDossier[];
   notes: string;
   documents: DocumentDossier[];
   visitesEffectuees: VisiteEffectuee[];

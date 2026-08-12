@@ -111,12 +111,18 @@ permet de consulter ce bien via `/biens?archives=1`.
 
 ## Fonctionnalités encore mock-only
 
-Aucun équivalent réel n'existe à ce jour pour :
-
-- **`data/dossier.ts` (`DossierBien`)** — historique manuscrit, notes en un seul bloc de texte,
-  documents (`DocumentDossier`), visites effectuées. Concerne uniquement les deux biens mockés
-  historiques (`bien-001`, `bien-002`) ; un bien réel n'a jamais de `DossierBien`. Les quatre
-  dimensions ont désormais un équivalent réel dérivé indépendant : Historique
+- **Bandeau "État du dossier"** (`biens/[id]/page.tsx`, badge `statut` + "Dernière activité
+  le...") — dernière pièce de `data/dossier.ts` (`DossierBien.statut`/`.derniereActivite`,
+  `StatutDossier`) sans aucun équivalent réel : pas de notion de progression de vente
+  (`en_commercialisation`/`offre_en_cours`/`compromis_signe`) côté `biens` réel — à ne pas
+  confondre avec `statutMandat` (`actif`/`suspendu`/`expire`), un concept différent. N'apparaît
+  donc que pour les deux biens mockés historiques (`bien-001`, `bien-002`) ; absent sans texte de
+  repli pour un bien réel.
+- **`data/dossier.ts` (`DossierBien`) — historique manuscrit, notes en un seul bloc de texte,
+  documents, visites effectuées.** Ces quatre dimensions restent le contenu affiché pour les deux
+  biens mockés historiques (texte curaté à la main, auteur nommé — voir
+  `EvenementHistoriqueDossier`), mais ont chacune un équivalent réel dérivé indépendant utilisé à
+  la place pour un bien réel, qui n'a jamais de `DossierBien` : Historique
   (`deriverHistoriqueBien`), Notes (`notes_bien`), Visites → Effectuées (`comptes_rendus_visite`)
   et Documents (`documents_bien`, stockage local — ADR-013) — voir `docs/BUSINESS_RULES.md`.
 - **`data/preparations.ts`** — une seule préparation de visite entièrement curatée à la main
