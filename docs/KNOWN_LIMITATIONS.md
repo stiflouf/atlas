@@ -131,13 +131,26 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Dashboard commercial
 
-- **Pas de taux ni délai visite → offre, pas de CA, pas de commission, pas de fiscalité** —
-  aucun lien visite ↔ offre matérialisé dans le modèle, aucune donnée de commission ou fiscale
-  instrumentée. Afficher un chiffre approximatif aurait été plus trompeur qu'une absence de
-  métrique (ADR-018).
+- **Pas de CA, pas de commission, pas de fiscalité** — aucune donnée de commission ou fiscale
+  instrumentée dans le schéma. Afficher un chiffre approximatif aurait été plus trompeur qu'une
+  absence de métrique (ADR-018).
 - **`prixConvenu` = volume de transaction, jamais le CA du conseiller** — rappelé dans l'UI à
   chaque métrique de volume, mais reste une donnée qu'un lecteur non averti pourrait mal
   interpréter hors contexte.
+
+## Lien visite → offre (`offre_visites`)
+
+- **Taux et délai visite → offre non rétroactifs** : `tauxVisiteOffre` et
+  `delaiMoyenVisiteOffreJours` ne comptent que les visites explicitement liées à une offre après
+  la mise en place de ce lien (ADR-019) — aucun rattrapage automatique de l'historique antérieur,
+  ce serait de l'inférence. Le taux affiché est donc biaisé à la baisse tant que l'historique
+  n'est pas rattaché manuellement, sans aucune limite de temps prévue pour ce rattrapage.
+- **Aucun événement d'historique dédié** à la création ou au retrait d'un lien — seules la visite
+  et l'offre elles-mêmes apparaissent dans l'historique du bien (ADR-019).
+- **Aucune garde d'archivage sur la liaison** : un conseiller peut lier ou délier une visite et
+  une offre même si le bien ou l'acquéreur est désormais archivé — choix volontaire (documenter un
+  rapprochement entre faits existants n'est pas créer un nouveau fait commercial), mais qui
+  diffère de la création d'une offre, elle bloquée sur une entité archivée.
 - **Moyenne de visites avant vente exclut les ventes sans compte rendu** du dénominateur plutôt
   que de les compter comme 0 — une vente conclue sans compte rendu enregistré (visite non
   formalisée, vente par un tiers, etc.) reste donc invisible dans cette moyenne plutôt que de la

@@ -30,6 +30,7 @@ const { enregistrerCompromis, changerStatutCompromis, marquerCompromisRealise } 
   "./compromisRepository"
 );
 const { enregistrerCompteRenduVisite } = await import("./compteRenduVisiteRepository");
+const { lierVisiteAOffre } = await import("./offreVisiteRepository");
 const { chargerResultats, chargerPipeline, chargerActivite, chargerDelaisPertes } = await import(
   "./dashboardRepository"
 );
@@ -363,6 +364,43 @@ describe("dashboardRepository — chargerActivite", () => {
 
     expect(apresD.moyenneVisitesAvantVente).toBe(apresE.moyenneVisitesAvantVente);
   });
+
+  it("tauxVisiteOffre : une visite SANS lien vers une offre ne contribue jamais au numérateur", async () => {
+    const avant = await chargerActivite();
+    // Numérateur reconstruit algébriquement (avant.tauxVisiteOffre est une moyenne globale, non
+    // additive) — voir le principe documenté en tête de fichier.
+    const numerateurAvant = (avant.tauxVisiteOffre ?? 0) * avant.visitesEnregistrees;
+
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("ACTIVITE-005-SANS-LIEN");
+    await creerCompteRendu(bien.id, acquereur.id, "2026-08-01");
+    // Aucune offre créée, aucun lien posé pour cette visite.
+
+    const apres = await chargerActivite();
+
+    expect(apres.visitesEnregistrees).toBe(avant.visitesEnregistrees + 1);
+    expect(apres.tauxVisiteOffre).toBeCloseTo(numerateurAvant / apres.visitesEnregistrees, 10);
+  });
+
+  it("tauxVisiteOffre : une visite explicitement liée à une offre contribue au numérateur", async () => {
+    const avant = await chargerActivite();
+    const numerateurAvant = (avant.tauxVisiteOffre ?? 0) * avant.visitesEnregistrees;
+
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("ACTIVITE-006-AVEC-LIEN");
+    const cr = await creerCompteRendu(bien.id, acquereur.id, "2026-08-01");
+    const o = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-10",
+    });
+    idsOffresCrees.push(o.id);
+    await lierVisiteAOffre(o.id, cr.id);
+
+    const apres = await chargerActivite();
+
+    expect(apres.visitesEnregistrees).toBe(avant.visitesEnregistrees + 1);
+    expect(apres.tauxVisiteOffre).toBeCloseTo((numerateurAvant + 1) / apres.visitesEnregistrees, 10);
+  });
 });
 
 describe("dashboardRepository — chargerDelaisPertes", () => {
@@ -437,5 +475,41 @@ describe("dashboardRepository — chargerDelaisPertes", () => {
 
     expect(apres.compromisAnnules).toBe(avant.compromisAnnules + 1);
     expect(apres.volumeCompromisAnnules).toBe(avant.volumeCompromisAnnules + 777000);
+  });
+
+  it("delaiMoyenVisiteOffreJours reste inchangé pour une visite et une offre non liées entre elles (égalité avant/après)", async () => {
+    const avant = await chargerDelaisPertes();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DELAIS-005");
+    await creerCompteRendu(bien.id, acquereur.id, "2026-08-01");
+    const o = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-10",
+    });
+    idsOffresCrees.push(o.id);
+    // Aucun lien posé entre cette visite et cette offre.
+
+    const apres = await chargerDelaisPertes();
+
+    expect(apres.delaiMoyenVisiteOffreJours).toBe(avant.delaiMoyenVisiteOffreJours);
+  });
+
+  it("delaiMoyenVisiteOffreJours devient défini pour une paire visite/offre explicitement liée", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DELAIS-006");
+    const cr = await creerCompteRendu(bien.id, acquereur.id, "2026-08-01");
+    const o = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-10",
+    });
+    idsOffresCrees.push(o.id);
+    await lierVisiteAOffre(o.id, cr.id);
+
+    const { delaiMoyenVisiteOffreJours } = await chargerDelaisPertes();
+
+    expect(delaiMoyenVisiteOffreJours).toBeTypeOf("number");
+    expect(delaiMoyenVisiteOffreJours).toBeGreaterThanOrEqual(0);
   });
 });

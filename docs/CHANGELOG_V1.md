@@ -187,6 +187,24 @@ transaction, jamais le CA du conseiller. Explicitement écarté faute d'instrume
 taux/délai visite → offre, CA, commission, fiscalité. Pas de graphiques, pas de filtre temporel en
 V1. Nouvelle route `/dashboard`, ajoutée à la navigation principale sous "Tableau de bord".
 
+## 19. Lien explicite visite → offre
+
+Nouvelle table de liaison many-to-many `offre_visites` (ADR-019) — jamais une inférence par
+proximité de date ou par texte, toujours un geste explicite du conseiller. Représente sans
+exception les quatre cas du domaine : offre sans visite, visite sans offre, plusieurs visites
+précédant une même offre, une même visite précédant plusieurs offres successives. Intégrité
+applicative (offre et visite existantes, même bien, même acquéreur, `dateVisite <= dateOffre`,
+paire unique) validée côté Server Action, jamais en `CHECK` SQL. Deux points d'entrée : à la
+création d'une offre (`ajouterOffreAction`, transaction unique couvrant l'offre, ses liens et le
+jalon `offreEnCoursLe` — tout ou rien) et rétroactivement sur une offre déjà existante
+(`lierVisiteAOffreAction`/`delierVisiteAction`) — la liaison n'est jamais figée au seul instant de
+création de l'offre, et se corrige sans jamais modifier la visite ni l'offre elles-mêmes. Aucune
+garde d'archivage sur la liaison (documente un rapprochement entre faits existants, pas un nouveau
+fait commercial), aucun événement d'historique dédié, aucun backfill automatique de l'historique
+antérieur. Débloque deux métriques dans `/dashboard` explicitement écartées par ADR-018 : taux
+visite → offre (Activité) et délai moyen visite → offre (Délais/pertes), toutes deux réservées aux
+visites explicitement liées.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

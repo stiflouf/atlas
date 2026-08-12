@@ -78,6 +78,13 @@
       "when": 1786538337567,
       "tag": "0010_tiny_earthquake",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1786545137091,
+      "tag": "0011_friendly_captain_flint",
+      "breakpoints": true
     }
   ]
 }

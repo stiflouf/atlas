@@ -15,6 +15,7 @@ import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
 import { ajouterDocumentBienAction } from "@/actions/ajouterDocumentBien";
 import { ajouterOffreAction, changerStatutOffreAction } from "@/actions/offre";
+import { lierVisiteAOffreAction, delierVisiteAction } from "@/actions/offreVisite";
 import { ajouterCompromisAction, changerStatutCompromisAction } from "@/actions/compromis";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 
@@ -54,6 +55,7 @@ export default function BienTabs({
   documents,
   offres,
   compromis,
+  liens = [],
   acquereursActifs = [],
   acquereursParId = new Map(),
 }: {
@@ -65,10 +67,19 @@ export default function BienTabs({
   documents: DocumentBien[];
   offres: Offre[];
   compromis: Compromis[];
+  liens?: { lienId: string; offreId: string; visite: CompteRenduVisite }[];
   acquereursActifs?: ProfilAcquereur[];
   acquereursParId?: Map<string, ProfilAcquereur | undefined>;
 }) {
   const [active, setActive] = useState<Tab>("contexte");
+  const [acquereurOffreSelectionne, setAcquereurOffreSelectionne] = useState("");
+
+  const liensParOffre = new Map<string, { lienId: string; visite: CompteRenduVisite }[]>();
+  for (const lien of liens) {
+    const liste = liensParOffre.get(lien.offreId) ?? [];
+    liste.push({ lienId: lien.lienId, visite: lien.visite });
+    liensParOffre.set(lien.offreId, liste);
+  }
 
   // Contexte, Actions, Notes, Visites et Documents reposent tous sur des données réelles (bien,
   // actionRepository, noteBienRepository, compteRenduVisiteRepository, documentBienRepository),
@@ -391,6 +402,7 @@ export default function BienTabs({
                 name="acquereurId"
                 required
                 defaultValue=""
+                onChange={(e) => setAcquereurOffreSelectionne(e.target.value)}
                 className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
               >
                 <option value="" disabled>
@@ -402,6 +414,29 @@ export default function BienTabs({
                   </option>
                 ))}
               </select>
+              {acquereurOffreSelectionne && (
+                <div>
+                  <p className="text-[11px] font-medium text-[#64748b] mb-1">
+                    Visites à lier à cette offre (optionnel)
+                  </p>
+                  {/* Filtrage indicatif côté client (acquéreur sélectionné) — ne remplace jamais
+                      la validation serveur (bien/acquéreur/date), qui revérifie tout (ADR-019). */}
+                  {comptesRendus.filter((cr) => cr.acquereurId === acquereurOffreSelectionne).length === 0 ? (
+                    <p className="text-[12px] text-[#94a3b8]">Aucune visite enregistrée avec cet acquéreur.</p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {comptesRendus
+                        .filter((cr) => cr.acquereurId === acquereurOffreSelectionne)
+                        .map((cr) => (
+                          <label key={cr.id} className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                            <input type="checkbox" name="compteRenduVisiteIds" value={cr.id} />
+                            {formatDate(cr.dateVisite)} — {LABEL_INTERET[cr.interet]}
+                          </label>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <input
                 type="number"
                 name="montant"
@@ -471,6 +506,76 @@ export default function BienTabs({
                         ))}
                       </div>
                     )}
+
+                    {/* Rattachement rétroactif de visites (ADR-019) — pas seulement à la création
+                        de l'offre : correspondance bien/acquéreur/date toujours revalidée côté
+                        serveur, jamais d'inférence, aucune garde d'archivage (documentation d'un
+                        rapprochement entre faits existants, pas un nouveau fait commercial). */}
+                    {(() => {
+                      const liensDeLOffre = liensParOffre.get(offre.id) ?? [];
+                      const idsDejaLies = new Set(liensDeLOffre.map(({ visite }) => visite.id));
+                      const visitesDisponibles = comptesRendus.filter(
+                        (cr) =>
+                          cr.acquereurId === offre.acquereurId &&
+                          cr.dateVisite <= offre.dateOffre &&
+                          !idsDejaLies.has(cr.id)
+                      );
+                      return (
+                        <div className="mt-3 pt-3 border-t border-[#f1f5f9]">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-1.5">
+                            Visites liées
+                          </p>
+                          {liensDeLOffre.length === 0 ? (
+                            <p className="text-[12px] text-[#94a3b8] mb-2">Aucune visite liée pour l'instant.</p>
+                          ) : (
+                            <div className="flex flex-col gap-1 mb-2">
+                              {liensDeLOffre.map(({ lienId, visite }) => (
+                                <div key={lienId} className="flex items-center justify-between gap-2 text-[13px]">
+                                  <span className="text-[#64748b]">
+                                    {formatDate(visite.dateVisite)} — {LABEL_INTERET[visite.interet]}
+                                  </span>
+                                  <form action={delierVisiteAction}>
+                                    <input type="hidden" name="lienId" value={lienId} />
+                                    <button
+                                      type="submit"
+                                      className="text-[11px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors"
+                                    >
+                                      Retirer le lien
+                                    </button>
+                                  </form>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {visitesDisponibles.length > 0 && (
+                            <form action={lierVisiteAOffreAction} className="flex items-center gap-2">
+                              <input type="hidden" name="offreId" value={offre.id} />
+                              <select
+                                name="compteRenduVisiteId"
+                                required
+                                defaultValue=""
+                                className="flex-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[12px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              >
+                                <option value="" disabled>
+                                  Lier une visite existante
+                                </option>
+                                {visitesDisponibles.map((cr) => (
+                                  <option key={cr.id} value={cr.id}>
+                                    {formatDate(cr.dateVisite)} — {LABEL_INTERET[cr.interet]}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="submit"
+                                className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors shrink-0"
+                              >
+                                Lier
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

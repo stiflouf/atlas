@@ -276,6 +276,36 @@ export const offres = pgTable(
 // à 'realise', atomiquement avec le changement de statut. Distinction conservée pour permettre
 // plus tard un suivi de pipeline/délais/CA prévisionnel vs réalisé — aucun calcul de ce type
 // n'existe dans cette passe.
+// Lien explicite visite -> offre (ADR-019), many-to-many via table de jonction : plusieurs
+// comptes rendus peuvent précéder une même offre, et un même compte rendu peut aussi précéder
+// plusieurs offres successives (une offre refusée n'empêche pas une nouvelle offre du même
+// acquéreur sur le même bien). Cascade des deux côtés (contrairement à compromis.offreId en SET
+// NULL) : une ligne de liaison n'a aucun sens indépendamment de l'offre et du compte rendu
+// qu'elle relie — elle disparaît avec l'un ou l'autre. Correspondance bienId/acquereurId et
+// dateVisite <= dateOffre : validées côté Server Action (jamais en CHECK SQL, même principe que
+// offres.statut/compromis.statut), car ce sont des comparaisons entre deux tables. La contrainte
+// unique, elle, ne porte que sur les colonnes de cette table : elle reste en base comme dernier
+// filet de sécurité contre un doublon.
+export const offreVisites = pgTable(
+  "offre_visites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    offreId: uuid("offre_id")
+      .notNull()
+      .references(() => offres.id, { onDelete: "cascade" }),
+    compteRenduVisiteId: uuid("compte_rendu_visite_id")
+      .notNull()
+      .references(() => comptesRendusVisite.id, { onDelete: "cascade" }),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("offre_visites_offre_id_compte_rendu_visite_id_unique").on(
+      table.offreId,
+      table.compteRenduVisiteId
+    ),
+  ]
+);
+
 export const compromis = pgTable(
   "compromis",
   {

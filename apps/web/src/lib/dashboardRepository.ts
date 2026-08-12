@@ -1,6 +1,12 @@
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { biens as biensTable, compromis as compromisTable, comptesRendusVisite, offres as offresTable } from "@/db/schema";
+import {
+  biens as biensTable,
+  compromis as compromisTable,
+  comptesRendusVisite,
+  offres as offresTable,
+  offreVisites as offreVisitesTable,
+} from "@/db/schema";
 
 // Agrégation entièrement côté SQL (COUNT/SUM/AVG/GROUP BY par Postgres) — ADR-018. La page ne
 // charge jamais les lignes métier pour recalculer en mémoire.
@@ -41,6 +47,11 @@ export type DashboardActivite = {
   // compte rendu n'est jamais comptée comme "0 visite" — absence de donnée, pas zéro — elle est
   // exclue du dénominateur. undefined si aucune vente réalisée ne dispose d'un compte rendu.
   moyenneVisitesAvantVente: number | undefined;
+  // Calculé uniquement à partir des visites explicitement associées à une offre (ADR-019, table
+  // offre_visites) — jamais par rapprochement de date. undefined si aucune visite n'est
+  // enregistrée. Ne rattrape jamais l'historique antérieur à la mise en place du lien : les
+  // visites jamais liées manuellement restent hors du numérateur, sans exception.
+  tauxVisiteOffre: number | undefined;
 };
 
 export type DashboardDelaisPertes = {
@@ -48,6 +59,10 @@ export type DashboardDelaisPertes = {
   delaiMoyenCompromisActeJours: number | undefined;
   compromisAnnules: number;
   volumeCompromisAnnules: number;
+  // Moyenne de (offre.dateOffre - visite.dateVisite) sur chaque paire explicitement liée
+  // (ADR-019) — une visite liée à plusieurs offres, ou une offre liée à plusieurs visites,
+  // contribue une valeur par paire. undefined si aucune paire liée n'existe.
+  delaiMoyenVisiteOffreJours: number | undefined;
 };
 
 export async function chargerResultats(): Promise<DashboardResultats> {
@@ -158,7 +173,17 @@ export async function chargerActivite(): Promise<DashboardActivite> {
   const moyenneBrute = resultat[0]?.moyenne;
   const moyenneVisitesAvantVente = moyenneBrute === null || moyenneBrute === undefined ? undefined : Number(moyenneBrute);
 
-  return { visitesEnregistrees, offresEnregistrees, compromisEnregistres, moyenneVisitesAvantVente };
+  // Numérateur : comptes rendus distincts référencés par au moins une ligne offre_visites
+  // (ADR-019) — un lien explicite, jamais une proximité de date. Dénominateur : tous les comptes
+  // rendus enregistrés (visitesEnregistrees ci-dessus).
+  const [{ visitesAvecOffre }] = await getDb()
+    .select({
+      visitesAvecOffre: sql<number>`count(distinct ${offreVisitesTable.compteRenduVisiteId})::int`,
+    })
+    .from(offreVisitesTable);
+  const tauxVisiteOffre = visitesEnregistrees > 0 ? visitesAvecOffre / visitesEnregistrees : undefined;
+
+  return { visitesEnregistrees, offresEnregistrees, compromisEnregistres, moyenneVisitesAvantVente, tauxVisiteOffre };
 }
 
 export async function chargerDelaisPertes(): Promise<DashboardDelaisPertes> {
@@ -184,5 +209,21 @@ export async function chargerDelaisPertes(): Promise<DashboardDelaisPertes> {
     .from(compromisTable)
     .where(eq(compromisTable.statut, "annule"));
 
-  return { delaiMoyenOffreCompromisJours, delaiMoyenCompromisActeJours, compromisAnnules, volumeCompromisAnnules };
+  // Une ligne par paire (visite, offre) explicitement liée (ADR-019) — une même visite ou une
+  // même offre peut contribuer plusieurs fois si elle est liée à plusieurs offres/visites.
+  const visiteOffreResultat = await getDb()
+    .select({ moyenne: sql<string | null>`avg(${offresTable.dateOffre} - ${comptesRendusVisite.dateVisite})` })
+    .from(offreVisitesTable)
+    .innerJoin(offresTable, eq(offreVisitesTable.offreId, offresTable.id))
+    .innerJoin(comptesRendusVisite, eq(offreVisitesTable.compteRenduVisiteId, comptesRendusVisite.id));
+  const delaiMoyenVisiteOffreJours =
+    visiteOffreResultat[0]?.moyenne == null ? undefined : Number(visiteOffreResultat[0].moyenne);
+
+  return {
+    delaiMoyenOffreCompromisJours,
+    delaiMoyenCompromisActeJours,
+    compromisAnnules,
+    volumeCompromisAnnules,
+    delaiMoyenVisiteOffreJours,
+  };
 }

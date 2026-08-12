@@ -157,6 +157,11 @@ export default async function DashboardPage() {
               valeur={formatMoyenne(activite.moyenneVisitesAvantVente)}
               reserve="Calculé uniquement sur les ventes disposant d'au moins un compte rendu de visite."
             />
+            <MetricCard
+              label="Taux visite → offre"
+              valeur={formatPourcentage(activite.tauxVisiteOffre)}
+              reserve="Calculé uniquement à partir des visites explicitement associées à une offre."
+            />
           </div>
         </Card>
       </section>
@@ -178,6 +183,11 @@ export default async function DashboardPage() {
             <MetricCard
               label="Volume des compromis annulés"
               valeur={formatPrix(delaisPertes.volumeCompromisAnnules)}
+            />
+            <MetricCard
+              label="Délai moyen entre une visite liée et l'offre"
+              valeur={formatJours(delaisPertes.delaiMoyenVisiteOffreJours)}
+              reserve="Calculé uniquement à partir des visites explicitement associées à une offre."
             />
           </div>
         </Card>

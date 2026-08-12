@@ -331,13 +331,18 @@ uniquement (jointure `biens.archive_le is null` — l'archivage acquéreur n'est
 | Pipeline | Offres en cours / leur volume | `count(*)`/`sum(montant)` sur `offres` `en_cours`, bien non archivé | Biens archivés exclus |
 | Activité | Visites / offres / compromis enregistrés | `count(*)` sur chaque table, sans filtre d'archivage | — |
 | Activité | Moyenne de visites avant vente | Moyenne, par vente `realise`, du nombre de `comptes_rendus_visite` du même couple bien/acquéreur antérieurs à `date_signature` — **ventes sans compte rendu exclues du dénominateur**, jamais comptées comme 0 | "Calculé uniquement sur les ventes disposant d'au moins un compte rendu de visite" |
+| Activité | Taux visite → offre | Comptes rendus distincts référencés par au moins une ligne `offre_visites`, sur le total des comptes rendus enregistrés (ADR-019) — lien explicite uniquement, jamais par proximité de date | "Calculé uniquement à partir des visites explicitement associées à une offre" |
 | Délais/pertes | Délai moyen offre → compromis | `avg(date_signature - date_offre)` sur les compromis liés à une offre (`offre_id` non nul) | Uniquement les compromis liés à une offre enregistrée |
 | Délais/pertes | Délai moyen compromis → acte | `avg(date_acte_reelle - date_signature)` sur les compromis `realise` | — |
 | Délais/pertes | Compromis annulés / leur volume | `count(*)`/`sum(prix_convenu)` sur `compromis` `annule` | — |
+| Délais/pertes | Délai moyen visite → offre | `avg(date_offre - date_visite)` sur chaque paire explicitement liée via `offre_visites` (ADR-019) | "Calculé uniquement à partir des visites explicitement associées à une offre" |
 
-**Explicitement écarté** (donnée non instrumentée) : taux et délai visite → offre (aucun lien
-visite ↔ offre matérialisé), chiffre d'affaires, commission, fiscalité (aucun modèle de commission
-dans le schéma) — voir ADR-018 et `docs/KNOWN_LIMITATIONS.md`.
+**Explicitement écarté** (donnée non instrumentée) : chiffre d'affaires, commission, fiscalité
+(aucun modèle de commission dans le schéma) — voir ADR-018 et `docs/KNOWN_LIMITATIONS.md`. Le taux
+et le délai visite → offre, écartés dans ADR-018 faute de lien matérialisé, sont désormais
+disponibles via le lien explicite `offre_visites` (ADR-019) — avec la réserve que seules les
+visites explicitement liées après la mise en place de ce lien sont comptées (aucun rattrapage
+automatique de l'historique).
 
 Pas de graphiques, pas de filtre temporel en V1 — les séries "par mois" s'affichent en liste
 simple.

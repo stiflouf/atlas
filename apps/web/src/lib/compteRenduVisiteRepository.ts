@@ -38,6 +38,14 @@ export async function listerComptesRendusPourBien(bienId: string): Promise<Compt
   }
 }
 
+// Résolution directe, jamais filtrée par archivage — nécessaire pour valider un lien offre <->
+// visite (ADR-019) même si le bien/acquéreur a depuis été archivé.
+export async function getCompteRenduVisiteById(id: string): Promise<CompteRenduVisite | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb().select().from(comptesRendusVisiteTable).where(eq(comptesRendusVisiteTable.id, id));
+  return ligne ? ligneVersCompteRendu(ligne) : undefined;
+}
+
 // Validation (retour non vide après trim, interet dans le vocabulaire contrôlé) déjà faite par
 // l'appelant (server action) — insertion pure ici, même principe que les autres repositories.
 export type NouveauCompteRendu = Omit<CompteRenduVisite, "id" | "creeLe">;

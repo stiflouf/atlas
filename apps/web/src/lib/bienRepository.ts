@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { biens as biensTable } from "@/db/schema";
 import { biens as biensDemo, getBienById as getBienDemoById } from "@/data/biens";
 import type { Bien, TypeBien, StatutMandat, Exterieur } from "@/types/bien";
@@ -174,9 +174,11 @@ export async function desarchiverBien(id: string): Promise<Bien | undefined> {
 // Jalons du statut commercial (ADR-014) : insertion pure, aucune garde métier interne — la
 // validation (compromis non actif pour retirerOffre, bien non archivé) est de la responsabilité
 // de la Server Action appelante, même séparation que archiverBien/desarchiverBien.
-export async function marquerOffreEnCours(id: string): Promise<Bien | undefined> {
+// `executeur` optionnel : permet d'appeler cette fonction à l'intérieur d'une transaction ouverte
+// ailleurs (voir offreRepository.enregistrerOffreAvecLiensEtJalon, ADR-019).
+export async function marquerOffreEnCours(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(biensTable)
     .set({ offreEnCoursLe: new Date() })
     .where(eq(biensTable.id, id))

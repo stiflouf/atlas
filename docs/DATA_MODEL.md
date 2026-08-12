@@ -425,12 +425,41 @@ unidirectionnel, ADR-016) ; changer son statut ne le modifie jamais. `date_acte`
 distinctes délibérément conservées pour permettre plus tard un suivi de pipeline/délais/CA
 prévisionnel vs réalisé (ADR-017) — aucun calcul de ce type n'existe dans cette passe.
 
+## `offre_visites`
+
+**Rôle** : lien explicite many-to-many entre une offre et les visites qui l'ont précédée — jamais
+déduit par proximité de date, toujours créé par un geste explicite du conseiller. Voir ADR-019.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `offre_id` | uuid (FK → `offres.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `cree_le` | timestamptz | non | |
+
+**Contrainte `UNIQUE`** : `(offre_id, compte_rendu_visite_id)` — dernier filet de sécurité contre
+un doublon, en complément de la validation applicative (même bien, même acquéreur,
+`date_visite <= date_offre`, jamais exprimée en `CHECK` SQL puisqu'elle compare deux tables).
+
+Cascade des deux côtés (contrairement à `compromis.offre_id`, en `SET NULL`) : une ligne de
+liaison n'a aucun sens indépendamment de l'offre et de la visite qu'elle relie. Table de faits
+sans `modifie_le` mais dont les lignes peuvent être supprimées individuellement (correction d'une
+erreur de saisie) — seule table du projet où une suppression physique de ligne est un usage normal
+plutôt qu'une exception, car le lien n'est pas lui-même un fait métier historique. Relation
+fonctionnelle : lue par `listerLiensPourBien()`/`getLienOffreVisiteById()`/`getLienOffreVisite()`,
+écrite par `lierVisiteAOffre()`/`retirerLienVisiteOffre()` (`src/lib/offreVisiteRepository.ts`).
+Créée soit dans la même transaction que l'offre (`enregistrerOffreAvecLiensEtJalon`,
+`src/lib/offreRepository.ts`), soit rétroactivement (`lierVisiteAOffreAction`/`delierVisiteAction`,
+`src/actions/offreVisite.ts`).
+
 ## Tableau de bord commercial (`dashboardRepository.ts`)
 
-Aucune nouvelle table. `src/lib/dashboardRepository.ts` (lecture seule, ADR-018) agrège
-`compromis`/`offres`/`comptes_rendus_visite`/`biens` existants via `COUNT`/`SUM`/`AVG`/`GROUP BY`
-exécutés par Postgres — jamais recalculé en mémoire côté application. Voir `docs/BUSINESS_RULES.md`
-pour le détail des métriques et ADR-018 pour la règle d'archivage et les métriques écartées.
+`src/lib/dashboardRepository.ts` (lecture seule, ADR-018/ADR-019) agrège
+`compromis`/`offres`/`comptes_rendus_visite`/`biens`/`offre_visites` existants via
+`COUNT`/`SUM`/`AVG`/`GROUP BY` exécutés par Postgres — jamais recalculé en mémoire côté
+application. Voir `docs/BUSINESS_RULES.md`
+pour le détail des métriques et ADR-018 pour la règle d'archivage et les métriques écartées ;
+ADR-019 pour `offre_visites` et les métriques visite → offre.
 
 ## Migrations
 
@@ -447,6 +476,7 @@ pour le détail des métriques et ADR-018 pour la règle d'archivage et les mét
 | `0008_great_kid_colt.sql` | `offres` |
 | `0009_high_lenny_balinger.sql` | `compromis` |
 | `0010_tiny_earthquake.sql` | `date_acte_reelle` sur `compromis` |
+| `0011_friendly_captain_flint.sql` | `offre_visites` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -1,9 +1,10 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getBienById, marquerOffreEnCours } from "@/lib/bienRepository";
+import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
-import { enregistrerOffre, getOffreById, changerStatutOffre } from "@/lib/offreRepository";
+import { enregistrerOffreAvecLiensEtJalon, getOffreById, changerStatutOffre } from "@/lib/offreRepository";
+import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import type { StatutOffre } from "@/types/offre";
 
 const TRANSITIONS_VALIDES: StatutOffre[] = ["acceptee", "refusee", "retiree"];
@@ -20,14 +21,19 @@ function parseDateOptionnelle(valeur: FormDataEntryValue | null): string | undef
 
 // Refus explicite (throw) si le bien ou l'acquéreur est invalide/inexistant/archivé — une offre
 // est un nouveau fait métier structuré, jamais posé sur une entité sortie des flux actifs
-// (ADR-012/ADR-014/ADR-015). Couplage unidirectionnel : pose offreEnCoursLe sur le bien dans la
-// même action, un seul geste conseiller.
+// (ADR-012/ADR-014/ADR-015). Refuse aussi (throw, avant toute écriture) si un compteRenduVisiteId
+// coché ne correspond pas exactement au même bien/acquéreur ou a une dateVisite postérieure à
+// dateOffre (ADR-019) — jamais d'inférence, le conseiller ne peut lier que des visites qui
+// correspondent réellement. L'offre, ses liens de visite et le jalon offreEnCoursLe sont écrits
+// en une seule transaction (enregistrerOffreAvecLiensEtJalon) : un seul geste conseiller, tout ou
+// rien.
 export async function ajouterOffreAction(formData: FormData): Promise<void> {
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const montant = parseMontant(formData.get("montant"));
   const dateOffre = String(formData.get("dateOffre") ?? "").trim();
   const dateValidite = parseDateOptionnelle(formData.get("dateValidite"));
+  const compteRenduVisiteIds = formData.getAll("compteRenduVisiteIds").map(String).filter((id) => id !== "");
 
   if (!montant) throw new Error("Le montant de l'offre doit être un nombre positif.");
   if (!dateOffre) throw new Error("La date de l'offre est obligatoire.");
@@ -38,8 +44,17 @@ export async function ajouterOffreAction(formData: FormData): Promise<void> {
   if (!acquereur) throw new Error("Acquéreur introuvable.");
   if (acquereur.archiveLe) throw new Error("Impossible d'ajouter une offre pour un acquéreur archivé.");
 
-  await enregistrerOffre({ bienId, acquereurId, montant, dateOffre, dateValidite });
-  await marquerOffreEnCours(bienId);
+  for (const compteRenduVisiteId of compteRenduVisiteIds) {
+    const compteRendu = await getCompteRenduVisiteById(compteRenduVisiteId);
+    if (!compteRendu) throw new Error("Visite introuvable.");
+    if (compteRendu.bienId !== bienId) throw new Error("Cette visite ne concerne pas ce bien.");
+    if (compteRendu.acquereurId !== acquereurId) throw new Error("Cette visite ne concerne pas cet acquéreur.");
+    if (compteRendu.dateVisite > dateOffre) {
+      throw new Error("Une visite postérieure à l'offre ne peut pas y être liée.");
+    }
+  }
+
+  await enregistrerOffreAvecLiensEtJalon({ bienId, acquereurId, montant, dateOffre, dateValidite }, compteRenduVisiteIds);
 
   redirect(`/biens/${bienId}`);
 }
