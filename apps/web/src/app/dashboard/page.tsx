@@ -6,10 +6,13 @@ import {
   chargerActivite,
   chargerDelais,
   chargerPertes,
+  chargerRemuneration,
   type MontantParMois,
+  type MontantCentimesParMois,
   type PerteParMotif,
 } from "@/lib/dashboardRepository";
 import { LABEL_MOTIF_PERTE } from "@/types/motifPerte";
+import { formatMontantCentimes } from "@/types/remuneration";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, le tableau de bord figerait au moment du build.
@@ -35,6 +38,13 @@ function formatJours(jours: number | undefined): string {
 function formatMoyenne(valeur: number | undefined): string {
   if (valeur === undefined) return "—";
   return (Math.round(valeur * 10) / 10).toString();
+}
+
+// Inconnu ≠ zéro (ADR-021) : une population sans aucune ligne remuneration renseignée affiche
+// "Pas encore renseignée", jamais "0 €" — un total à 0 laisserait croire à une mesure exhaustive.
+function formatMontantCentimesOuInconnu(centimes: number | undefined): string {
+  if (centimes === undefined) return "Pas encore renseignée";
+  return formatMontantCentimes(centimes);
 }
 
 function formatMois(mois: string): string {
@@ -77,6 +87,22 @@ function ParMoisListe({ items }: { items: MontantParMois[] }) {
   );
 }
 
+function ParMoisCentimesListe({ items }: { items: MontantCentimesParMois[] }) {
+  if (items.length === 0) {
+    return <p className="text-[13px] text-[#94a3b8]">Aucune donnée pour l'instant.</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {items.map(({ mois, montantCentimes }) => (
+        <li key={mois} className="flex items-center justify-between text-[13px]">
+          <span className="text-[#64748b] capitalize">{formatMois(mois)}</span>
+          <span className="font-medium text-[#0f172a]">{formatMontantCentimes(montantCentimes)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 // Motif NULL historique jamais affiché ici ni reclassé (ADR-020) : la liste ne contient que les
 // motifs explicitement renseignés — voir la réserve affichée au-dessus de chaque liste.
 function ParMotifListe({ items }: { items: PerteParMotif[] }) {
@@ -98,12 +124,13 @@ function ParMotifListe({ items }: { items: PerteParMotif[] }) {
 }
 
 export default async function DashboardPage() {
-  const [resultats, pipeline, activite, delais, pertes] = await Promise.all([
+  const [resultats, pipeline, activite, delais, pertes, remuneration] = await Promise.all([
     chargerResultats(),
     chargerPipeline(),
     chargerActivite(),
     chargerDelais(),
     chargerPertes(),
+    chargerRemuneration(),
   ]);
 
   return (
@@ -131,6 +158,33 @@ export default async function DashboardPage() {
           </div>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Réalisé par mois</p>
           <ParMoisListe items={resultats.realiseParMois} />
+        </Card>
+      </section>
+
+      <section className="mb-8">
+        <SectionTitle>Rémunération</SectionTitle>
+        <Card className="p-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-5 mb-6">
+            <MetricCard
+              label="Rémunération prévisionnelle"
+              valeur={formatMontantCentimesOuInconnu(remuneration.remunerationPrevisionnelleCentimes)}
+              reserve={`Biens archivés exclus. Renseignée sur ${remuneration.nombreRemunerationsPrevisionnellesRenseignees} compromis en cours sur ${remuneration.nombreCompromisEnCoursEligibles}.`}
+            />
+            <MetricCard
+              label="Rémunération associée à une vente finalisée"
+              valeur={formatMontantCentimesOuInconnu(remuneration.remunerationVenteFinaliseeNonEncaisseeCentimes)}
+              reserve={`Vente finalisée non encaissée, biens archivés inclus. Renseignée sur ${remuneration.nombreRemunerationsVentesFinaliseesRenseignees} ventes finalisées sur ${remuneration.nombreVentesFinalisees}.`}
+            />
+            <MetricCard
+              label="Rémunération encaissée"
+              valeur={formatMontantCentimesOuInconnu(remuneration.remunerationEncaisseeCentimes)}
+              reserve="Biens archivés inclus."
+            />
+          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+            Rémunération encaissée par mois
+          </p>
+          <ParMoisCentimesListe items={remuneration.remunerationEncaisseeParMoisCentimes} />
         </Card>
       </section>
 

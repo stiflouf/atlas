@@ -350,3 +350,51 @@ export const compromis = pgTable(
     ),
   ]
 );
+
+// Rémunération du conseiller sur un compromis (ADR-021), 1:1 strict — compromisId UNIQUE, une seule
+// ligne pour toute la durée de vie d'un compromis, jamais de paiement partiel/plusieurs versements
+// en V1 (une future table encaissements introduirait cela sans rupture). ON DELETE CASCADE comme
+// compromis.bienId/acquereurId : aucune suppression de compromis n'existe dans le codebase, mais une
+// ligne remuneration n'a aucun sens indépendamment de son compromis.
+// Montants en CENTIMES entiers (jamais un flottant) — contrairement à compromis.prixConvenu/
+// offres.montant qui sont des euros entiers : première donnée financière précise d'Atlas, divergence
+// assumée. montantRemunerationConseillerCentimes NOT NULL (aucune ligne vide : si le montant n'est
+// pas connu, aucune ligne n'est créée) ; montantHonorairesTotalCentimes nullable. Aucune relation
+// automatique entre les deux colonnes, aucun taux implicite — seuls des montants saisis font foi.
+// Pas de statut stocké : l'état prévisionnelle/associée à une vente finalisée/encaissée se déduit à
+// la lecture de compromis.statut + dateEncaissementReelle (voir src/types/remuneration.ts), jamais
+// une colonne dupliquée. dateEncaissementPrevue (saisie) et dateEncaissementReelle (constatée, posée
+// uniquement par la transition d'encaissement dédiée, jamais à la création) suivent la même
+// distinction prévue/constatée que compromis.dateActe/dateActeReelle (ADR-017). Une fois
+// dateEncaissementReelle posée, la ligne est figée : plus aucune correction depuis ce chemin (une
+// correction tardive relèverait de la future passe encaissements/régularisations).
+// Archivage du bien/acquéreur : ne bloque jamais la correction/l'encaissement d'une rémunération sur
+// un compromis déjà 'realise' (seuls les nouveaux engagements prévisionnels sur un compromis encore
+// 'en_cours' sont bloqués côté Server Action) — le règlement financier d'une vente déjà conclue ne
+// s'arrête pas à l'archivage du dossier commercial (voir src/actions/remuneration.ts).
+export const remuneration = pgTable(
+  "remuneration",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    compromisId: uuid("compromis_id")
+      .notNull()
+      .references(() => compromis.id, { onDelete: "cascade" })
+      .unique(),
+    montantHonorairesTotalCentimes: integer("montant_honoraires_total_centimes"),
+    montantRemunerationConseillerCentimes: integer("montant_remuneration_conseiller_centimes").notNull(),
+    dateEncaissementPrevue: date("date_encaissement_prevue"),
+    dateEncaissementReelle: date("date_encaissement_reelle"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "remuneration_montant_conseiller_positif_check",
+      sql`${table.montantRemunerationConseillerCentimes} > 0`
+    ),
+    check(
+      "remuneration_montant_honoraires_positif_check",
+      sql`${table.montantHonorairesTotalCentimes} IS NULL OR ${table.montantHonorairesTotalCentimes} > 0`
+    ),
+  ]
+);

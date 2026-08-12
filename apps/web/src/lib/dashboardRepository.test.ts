@@ -22,6 +22,7 @@ const {
   offres: offresTable,
   compromis: compromisTable,
   comptesRendusVisite: comptesRendusVisiteTable,
+  remuneration: remunerationTable,
 } = await import("@/db/schema");
 const { creerBien, archiverBien } = await import("./bienRepository");
 const { creerAcquereur } = await import("./clientRepository");
@@ -31,17 +32,21 @@ const { enregistrerCompromis, marquerCompromisAnnule, marquerCompromisRealise } 
 );
 const { enregistrerCompteRenduVisite } = await import("./compteRenduVisiteRepository");
 const { lierVisiteAOffre } = await import("./offreVisiteRepository");
-const { chargerResultats, chargerPipeline, chargerActivite, chargerDelais, chargerPertes } = await import(
-  "./dashboardRepository"
-);
+const { enregistrerRemuneration, marquerRemunerationEncaissee } = await import("./remunerationRepository");
+const { chargerResultats, chargerPipeline, chargerActivite, chargerDelais, chargerPertes, chargerRemuneration } =
+  await import("./dashboardRepository");
 
 const idsCompromisCrees: string[] = [];
 const idsOffresCrees: string[] = [];
 const idsComptesRendusCrees: string[] = [];
 const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
+const idsRemunerationCrees: string[] = [];
 
 afterAll(async () => {
+  for (const id of idsRemunerationCrees) {
+    await getDb().delete(remunerationTable).where(eq(remunerationTable.id, id));
+  }
   for (const id of idsComptesRendusCrees) {
     await getDb().delete(comptesRendusVisiteTable).where(eq(comptesRendusVisiteTable.id, id));
   }
@@ -645,5 +650,137 @@ describe("dashboardRepository — chargerPertes (ADR-020)", () => {
     const sommeNombreApres = apres.pertesOffresParMotif.reduce((acc, p) => acc + p.nombre, 0);
     expect(sommeNombreApres).toBe(sommeNombreAvant);
     expect(apres.pertesOffresParMois).toEqual(avant.pertesOffresParMois);
+  });
+});
+
+describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
+  it("remunerationPrevisionnelleCentimes exclut un compromis en_cours sur un bien archivé (égalité avant/après)", async () => {
+    const avant = await chargerRemuneration();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REMUNERATION-001");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 1000000 });
+    idsRemunerationCrees.push(r.id);
+    await archiverBien(bien.id);
+
+    const apres = await chargerRemuneration();
+
+    expect(apres.remunerationPrevisionnelleCentimes).toBe(avant.remunerationPrevisionnelleCentimes);
+  });
+
+  it("remunerationPrevisionnelleCentimes inclut un compromis en_cours sur un bien non archivé (delta avant/après)", async () => {
+    const avant = await chargerRemuneration();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REMUNERATION-002");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 1500000 });
+    idsRemunerationCrees.push(r.id);
+
+    const apres = await chargerRemuneration();
+
+    expect(apres.remunerationPrevisionnelleCentimes).toBe((avant.remunerationPrevisionnelleCentimes ?? 0) + 1500000);
+    expect(apres.nombreRemunerationsPrevisionnellesRenseignees).toBe(
+      avant.nombreRemunerationsPrevisionnellesRenseignees + 1
+    );
+    expect(apres.nombreCompromisEnCoursEligibles).toBe(avant.nombreCompromisEnCoursEligibles + 1);
+  });
+
+  it("un compromis en_cours sans ligne remuneration augmente le dénominateur mais pas le numérateur de couverture (inconnu ≠ zéro)", async () => {
+    const avant = await chargerRemuneration();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REMUNERATION-003");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    // Aucune ligne remuneration créée pour ce compromis.
+
+    const apres = await chargerRemuneration();
+
+    expect(apres.nombreCompromisEnCoursEligibles).toBe(avant.nombreCompromisEnCoursEligibles + 1);
+    expect(apres.nombreRemunerationsPrevisionnellesRenseignees).toBe(
+      avant.nombreRemunerationsPrevisionnellesRenseignees
+    );
+    expect(apres.remunerationPrevisionnelleCentimes).toBe(avant.remunerationPrevisionnelleCentimes);
+  });
+
+  it("une vente realise sur un bien archivé reste comptée dans les métriques 'vente finalisée' (archivage commercial ≠ clôture du suivi financier, ADR-021)", async () => {
+    const avant = await chargerRemuneration();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REMUNERATION-004");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    await marquerCompromisRealise(c.id, "2026-09-01");
+    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 800000 });
+    idsRemunerationCrees.push(r.id);
+    await archiverBien(bien.id);
+
+    const apres = await chargerRemuneration();
+
+    expect(apres.remunerationVenteFinaliseeNonEncaisseeCentimes).toBe(
+      (avant.remunerationVenteFinaliseeNonEncaisseeCentimes ?? 0) + 800000
+    );
+    expect(apres.nombreVentesFinalisees).toBe(avant.nombreVentesFinalisees + 1);
+    expect(apres.nombreRemunerationsVentesFinaliseesRenseignees).toBe(
+      avant.nombreRemunerationsVentesFinaliseesRenseignees + 1
+    );
+  });
+
+  it("une même ligne encaissée n'apparaît que dans remunerationEncaisseeCentimes, jamais aussi dans remunerationVenteFinaliseeNonEncaisseeCentimes (états mutuellement exclusifs)", async () => {
+    const avant = await chargerRemuneration();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REMUNERATION-005");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    await marquerCompromisRealise(c.id, "2026-09-01");
+    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 900000 });
+    idsRemunerationCrees.push(r.id);
+    await marquerRemunerationEncaissee(c.id, "2026-09-20");
+
+    const apres = await chargerRemuneration();
+
+    expect(apres.remunerationEncaisseeCentimes).toBe((avant.remunerationEncaisseeCentimes ?? 0) + 900000);
+    expect(apres.remunerationVenteFinaliseeNonEncaisseeCentimes).toBe(
+      avant.remunerationVenteFinaliseeNonEncaisseeCentimes
+    );
+  });
+
+  it("remunerationEncaisseeParMoisCentimes regroupe par mois de dateEncaissementReelle (mois distinctif)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REMUNERATION-006");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    await marquerCompromisRealise(c.id, "2026-09-01");
+    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 700000 });
+    idsRemunerationCrees.push(r.id);
+    await marquerRemunerationEncaissee(c.id, "2031-07-10");
+
+    const { remunerationEncaisseeParMoisCentimes } = await chargerRemuneration();
+
+    expect(remunerationEncaisseeParMoisCentimes).toContainEqual({ mois: "2031-07", montantCentimes: 700000 });
   });
 });

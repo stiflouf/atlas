@@ -13,6 +13,7 @@ import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerLiensPourBien } from "@/lib/offreVisiteRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
+import { listerRemunerationsPourBien } from "@/lib/remunerationRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
@@ -62,6 +63,7 @@ export default async function FicheBien({ params }: PageProps) {
   const offres = await listerOffresPourBien(bien.id);
   const liens = await listerLiensPourBien(bien.id);
   const compromis = await listerCompromisPourBien(bien.id);
+  const remunerations = await listerRemunerationsPourBien(bien.id);
   const acquereursActifs = await listerClients();
   const acquereurIds = [
     ...new Set([
@@ -237,6 +239,7 @@ export default async function FicheBien({ params }: PageProps) {
         documents={documents}
         offres={offres}
         compromis={compromis}
+        remunerations={remunerations}
         liens={liens}
         acquereursActifs={acquereursActifs}
         acquereursParId={acquereursParId}

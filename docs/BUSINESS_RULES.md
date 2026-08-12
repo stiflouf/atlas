@@ -312,6 +312,48 @@ pipeline/délais (écart prévu/réel), un CA prévisionnel (compromis non acté
 `vendu`), des taux de conversion, et une analyse des ventes perdues (compromis `annule`) — voir
 ADR-017.
 
+## Rémunération conseiller
+
+**Fichiers** : `src/lib/remunerationRepository.ts`, `src/actions/remuneration.ts`,
+`src/types/remuneration.ts`. Détail de la décision : ADR-021.
+
+Relation 1:1 stricte avec `compromis` (`compromisId` `UNIQUE`) — au plus une ligne pour toute la
+durée de vie d'un compromis, V1 suppose un encaissement unique (pas de paiement partiel, plusieurs
+versements, avoirs ni régularisations). Montants en **centimes entiers**, saisis à la main,
+**aucun** calcul automatique (jamais `prixConvenu × taux`, jamais `honoraires × pourcentage`,
+aucune relation entre `montantHonorairesTotalCentimes` et `montantRemunerationConseillerCentimes`).
+Aucune ligne vide : si le montant n'est pas connu, aucune ligne `remuneration` n'est créée.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Créer une rémunération | Compromis réel, non `annule` ; si `en_cours`, bien et acquéreur non archivés ; montant conseiller > 0 ; honoraires totaux absents ou > 0 ; aucune rémunération déjà associée à ce compromis | `enregistrerRemuneration(...)` |
+| Créer une rémunération — refus | Compromis introuvable/`annule` ; compromis `en_cours` avec bien/acquéreur archivé ; montant invalide ; doublon | `throw` explicite (`ajouterRemunerationAction`) |
+| Créer sur un compromis `realise` archivé | Toujours autorisé | Aucun blocage d'archivage — voir "Archivage" ci-dessous |
+| Corriger avant encaissement | Rémunération non encaissée ; mêmes conditions d'archivage que la création | `modifierRemunerationPrevisionnelle(...)` — **remplacement complet** des trois champs corrigibles, `montantHonorairesTotalCentimes`/`dateEncaissementPrevue` en `number \| null` / `string \| null` (jamais `undefined` = "ne pas toucher") |
+| Corriger — refus | Déjà encaissée, compromis `annule`, ou compromis `en_cours` avec bien/acquéreur archivé | `throw` explicite (`modifierRemunerationAction`) |
+| Marquer encaissée | Compromis `statut === "realise"` **et** `dateActeReelle` présente ; `dateEncaissementReelle` fournie | `marquerRemunerationEncaissee(...)` — écriture atomique dédiée, ligne figée ensuite |
+| Marquer encaissée — refus | Compromis non `realise`, `dateActeReelle` absente, `dateEncaissementReelle` manquante, ou déjà encaissée | `throw` explicite (`marquerRemunerationEncaisseeAction`) — **aucune vérification d'archivage** |
+| Gel concurrent | `modifierRemunerationPrevisionnelle`/`marquerRemunerationEncaissee` appelées après un encaissement posé entre-temps | L'`UPDATE` (protégé par `WHERE date_encaissement_reelle IS NULL`) ne touche aucune ligne → le repository retourne `undefined` → la Server Action lève une erreur explicite |
+| Vente annulée | Compromis passé `annule` après création d'une rémunération prévisionnelle | La ligne reste consultable telle quelle (jamais modifiée/supprimée), sort du prévisionnel actif |
+| Consultation | Toujours | `listerRemunerationsPourBien()`/`getRemunerationParCompromis()` résolvent toujours, même sur un bien/acquéreur archivé |
+
+**Archivage — exception au reste du domaine commercial** : l'archivage du bien/acquéreur ne bloque
+**que** les nouveaux engagements/corrections sur un compromis encore `en_cours`. Il ne bloque jamais
+la création, la correction (avant encaissement) ni l'encaissement d'une rémunération sur un
+compromis déjà `realise` — le règlement financier d'une vente déjà conclue ne s'arrête pas à
+l'archivage du dossier commercial (ADR-021, "Archivage commercial ≠ clôture du suivi financier
+historique").
+
+**États dérivés, jamais stockés** : `previsionnelle` (`en_cours`), `associee_vente_finalisee`
+(`realise` sans `dateEncaissementReelle`), `encaissee` (`realise` avec `dateEncaissementReelle`) —
+mutuellement exclusifs, calculés par `deriverEtatRemuneration()`. Un compromis `annule` ne retourne
+aucun état. Aucune notion comptable/juridique de "CA acquis" n'est gravée dans cette passe — une
+future passe dédiée déterminera le traitement fiscal/comptable.
+
+**Historique dérivé** : un seul événement, `"Rémunération encaissée — {montant}"`, posé uniquement
+quand `dateEncaissementReelle` est présente — pas d'événement à la création de la ligne
+prévisionnelle, pas d'événement de correction.
+
 ## Dashboard commercial
 
 **Fichiers** : `src/lib/dashboardRepository.ts` (lecture seule, aucune Server Action),
@@ -324,7 +366,8 @@ moyenne ou un délai dont le dénominateur est vide retourne `undefined` (affich
 **Règle d'archivage** : Résultats/Activité/Délais/Pertes commerciales incluent les biens et
 acquéreurs archivés (l'historique ne se réécrit pas rétroactivement) ; Pipeline exclut les biens
 archivés uniquement (jointure `biens.archive_le is null` — l'archivage acquéreur n'est pas pris en
-compte).
+compte). Rémunération suit une règle asymétrique par métrique (ADR-021) : voir la famille dédiée
+ci-dessous.
 
 | Famille | Métrique | Formule / source | Réserve affichée dans l'UI |
 |---|---|---|---|
@@ -348,9 +391,15 @@ compte).
 | Pertes commerciales | Volume de transactions interrompues | `sum(prix_convenu)` même périmètre | "Volume de transaction, pas un chiffre d'affaires" |
 | Pertes commerciales | Offres perdues / compromis annulés par motif | `GROUP BY motif_perte`/`motif_annulation`, `WHERE motif ... IS NOT NULL` (ADR-020) | "Calculé uniquement sur les pertes disposant d'un motif renseigné" |
 | Pertes commerciales | Offres perdues / compromis annulés par mois | `GROUP BY` mois de `date_decision`/`date_annulation`, `WHERE ... IS NOT NULL` — jamais approximé depuis `date_offre`/`date_signature` | "Calculé uniquement sur les pertes disposant d'une date de décision/d'annulation fiable" |
+| Rémunération | Rémunération prévisionnelle | `sum(montant_remuneration_conseiller_centimes)` sur `remuneration` ⨝ `compromis` `en_cours`, bien non archivé (ADR-021) | Biens archivés exclus + compteur de couverture ("renseignée sur X compromis sur Y") ; `undefined` (pas `0`) si aucune ligne renseignée |
+| Rémunération | Rémunération associée à une vente finalisée | Même somme, `compromis` `realise` **et** `date_encaissement_reelle IS NULL`, biens archivés inclus | Compteur de couverture partagé avec la ligne "encaissée" (même dénominateur : toutes les ventes `realise`) ; `undefined` si aucune ligne renseignée |
+| Rémunération | Rémunération encaissée | Même somme, `compromis` `realise` **et** `date_encaissement_reelle IS NOT NULL`, biens archivés inclus | Mutuellement exclusive de la ligne précédente (jamais la même ligne dans les deux) ; `undefined` si aucune ligne renseignée |
+| Rémunération | Rémunération encaissée par mois | `sum(...)` groupé par mois de `date_encaissement_reelle` | — |
 
-**Explicitement écarté** (donnée non instrumentée) : chiffre d'affaires, commission, fiscalité
-(aucun modèle de commission dans le schéma) — voir ADR-018 et `docs/KNOWN_LIMITATIONS.md`. Le taux
+**Explicitement écarté** (donnée non instrumentée) : chiffre d'affaires, fiscalité, et toute notion
+comptable/juridique de rémunération "acquise" — `remuneration` (ADR-021) instrumente les montants
+saisis mais ne tranche aucune de ces questions, volontairement reportées à une passe dédiée — voir
+ADR-018, ADR-021 et `docs/KNOWN_LIMITATIONS.md`. Le taux
 et le délai visite → offre, écartés dans ADR-018 faute de lien matérialisé, sont désormais
 disponibles via le lien explicite `offre_visites` (ADR-019) — avec la réserve que seules les
 visites explicitement liées après la mise en place de ce lien sont comptées (aucun rattrapage

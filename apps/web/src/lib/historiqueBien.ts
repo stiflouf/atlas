@@ -3,6 +3,7 @@ import type { ActionMetier } from "@/types/action";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { Offre } from "@/types/offre";
 import type { Compromis } from "@/types/compromis";
+import { formatMontantCentimes, type Remuneration } from "@/types/remuneration";
 
 function formatPrix(montant: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
@@ -23,7 +24,8 @@ export function deriverHistoriqueBien(
   actions: ActionMetier[],
   comptesRendus: CompteRenduVisite[] = [],
   offres: Offre[] = [],
-  compromis: Compromis[] = []
+  compromis: Compromis[] = [],
+  remunerations: Remuneration[] = []
 ): EvenementHistorique[] {
   const evenements: EvenementHistorique[] = [];
 
@@ -97,6 +99,19 @@ export function deriverHistoriqueBien(
     }
     if (c.statut === "annule" && c.dateAnnulation) {
       evenements.push({ date: c.dateAnnulation, texte: `Compromis annulé — ${formatPrix(c.prixConvenu)}` });
+    }
+  }
+
+  // Un seul événement par ligne remuneration, posé uniquement quand dateEncaissementReelle est
+  // présente (même garde "pas d'événement sans date fiable" qu'ADR-017/020) — pas d'événement à la
+  // création de la ligne prévisionnelle (pas encore un fait "acquis" au sens d'ADR-021), pas
+  // d'événement de correction (modifieLe n'apparaît jamais dans l'historique).
+  for (const r of remunerations) {
+    if (r.dateEncaissementReelle) {
+      evenements.push({
+        date: r.dateEncaissementReelle,
+        texte: `Rémunération encaissée — ${formatMontantCentimes(r.montantRemunerationConseillerCentimes)}`,
+      });
     }
   }
 

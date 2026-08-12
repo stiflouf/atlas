@@ -6,6 +6,7 @@ import {
   comptesRendusVisite,
   offres as offresTable,
   offreVisites as offreVisitesTable,
+  remuneration as remunerationTable,
 } from "@/db/schema";
 import type { MotifPerte } from "@/types/motifPerte";
 
@@ -319,5 +320,85 @@ export async function chargerPertes(): Promise<DashboardPertes> {
     pertesCompromisParMotif,
     pertesOffresParMois,
     pertesCompromisParMois,
+  };
+}
+
+// Type dédié — MontantParMois existant représente des volumes immobiliers en euros
+// (prixConvenu/montant), jamais des centimes de rémunération. Ne pas réutiliser : les deux types
+// doivent rester impossibles à confondre au typage.
+export type MontantCentimesParMois = { mois: string; montantCentimes: number };
+
+// ADR-021. Trois états mutuellement exclusifs — chaque ligne remuneration ne peut apparaître que
+// dans un seul des trois champs de somme (construits sur des filtres WHERE/filter disjoints sur
+// (compromis.statut, date_encaissement_reelle IS NULL)).
+//
+// Règle d'archivage, volontairement asymétrique : remunerationPrevisionnelleCentimes exclut les
+// biens archivés (même règle que chargerPipeline — c'est une métrique de pipeline actif, pas
+// d'historique) ; les deux métriques "vente finalisée" incluent les biens archivés (comme
+// chargerResultats — le suivi financier d'une vente déjà conclue ne s'arrête pas à l'archivage du
+// dossier commercial, ADR-021). Ne jamais uniformiser ces trois règles.
+//
+// Convention undefined vs 0 (inconnu ≠ zéro, ADR-021) : chaque somme utilise `sum(...) filter
+// (where ...)` sans coalesce — Postgres renvoie NULL (mappé en undefined ici) quand aucune ligne ne
+// correspond au filtre, jamais une somme à 0.
+//
+// Indicateurs de couverture, jamais un total silencieusement partiel : une somme sur une population
+// où seule une fraction des lignes a une rémunération renseignée serait trompeuse. Les compteurs
+// sont calculés par un simple count(*) sur la même population filtrée que la somme correspondante —
+// jamais déduits de la somme elle-même.
+export type DashboardRemuneration = {
+  remunerationPrevisionnelleCentimes: number | undefined;
+  nombreRemunerationsPrevisionnellesRenseignees: number;
+  nombreCompromisEnCoursEligibles: number;
+  remunerationVenteFinaliseeNonEncaisseeCentimes: number | undefined;
+  remunerationEncaisseeCentimes: number | undefined;
+  nombreRemunerationsVentesFinaliseesRenseignees: number;
+  nombreVentesFinalisees: number;
+  remunerationEncaisseeParMoisCentimes: MontantCentimesParMois[];
+};
+
+export async function chargerRemuneration(): Promise<DashboardRemuneration> {
+  const [previsionnel] = await getDb()
+    .select({
+      nombreRenseignees: sql<number>`count(*) filter (where ${remunerationTable.id} is not null)::int`,
+      nombreEligibles: sql<number>`count(*)::int`,
+      somme: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes})::int`,
+    })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe)));
+
+  const [venteFinalisee] = await getDb()
+    .select({
+      nombreVentesFinalisees: sql<number>`count(*)::int`,
+      nombreRenseignees: sql<number>`count(*) filter (where ${remunerationTable.id} is not null)::int`,
+      sommeNonEncaissee: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes}) filter (where ${remunerationTable.dateEncaissementReelle} is null)::int`,
+      sommeEncaissee: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes}) filter (where ${remunerationTable.dateEncaissementReelle} is not null)::int`,
+    })
+    .from(compromisTable)
+    .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(eq(compromisTable.statut, "realise"));
+
+  const remunerationEncaisseeParMoisCentimes = await getDb()
+    .select({
+      mois: sql<string>`to_char(date_trunc('month', ${remunerationTable.dateEncaissementReelle}), 'YYYY-MM')`,
+      montantCentimes: sql<number>`sum(${remunerationTable.montantRemunerationConseillerCentimes})::int`,
+    })
+    .from(remunerationTable)
+    .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(and(eq(compromisTable.statut, "realise"), isNotNull(remunerationTable.dateEncaissementReelle)))
+    .groupBy(sql`date_trunc('month', ${remunerationTable.dateEncaissementReelle})`)
+    .orderBy(sql`date_trunc('month', ${remunerationTable.dateEncaissementReelle})`);
+
+  return {
+    remunerationPrevisionnelleCentimes: previsionnel.somme ?? undefined,
+    nombreRemunerationsPrevisionnellesRenseignees: previsionnel.nombreRenseignees,
+    nombreCompromisEnCoursEligibles: previsionnel.nombreEligibles,
+    remunerationVenteFinaliseeNonEncaisseeCentimes: venteFinalisee.sommeNonEncaissee ?? undefined,
+    remunerationEncaisseeCentimes: venteFinalisee.sommeEncaissee ?? undefined,
+    nombreRemunerationsVentesFinaliseesRenseignees: venteFinalisee.nombreRenseignees,
+    nombreVentesFinalisees: venteFinalisee.nombreVentesFinalisees,
+    remunerationEncaisseeParMoisCentimes,
   };
 }

@@ -226,6 +226,33 @@ par étape, par motif, par mois, volume perdu jamais qualifié de "CA" (`volume 
 (`"Offre acceptée/refusée/retirée"`, `"Compromis annulé"`), datés par les nouveaux champs, jamais
 affichés sans eux. Pas de taux de conversion par cause en V1.
 
+## 21. Rémunération conseiller
+
+Première donnée financière précise d'Atlas : nouvelle table `remuneration` (ADR-021), en relation
+1:1 stricte avec `compromis` (`compromisId` `UNIQUE`), montants stockés en **centimes entiers**
+(jamais un flottant), contrairement aux euros entiers utilisés partout ailleurs dans le schéma.
+Trois faits monétaires distincts, jamais fusionnés en une notion comptable/juridique de "CA
+acquis" : rémunération prévisionnelle, associée à une vente finalisée, encaissée — dérivés à la
+lecture de `compromis.statut` + `dateEncaissementReelle`, jamais un `statut` stocké. Aucun calcul
+automatique (jamais `prixConvenu × taux`, jamais `honoraires × pourcentage`) : seuls des montants
+saisis à la main font foi, aucune ligne créée si le montant est inconnu. V1 suppose un encaissement
+unique (pas de paiement partiel, plusieurs versements, avoirs ni régularisations) ; une fois
+`dateEncaissementReelle` posée, la ligne est figée, protégée par un gel concurrent
+(`WHERE date_encaissement_reelle IS NULL`) sur les deux écritures (`modifierRemunerationPrevisionnelle`/
+`marquerRemunerationEncaissee`). Encaissement strictement subordonné à une vente finalisée
+(`compromis.statut === "realise"` et `dateActeReelle` présente). Exception notable au reste du
+domaine commercial : l'archivage du bien/acquéreur ne bloque que les nouveaux engagements sur un
+compromis encore `en_cours` — jamais la correction ni l'encaissement d'une rémunération sur un
+compromis déjà `realise` ("archivage commercial ≠ clôture du suivi financier historique"). Une
+rémunération prévisionnelle sur un compromis ensuite annulé reste consultable telle quelle, sort du
+prévisionnel actif, sans métrique dédiée en V1. Nouvelle famille dashboard "Rémunération" : trois
+montants mutuellement exclusifs, chacun accompagné d'un compteur de couverture (lignes renseignées
+sur population éligible) pour ne jamais laisser une somme partielle se lire comme un total
+exhaustif ; règle d'archivage volontairement asymétrique (prévisionnelle exclut les biens archivés,
+comme le pipeline ; les deux métriques "vente finalisée" les incluent, comme les résultats). Un
+nouvel événement d'historique, `"Rémunération encaissée"`, daté par `dateEncaissementReelle`, jamais
+affiché sans elle.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

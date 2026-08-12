@@ -134,9 +134,10 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Dashboard commercial
 
-- **Pas de CA, pas de commission, pas de fiscalité** — aucune donnée de commission ou fiscale
-  instrumentée dans le schéma. Afficher un chiffre approximatif aurait été plus trompeur qu'une
-  absence de métrique (ADR-018).
+- **Pas de CA, pas de fiscalité** — `remuneration` (ADR-021) instrumente désormais des montants de
+  rémunération saisis, mais aucune notion comptable/juridique de chiffre d'affaires ou de
+  reconnaissance fiscale n'est tranchée dans cette passe. Afficher un chiffre approximatif aurait
+  été plus trompeur qu'une absence de métrique (ADR-018/ADR-021).
 - **`prixConvenu` = volume de transaction, jamais le CA du conseiller** — rappelé dans l'UI à
   chaque métrique de volume, mais reste une donnée qu'un lecteur non averti pourrait mal
   interpréter hors contexte.
@@ -189,6 +190,35 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   avec le modèle mono-conseiller, ADR-006), pas de vue par mandat ou par secteur.
 - **Délais offre → compromis / compromis → acte non pondérés par le volume** — une vente à
   10 000 € et une vente à 500 000 € comptent également dans la moyenne des délais.
+
+## Rémunération conseiller (ADR-021)
+
+- **Encaissement unique en V1** : pas de paiement partiel, plusieurs versements, avoirs ni
+  régularisations — une seule `dateEncaissementReelle` par rémunération, posée une fois pour toute
+  la durée de vie de la ligne. Une future table `encaissements` pourrait introduire ces cas sans
+  rupture de modèle, mais n'est pas construite dans cette passe.
+- **Aucune notion comptable/juridique de "CA acquis"** — seulement trois états descriptifs
+  (prévisionnelle / associée à une vente finalisée / encaissée), jamais une reconnaissance
+  fiscale/comptable. Une future passe dédiée déterminera à quel moment une rémunération devient
+  juridiquement/comptablement acquise et comment elle doit être traitée fiscalement.
+- **Aucun calcul automatique** : ni `prixConvenu × taux`, ni `honoraires × pourcentage`, ni relation
+  entre `montantHonorairesTotalCentimes` et `montantRemunerationConseillerCentimes` — uniquement des
+  montants saisis à la main. Un conseiller qui saisit un montant incohérent avec le prix convenu du
+  compromis n'est jamais corrigé ni alerté automatiquement.
+- **Stockage en centimes propre à cette seule table** — divergence assumée avec
+  `compromis.prixConvenu`/`offres.montant`, stockés en euros entiers ailleurs dans le schéma
+  (première donnée financière précise d'Atlas, ADR-021).
+- **Gel après encaissement, pas de correction rétroactive** : une fois `dateEncaissementReelle`
+  posée, plus aucune correction des montants n'est possible depuis les actions existantes — une
+  erreur de saisie constatée après encaissement nécessiterait une intervention directe en base ou
+  une future passe encaissements/régularisations.
+- **"Rémunération potentielle perdue" non construite** : un compromis annulé après création d'une
+  rémunération prévisionnelle sort silencieusement du prévisionnel actif, sans qu'aucune métrique de
+  dashboard n'agrège ces montants "perdus" — mentionné comme extension future possible, hors
+  périmètre de cette passe.
+- **Aucune extension de l'onglet Acquéreur** : la rémunération n'est visible que dans l'onglet
+  Compromis de la fiche bien (`BienTabs.tsx`), pas dans `AcquereurFormulaire.tsx` — extension
+  triviale à faire dans une passe ultérieure si besoin.
 
 ## Limites du moteur de matching
 

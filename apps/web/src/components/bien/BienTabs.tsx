@@ -11,6 +11,12 @@ import { LABEL_CATEGORIE_DOCUMENT, type CategorieDocument, type DocumentBien } f
 import { LABEL_STATUT_OFFRE, type Offre } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS, type Compromis } from "@/types/compromis";
 import { MOTIFS_PERTE, LABEL_MOTIF_PERTE } from "@/types/motifPerte";
+import {
+  LABEL_ETAT_REMUNERATION,
+  deriverEtatRemuneration,
+  formatMontantCentimes,
+  type Remuneration,
+} from "@/types/remuneration";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
@@ -18,6 +24,11 @@ import { ajouterDocumentBienAction } from "@/actions/ajouterDocumentBien";
 import { ajouterOffreAction, changerStatutOffreAction } from "@/actions/offre";
 import { lierVisiteAOffreAction, delierVisiteAction } from "@/actions/offreVisite";
 import { ajouterCompromisAction, changerStatutCompromisAction } from "@/actions/compromis";
+import {
+  ajouterRemunerationAction,
+  marquerRemunerationEncaisseeAction,
+  modifierRemunerationAction,
+} from "@/actions/remuneration";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 
 const CATEGORIES_DOCUMENT: CategorieDocument[] = [
@@ -56,6 +67,7 @@ export default function BienTabs({
   documents,
   offres,
   compromis,
+  remunerations = [],
   liens = [],
   acquereursActifs = [],
   acquereursParId = new Map(),
@@ -68,6 +80,7 @@ export default function BienTabs({
   documents: DocumentBien[];
   offres: Offre[];
   compromis: Compromis[];
+  remunerations?: Remuneration[];
   liens?: { lienId: string; offreId: string; visite: CompteRenduVisite }[];
   acquereursActifs?: ProfilAcquereur[];
   acquereursParId?: Map<string, ProfilAcquereur | undefined>;
@@ -82,6 +95,11 @@ export default function BienTabs({
     liensParOffre.set(lien.offreId, liste);
   }
 
+  const remunerationParCompromis = new Map<string, Remuneration>();
+  for (const r of remunerations) {
+    remunerationParCompromis.set(r.compromisId, r);
+  }
+
   // Contexte, Actions, Notes, Visites et Documents reposent tous sur des données réelles (bien,
   // actionRepository, noteBienRepository, compteRenduVisiteRepository, documentBienRepository),
   // toujours disponibles — Notes, Visites et Documents restent affichés même vides, c'est
@@ -90,7 +108,7 @@ export default function BienTabs({
   // dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
     ? dossier.historique
-    : deriverHistoriqueBien(bien, actions, comptesRendus, offres, compromis);
+    : deriverHistoriqueBien(bien, actions, comptesRendus, offres, compromis, remunerations);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "contexte", label: "Contexte" },
@@ -784,6 +802,144 @@ export default function BienTabs({
                         </form>
                       </div>
                     )}
+                    {(() => {
+                      if (c.statut === "annule") return null;
+                      const remuneration = remunerationParCompromis.get(c.id);
+                      const acquereurCompromis = acquereursParId.get(c.acquereurId);
+                      // Archivage commercial ≠ clôture du suivi financier historique (ADR-021) :
+                      // seul un compromis en_cours est bloqué par l'archivage du bien/acquéreur ;
+                      // un compromis realise reste corrigible/encaissable après archivage.
+                      const eligibleMalgreArchivage =
+                        c.statut === "realise" || (!bien.archiveLe && !acquereurCompromis?.archiveLe);
+                      const etatRemuneration = remuneration
+                        ? deriverEtatRemuneration(remuneration, c.statut)
+                        : undefined;
+                      const encaissementDisponible = c.statut === "realise" && !!c.dateActeReelle;
+
+                      if (!remuneration) {
+                        return eligibleMalgreArchivage ? (
+                          <form
+                            action={ajouterRemunerationAction}
+                            className="flex flex-col gap-2 mt-3 pt-3 border-t border-[#f1f5f9]"
+                          >
+                            <input type="hidden" name="compromisId" value={c.id} />
+                            <p className="text-[12px] font-medium text-[#64748b]">Rémunération</p>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              name="montantRemunerationConseiller"
+                              required
+                              placeholder="Rémunération conseiller (€)"
+                              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                            />
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              name="montantHonorairesTotal"
+                              placeholder="Honoraires totaux (€, optionnel)"
+                              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                            />
+                            <label className="text-[11px] text-[#94a3b8]">
+                              Date d'encaissement prévue (optionnelle)
+                              <input
+                                type="date"
+                                name="dateEncaissementPrevue"
+                                className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              />
+                            </label>
+                            <button
+                              type="submit"
+                              className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+                            >
+                              Ajouter la rémunération
+                            </button>
+                          </form>
+                        ) : null;
+                      }
+
+                      return (
+                        <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-[#f1f5f9]">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[12px] font-medium text-[#64748b]">Rémunération</p>
+                            <span className="text-[11px] font-medium text-[#4338ca]">
+                              {etatRemuneration ? LABEL_ETAT_REMUNERATION[etatRemuneration] : "Liée à un compromis annulé"}
+                            </span>
+                          </div>
+                          <p className="text-[14px] font-medium text-[#0f172a]">
+                            {formatMontantCentimes(remuneration.montantRemunerationConseillerCentimes)}
+                            {remuneration.montantHonorairesTotalCentimes != null &&
+                              ` (honoraires totaux ${formatMontantCentimes(remuneration.montantHonorairesTotalCentimes)})`}
+                          </p>
+                          {remuneration.dateEncaissementPrevue && !remuneration.dateEncaissementReelle && (
+                            <p className="text-[13px] text-[#94a3b8]">
+                              Encaissement prévu le {formatDate(remuneration.dateEncaissementPrevue)}
+                            </p>
+                          )}
+                          {remuneration.dateEncaissementReelle && (
+                            <p className="text-[13px] text-[#16a34a]">
+                              Encaissée le {formatDate(remuneration.dateEncaissementReelle)}
+                            </p>
+                          )}
+                          {!remuneration.dateEncaissementReelle && eligibleMalgreArchivage && (
+                            <form action={modifierRemunerationAction} className="flex flex-col gap-2">
+                              <input type="hidden" name="compromisId" value={c.id} />
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                name="montantRemunerationConseiller"
+                                required
+                                defaultValue={(remuneration.montantRemunerationConseillerCentimes / 100).toFixed(2)}
+                                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              />
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                name="montantHonorairesTotal"
+                                defaultValue={
+                                  remuneration.montantHonorairesTotalCentimes != null
+                                    ? (remuneration.montantHonorairesTotalCentimes / 100).toFixed(2)
+                                    : ""
+                                }
+                                placeholder="Honoraires totaux (€, optionnel)"
+                                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              />
+                              <input
+                                type="date"
+                                name="dateEncaissementPrevue"
+                                defaultValue={remuneration.dateEncaissementPrevue ?? ""}
+                                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              />
+                              <button
+                                type="submit"
+                                className="self-start text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                              >
+                                Corriger la rémunération
+                              </button>
+                            </form>
+                          )}
+                          {!remuneration.dateEncaissementReelle && encaissementDisponible && (
+                            <form action={marquerRemunerationEncaisseeAction} className="flex items-end gap-2">
+                              <input type="hidden" name="compromisId" value={c.id} />
+                              <label className="text-[11px] text-[#94a3b8]">
+                                Date d'encaissement réelle
+                                <input
+                                  type="date"
+                                  name="dateEncaissementReelle"
+                                  required
+                                  className="block mt-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                />
+                              </label>
+                              <button
+                                type="submit"
+                                className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
+                              >
+                                Marquer encaissée
+                              </button>
+                            </form>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

@@ -4,6 +4,7 @@ import type { ActionMetier } from "@/types/action";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { Offre } from "@/types/offre";
 import type { Compromis } from "@/types/compromis";
+import { formatMontantCentimes, type Remuneration } from "@/types/remuneration";
 import { deriverHistoriqueBien } from "./historiqueBien";
 
 // Réplique le formatage de historiqueBien.ts (Intl.NumberFormat produit des espaces insécables
@@ -321,5 +322,54 @@ describe("deriverHistoriqueBien", () => {
       ])
     );
     expect(evenements).toHaveLength(3);
+  });
+
+  it("ne produit aucun événement pour une rémunération sans dateEncaissementReelle (prévisionnelle, pas encore un fait acquis, ADR-021)", () => {
+    const c: Compromis = {
+      id: "compromis-remuneration-1",
+      bienId: "bien-test",
+      acquereurId: "acquereur-test",
+      prixConvenu: 300000,
+      dateSignature: "2026-08-05",
+      statut: "en_cours",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+    const r: Remuneration = {
+      id: "remuneration-1",
+      compromisId: "compromis-remuneration-1",
+      montantRemunerationConseillerCentimes: 1000000,
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [], [c], [r]);
+
+    expect(evenements).toEqual([{ date: "2026-08-05", texte: `Compromis structuré — ${formatPrix(300000)}` }]);
+  });
+
+  it("produit « Rémunération encaissée — {montant} » daté par dateEncaissementReelle (ADR-021)", () => {
+    const c: Compromis = {
+      id: "compromis-remuneration-2",
+      bienId: "bien-test",
+      acquereurId: "acquereur-test",
+      prixConvenu: 300000,
+      dateSignature: "2026-08-05",
+      dateActeReelle: "2026-10-08",
+      statut: "realise",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+    const r: Remuneration = {
+      id: "remuneration-2",
+      compromisId: "compromis-remuneration-2",
+      montantRemunerationConseillerCentimes: 1248736,
+      dateEncaissementReelle: "2026-10-20",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [], [c], [r]);
+
+    expect(evenements[0]).toEqual({
+      date: "2026-10-20",
+      texte: `Rémunération encaissée — ${formatMontantCentimes(1248736)}`,
+    });
   });
 });

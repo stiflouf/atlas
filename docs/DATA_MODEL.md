@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0010`, vérifiées le 2026-08-12). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0013`, vérifiées le 2026-08-12). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -22,6 +22,7 @@ erDiagram
     biens ||--o{ compromis : "bien_id (FK)"
     acquereurs ||--o{ compromis : "acquereur_id (FK)"
     offres |o--o{ compromis : "offre_id (FK, nullable)"
+    compromis ||--o| remuneration : "compromis_id (FK, unique)"
     acquereurs ||--o{ comptes_rendus_visite : "acquereur_id (FK)"
     biens ||..o{ actions : "bien_id (text, sans FK)"
     acquereurs ||..o{ actions : "acquereur_id (text, sans FK)"
@@ -156,6 +157,16 @@ erDiagram
         date date_acte_reelle "nullable, ADR-017, constatée"
         text statut "ADR-016, mutable"
         timestamptz cree_le
+    }
+    remuneration {
+        uuid id PK
+        uuid compromis_id "FK unique, ON DELETE CASCADE"
+        integer montant_honoraires_total_centimes "nullable"
+        integer montant_remuneration_conseiller_centimes
+        date date_encaissement_prevue "nullable, prévue"
+        date date_encaissement_reelle "nullable, ADR-021, constatée, figée une fois posée"
+        timestamptz cree_le
+        timestamptz modifie_le "nullable"
     }
 ```
 
@@ -456,6 +467,44 @@ jamais déduit d'un texte libre (`retour` des comptes rendus, notes) ni d'un act
 `retiree`/`refusee` ne disent pas par eux-mêmes qui est à l'origine de la perte, seul le motif
 choisi fait foi.
 
+## `remuneration`
+
+**Rôle** : rémunération du conseiller sur un compromis, en relation 1:1 stricte (`compromis_id`
+`UNIQUE`). Première donnée financière précise d'Atlas — montants stockés en **centimes entiers**,
+contrairement à `compromis.prix_convenu`/`offres.montant` qui sont des euros entiers. Voir ADR-021.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `compromis_id` | uuid (FK → `compromis.id`, `ON DELETE CASCADE`, `UNIQUE`) | non | vraie FK, 1:1 strict |
+| `montant_honoraires_total_centimes` | integer | **oui** | `CHECK` : `NULL` ou `> 0` |
+| `montant_remuneration_conseiller_centimes` | integer | non | `CHECK` : `> 0` ; aucune ligne vide, aucune relation automatique avec les honoraires totaux |
+| `date_encaissement_prevue` | date | **oui** | **prévue**, corrigible tant que non encaissée |
+| `date_encaissement_reelle` | date | **oui** | **constatée**, posée uniquement par la transition d'encaissement dédiée, jamais à la création ; une fois posée, toute la ligne est figée |
+| `cree_le` | timestamptz | non | |
+| `modifie_le` | timestamptz | **oui** | posé uniquement par une correction avant encaissement |
+
+**Contrainte `CHECK`** : `montant_remuneration_conseiller_centimes > 0` ;
+`montant_honoraires_total_centimes IS NULL OR montant_honoraires_total_centimes > 0`. Aucun `CHECK`
+inter-colonnes ni inter-tables (même principe qu'`offres`/`compromis`) : la règle "encaissement
+uniquement sur un compromis `realise` avec `date_acte_reelle`" et le gel après encaissement sont
+entièrement portés par `src/actions/remuneration.ts`.
+
+Pas de `statut` stocké : l'état prévisionnelle / associée à une vente finalisée / encaissée se
+déduit à la lecture de `compromis.statut` + `date_encaissement_reelle`
+(`deriverEtatRemuneration()`, `src/types/remuneration.ts`), jamais une colonne dupliquée. Relation
+fonctionnelle : lue par `listerRemunerationsPourBien()`/`getRemunerationParCompromis()`, écrite par
+`enregistrerRemuneration()` (création, `date_encaissement_reelle` exclue par construction du type
+`NouvelleRemuneration`), `modifierRemunerationPrevisionnelle()` (remplacement complet, protégé par
+`WHERE date_encaissement_reelle IS NULL`) et `marquerRemunerationEncaissee()` (transition atomique
+dédiée, même garde) — toutes dans `src/lib/remunerationRepository.ts`, appelées par
+`src/actions/remuneration.ts`.
+
+Archivage : contrairement au reste du domaine commercial, l'archivage du bien/acquéreur ne bloque
+**que** les nouveaux engagements/corrections sur un compromis encore `en_cours` — il ne bloque
+jamais la correction (avant encaissement) ni l'encaissement d'une rémunération sur un compromis déjà
+`realise` (voir ADR-021, "Archivage commercial ≠ clôture du suivi financier historique").
+
 ## `offre_visites`
 
 **Rôle** : lien explicite many-to-many entre une offre et les visites qui l'ont précédée — jamais
@@ -485,15 +534,19 @@ Créée soit dans la même transaction que l'offre (`enregistrerOffreAvecLiensEt
 
 ## Tableau de bord commercial (`dashboardRepository.ts`)
 
-`src/lib/dashboardRepository.ts` (lecture seule, ADR-018/ADR-019/ADR-020) agrège
-`compromis`/`offres`/`comptes_rendus_visite`/`biens`/`offre_visites` existants via
+`src/lib/dashboardRepository.ts` (lecture seule, ADR-018/ADR-019/ADR-020/ADR-021) agrège
+`compromis`/`offres`/`comptes_rendus_visite`/`biens`/`offre_visites`/`remuneration` existants via
 `COUNT`/`SUM`/`AVG`/`GROUP BY` exécutés par Postgres — jamais recalculé en mémoire côté
 application. `chargerDelaisPertes()` a été scindée en `chargerDelais()` et `chargerPertes()`
 (ADR-020) : les compromis annulés (compteur et volume) ont été déplacés de la première vers la
-seconde, sans duplication. Voir `docs/BUSINESS_RULES.md`
-pour le détail des métriques et ADR-018 pour la règle d'archivage et les métriques écartées ;
-ADR-019 pour `offre_visites` et les métriques visite → offre ; ADR-020 pour les motifs/dates de
-perte et la famille "Pertes commerciales".
+seconde, sans duplication. `chargerRemuneration()` (ADR-021) ajoute la famille "Rémunération" —
+trois montants mutuellement exclusifs en centimes, chacun accompagné d'un compteur de couverture
+(nombre de lignes `remuneration` renseignées / population éligible) pour ne jamais laisser une somme
+partielle se lire comme un total exhaustif ; règle d'archivage volontairement asymétrique
+(prévisionnelle exclut les biens archivés, les deux métriques "vente finalisée" les incluent). Voir
+`docs/BUSINESS_RULES.md` pour le détail des métriques et ADR-018 pour la règle d'archivage et les
+métriques écartées ; ADR-019 pour `offre_visites` et les métriques visite → offre ; ADR-020 pour les
+motifs/dates de perte et la famille "Pertes commerciales" ; ADR-021 pour la rémunération.
 
 ## Migrations
 
@@ -512,6 +565,7 @@ perte et la famille "Pertes commerciales".
 | `0010_tiny_earthquake.sql` | `date_acte_reelle` sur `compromis` |
 | `0011_friendly_captain_flint.sql` | `offre_visites` |
 | `0012_furry_cassandra_nova.sql` | `date_decision`/`motif_perte` sur `offres`, `date_annulation`/`motif_annulation` sur `compromis` |
+| `0013_thin_warbird.sql` | `remuneration` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.
