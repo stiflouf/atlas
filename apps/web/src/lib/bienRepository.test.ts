@@ -8,8 +8,19 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
 const { biens: biensTable } = await import("@/db/schema");
-const { creerBien, modifierBien, listerBiens, listerBiensArchives, getBienById, archiverBien, desarchiverBien } =
-  await import("./bienRepository");
+const {
+  creerBien,
+  modifierBien,
+  listerBiens,
+  listerBiensArchives,
+  getBienById,
+  archiverBien,
+  desarchiverBien,
+  marquerOffreEnCours,
+  retirerOffre,
+  marquerCompromisSigne,
+  annulerCompromis,
+} = await import("./bienRepository");
 
 const idsCrees: string[] = [];
 
@@ -124,5 +135,47 @@ describe("bienRepository (intégration Postgres)", () => {
     // listerBiens() ne doit jamais retomber sur les mocks data/biens.ts (ids "bien-00x").
     const actifs = await listerBiens();
     expect(actifs.some((b) => b.id === "bien-001")).toBe(false);
+  });
+
+  it("marquerOffreEnCours()/marquerCompromisSigne() posent les timestamps, annulerCompromis()/retirerOffre() les effacent", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] STATUT-COMM-001" }));
+    idsCrees.push(cree.id);
+    expect(cree.offreEnCoursLe).toBeUndefined();
+    expect(cree.compromisSigneLe).toBeUndefined();
+
+    const avecOffre = await marquerOffreEnCours(cree.id);
+    expect(avecOffre?.offreEnCoursLe).toBeDefined();
+    expect(avecOffre?.compromisSigneLe).toBeUndefined();
+
+    const avecCompromis = await marquerCompromisSigne(cree.id);
+    expect(avecCompromis?.compromisSigneLe).toBeDefined();
+    expect(avecCompromis?.offreEnCoursLe).toBeDefined();
+
+    const sansCompromis = await annulerCompromis(cree.id);
+    expect(sansCompromis?.compromisSigneLe).toBeUndefined();
+    expect(sansCompromis?.offreEnCoursLe).toBeDefined();
+
+    const sansOffre = await retirerOffre(cree.id);
+    expect(sansOffre?.offreEnCoursLe).toBeUndefined();
+
+    const parId = await getBienById(cree.id);
+    expect(parId?.offreEnCoursLe).toBeUndefined();
+    expect(parId?.compromisSigneLe).toBeUndefined();
+  });
+
+  it("marquerCompromisSigne() ne pose jamais offreEnCoursLe automatiquement (compromis marqué directement)", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] STATUT-COMM-002" }));
+    idsCrees.push(cree.id);
+
+    const avecCompromis = await marquerCompromisSigne(cree.id);
+    expect(avecCompromis?.compromisSigneLe).toBeDefined();
+    expect(avecCompromis?.offreEnCoursLe).toBeUndefined();
+  });
+
+  it("les jalons commerciaux retournent undefined pour un id non-UUID ou inexistant", async () => {
+    await expect(marquerOffreEnCours("bien-001")).resolves.toBeUndefined();
+    await expect(retirerOffre("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    await expect(marquerCompromisSigne("bien-001")).resolves.toBeUndefined();
+    await expect(annulerCompromis("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
   });
 });

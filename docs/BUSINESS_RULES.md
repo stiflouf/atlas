@@ -215,6 +215,33 @@ stratégie de stockage : ADR-013.
 | Document introuvable (id invalide, métadonnée absente, fichier physique absent) | Toujours | `404`, sans distinction observable entre ces cas |
 | Suppression | — | Aucune en V1 — voir ADR-013 |
 
+## Statut commercial du bien
+
+**Fichiers** : `src/lib/statutCommercialBien.ts` (`deriverStatutCommercial`),
+`src/actions/statutCommercialBien.ts`. Détail de la décision : ADR-014.
+
+Aucun statut stocké — dérivé en lecture depuis deux timestamps de jalons sur `biens` :
+
+| Jalons | Statut dérivé |
+|---|---|
+| `offreEnCoursLe` NULL et `compromisSigneLe` NULL | `en_commercialisation` |
+| `offreEnCoursLe` non NULL, `compromisSigneLe` NULL | `offre_en_cours` |
+| `compromisSigneLe` non NULL (quel que soit `offreEnCoursLe`) | `compromis_signe` |
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Marquer une offre en cours | Toujours (bien non archivé) | `offreEnCoursLe = now()` |
+| Retirer l'offre | `bien.archiveLe` NULL et `compromisSigneLe` NULL | `offreEnCoursLe = NULL` — sinon `throw` explicite (incohérence : compromis sans offre) |
+| Marquer compromis signé | Toujours (bien non archivé) | `compromisSigneLe = now()` — **ne pose jamais `offreEnCoursLe`**, un compromis peut être marqué directement |
+| Annuler le compromis | `bien.archiveLe` NULL | `compromisSigneLe = NULL` |
+| Toute action sur un bien archivé | `bien.archiveLe` non NULL | `throw` explicite sur les 4 actions — écart volontaire par rapport à `modifierBienAction`/`archiverBienAction` (qui restent disponibles sur un bien archivé) : un jalon commercial est un nouveau fait métier, pas une édition des champs structurels |
+| Jamais dérivé automatiquement | — | Aucune visite, aucun compte rendu, aucune action ne modifie ces timestamps — geste manuel du conseiller uniquement (aucun signal réel fiable, voir ADR-014) |
+
+**Historique dérivé** (`deriverHistoriqueBien`) : lit directement `offreEnCoursLe`/
+`compromisSigneLe` pour produire "Offre en cours"/"Compromis signé". **Non append-only** — annuler
+un jalon efface rétroactivement l'événement correspondant, puisqu'il est recalculé en direct
+depuis la valeur courante (voir `docs/KNOWN_LIMITATIONS.md`).
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

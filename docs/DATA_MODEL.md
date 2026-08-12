@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0006`, vérifiées le 2026-08-12). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0007`, vérifiées le 2026-08-12). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -66,6 +66,8 @@ erDiagram
         timestamptz cree_le
         timestamptz modifie_le
         timestamptz archive_le "nullable, ADR-012"
+        timestamptz offre_en_cours_le "nullable, ADR-014"
+        timestamptz compromis_signe_le "nullable, ADR-014"
     }
     acquereurs {
         uuid id PK
@@ -199,6 +201,8 @@ optionnelles nullables sans défaut (ADR-009).
 | `exterieur` | text | **oui** | `CHECK` si non NULL |
 | `cree_le` / `modifie_le` | timestamptz | non | `cree_le` alimente l'historique dérivé (`docs/BUSINESS_RULES.md`) |
 | `archive_le` | timestamptz | **oui** | `NULL` = actif, sinon date d'archivage — ADR-012, aucun défaut |
+| `offre_en_cours_le` | timestamptz | **oui** | jalon commercial — ADR-014, aucun défaut |
+| `compromis_signe_le` | timestamptz | **oui** | jalon commercial — ADR-014, peut être posé sans `offre_en_cours_le` (compromis marqué directement) |
 
 **Contraintes `CHECK`** :
 - `type IN ('appartement','maison','studio','loft','local_commercial')`
@@ -208,7 +212,9 @@ optionnelles nullables sans défaut (ADR-009).
 Relation fonctionnelle : référencé par FK réelle depuis `notes_bien` et `comptes_rendus_visite` ;
 référencé par id texte (sans FK) depuis `actions` et `memoire_contextuelle` (ADR-010).
 `listerBiens()` exclut les lignes où `archive_le` est non NULL ; `getBienById()` les résout
-toujours — voir `docs/DEMO_VS_REAL.md`.
+toujours — voir `docs/DEMO_VS_REAL.md`. `offre_en_cours_le`/`compromis_signe_le` ne filtrent rien :
+aucun statut commercial stocké, dérivé en lecture par `deriverStatutCommercial()`
+(`src/lib/statutCommercialBien.ts`) — voir ADR-014.
 
 ## `acquereurs`
 
@@ -340,6 +346,7 @@ par le Route Handler `/api/documents/[id]`.
 | `0004_needy_norrin_radd.sql` | `comptes_rendus_visite` |
 | `0005_happy_wolfsbane.sql` | `archive_le` sur `biens` et `acquereurs` |
 | `0006_volatile_starbolt.sql` | `documents_bien` |
+| `0007_absurd_rumiko_fujikawa.sql` | `offre_en_cours_le`, `compromis_signe_le` sur `biens` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -113,6 +113,19 @@ archivé (formulaire masqué + refus silencieux serveur, même patron que Notes)
 existants d'un bien archivé restent consultables et téléchargeables. Aucune suppression en V1,
 append-only comme Notes et Comptes rendus (ADR-011).
 
+## 14. Statut commercial du bien
+
+Dernière pièce du mock `DossierBien` sortie du mock : le bandeau "État du dossier" devient réel
+pour tout bien. Aucun statut stocké — deux timestamps de jalons (`offreEnCoursLe`,
+`compromisSigneLe`, ADR-014), état dérivé en lecture (`deriverStatutCommercial`). Quatre Server
+Actions manuelles (marquer/retirer offre, marquer/annuler compromis), jamais automatisées depuis
+une visite, un compte rendu ou une action — aucune donnée réelle ne permet de le faire
+honnêtement. Compromis marquable directement sans offre préalable. `retirerOffreAction` refuse
+explicitement si un compromis est déjà signé ; les 4 actions refusent explicitement sur un bien
+archivé. Historique dérivé enrichi de "Offre en cours"/"Compromis signé", datés par ces mêmes
+timestamps — non append-only, annuler un jalon efface rétroactivement l'événement correspondant
+(conséquence assumée, voir `docs/KNOWN_LIMITATIONS.md`).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

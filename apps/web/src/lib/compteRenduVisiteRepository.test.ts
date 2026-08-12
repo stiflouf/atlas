@@ -10,15 +10,25 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 const { getDb } = await import("@/db/client");
 const { biens: biensTable, acquereurs: acquereursTable, comptesRendusVisite: comptesRendusVisiteTable } =
   await import("@/db/schema");
+const { creerBien } = await import("./bienRepository");
+const { creerAcquereur } = await import("./clientRepository");
 const { listerComptesRendusPourBien, enregistrerCompteRenduVisite } = await import(
   "./compteRenduVisiteRepository"
 );
 
 const idsCrees: string[] = [];
+const idsBiensCrees: string[] = [];
+const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
   for (const id of idsCrees) {
     await getDb().delete(comptesRendusVisiteTable).where(eq(comptesRendusVisiteTable.id, id));
+  }
+  for (const id of idsBiensCrees) {
+    await getDb().delete(biensTable).where(eq(biensTable.id, id));
+  }
+  for (const id of idsAcquereursCrees) {
+    await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
   }
 });
 
@@ -28,9 +38,38 @@ describe("compteRenduVisiteRepository (intégration Postgres)", () => {
   });
 
   it("enregistrerCompteRenduVisite() persiste, listerComptesRendusPourBien() les retrouve triés DESC", async () => {
-    const [bien] = await getDb().select({ id: biensTable.id }).from(biensTable).limit(1);
-    const [acquereur] = await getDb().select({ id: acquereursTable.id }).from(acquereursTable).limit(1);
-    if (!bien || !acquereur) throw new Error("Aucun bien/acquéreur réel en base pour ce test d'intégration.");
+    // Bien/acquéreur créés dédiés à ce test (plutôt qu'une ligne réelle arbitraire piochée sans
+    // tri) : évite une course avec d'autres suites d'intégration qui créent/suppriment leurs
+    // propres biens/acquéreurs réels en parallèle.
+    const bien = await creerBien({
+      reference: "[test réel] CR-VISITE-001",
+      titre: "Bien de test",
+      type: "appartement",
+      adresse: "1 rue du Test",
+      ville: "Testville",
+      codePostal: "00000",
+      surface: 50,
+      pieces: 2,
+      prix: 300000,
+      statutMandat: "actif",
+      dateMandat: "2026-01-01",
+      caracteristiques: [],
+      description: "",
+    });
+    idsBiensCrees.push(bien.id);
+    const acquereur = await creerAcquereur({
+      prenom: "Test",
+      nom: "[test réel] CR Visite",
+      email: "test-réel-cr@example.com",
+      telephone: "0600000000",
+      budgetMin: 200000,
+      budgetMax: 400000,
+      criteres: [],
+      stadeProjet: "decouverte",
+      notes: "",
+      datePremiereContact: "2026-01-01",
+    });
+    idsAcquereursCrees.push(acquereur.id);
 
     const ancien = await enregistrerCompteRenduVisite({
       bienId: bien.id,

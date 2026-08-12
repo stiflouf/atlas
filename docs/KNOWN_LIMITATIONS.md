@@ -71,6 +71,21 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   `image/jpeg`, `image/png`) — pas de Word/Excel, pas d'archives ZIP, pas de scans TIFF.
 - **Un seul fichier par soumission** — pas d'upload multiple en une fois.
 
+## Statut commercial du bien
+
+- **Historique dérivé non append-only pour "Offre en cours"/"Compromis signé"** (ADR-014),
+  contrairement à toutes les autres sources de l'historique dérivé (bien créé, actions, visites).
+  Ces deux événements sont recalculés en direct depuis `offreEnCoursLe`/`compromisSigneLe` :
+  **annuler un jalon efface rétroactivement l'événement correspondant de l'historique affiché**,
+  comme s'il n'avait jamais existé — pas de journal immuable des transitions passées. Conséquence
+  assumée du choix "timestamps de jalons plutôt qu'un enum" pour rester minimal (voir ADR-014).
+- **Aucune donnée réelle ne permet de dériver automatiquement ces jalons** (aucune notion d'offre
+  ou de compromis structurée dans `comptes_rendus_visite`/`actions`) — geste manuel du conseiller
+  exclusivement, jamais automatisé.
+- **Pas de "dernière activité" réelle** pour le bandeau "État du dossier" d'un bien réel,
+  contrairement au mock (`dossier.derniereActivite`, valeur statique) — seul le badge de statut
+  est affiché.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

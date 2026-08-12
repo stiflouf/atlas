@@ -82,6 +82,12 @@ export const biens = pgTable(
     // matching) sans suppression physique — jamais touché par une édition (modifierBien ne le
     // référence pas dans son SET).
     archiveLe: timestamp("archive_le", { withTimezone: true }),
+    // Jalons du statut commercial du bien (ADR-014) : timestamps de jalons plutôt qu'un enum,
+    // source de vérité unique, aucun champ statut dérivé stocké. NULL/NULL = en commercialisation.
+    // compromisSigneLe peut être posé sans offreEnCoursLe (compromis marqué directement) — jamais
+    // l'inverse ne doit être créé artificiellement par le code applicatif.
+    offreEnCoursLe: timestamp("offre_en_cours_le", { withTimezone: true }),
+    compromisSigneLe: timestamp("compromis_signe_le", { withTimezone: true }),
   },
   (table) => [
     check("biens_type_check", sql`${table.type} IN ('appartement','maison','studio','loft','local_commercial')`),

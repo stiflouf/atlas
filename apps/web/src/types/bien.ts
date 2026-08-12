@@ -29,4 +29,8 @@ export type Bien = {
   // Absent = actif. Présent = archivé (sorti des flux actifs, jamais supprimé) — voir
   // ADR-012 et docs/BUSINESS_RULES.md.
   archiveLe?: string;
+  // Jalons du statut commercial (ADR-014) — source de vérité unique, aucun statut dérivé stocké.
+  // compromisSigneLe peut être présent sans offreEnCoursLe (compromis marqué directement).
+  offreEnCoursLe?: string;
+  compromisSigneLe?: string;
 };

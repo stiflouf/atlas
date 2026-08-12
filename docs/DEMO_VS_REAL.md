@@ -111,20 +111,17 @@ permet de consulter ce bien via `/biens?archives=1`.
 
 ## Fonctionnalités encore mock-only
 
-- **Bandeau "État du dossier"** (`biens/[id]/page.tsx`, badge `statut` + "Dernière activité
-  le...") — dernière pièce de `data/dossier.ts` (`DossierBien.statut`/`.derniereActivite`,
-  `StatutDossier`) sans aucun équivalent réel : pas de notion de progression de vente
-  (`en_commercialisation`/`offre_en_cours`/`compromis_signe`) côté `biens` réel — à ne pas
-  confondre avec `statutMandat` (`actif`/`suspendu`/`expire`), un concept différent. N'apparaît
-  donc que pour les deux biens mockés historiques (`bien-001`, `bien-002`) ; absent sans texte de
-  repli pour un bien réel.
 - **`data/dossier.ts` (`DossierBien`) — historique manuscrit, notes en un seul bloc de texte,
-  documents, visites effectuées.** Ces quatre dimensions restent le contenu affiché pour les deux
-  biens mockés historiques (texte curaté à la main, auteur nommé — voir
-  `EvenementHistoriqueDossier`), mais ont chacune un équivalent réel dérivé indépendant utilisé à
-  la place pour un bien réel, qui n'a jamais de `DossierBien` : Historique
-  (`deriverHistoriqueBien`), Notes (`notes_bien`), Visites → Effectuées (`comptes_rendus_visite`)
-  et Documents (`documents_bien`, stockage local — ADR-013) — voir `docs/BUSINESS_RULES.md`.
+  documents, visites effectuées, statut du dossier.** Ce contenu curaté à la main (texte rédigé,
+  auteur nommé — voir `EvenementHistoriqueDossier`) reste affiché tel quel pour les deux biens
+  mockés historiques (`bien-001`, `bien-002`), qui n'ont jamais d'équivalent réel dérivé. Un bien
+  réel, lui, n'a jamais de `DossierBien` : chaque dimension a désormais un équivalent réel
+  indépendant utilisé à la place — Historique (`deriverHistoriqueBien`), Notes (`notes_bien`),
+  Visites → Effectuées (`comptes_rendus_visite`), Documents (`documents_bien`, stockage local —
+  ADR-013) et statut commercial (`deriverStatutCommercial`, jalons `offreEnCoursLe`/
+  `compromisSigneLe` — ADR-014) — voir `docs/BUSINESS_RULES.md`. Seule exception restante :
+  "Dernière activité le..." (`dossier.derniereActivite`, valeur statique du mock) n'a **aucun**
+  équivalent réel dérivé pour l'instant — le bandeau réel affiche uniquement le badge de statut.
 - **`data/preparations.ts`** — une seule préparation de visite entièrement curatée à la main
   (`prep-rdv-001`, couple bien Oberkampf / acquéreurs Dubois). Pour tout autre couple bien/
   acquéreur, `construirePreparationMinimale()` (`visites/[id]/preparer/page.tsx`) prend le relais
@@ -143,3 +140,4 @@ permet de consulter ce bien via `/biens?archives=1`.
 - Décision d'architecture sur les identifiants texte vs FK réelles : `docs/adr/010-identifiants-texte-vs-fk-reelles.md`
 - Décision d'architecture sur l'archivage : `docs/adr/012-archivage-timestamp-vs-statut.md`
 - Décision d'architecture sur le stockage des documents : `docs/adr/013-stockage-local-documents-v1.md`
+- Décision d'architecture sur le statut commercial du bien : `docs/adr/014-statut-commercial-timestamps-jalons.md`

@@ -13,6 +13,13 @@ import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
+import {
+  annulerCompromisAction,
+  marquerCompromisSigneAction,
+  marquerOffreEnCoursAction,
+  retirerOffreAction,
+} from "@/actions/statutCommercialBien";
+import { deriverStatutCommercial, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -28,6 +35,12 @@ const statutConfig: Record<StatutDossier, { label: string; variant: "default" | 
   en_commercialisation: { label: "En commercialisation", variant: "default" },
   offre_en_cours: { label: "Offre en cours", variant: "accent" },
   compromis_signe: { label: "Compromis signé", variant: "success" },
+};
+
+const variantStatutCommercial: Record<StatutCommercial, "default" | "accent" | "success"> = {
+  en_commercialisation: "default",
+  offre_en_cours: "accent",
+  compromis_signe: "success",
 };
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -93,8 +106,10 @@ export default async function FicheBien({ params }: PageProps) {
           {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
         </div>
 
-        {/* État du dossier — visible immédiatement */}
-        {dossier && (
+        {/* État du dossier — visible immédiatement. Mock inchangé si dossier existe ; sinon dérivé
+            des jalons réels offreEnCoursLe/compromisSigneLe (ADR-014), sans "dernière activité"
+            (aucune donnée équivalente réelle pour l'instant). */}
+        {dossier ? (
           <div className="mt-4 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={statutConfig[dossier.statut].variant}>
@@ -106,6 +121,53 @@ export default async function FicheBien({ params }: PageProps) {
             </div>
             {actionPrincipale && (
               <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonAction(actionPrincipale)}</p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={variantStatutCommercial[deriverStatutCommercial(bien)]}>
+                {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
+              </Badge>
+            </div>
+            {actionPrincipale && (
+              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonAction(actionPrincipale)}</p>
+            )}
+            {UUID_REGEX.test(bien.id) && !bien.archiveLe && (
+              <div className="flex flex-wrap gap-3 mt-3">
+                {!bien.offreEnCoursLe && (
+                  <form action={marquerOffreEnCoursAction}>
+                    <input type="hidden" name="id" value={bien.id} />
+                    <button type="submit" className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+                      Marquer une offre en cours
+                    </button>
+                  </form>
+                )}
+                {bien.offreEnCoursLe && !bien.compromisSigneLe && (
+                  <form action={retirerOffreAction}>
+                    <input type="hidden" name="id" value={bien.id} />
+                    <button type="submit" className="text-[12px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors">
+                      Retirer l'offre
+                    </button>
+                  </form>
+                )}
+                {!bien.compromisSigneLe && (
+                  <form action={marquerCompromisSigneAction}>
+                    <input type="hidden" name="id" value={bien.id} />
+                    <button type="submit" className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+                      Marquer compromis signé
+                    </button>
+                  </form>
+                )}
+                {bien.compromisSigneLe && (
+                  <form action={annulerCompromisAction}>
+                    <input type="hidden" name="id" value={bien.id} />
+                    <button type="submit" className="text-[12px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors">
+                      Annuler le compromis
+                    </button>
+                  </form>
+                )}
+              </div>
             )}
           </div>
         )}

@@ -127,4 +127,27 @@ describe("deriverHistoriqueBien", () => {
       "Visite effectuée — Pas intéressé",
     ]);
   });
+
+  it("produit « Offre en cours » et « Compromis signé » à partir des jalons du bien", () => {
+    const bien = bienTest({
+      creeLe: undefined,
+      offreEnCoursLe: "2026-08-01T10:00:00.000Z",
+      compromisSigneLe: "2026-08-10T10:00:00.000Z",
+    });
+
+    const evenements = deriverHistoriqueBien(bien, []);
+
+    expect(evenements).toEqual([
+      { date: "2026-08-10T10:00:00.000Z", texte: "Compromis signé" },
+      { date: "2026-08-01T10:00:00.000Z", texte: "Offre en cours" },
+    ]);
+  });
+
+  it("ne produit « Compromis signé » sans « Offre en cours » que si le compromis a été marqué directement", () => {
+    const bien = bienTest({ creeLe: undefined, compromisSigneLe: "2026-08-10T10:00:00.000Z" });
+
+    const evenements = deriverHistoriqueBien(bien, []);
+
+    expect(evenements).toEqual([{ date: "2026-08-10T10:00:00.000Z", texte: "Compromis signé" }]);
+  });
 });

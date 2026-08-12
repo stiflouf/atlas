@@ -21,6 +21,16 @@ export function deriverHistoriqueBien(
     evenements.push({ date: bien.creeLe, texte: "Bien créé" });
   }
 
+  // Dérivés en direct de bien.offreEnCoursLe/compromisSigneLe (ADR-014) — pas d'un journal
+  // immuable : annuler un jalon efface rétroactivement l'événement correspondant de l'historique,
+  // conséquence assumée (voir docs/KNOWN_LIMITATIONS.md).
+  if (bien.offreEnCoursLe) {
+    evenements.push({ date: bien.offreEnCoursLe, texte: "Offre en cours" });
+  }
+  if (bien.compromisSigneLe) {
+    evenements.push({ date: bien.compromisSigneLe, texte: "Compromis signé" });
+  }
+
   for (const action of actions) {
     evenements.push({ date: action.creeLe, texte: `Action créée : ${action.titre}` });
     if (action.statut === "termine" && action.termineLe) {

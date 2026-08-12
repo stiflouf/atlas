@@ -32,6 +32,8 @@ function ligneVersBien(ligne: LigneBien): Bien {
     exterieur: (ligne.exterieur as Exterieur | null) ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
     archiveLe: ligne.archiveLe?.toISOString(),
+    offreEnCoursLe: ligne.offreEnCoursLe?.toISOString(),
+    compromisSigneLe: ligne.compromisSigneLe?.toISOString(),
   };
 }
 
@@ -164,6 +166,49 @@ export async function desarchiverBien(id: string): Promise<Bien | undefined> {
   const [ligne] = await getDb()
     .update(biensTable)
     .set({ archiveLe: null })
+    .where(eq(biensTable.id, id))
+    .returning();
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
+
+// Jalons du statut commercial (ADR-014) : insertion pure, aucune garde métier interne — la
+// validation (compromis non actif pour retirerOffre, bien non archivé) est de la responsabilité
+// de la Server Action appelante, même séparation que archiverBien/desarchiverBien.
+export async function marquerOffreEnCours(id: string): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(biensTable)
+    .set({ offreEnCoursLe: new Date() })
+    .where(eq(biensTable.id, id))
+    .returning();
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
+
+export async function retirerOffre(id: string): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(biensTable)
+    .set({ offreEnCoursLe: null })
+    .where(eq(biensTable.id, id))
+    .returning();
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
+
+export async function marquerCompromisSigne(id: string): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(biensTable)
+    .set({ compromisSigneLe: new Date() })
+    .where(eq(biensTable.id, id))
+    .returning();
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
+
+export async function annulerCompromis(id: string): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(biensTable)
+    .set({ compromisSigneLe: null })
     .where(eq(biensTable.id, id))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
