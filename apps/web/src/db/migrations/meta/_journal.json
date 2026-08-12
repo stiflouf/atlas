@@ -64,6 +64,13 @@
       "when": 1786527633529,
       "tag": "0008_great_kid_colt",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786535527842,
+      "tag": "0009_high_lenny_balinger",
+      "breakpoints": true
     }
   ]
 }

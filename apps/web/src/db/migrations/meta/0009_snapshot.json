@@ -1,0 +1,1045 @@
+{
+  "id": "0b04070a-be55-4f51-b75c-e2c1befd338b",
+  "prevId": "5625ad44-58a2-4e0d-9a0e-6063c7fb6a15",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.acquereurs": {
+      "name": "acquereurs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "prenom": {
+          "name": "prenom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "telephone": {
+          "name": "telephone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "budget_min": {
+          "name": "budget_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "budget_max": {
+          "name": "budget_max",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "criteres": {
+          "name": "criteres",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "stade_projet": {
+          "name": "stade_projet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'decouverte'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "date_premiere_contact": {
+          "name": "date_premiere_contact",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pieces_min": {
+          "name": "pieces_min",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "surface_min": {
+          "name": "surface_min",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accessibilite_requise": {
+          "name": "accessibilite_requise",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "necessite_parking": {
+          "name": "necessite_parking",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "necessite_exterieur": {
+          "name": "necessite_exterieur",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "archive_le": {
+          "name": "archive_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "acquereurs_stade_projet_check": {
+          "name": "acquereurs_stade_projet_check",
+          "value": "\"acquereurs\".\"stade_projet\" IN ('decouverte','recherche_active','offre','compromis','acte')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.actions": {
+      "name": "actions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "titre": {
+          "name": "titre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contexte": {
+          "name": "contexte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'autre'"
+        },
+        "statut": {
+          "name": "statut",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'a_faire'"
+        },
+        "priorite": {
+          "name": "priorite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'normale'"
+        },
+        "echeance": {
+          "name": "echeance",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "acquereur_id": {
+          "name": "acquereur_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "termine_le": {
+          "name": "termine_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "actions_type_check": {
+          "name": "actions_type_check",
+          "value": "\"actions\".\"type\" IN ('appel','email','message','document','relance','autre')"
+        },
+        "actions_statut_check": {
+          "name": "actions_statut_check",
+          "value": "\"actions\".\"statut\" IN ('a_faire','termine')"
+        },
+        "actions_priorite_check": {
+          "name": "actions_priorite_check",
+          "value": "\"actions\".\"priorite\" IN ('haute','normale','basse')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.biens": {
+      "name": "biens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "reference": {
+          "name": "reference",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "titre": {
+          "name": "titre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "adresse": {
+          "name": "adresse",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ville": {
+          "name": "ville",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code_postal": {
+          "name": "code_postal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "surface": {
+          "name": "surface",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pieces": {
+          "name": "pieces",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prix": {
+          "name": "prix",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut_mandat": {
+          "name": "statut_mandat",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'actif'"
+        },
+        "date_mandat": {
+          "name": "date_mandat",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "caracteristiques": {
+          "name": "caracteristiques",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "etage": {
+          "name": "etage",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ascenseur": {
+          "name": "ascenseur",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parking": {
+          "name": "parking",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "exterieur": {
+          "name": "exterieur",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "archive_le": {
+          "name": "archive_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "offre_en_cours_le": {
+          "name": "offre_en_cours_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "compromis_signe_le": {
+          "name": "compromis_signe_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "biens_type_check": {
+          "name": "biens_type_check",
+          "value": "\"biens\".\"type\" IN ('appartement','maison','studio','loft','local_commercial')"
+        },
+        "biens_statut_mandat_check": {
+          "name": "biens_statut_mandat_check",
+          "value": "\"biens\".\"statut_mandat\" IN ('actif','suspendu','expire')"
+        },
+        "biens_exterieur_check": {
+          "name": "biens_exterieur_check",
+          "value": "\"biens\".\"exterieur\" IS NULL OR \"biens\".\"exterieur\" IN ('aucun','balcon','terrasse','jardin')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.compromis": {
+      "name": "compromis",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acquereur_id": {
+          "name": "acquereur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "offre_id": {
+          "name": "offre_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prix_convenu": {
+          "name": "prix_convenu",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_signature": {
+          "name": "date_signature",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_acte": {
+          "name": "date_acte",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "statut": {
+          "name": "statut",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'en_cours'"
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "compromis_bien_id_biens_id_fk": {
+          "name": "compromis_bien_id_biens_id_fk",
+          "tableFrom": "compromis",
+          "tableTo": "biens",
+          "columnsFrom": [
+            "bien_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "compromis_acquereur_id_acquereurs_id_fk": {
+          "name": "compromis_acquereur_id_acquereurs_id_fk",
+          "tableFrom": "compromis",
+          "tableTo": "acquereurs",
+          "columnsFrom": [
+            "acquereur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "compromis_offre_id_offres_id_fk": {
+          "name": "compromis_offre_id_offres_id_fk",
+          "tableFrom": "compromis",
+          "tableTo": "offres",
+          "columnsFrom": [
+            "offre_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "compromis_statut_check": {
+          "name": "compromis_statut_check",
+          "value": "\"compromis\".\"statut\" IN ('en_cours','realise','annule')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.comptes_rendus_visite": {
+      "name": "comptes_rendus_visite",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acquereur_id": {
+          "name": "acquereur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_visite": {
+          "name": "date_visite",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "retour": {
+          "name": "retour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "interet": {
+          "name": "interet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'inconnu'"
+        },
+        "prochaine_etape": {
+          "name": "prochaine_etape",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "comptes_rendus_visite_bien_id_biens_id_fk": {
+          "name": "comptes_rendus_visite_bien_id_biens_id_fk",
+          "tableFrom": "comptes_rendus_visite",
+          "tableTo": "biens",
+          "columnsFrom": [
+            "bien_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "comptes_rendus_visite_acquereur_id_acquereurs_id_fk": {
+          "name": "comptes_rendus_visite_acquereur_id_acquereurs_id_fk",
+          "tableFrom": "comptes_rendus_visite",
+          "tableTo": "acquereurs",
+          "columnsFrom": [
+            "acquereur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "comptes_rendus_visite_interet_check": {
+          "name": "comptes_rendus_visite_interet_check",
+          "value": "\"comptes_rendus_visite\".\"interet\" IN ('interesse','a_reflechir','pas_interesse','inconnu')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.connexions_google": {
+      "name": "connexions_google",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "'default'"
+        },
+        "refresh_token_chiffre": {
+          "name": "refresh_token_chiffre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.documents_bien": {
+      "name": "documents_bien",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "categorie": {
+          "name": "categorie",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'autre'"
+        },
+        "nom_fichier_original": {
+          "name": "nom_fichier_original",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cle_stockage": {
+          "name": "cle_stockage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "taille_octets": {
+          "name": "taille_octets",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type_mime": {
+          "name": "type_mime",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "documents_bien_bien_id_biens_id_fk": {
+          "name": "documents_bien_bien_id_biens_id_fk",
+          "tableFrom": "documents_bien",
+          "tableTo": "biens",
+          "columnsFrom": [
+            "bien_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "documents_bien_categorie_check": {
+          "name": "documents_bien_categorie_check",
+          "value": "\"documents_bien\".\"categorie\" IN ('mandat','diagnostic','copropriete','technique','commercial','compromis','autre')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.memoire_contextuelle": {
+      "name": "memoire_contextuelle",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type_element": {
+          "name": "type_element",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "identifiant_externe": {
+          "name": "identifiant_externe",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_id": {
+          "name": "client_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type_metier": {
+          "name": "type_metier",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'autre'"
+        },
+        "confidence_bien": {
+          "name": "confidence_bien",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence_client": {
+          "name": "confidence_client",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confidence_type": {
+          "name": "confidence_type",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "overall_confidence": {
+          "name": "overall_confidence",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut_validation": {
+          "name": "statut_validation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'auto'"
+        },
+        "empreinte_contenu": {
+          "name": "empreinte_contenu",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "memoire_contextuelle_source_identifiant_externe_unique": {
+          "name": "memoire_contextuelle_source_identifiant_externe_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "source",
+            "identifiant_externe"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "memoire_contextuelle_type_metier_check": {
+          "name": "memoire_contextuelle_type_metier_check",
+          "value": "\"memoire_contextuelle\".\"type_metier\" IN ('visite','estimation','appel','signature','prospection','autre')"
+        },
+        "memoire_contextuelle_statut_validation_check": {
+          "name": "memoire_contextuelle_statut_validation_check",
+          "value": "\"memoire_contextuelle\".\"statut_validation\" IN ('auto','confirme','corrige','ignore')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.notes_bien": {
+      "name": "notes_bien",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contenu": {
+          "name": "contenu",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "notes_bien_bien_id_biens_id_fk": {
+          "name": "notes_bien_bien_id_biens_id_fk",
+          "tableFrom": "notes_bien",
+          "tableTo": "biens",
+          "columnsFrom": [
+            "bien_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.offres": {
+      "name": "offres",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "bien_id": {
+          "name": "bien_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acquereur_id": {
+          "name": "acquereur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "montant": {
+          "name": "montant",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_offre": {
+          "name": "date_offre",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut": {
+          "name": "statut",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'en_cours'"
+        },
+        "date_validite": {
+          "name": "date_validite",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "offres_bien_id_biens_id_fk": {
+          "name": "offres_bien_id_biens_id_fk",
+          "tableFrom": "offres",
+          "tableTo": "biens",
+          "columnsFrom": [
+            "bien_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "offres_acquereur_id_acquereurs_id_fk": {
+          "name": "offres_acquereur_id_acquereurs_id_fk",
+          "tableFrom": "offres",
+          "tableTo": "acquereurs",
+          "columnsFrom": [
+            "acquereur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "offres_statut_check": {
+          "name": "offres_statut_check",
+          "value": "\"offres\".\"statut\" IN ('en_cours','acceptee','refusee','retiree')"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

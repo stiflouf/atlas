@@ -139,6 +139,22 @@ bien réelle (aucun équivalent mock), section de lecture sur la fiche acquéreu
 enrichi d'un événement de création par offre, jamais l'acquéreur nommé, aucun événement pour un
 changement de statut (pas de date de transition fiable disponible).
 
+## 16. Compromis structuré
+
+Table `compromis` (bien, acquéreur, offre acceptée optionnelle, prix convenu, date de signature,
+date d'acte optionnelle, statut) : le "qui, quel prix, quand l'acte" que `compromisSigneLe` seul
+ne pouvait pas représenter (ADR-016). Prix/bien/acquéreur/offre/date de signature immuables après
+création — une nouvelle signature est une nouvelle ligne, plusieurs compromis historiques
+autorisés par bien, un compromis annulé reste consultable. Statut mutable en place (`en_cours` →
+`realise`/`annule` uniquement). Garde applicative : un seul compromis `en_cours` par bien à la
+fois. Offre liée validée côté serveur (même bien, même acquéreur, statut `acceptee`). Créer un
+compromis pose `compromisSigneLe` (couplage unidirectionnel) ; changer son statut ne le touche
+jamais. Refus explicites sur bien/acquéreur archivé, compromis déjà en cours, offre liée
+incohérente, ou compromis déjà résolu. Nouvel onglet "Compromis" sur la fiche bien réelle, section
+de lecture sur la fiche acquéreur. Historique dérivé enrichi de "Compromis structuré — {prix}",
+libellé volontairement distinct de l'événement générique ADR-014 ("Compromis signé") qui continue
+de coexister séparément.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

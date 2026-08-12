@@ -102,6 +102,28 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   (`en_commercialisation`/`offre_en_cours`/`compromis_signe`), pas le détail de l'offre en cours
   (montant, acquéreur) — consultable uniquement dans l'onglet Offres.
 
+## Compromis structuré
+
+- **Transitions de statut non réversibles en V1** — une fois `realise`/`annule`, aucune action ne
+  permet de revenir à `en_cours`. Une erreur de saisie nécessite une intervention directe en base
+  (ADR-016).
+- **Aucun historique des changements de statut**, même limite qu'Offres : ni dans l'onglet
+  Compromis, ni dans l'historique dérivé du bien (un seul événement à la création). Conséquence du
+  choix de ne pas ajouter de champ de date de transition non demandé (ADR-016).
+- **Sélection de l'offre acceptée non filtrée par acquéreur** : le formulaire "Ajouter un
+  compromis" liste toutes les offres `acceptee` du bien, tous acquéreurs confondus (impossible de
+  filtrer dynamiquement sans JS côté client) — si le conseiller choisit une offre d'un autre
+  acquéreur que celui sélectionné, la Server Action refuse explicitement plutôt que d'ignorer
+  silencieusement l'incohérence.
+- **Un seul compromis actif à la fois par bien**, garde applicative (pas une contrainte SQL) — un
+  bug applicatif pourrait théoriquement la contourner, contrairement à une contrainte d'unicité en
+  base qui l'empêcherait structurellement.
+- **Préparation de visite non enrichie** : contrairement à Offre, ce n'est pas considéré comme une
+  extension naturelle — un bien avec compromis signé n'est normalement plus en phase de visite
+  active (ADR-016).
+- **Bandeau "État du dossier" inchangé** : ne montre que le badge générique, pas le détail du
+  compromis (prix, acquéreur, date d'acte) — consultable uniquement dans l'onglet Compromis.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

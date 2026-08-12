@@ -9,11 +9,13 @@ import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import { LABEL_CATEGORIE_DOCUMENT, type CategorieDocument, type DocumentBien } from "@/types/documentBien";
 import { LABEL_STATUT_OFFRE, type Offre } from "@/types/offre";
+import { LABEL_STATUT_COMPROMIS, type Compromis } from "@/types/compromis";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
 import { ajouterDocumentBienAction } from "@/actions/ajouterDocumentBien";
 import { ajouterOffreAction, changerStatutOffreAction } from "@/actions/offre";
+import { ajouterCompromisAction, changerStatutCompromisAction } from "@/actions/compromis";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 
 const CATEGORIES_DOCUMENT: CategorieDocument[] = [
@@ -37,7 +39,7 @@ function formatPrix(montant: number): string {
   );
 }
 
-type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "offres" | "actions";
+type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "offres" | "compromis" | "actions";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -51,6 +53,7 @@ export default function BienTabs({
   comptesRendus,
   documents,
   offres,
+  compromis,
   acquereursActifs = [],
   acquereursParId = new Map(),
 }: {
@@ -61,6 +64,7 @@ export default function BienTabs({
   comptesRendus: CompteRenduVisite[];
   documents: DocumentBien[];
   offres: Offre[];
+  compromis: Compromis[];
   acquereursActifs?: ProfilAcquereur[];
   acquereursParId?: Map<string, ProfilAcquereur | undefined>;
 }) {
@@ -74,7 +78,7 @@ export default function BienTabs({
   // dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
     ? dossier.historique
-    : deriverHistoriqueBien(bien, actions, comptesRendus, offres);
+    : deriverHistoriqueBien(bien, actions, comptesRendus, offres, compromis);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "contexte", label: "Contexte" },
@@ -82,8 +86,10 @@ export default function BienTabs({
     { id: "notes", label: "Notes" },
     { id: "visites", label: "Visites" },
     { id: "documents", label: "Documents" },
-    // Pas d'équivalent mock (aucun DossierBien.offres) — visible pour un bien réel uniquement.
+    // Pas d'équivalent mock (aucun DossierBien.offres/compromis) — visibles pour un bien réel
+    // uniquement.
     ...(!dossier ? ([{ id: "offres", label: "Offres" }] as const) : []),
+    ...(!dossier ? ([{ id: "compromis", label: "Compromis" }] as const) : []),
     { id: "actions", label: "Actions" },
   ];
 
@@ -93,6 +99,9 @@ export default function BienTabs({
     : [];
   const comptesRendusTries = [...comptesRendus].sort((a, b) => (a.dateVisite < b.dateVisite ? 1 : -1));
   const offresTriees = [...offres].sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
+  const offresAccepteesDuBien = offres.filter((o) => o.statut === "acceptee");
+  const compromisTries = [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1));
+  const compromisEnCours = compromis.some((c) => c.statut === "en_cours");
 
   return (
     <div>
@@ -457,6 +466,127 @@ export default function BienTabs({
                               className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
                             >
                               {statut === "acceptee" ? "Accepter" : statut === "refusee" ? "Refuser" : "Retirer"}
+                            </button>
+                          </form>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {active === "compromis" && (
+        <div className="flex flex-col gap-4">
+          {bien.archiveLe ? (
+            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+              Ce bien est archivé — impossible d'ajouter un nouveau compromis.
+            </p>
+          ) : compromisEnCours ? (
+            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+              Un compromis est déjà en cours pour ce bien — résolvez-le avant d'en ajouter un nouveau.
+            </p>
+          ) : (
+            <form action={ajouterCompromisAction} className="flex flex-col gap-2">
+              <input type="hidden" name="bienId" value={bien.id} />
+              <select
+                name="acquereurId"
+                required
+                defaultValue=""
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              >
+                <option value="" disabled>
+                  Acquéreur
+                </option>
+                {acquereursActifs.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.prenom} {a.nom}
+                  </option>
+                ))}
+              </select>
+              <select
+                name="offreId"
+                defaultValue=""
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              >
+                <option value="">Aucune (compromis direct)</option>
+                {offresAccepteesDuBien.map((o) => {
+                  const acq = acquereursParId.get(o.acquereurId);
+                  return (
+                    <option key={o.id} value={o.id}>
+                      {formatPrix(o.montant)} — {acq ? `${acq.prenom} ${acq.nom}` : "Acquéreur indisponible"} —{" "}
+                      {formatDate(o.dateOffre)}
+                    </option>
+                  );
+                })}
+              </select>
+              <input
+                type="number"
+                name="prixConvenu"
+                required
+                min={1}
+                placeholder="Prix convenu (€)"
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              />
+              <label className="text-[11px] text-[#94a3b8]">
+                Date de signature
+                <input
+                  type="date"
+                  name="dateSignature"
+                  required
+                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                />
+              </label>
+              <label className="text-[11px] text-[#94a3b8]">
+                Date d'acte prévue (optionnelle)
+                <input
+                  type="date"
+                  name="dateActe"
+                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                />
+              </label>
+              <button
+                type="submit"
+                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              >
+                Ajouter le compromis
+              </button>
+            </form>
+          )}
+
+          {compromisTries.length === 0 ? (
+            <p className="text-[14px] text-[#94a3b8]">Aucun compromis pour l'instant.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {compromisTries.map((c) => {
+                const acquereur = acquereursParId.get(c.acquereurId);
+                return (
+                  <div key={c.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-[13px] font-medium text-[#64748b]">{formatDate(c.dateSignature)}</p>
+                      <span className="text-[11px] text-[#94a3b8]">·</span>
+                      <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
+                    </div>
+                    <p className="text-[14px] font-medium text-[#0f172a]">
+                      {formatPrix(c.prixConvenu)} — {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                    </p>
+                    {c.dateActe && (
+                      <p className="text-[13px] text-[#94a3b8] mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
+                    )}
+                    {c.statut === "en_cours" && !bien.archiveLe && (
+                      <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
+                        {(["realise", "annule"] as const).map((statut) => (
+                          <form key={statut} action={changerStatutCompromisAction}>
+                            <input type="hidden" name="compromisId" value={c.id} />
+                            <input type="hidden" name="statut" value={statut} />
+                            <button
+                              type="submit"
+                              className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                            >
+                              {statut === "realise" ? "Marquer réalisé" : "Annuler"}
                             </button>
                           </form>
                         ))}

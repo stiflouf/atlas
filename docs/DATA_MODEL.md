@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0008`, vérifiées le 2026-08-12). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0009`, vérifiées le 2026-08-12). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -19,6 +19,9 @@ erDiagram
     biens ||--o{ documents_bien : "bien_id (FK)"
     biens ||--o{ offres : "bien_id (FK)"
     acquereurs ||--o{ offres : "acquereur_id (FK)"
+    biens ||--o{ compromis : "bien_id (FK)"
+    acquereurs ||--o{ compromis : "acquereur_id (FK)"
+    offres |o--o{ compromis : "offre_id (FK, nullable)"
     acquereurs ||--o{ comptes_rendus_visite : "acquereur_id (FK)"
     biens ||..o{ actions : "bien_id (text, sans FK)"
     acquereurs ||..o{ actions : "acquereur_id (text, sans FK)"
@@ -140,6 +143,17 @@ erDiagram
         date date_offre
         text statut "ADR-015, mutable"
         date date_validite "nullable"
+        timestamptz cree_le
+    }
+    compromis {
+        uuid id PK
+        uuid bien_id FK
+        uuid acquereur_id FK
+        uuid offre_id "FK nullable, ON DELETE SET NULL"
+        integer prix_convenu
+        date date_signature
+        date date_acte "nullable"
+        text statut "ADR-016, mutable"
         timestamptz cree_le
     }
 ```
@@ -374,6 +388,35 @@ fonctionnelle : lue par `listerOffresPourBien()`/`listerOffresPourAcquereur()`/`
 unidirectionnel, ADR-015) ; changer son statut ne modifie jamais
 `offreEnCoursLe`/`compromisSigneLe`.
 
+## `compromis`
+
+**Rôle** : compromis de vente structuré — bien, acquéreur, prix convenu, date de signature, date
+d'acte optionnelle, statut, lien optionnel vers l'offre acceptée d'origine. Voir ADR-016.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `offre_id` | uuid (FK → `offres.id`, `ON DELETE SET NULL`) | **oui** | optionnel — un compromis peut être marqué directement sans offre structurée préalable |
+| `prix_convenu` | integer | non | immuable après création |
+| `date_signature` | date | non | immuable après création |
+| `date_acte` | date | **oui** | optionnel, "si connue" |
+| `statut` | text | non | défaut `"en_cours"`, `CHECK` — seul champ mutable (`UPDATE` en place, ADR-016) |
+| `cree_le` | timestamptz | non | |
+
+**Contrainte `CHECK`** : `statut IN ('en_cours','realise','annule')`. Transitions autorisées
+(`en_cours` → une valeur finale, jamais l'inverse) et cohérence de l'offre liée (même bien, même
+acquéreur, statut `acceptee`) validées côté Server Action, pas en `CHECK` SQL. Un seul compromis
+`en_cours` par bien à la fois : garde applicative, pas une contrainte SQL d'unicité.
+
+Pas de `modifie_le` distinct. Relation fonctionnelle : lue par
+`listerCompromisPourBien()`/`listerCompromisPourAcquereur()`/`getCompromisById()`
+(`src/lib/compromisRepository.ts`), écrite par
+`ajouterCompromisAction`/`changerStatutCompromisAction` (`src/actions/compromis.ts`). Créer un
+compromis pose aussi `biens.compromisSigneLe` (couplage unidirectionnel, ADR-016) ; changer son
+statut ne le modifie jamais.
+
 ## Migrations
 
 | Fichier | Tables introduites |
@@ -387,6 +430,7 @@ unidirectionnel, ADR-015) ; changer son statut ne modifie jamais
 | `0006_volatile_starbolt.sql` | `documents_bien` |
 | `0007_absurd_rumiko_fujikawa.sql` | `offre_en_cours_le`, `compromis_signe_le` sur `biens` |
 | `0008_great_kid_colt.sql` | `offres` |
+| `0009_high_lenny_balinger.sql` | `compromis` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

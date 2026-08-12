@@ -3,6 +3,7 @@ import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { Offre } from "@/types/offre";
+import type { Compromis } from "@/types/compromis";
 import { deriverHistoriqueBien } from "./historiqueBien";
 
 // Réplique le formatage de historiqueBien.ts (Intl.NumberFormat produit des espaces insécables
@@ -220,5 +221,58 @@ describe("deriverHistoriqueBien", () => {
       `Offre reçue — ${formatPrix(420000)}`,
       `Offre reçue — ${formatPrix(400000)}`,
     ]);
+  });
+
+  it("produit « Compromis structuré — {prix} » à partir d'un compromis, sans jamais nommer l'acquéreur", () => {
+    const c: Compromis = {
+      id: "compromis-1",
+      bienId: "bien-test",
+      acquereurId: "acquereur-confidentiel",
+      prixConvenu: 480000,
+      dateSignature: "2026-08-05",
+      statut: "en_cours",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [], [c]);
+
+    expect(evenements).toEqual([{ date: "2026-08-05", texte: `Compromis structuré — ${formatPrix(480000)}` }]);
+    expect(evenements.some((e) => e.texte.includes("acquereur-confidentiel"))).toBe(false);
+  });
+
+  it("ne produit aucun événement pour un changement de statut de compromis (pas de date de transition fiable)", () => {
+    const c: Compromis = {
+      id: "compromis-2",
+      bienId: "bien-test",
+      acquereurId: "acquereur-test",
+      prixConvenu: 500000,
+      dateSignature: "2026-08-05",
+      statut: "realise",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [], [c]);
+
+    expect(evenements).toEqual([{ date: "2026-08-05", texte: `Compromis structuré — ${formatPrix(500000)}` }]);
+  });
+
+  it("distingue « Compromis structuré » (entité détaillée) de « Compromis signé » (jalon générique ADR-014) quand les deux coexistent", () => {
+    const bien = bienTest({ creeLe: undefined, compromisSigneLe: "2026-08-05T10:00:00.000Z" });
+    const c: Compromis = {
+      id: "compromis-3",
+      bienId: "bien-test",
+      acquereurId: "acquereur-test",
+      prixConvenu: 500000,
+      dateSignature: "2026-08-05",
+      statut: "en_cours",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bien, [], [], [], [c]);
+
+    expect(evenements.map((e) => e.texte)).toEqual(
+      expect.arrayContaining(["Compromis signé", `Compromis structuré — ${formatPrix(500000)}`])
+    );
+    expect(evenements).toHaveLength(2);
   });
 });

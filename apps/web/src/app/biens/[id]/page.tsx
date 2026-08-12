@@ -11,6 +11,7 @@ import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { listerOffresPourBien } from "@/lib/offreRepository";
+import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
@@ -57,9 +58,14 @@ export default async function FicheBien({ params }: PageProps) {
   const comptesRendus = await listerComptesRendusPourBien(bien.id);
   const documents = await listerDocumentsPourBien(bien.id);
   const offres = await listerOffresPourBien(bien.id);
+  const compromis = await listerCompromisPourBien(bien.id);
   const acquereursActifs = await listerClients();
   const acquereurIds = [
-    ...new Set([...comptesRendus.map((cr) => cr.acquereurId), ...offres.map((o) => o.acquereurId)]),
+    ...new Set([
+      ...comptesRendus.map((cr) => cr.acquereurId),
+      ...offres.map((o) => o.acquereurId),
+      ...compromis.map((c) => c.acquereurId),
+    ]),
   ];
   const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
   const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
@@ -226,6 +232,7 @@ export default async function FicheBien({ params }: PageProps) {
         comptesRendus={comptesRendus}
         documents={documents}
         offres={offres}
+        compromis={compromis}
         acquereursActifs={acquereursActifs}
         acquereursParId={acquereursParId}
       />

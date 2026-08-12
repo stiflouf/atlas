@@ -265,6 +265,33 @@ ADR-015.
 Aucun événement pour un changement de statut : pas de date de transition fiable disponible (pas de
 champ `statutModifieLe`, volontairement absent du modèle).
 
+## Compromis structuré
+
+**Fichiers** : `src/lib/compromisRepository.ts`, `src/actions/compromis.ts`. Détail de la
+décision : ADR-016.
+
+`prixConvenu`/`bienId`/`acquereurId`/`offreId`/`dateSignature` immuables après création — une
+nouvelle signature (si un premier compromis tombe à l'eau) est une nouvelle ligne. Plusieurs
+compromis historiques autorisés par bien, un compromis annulé reste consultable. Seul `statut` est
+mutable, `UPDATE` en place (même patron qu'`offres.statut`).
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Créer un compromis | Bien et acquéreur réels, non archivés ; prix convenu > 0 ; aucun compromis `en_cours` déjà présent pour ce bien | `enregistrerCompromis(...)` **puis** `marquerCompromisSigne(bienId)` — un seul geste |
+| Créer un compromis — refus | Bien/acquéreur introuvable ou archivé, prix invalide, ou compromis déjà `en_cours` pour ce bien | `throw` explicite (`ajouterCompromisAction`) — garde d'unicité applicative, pas une contrainte SQL |
+| Offre liée (`offreId` optionnel) | Fournie | Doit exister, appartenir au même bien, au même acquéreur, et être `acceptee` — sinon `throw` explicite spécifique à chaque cas |
+| Changer le statut | Compromis `en_cours`, bien et acquéreur non archivés | `en_cours` → `realise`/`annule` uniquement — jamais l'inverse |
+| Changer le statut — refus | Compromis introuvable, bien/acquéreur archivé, ou compromis déjà dans un statut final | `throw` explicite (`changerStatutCompromisAction`) |
+| Couplage avec le statut commercial | Toujours | Créer un compromis pose `compromisSigneLe` ; changer son statut **ne le modifie jamais** — geste commercial séparé (ADR-014 non touchée) |
+| Consultation | Toujours | `listerCompromisPourBien()`/`listerCompromisPourAcquereur()`/`getCompromisById()` résolvent toujours, même sur un bien/acquéreur archivé |
+
+**Historique dérivé** : un événement par compromis, à la création
+(`"Compromis structuré — {prixConvenu}"`), **sans nommer l'acquéreur**. Libellé volontairement
+distinct de l'événement générique ADR-014 (`"Compromis signé"`, dérivé de `compromisSigneLe`), qui
+continue de coexister séparément — le premier est la création de l'entité détaillée, le second le
+jalon commercial synthétique du bien. Aucun événement pour un changement de statut (pas de date de
+transition fiable disponible).
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

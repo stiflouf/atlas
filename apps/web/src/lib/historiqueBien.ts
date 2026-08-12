@@ -2,6 +2,7 @@ import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { Offre } from "@/types/offre";
+import type { Compromis } from "@/types/compromis";
 
 function formatPrix(montant: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
@@ -21,7 +22,8 @@ export function deriverHistoriqueBien(
   bien: Bien,
   actions: ActionMetier[],
   comptesRendus: CompteRenduVisite[] = [],
-  offres: Offre[] = []
+  offres: Offre[] = [],
+  compromis: Compromis[] = []
 ): EvenementHistorique[] {
   const evenements: EvenementHistorique[] = [];
 
@@ -61,6 +63,16 @@ export function deriverHistoriqueBien(
   // consulte dans l'onglet Offres, pas dans l'historique.
   for (const offre of offres) {
     evenements.push({ date: offre.dateOffre, texte: `Offre reçue — ${formatPrix(offre.montant)}` });
+  }
+
+  // Un seul événement par compromis, à la création — jamais l'acquéreur nommé (même convention).
+  // Libellé "Compromis structuré" (pas "Compromis signé") pour rester distinct de l'événement
+  // générique ADR-014 dérivé de bien.compromisSigneLe, qui coexiste séparément ci-dessus : l'un
+  // est le jalon commercial synthétique du bien, l'autre la création de l'entité détaillée.
+  // Aucun événement pour un changement de statut : pas de date de transition fiable disponible
+  // (ADR-016).
+  for (const c of compromis) {
+    evenements.push({ date: c.dateSignature, texte: `Compromis structuré — ${formatPrix(c.prixConvenu)}` });
   }
 
   return evenements.sort((a, b) => (a.date < b.date ? 1 : -1));

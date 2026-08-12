@@ -260,3 +260,35 @@ export const offres = pgTable(
     check("offres_statut_check", sql`${table.statut} IN ('en_cours','acceptee','refusee','retiree')`),
   ]
 );
+
+// Compromis structuré sur un bien (ADR-016). bienId/acquereurId sont de vraies FK, même rationale
+// que offres. offreId nullable (ON DELETE SET NULL, pas cascade : un compromis ne doit jamais
+// disparaître si son offre d'origine venait à être supprimée) — un compromis peut être marqué
+// directement sans offre structurée préalable. prixConvenu/bienId/acquereurId/offreId/
+// dateSignature immuables après création : une nouvelle signature = une nouvelle ligne. statut
+// est le seul champ mutable (UPDATE en place, comme offres.statut), transitions
+// unidirectionnelles depuis 'en_cours' uniquement — validées côté Server Action. Un seul
+// compromis 'en_cours' par bien à la fois : garde applicative, pas une contrainte SQL. Couplage
+// unidirectionnel avec biens.compromisSigneLe : créer un compromis le pose, mais aucun changement
+// de statut ne le modifie (voir src/actions/compromis.ts).
+export const compromis = pgTable(
+  "compromis",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id, { onDelete: "cascade" }),
+    acquereurId: uuid("acquereur_id")
+      .notNull()
+      .references(() => acquereurs.id, { onDelete: "cascade" }),
+    offreId: uuid("offre_id").references(() => offres.id, { onDelete: "set null" }),
+    prixConvenu: integer("prix_convenu").notNull(),
+    dateSignature: date("date_signature").notNull(),
+    dateActe: date("date_acte"),
+    statut: text("statut").notNull().default("en_cours"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("compromis_statut_check", sql`${table.statut} IN ('en_cours','realise','annule')`),
+  ]
+);

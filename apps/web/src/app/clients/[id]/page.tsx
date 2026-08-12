@@ -7,8 +7,10 @@ import { getClientById } from "@/lib/clientRepository";
 import { getActionsPourAcquereur } from "@/lib/actionRepository";
 import { archiverAcquereurAction, desarchiverAcquereurAction } from "@/actions/archivageAcquereur";
 import { listerOffresPourAcquereur } from "@/lib/offreRepository";
+import { listerCompromisPourAcquereur } from "@/lib/compromisRepository";
 import { getBienById } from "@/lib/bienRepository";
 import { LABEL_STATUT_OFFRE } from "@/types/offre";
+import { LABEL_STATUT_COMPROMIS } from "@/types/compromis";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -44,7 +46,10 @@ export default async function FicheClient({ params }: PageProps) {
   const offres = (await listerOffresPourAcquereur(client.id)).sort((a, b) =>
     a.dateOffre < b.dateOffre ? 1 : -1
   );
-  const bienIds = [...new Set(offres.map((o) => o.bienId))];
+  const compromis = (await listerCompromisPourAcquereur(client.id)).sort((a, b) =>
+    a.dateSignature < b.dateSignature ? 1 : -1
+  );
+  const bienIds = [...new Set([...offres.map((o) => o.bienId), ...compromis.map((c) => c.bienId)])];
   const biensPourOffres = await Promise.all(bienIds.map((id) => getBienById(id)));
   const biensParId = new Map(bienIds.map((id, i) => [id, biensPourOffres[i]]));
 
@@ -129,6 +134,31 @@ export default async function FicheClient({ params }: PageProps) {
                   </div>
                   <p className="text-[14px] font-medium text-[#0f172a]">
                     {formatPrix(offre.montant)} — {bienOffre ? bienOffre.titre : "Bien indisponible"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="mb-8">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Compromis</p>
+        {compromis.length === 0 ? (
+          <p className="text-[14px] text-[#94a3b8]">Aucun compromis pour l'instant.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {compromis.map((c) => {
+              const bienCompromis = biensParId.get(c.bienId);
+              return (
+                <div key={c.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-[13px] font-medium text-[#64748b]">{formatDate(c.dateSignature)}</p>
+                    <span className="text-[11px] text-[#94a3b8]">·</span>
+                    <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
+                  </div>
+                  <p className="text-[14px] font-medium text-[#0f172a]">
+                    {formatPrix(c.prixConvenu)} — {bienCompromis ? bienCompromis.titre : "Bien indisponible"}
                   </p>
                 </div>
               );
