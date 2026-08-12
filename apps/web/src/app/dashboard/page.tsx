@@ -7,8 +7,10 @@ import {
   chargerDelais,
   chargerPertes,
   chargerRemuneration,
+  chargerProjectionAnnuelle,
   type MontantParMois,
   type MontantCentimesParMois,
+  type MontantCentimesParMoisAnnuel,
   type PerteParMotif,
 } from "@/lib/dashboardRepository";
 import { LABEL_MOTIF_PERTE } from "@/types/motifPerte";
@@ -103,6 +105,37 @@ function ParMoisCentimesListe({ items }: { items: MontantCentimesParMois[] }) {
   );
 }
 
+// Toujours 12 lignes (janvier -> décembre, zero-remplies côté SQL) — jamais "Pas encore
+// renseignée" par cellule : le zero-remplissage garantit qu'une valeur existe pour chaque mois.
+// Un 0 € signifie "0 € parmi les rémunérations disposant d'une date permettant de les positionner
+// dans ce mois", pas une couverture exhaustive — voir la réserve affichée sous le tableau.
+function VentilationAnnuelleTable({ items }: { items: MontantCentimesParMoisAnnuel[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="text-left text-[11px] text-[#94a3b8]">
+            <th className="font-medium pb-1.5 pr-3">Mois</th>
+            <th className="font-medium pb-1.5 pr-3">Prévisionnel</th>
+            <th className="font-medium pb-1.5 pr-3">Finalisé non encaissé</th>
+            <th className="font-medium pb-1.5">Encaissé</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map(({ mois, previsionnelCentimes, finaliseNonEncaisseCentimes, encaisseCentimes }) => (
+            <tr key={mois} className="border-t border-[#f1f5f9]">
+              <td className="py-1.5 pr-3 text-[#64748b] capitalize">{formatMois(mois)}</td>
+              <td className="py-1.5 pr-3 text-[#0f172a]">{formatMontantCentimes(previsionnelCentimes)}</td>
+              <td className="py-1.5 pr-3 text-[#0f172a]">{formatMontantCentimes(finaliseNonEncaisseCentimes)}</td>
+              <td className="py-1.5 text-[#0f172a]">{formatMontantCentimes(encaisseCentimes)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // Motif NULL historique jamais affiché ici ni reclassé (ADR-020) : la liste ne contient que les
 // motifs explicitement renseignés — voir la réserve affichée au-dessus de chaque liste.
 function ParMotifListe({ items }: { items: PerteParMotif[] }) {
@@ -124,13 +157,14 @@ function ParMotifListe({ items }: { items: PerteParMotif[] }) {
 }
 
 export default async function DashboardPage() {
-  const [resultats, pipeline, activite, delais, pertes, remuneration] = await Promise.all([
+  const [resultats, pipeline, activite, delais, pertes, remuneration, projection] = await Promise.all([
     chargerResultats(),
     chargerPipeline(),
     chargerActivite(),
     chargerDelais(),
     chargerPertes(),
     chargerRemuneration(),
+    chargerProjectionAnnuelle(),
   ]);
 
   return (
@@ -185,6 +219,41 @@ export default async function DashboardPage() {
             Rémunération encaissée par mois
           </p>
           <ParMoisCentimesListe items={remuneration.remunerationEncaisseeParMoisCentimes} />
+        </Card>
+      </section>
+
+      <section className="mb-8">
+        <SectionTitle>Projection {projection.annee}</SectionTitle>
+        <Card className="p-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6">
+            <MetricCard
+              label="Encaissé depuis le 1er janvier"
+              valeur={formatMontantCentimesOuInconnu(projection.encaisseDepuisJanvierCentimes)}
+              reserve={`Biens archivés inclus. ${remuneration.nombreRemunerationsVentesFinaliseesRenseignees}/${remuneration.nombreVentesFinalisees} ventes finalisées disposent d'une rémunération renseignée — ce montant ne peut refléter que celles-ci.`}
+            />
+            <MetricCard
+              label="Finalisé non encaissé à ce jour"
+              valeur={formatMontantCentimesOuInconnu(remuneration.remunerationVenteFinaliseeNonEncaisseeCentimes)}
+              reserve="Toutes années confondues. Les rémunérations sans date d'encaissement prévue restent incluses dans ce total mais sont absentes de la ventilation mensuelle."
+            />
+            <MetricCard
+              label="Prévisionnel restant jusqu'au 31 décembre"
+              valeur={formatMontantCentimesOuInconnu(projection.previsionnelRestantCentimes)}
+              reserve={`Biens archivés exclus. ${remuneration.nombreCompromisEnCoursEligibles} compromis en cours éligibles. ${remuneration.nombreRemunerationsPrevisionnellesRenseignees}/${remuneration.nombreCompromisEnCoursEligibles} disposent d'une rémunération renseignée. ${projection.nombreRemunerationsPrevisionnellesAvecDatePrevue}/${remuneration.nombreRemunerationsPrevisionnellesRenseignees} disposent en plus d'une date d'encaissement prévue.`}
+            />
+            <MetricCard
+              label="Encaissements attendus dépassés"
+              valeur={formatMontantCentimesOuInconnu(projection.encaissementsAttendusDepassesCentimes)}
+              reserve={`${projection.nombreEncaissementsAttendusDepasses} vente(s) concernée(s). Biens archivés inclus. ${remuneration.nombreVentesFinalisees} ventes finalisées au total, ${remuneration.nombreRemunerationsVentesFinaliseesRenseignees}/${remuneration.nombreVentesFinalisees} disposent d'une rémunération renseignée. Parmi les ventes non encore encaissées, ${projection.nombreFinaliseNonEncaisseAvecDatePrevue}/${projection.nombreFinaliseNonEncaisseRenseignees} disposent en plus d'une date d'encaissement prévue.`}
+            />
+          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+            Janvier → décembre {projection.annee}
+          </p>
+          <VentilationAnnuelleTable items={projection.ventilationMensuelle} />
+          <p className="text-[11px] text-[#94a3b8] mt-2">
+            {`Ventilation limitée aux rémunérations avec une date connue (${projection.nombreRemunerationsPrevisionnellesAvecDatePrevue}/${remuneration.nombreRemunerationsPrevisionnellesRenseignees} prévisionnelles, ${projection.nombreFinaliseNonEncaisseAvecDatePrevue}/${projection.nombreFinaliseNonEncaisseRenseignees} finalisées non encaissées) — les totaux globaux ci-dessus incluent aussi celles sans date. Un mois passé non nul dans la colonne "Prévisionnel" ne signifie pas un dépassement au sens de "Encaissements attendus dépassés", strictement réservée aux compromis réalisés.`}
+          </p>
         </Card>
       </section>
 

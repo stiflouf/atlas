@@ -253,6 +253,26 @@ comme le pipeline ; les deux métriques "vente finalisée" les incluent, comme l
 nouvel événement d'historique, `"Rémunération encaissée"`, daté par `dateEncaissementReelle`, jamais
 affiché sans elle.
 
+## 22. Projection financière annuelle
+
+Audit préalable (métrique par métrique : source, formule, limites, archivage, comportement si
+`dateEncaissementPrevue` absente) débouchant sur `chargerProjectionAnnuelle()` (ADR-022, scindée de
+`chargerRemuneration()` — même logique qu'ADR-020), qui étend `/dashboard` existant sans nouvelle
+route ni filtre temporel : année civile fixe, janvier → décembre. Quatre nouvelles métriques :
+encaissé depuis le 1er janvier (biens archivés inclus), prévisionnel restant jusqu'au 31 décembre
+(`en_cours` uniquement, jamais fusionné avec finalisé non encaissé, biens archivés exclus),
+"Encaissement(s) attendu(s) dépassé(s)" — jamais "retard", justifié par le caractère auto-déclaré et
+corrigible de `dateEncaissementPrevue` — et une ventilation mensuelle zero-remplie (`generate_series`,
+deuxième et dernier usage de SQL brut du fichier) répartissant prévisionnel/finalisé non encaissé par
+`dateEncaissementPrevue` et encaissé par `dateEncaissementReelle`. Couverture à trois niveaux : les
+deux premiers (population éligible, ligne `remuneration` renseignée) réutilisés tels quels depuis
+`chargerRemuneration()`, jamais dupliqués ; le troisième (date prévue renseignée) neuf. Mapping
+explicite `undefined`/`0`/somme en JS pour ne jamais confondre "aucune date connue" (vraiment
+inconnu) et "des dates connues mais hors fenêtre" (un vrai zéro mesuré) — le `NULL` naturel de
+`SUM ... FILTER` aurait confondu les deux. Aucun écart moyen prévu/réel construit (la date prévue
+reste corrigible jusqu'à l'encaissement, la mesurer serait trompeuse sans historique des
+corrections). Aucun changement de schéma, aucune fiscalité.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

@@ -534,7 +534,7 @@ Créée soit dans la même transaction que l'offre (`enregistrerOffreAvecLiensEt
 
 ## Tableau de bord commercial (`dashboardRepository.ts`)
 
-`src/lib/dashboardRepository.ts` (lecture seule, ADR-018/ADR-019/ADR-020/ADR-021) agrège
+`src/lib/dashboardRepository.ts` (lecture seule, ADR-018/ADR-019/ADR-020/ADR-021/ADR-022) agrège
 `compromis`/`offres`/`comptes_rendus_visite`/`biens`/`offre_visites`/`remuneration` existants via
 `COUNT`/`SUM`/`AVG`/`GROUP BY` exécutés par Postgres — jamais recalculé en mémoire côté
 application. `chargerDelaisPertes()` a été scindée en `chargerDelais()` et `chargerPertes()`
@@ -543,10 +543,18 @@ seconde, sans duplication. `chargerRemuneration()` (ADR-021) ajoute la famille "
 trois montants mutuellement exclusifs en centimes, chacun accompagné d'un compteur de couverture
 (nombre de lignes `remuneration` renseignées / population éligible) pour ne jamais laisser une somme
 partielle se lire comme un total exhaustif ; règle d'archivage volontairement asymétrique
-(prévisionnelle exclut les biens archivés, les deux métriques "vente finalisée" les incluent). Voir
+(prévisionnelle exclut les biens archivés, les deux métriques "vente finalisée" les incluent).
+`chargerProjectionAnnuelle()` (ADR-022, scindée de `chargerRemuneration()` même logique qu'ADR-020)
+ajoute la vue "année en cours" — encaissé depuis janvier, prévisionnel restant jusqu'au 31/12
+(`en_cours` uniquement, jamais fusionné avec finalisé non encaissé), "Encaissement(s) attendu(s)
+dépassé(s)" (jamais "retard"), ventilation mensuelle zero-remplie par `generate_series` (deuxième et
+dernier usage de SQL brut du fichier, avec `chargerActivite()`). Compteurs de couverture à un
+troisième niveau (a en plus une `dateEncaissementPrevue`), composés dans `dashboard/page.tsx` avec
+les deux premiers niveaux déjà fournis par `chargerRemuneration()`, jamais dupliqués. Voir
 `docs/BUSINESS_RULES.md` pour le détail des métriques et ADR-018 pour la règle d'archivage et les
 métriques écartées ; ADR-019 pour `offre_visites` et les métriques visite → offre ; ADR-020 pour les
-motifs/dates de perte et la famille "Pertes commerciales" ; ADR-021 pour la rémunération.
+motifs/dates de perte et la famille "Pertes commerciales" ; ADR-021 pour la rémunération ; ADR-022
+pour la projection annuelle.
 
 ## Migrations
 

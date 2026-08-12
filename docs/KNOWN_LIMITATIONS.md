@@ -220,6 +220,25 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   Compromis de la fiche bien (`BienTabs.tsx`), pas dans `AcquereurFormulaire.tsx` — extension
   triviale à faire dans une passe ultérieure si besoin.
 
+## Projection financière annuelle (ADR-022)
+
+- **Sous-couverture silencieuse de "prévisionnel restant" et "encaissements attendus dépassés"** :
+  les deux métriques dépendent entièrement de `dateEncaissementPrevue`, un champ optionnel que rien
+  n'impose ni ne rappelle. Tant que son adoption reste faible, ces deux chiffres peuvent
+  sous-estimer la réalité sans qu'aucun signal ne le révèle si le compteur de couverture n'est pas
+  lu à côté — d'où l'affichage systématique de ce compteur, jamais un montant seul.
+- **Aucun écart moyen `dateEncaissementPrevue → dateEncaissementReelle`** : la date prévue restant
+  corrigible jusqu'à l'encaissement (ADR-021), elle ne reflète pas nécessairement la prévision
+  initiale — un écart mesuré contre une valeur réécrite serait trompeur. Reporté à une éventuelle
+  passe future d'historisation des corrections.
+- **Un mois passé non nul dans la colonne "Prévisionnel" de la ventilation ne signifie pas un
+  dépassement** au sens de "Encaissements attendus dépassés" — cette dernière est strictement
+  réservée aux compromis `realise` ; un compromis encore `en_cours` dont la date prévue est déjà
+  passée signale une vente qui traîne, pas un encaissement en attente.
+- **Année civile fixe, pas de sélecteur** : aucun moyen de consulter une année passée ou future
+  depuis le dashboard — cohérent avec l'absence de filtre temporel déjà actée en V1 (ADR-018), mais
+  une limitation réelle pour qui voudrait comparer plusieurs années.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

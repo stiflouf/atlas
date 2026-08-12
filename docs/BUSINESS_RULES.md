@@ -395,6 +395,11 @@ ci-dessous.
 | Rémunération | Rémunération associée à une vente finalisée | Même somme, `compromis` `realise` **et** `date_encaissement_reelle IS NULL`, biens archivés inclus | Compteur de couverture partagé avec la ligne "encaissée" (même dénominateur : toutes les ventes `realise`) ; `undefined` si aucune ligne renseignée |
 | Rémunération | Rémunération encaissée | Même somme, `compromis` `realise` **et** `date_encaissement_reelle IS NOT NULL`, biens archivés inclus | Mutuellement exclusive de la ligne précédente (jamais la même ligne dans les deux) ; `undefined` si aucune ligne renseignée |
 | Rémunération | Rémunération encaissée par mois | `sum(...)` groupé par mois de `date_encaissement_reelle` | — |
+| Projection annuelle | Encaissé depuis le 1er janvier | `sum(...)` sur `remuneration` ⨝ `compromis` `realise` **et** `date_encaissement_reelle` dans l'année en cours, biens archivés inclus (ADR-022) | Réserve reprend la couverture "ventes finalisées" de `chargerRemuneration()` : le montant ne peut refléter que les ventes finalisées disposant d'une rémunération renseignée |
+| Projection annuelle | Finalisé non encaissé à ce jour | Réutilise `remunerationVenteFinaliseeNonEncaisseeCentimes` (`chargerRemuneration()`), **jamais filtré à l'année** | "Toutes années confondues. Les rémunérations sans date d'encaissement prévue restent incluses dans ce total mais sont absentes de la ventilation mensuelle" |
+| Projection annuelle | Prévisionnel restant jusqu'au 31 décembre | `sum(...)` sur `compromis` `en_cours` **uniquement** (jamais fusionné avec finalisé non encaissé), bien non archivé, `date_encaissement_prevue` entre aujourd'hui et le 31/12 (ADR-022) | Compteur de couverture à un troisième niveau ("Z/Y disposent en plus d'une date prévue"), composé avec les deux premiers niveaux de `chargerRemuneration()` ; `undefined` seulement si aucune date prévue n'est connue du tout, `0` si des dates sont connues mais hors fenêtre (jamais confondus, ADR-022) |
+| Projection annuelle | Encaissement(s) attendu(s) dépassé(s) | `sum(...)` + `count(*)` sur `remuneration` ⨝ `compromis` `realise`, `date_encaissement_reelle IS NULL`, `date_encaissement_prevue IS NOT NULL` et `< aujourd'hui`, biens archivés inclus (ADR-022) | **Jamais** le mot "retard" ; nombre de ventes concernées + couverture des dates prévues affichés ; même distinction `undefined`/`0` que ci-dessus |
+| Projection annuelle | Ventilation janvier → décembre (prévisionnel / finalisé non encaissé / encaissé) | `generate_series` (spine 12 mois) `LEFT JOIN` trois agrégats par `date_encaissement_prevue` (prévisionnel, finalisé non encaissé) ou `date_encaissement_reelle` (encaissé), `coalesce(...,0)` | Toujours 12 mois, zero-remplis ; un `0 €` signifie "aucune ligne datée ce mois-là", pas une couverture exhaustive — réserve rappelle les compteurs de couverture |
 
 **Explicitement écarté** (donnée non instrumentée) : chiffre d'affaires, fiscalité, et toute notion
 comptable/juridique de rémunération "acquise" — `remuneration` (ADR-021) instrumente les montants
@@ -404,10 +409,13 @@ et le délai visite → offre, écartés dans ADR-018 faute de lien matérialis�
 disponibles via le lien explicite `offre_visites` (ADR-019) — avec la réserve que seules les
 visites explicitement liées après la mise en place de ce lien sont comptées (aucun rattrapage
 automatique de l'historique). Aucun taux de conversion par cause en V1 (ADR-020) — voir
-`docs/KNOWN_LIMITATIONS.md`.
+`docs/KNOWN_LIMITATIONS.md`. Aucun écart moyen `dateEncaissementPrevue → dateEncaissementReelle`
+(ADR-022) : la date prévue reste corrigible jusqu'à l'encaissement, elle ne représente donc pas
+nécessairement la prévision initiale — mesurer cet écart serait trompeur tant qu'aucun historique
+des corrections n'existe.
 
-Pas de graphiques, pas de filtre temporel en V1 — les séries "par mois" s'affichent en liste
-simple.
+Pas de graphiques, pas de filtre temporel en V1 (y compris pour la projection annuelle, ADR-022 :
+année civile fixe, pas de sélecteur) — les séries "par mois" s'affichent en liste simple.
 
 ## Archivage
 
