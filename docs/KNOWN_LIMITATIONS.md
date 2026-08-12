@@ -8,12 +8,12 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 - **Onglet "Documents" de la fiche bien** (`BienTabs.tsx`) — aucun stockage de documents réel
   n'existe. Visible uniquement pour un bien mocké avec `DossierBien` (`data/dossier.ts`).
-- **Onglet "Visites → Effectuées"** — lit exclusivement `dossier.visitesEffectuees` (mock). Les
-  comptes rendus de visite réels (`comptes_rendus_visite`) **ne sont pas affichés dans cet
-  onglet** — ils alimentent uniquement l'onglet "Historique" (sous forme de ligne courte) et la
-  "Mémoire du dossier" de la page de préparation. Un futur travail cohérent serait de faire lire
-  cet onglet depuis `comptes_rendus_visite` pour un bien réel, comme cela a été fait pour
-  Historique et Notes.
+- **Onglet "Visites → Effectuées"** — pour un bien réel, lit désormais `comptes_rendus_visite`
+  (date, acquéreur résolu via `getClientById`, intérêt, retour brut, prochaine étape) ; pour un
+  bien mocké avec `DossierBien`, comportement inchangé (`dossier.visitesEffectuees`). Si
+  l'acquéreur d'un compte rendu ne peut pas être résolu (cas normalement impossible, la FK de
+  `comptes_rendus_visite` garantit son existence — ADR-010), l'UI affiche "Acquéreur indisponible"
+  plutôt que d'inventer un nom.
 - **Onglet "Visites → À venir"** — lit exclusivement le mock statique `data/agenda.ts`
   (`rendezVousDuJour`), jamais `getAgendaSemaine()`/Google Calendar. Un bien réel n'affichera donc
   jamais ses vraies visites à venir dans cet onglet, même avec Google Calendar connecté.

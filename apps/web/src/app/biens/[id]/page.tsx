@@ -4,6 +4,7 @@ import { ArrowLeft, Building2 } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
+import { getClientById } from "@/lib/clientRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getActionsPourBien } from "@/lib/actionRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
@@ -39,6 +40,9 @@ export default async function FicheBien({ params }: PageProps) {
   const actions = await getActionsPourBien(bien.id);
   const notes = await listerNotesPourBien(bien.id);
   const comptesRendus = await listerComptesRendusPourBien(bien.id);
+  const acquereurIds = [...new Set(comptesRendus.map((cr) => cr.acquereurId))];
+  const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
+  const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
   const actionPrincipale = actionPrioritaire(actions);
   const prochaineVisite = rendezVousDuJour.find(
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
@@ -143,9 +147,16 @@ export default async function FicheBien({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Onglets — Contexte, Actions et Notes sont toujours réels ; les autres n'apparaissent que
-          si un dossier existe (voir BienTabs, aucun DossierBien artificiel fabriqué ici). */}
-      <BienTabs bien={bien} dossier={dossier} actions={actions} notes={notes} comptesRendus={comptesRendus} />
+      {/* Onglets — Contexte, Notes, Visites et Actions sont toujours réels ; Documents n'apparaît
+          que si un dossier existe (voir BienTabs, aucun DossierBien artificiel fabriqué ici). */}
+      <BienTabs
+        bien={bien}
+        dossier={dossier}
+        actions={actions}
+        notes={notes}
+        comptesRendus={comptesRendus}
+        acquereursParId={acquereursParId}
+      />
     </div>
   );
 }

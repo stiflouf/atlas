@@ -115,11 +115,11 @@ Aucun équivalent réel n'existe à ce jour pour :
 
 - **`data/dossier.ts` (`DossierBien`)** — historique manuscrit, notes en un seul bloc de texte,
   documents, visites effectuées. Concerne uniquement les deux biens mockés historiques
-  (`bien-001`, `bien-002`) ; un bien réel n'a jamais de `DossierBien`. Deux de ses quatre
+  (`bien-001`, `bien-002`) ; un bien réel n'a jamais de `DossierBien`. Trois de ses quatre
   dimensions ont depuis reçu un équivalent réel dérivé indépendant : Historique
-  (`deriverHistoriqueBien`) et Notes (`notes_bien`) — voir `docs/BUSINESS_RULES.md`. **Documents**
-  et **Visites → Effectuées** restent 100% mock, sans aucun équivalent réel (détaillé dans
-  `docs/KNOWN_LIMITATIONS.md`).
+  (`deriverHistoriqueBien`), Notes (`notes_bien`) et Visites → Effectuées
+  (`comptes_rendus_visite`) — voir `docs/BUSINESS_RULES.md`. **Documents** reste 100% mock, sans
+  aucun équivalent réel (détaillé dans `docs/KNOWN_LIMITATIONS.md`).
 - **`data/preparations.ts`** — une seule préparation de visite entièrement curatée à la main
   (`prep-rdv-001`, couple bien Oberkampf / acquéreurs Dubois). Pour tout autre couple bien/
   acquéreur, `construirePreparationMinimale()` (`visites/[id]/preparer/page.tsx`) prend le relais

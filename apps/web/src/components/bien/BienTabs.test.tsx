@@ -42,7 +42,7 @@ function dossierTest(): DossierBien {
 const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Actions"];
 
 describe("BienTabs", () => {
-  it("n'affiche que Contexte, Notes et Actions pour un bien réel sans dossier", () => {
+  it("n'affiche que Contexte, Notes, Visites et Actions pour un bien réel sans dossier", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
@@ -54,8 +54,9 @@ describe("BienTabs", () => {
 
     expect(html).toContain("Contexte");
     expect(html).toContain("Notes");
+    expect(html).toContain("Visites");
     expect(html).toContain("Actions");
-    for (const onglet of ["Historique", "Visites", "Documents"]) {
+    for (const onglet of ["Historique", "Documents"]) {
       expect(html).not.toContain(onglet);
     }
   });
@@ -101,9 +102,7 @@ describe("BienTabs", () => {
     );
 
     expect(html).toContain("Historique");
-    for (const onglet of ["Visites", "Documents"]) {
-      expect(html).not.toContain(onglet);
-    }
+    expect(html).not.toContain("Documents");
   });
 
   it("affiche l'onglet Historique pour un bien réel dès qu'un compte rendu de visite existe, sans creeLe ni action", () => {

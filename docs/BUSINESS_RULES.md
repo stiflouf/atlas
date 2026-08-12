@@ -180,6 +180,24 @@ compte rendu n'apparaît dans l'historique — seulement le label court dérivé
   rappel textuel affiché dans la Mémoire du dossier ; créer une action à partir de cette
   information reste un geste manuel du conseiller (via "+ Ajouter une action").
 
+## Onglet Visites → Effectuées de la fiche bien
+
+**Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section
+"Effectuées" est dérivée de `comptes_rendus_visite`, triés par `dateVisite` décroissante — jamais
+mélangée au mock (`dossier.visitesEffectuees` reste affiché tel quel si un dossier existe).
+
+| Champ affiché | Source | Traitement |
+|---|---|---|
+| Date de visite | `dateVisite` | Formatage seul, aucune reformulation |
+| Acquéreur | `acquereurId` | Résolu via `getClientById()` (jamais `listerClients()`, pour rester résolu même si l'acquéreur a depuis été archivé) — `"Acquéreur indisponible"` si la résolution échoue malgré la garantie de FK (ADR-010) |
+| Intérêt | `interet` | `LABEL_INTERET[interet]` |
+| Retour | `retour` | Texte brut, jamais reformulé |
+| Prochaine étape | `prochaineEtape` | Affiché uniquement si présent |
+
+Complémentaire de l'historique dérivé (ligne courte, sans `retour` ni acquéreur nommé — voir
+"Historique dérivé du bien" ci-dessus) : aucun des deux n'est une reformulation de l'autre, ce sont
+deux granularités différentes des mêmes faits.
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

@@ -5,7 +5,8 @@ import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import type { ActionMetier } from "@/types/action";
 import type { NoteBien } from "@/types/noteBien";
-import type { CompteRenduVisite } from "@/types/compteRenduVisite";
+import type { ProfilAcquereur } from "@/types/client";
+import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
@@ -23,22 +24,24 @@ export default function BienTabs({
   actions,
   notes,
   comptesRendus,
+  acquereursParId = new Map(),
 }: {
   bien: Bien;
   dossier?: DossierBien;
   actions: ActionMetier[];
   notes: NoteBien[];
   comptesRendus: CompteRenduVisite[];
+  acquereursParId?: Map<string, ProfilAcquereur | undefined>;
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
-  // Contexte, Actions et Notes reposent sur des données réelles (bien, actionRepository,
-  // noteBienRepository), toujours disponibles — Notes reste affiché même vide, c'est justement
-  // là que le conseiller ajoute sa première note. Documents/Visites n'ont pas d'équivalent réel
-  // aujourd'hui (aucun stockage de documents, aucun suivi de visites effectuées) : masqués
-  // plutôt que de fabriquer un DossierBien artificiel pour un bien réel. Historique, lui, est
-  // dérivé de faits réels (bien.creeLe, action.creeLe/termineLe, comptes rendus de visite) quand
-  // aucun dossier mock n'existe.
+  // Contexte, Actions, Notes et Visites reposent sur des données réelles (bien, actionRepository,
+  // noteBienRepository, compteRenduVisiteRepository), toujours disponibles — Notes et Visites
+  // restent affichés même vides, c'est justement là que le conseiller ajoute sa première entrée.
+  // Documents n'a pas d'équivalent réel aujourd'hui (aucun stockage de documents) : masqué plutôt
+  // que de fabriquer un DossierBien artificiel pour un bien réel. Historique, lui, est dérivé de
+  // faits réels (bien.creeLe, action.creeLe/termineLe, comptes rendus de visite) quand aucun
+  // dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
     ? dossier.historique
     : deriverHistoriqueBien(bien, actions, comptesRendus);
@@ -47,12 +50,16 @@ export default function BienTabs({
     { id: "contexte", label: "Contexte" },
     ...(evenementsHistorique.length > 0 ? ([{ id: "historique", label: "Historique" }] as const) : []),
     { id: "notes", label: "Notes" },
-    ...(dossier ? ([{ id: "visites", label: "Visites" }, { id: "documents", label: "Documents" }] as const) : []),
+    { id: "visites", label: "Visites" },
+    ...(dossier ? ([{ id: "documents", label: "Documents" }] as const) : []),
     { id: "actions", label: "Actions" },
   ];
 
   const visitesAVenir = rendezVousDuJour.filter((rdv) => rdv.bien?.id === bien.id);
-  const visitesPassees = dossier ? [...dossier.visitesEffectuees].sort((a, b) => (a.date < b.date ? 1 : -1)) : [];
+  const visitesPasseesMock = dossier
+    ? [...dossier.visitesEffectuees].sort((a, b) => (a.date < b.date ? 1 : -1))
+    : [];
+  const comptesRendusTries = [...comptesRendus].sort((a, b) => (a.dateVisite < b.dateVisite ? 1 : -1));
 
   return (
     <div>
@@ -200,17 +207,45 @@ export default function BienTabs({
 
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Effectuées</p>
-            {visitesPassees.length === 0 ? (
-              <p className="text-[14px] text-[#94a3b8]">Aucune visite effectuée pour l'instant.</p>
+            {dossier ? (
+              visitesPasseesMock.length === 0 ? (
+                <p className="text-[14px] text-[#94a3b8]">Aucune visite effectuée pour l'instant.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {visitesPasseesMock.map((v) => (
+                    <div key={v.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                      <p className="text-[13px] font-medium text-[#64748b]">{formatDate(v.date)}</p>
+                      <p className="text-[14px] font-medium text-[#0f172a] mt-0.5">{v.client}</p>
+                      <p className="text-[13px] text-[#94a3b8] mt-1 leading-snug">{v.retour}</p>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : comptesRendusTries.length === 0 ? (
+              <p className="text-[14px] text-[#94a3b8]">Aucune visite effectuée enregistrée pour ce bien.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {visitesPassees.map((v) => (
-                  <div key={v.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-                    <p className="text-[13px] font-medium text-[#64748b]">{formatDate(v.date)}</p>
-                    <p className="text-[14px] font-medium text-[#0f172a] mt-0.5">{v.client}</p>
-                    <p className="text-[13px] text-[#94a3b8] mt-1 leading-snug">{v.retour}</p>
-                  </div>
-                ))}
+                {comptesRendusTries.map((cr) => {
+                  const acquereur = acquereursParId.get(cr.acquereurId);
+                  return (
+                    <div key={cr.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-[13px] font-medium text-[#64748b]">{formatDate(cr.dateVisite)}</p>
+                        <span className="text-[11px] text-[#94a3b8]">·</span>
+                        <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_INTERET[cr.interet]}</span>
+                      </div>
+                      <p className="text-[14px] font-medium text-[#0f172a]">
+                        {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                      </p>
+                      <p className="text-[13px] text-[#94a3b8] mt-1 leading-snug whitespace-pre-wrap">{cr.retour}</p>
+                      {cr.prochaineEtape && (
+                        <p className="text-[13px] text-[#94a3b8] mt-2 border-t border-[#f1f5f9] pt-2">
+                          Prochaine étape : {cr.prochaineEtape}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -29,7 +29,7 @@ export function deriverHistoriqueBien(
   }
 
   // Événement court uniquement — jamais le texte libre de `retour`, qui reste consultable dans
-  // la mémoire du dossier (page de préparation) et nulle part ailleurs.
+  // la mémoire du dossier (page de préparation) et dans l'onglet Visites de la fiche bien.
   for (const compteRendu of comptesRendus) {
     evenements.push({
       date: compteRendu.dateVisite,
