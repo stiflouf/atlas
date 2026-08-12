@@ -63,6 +63,21 @@ export function deriverHistoriqueBien(
   // consulte dans l'onglet Offres, pas dans l'historique.
   for (const offre of offres) {
     evenements.push({ date: offre.dateOffre, texte: `Offre reçue — ${formatPrix(offre.montant)}` });
+
+    // Exception à "pas d'événement pour un changement de statut" : les trois transitions finales
+    // portent désormais une date fiable (dateDecision, ADR-020), posée atomiquement avec le
+    // statut — jamais affiché si dateDecision manque (lignes historiques créées avant ADR-020,
+    // aucun backfill). Le motif n'apparaît jamais dans le texte de l'événement (déjà consultable
+    // dans l'onglet Offres) — l'historique reste un fait court, pas un détail.
+    if (offre.statut === "acceptee" && offre.dateDecision) {
+      evenements.push({ date: offre.dateDecision, texte: `Offre acceptée — ${formatPrix(offre.montant)}` });
+    }
+    if (offre.statut === "refusee" && offre.dateDecision) {
+      evenements.push({ date: offre.dateDecision, texte: `Offre refusée — ${formatPrix(offre.montant)}` });
+    }
+    if (offre.statut === "retiree" && offre.dateDecision) {
+      evenements.push({ date: offre.dateDecision, texte: `Offre retirée — ${formatPrix(offre.montant)}` });
+    }
   }
 
   // Un seul événement par compromis, à la création — jamais l'acquéreur nommé (même convention).
@@ -74,11 +89,14 @@ export function deriverHistoriqueBien(
   for (const c of compromis) {
     evenements.push({ date: c.dateSignature, texte: `Compromis structuré — ${formatPrix(c.prixConvenu)}` });
 
-    // Exception à "pas d'événement pour un changement de statut" : contrairement aux autres
-    // transitions, 'realise' porte désormais une date fiable (dateActeReelle, ADR-017), posée
-    // atomiquement avec le statut — jamais affiché si l'une des deux conditions manque.
+    // Exceptions à "pas d'événement pour un changement de statut" : 'realise' porte
+    // dateActeReelle (ADR-017), 'annule' porte désormais dateAnnulation (ADR-020) — chacune posée
+    // atomiquement avec son statut, jamais affichée si la date manque.
     if (c.statut === "realise" && c.dateActeReelle) {
       evenements.push({ date: c.dateActeReelle, texte: `Vente finalisée — ${formatPrix(c.prixConvenu)}` });
+    }
+    if (c.statut === "annule" && c.dateAnnulation) {
+      evenements.push({ date: c.dateAnnulation, texte: `Compromis annulé — ${formatPrix(c.prixConvenu)}` });
     }
   }
 

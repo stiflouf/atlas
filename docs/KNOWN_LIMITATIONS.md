@@ -91,10 +91,11 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Transitions de statut non réversibles en V1** — une fois `acceptee`/`refusee`/`retiree`,
   aucune action ne permet de revenir à `en_cours` ni de changer vers un autre statut final. Une
   erreur de saisie nécessite une intervention directe en base (ADR-015).
-- **Aucun historique des changements de statut** : ni dans l'onglet Offres (seul le statut courant
-  est affiché, pas les dates de transition), ni dans l'historique dérivé du bien (un seul
-  événement par offre, à la création — voir `docs/BUSINESS_RULES.md`). Conséquence du choix de ne
-  pas ajouter de champ `statutModifieLe` non demandé (ADR-015).
+- **Historique des changements de statut disponible depuis ADR-020, mais pas rétroactif** :
+  `dateDecision` produit désormais un événement d'historique par transition finale
+  (`"Offre acceptée/refusée/retirée"`), mais uniquement pour les offres modifiées après la mise en
+  place de cette fonctionnalité — les lignes déjà en `refusee`/`retiree` sans `dateDecision`
+  n'affichent jamais ce second événement, sans rattrapage automatique.
 - **Préparation de visite non enrichie** : la "Mémoire du dossier" (page de préparation) n'affiche
   pas encore les offres précédentes du couple bien/acquéreur — extension naturelle documentée mais
   non implémentée dans cette passe (ADR-015).
@@ -107,9 +108,11 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Transitions de statut non réversibles en V1** — une fois `realise`/`annule`, aucune action ne
   permet de revenir à `en_cours`. Une erreur de saisie (y compris `dateActeReelle`) nécessite une
   intervention directe en base (ADR-016/ADR-017).
-- **Historique des changements de statut limité à `realise`** : seule cette transition produit un
-  événement daté (`"Vente finalisée"`, grâce à `dateActeReelle` — ADR-017) ; `annule` n'en produit
-  toujours aucun, même limite qu'Offres (pas de champ de date de transition générique).
+- **Historique des changements de statut, `realise` et `annule` uniquement, pas rétroactif** :
+  `realise` produit `"Vente finalisée"` (grâce à `dateActeReelle`, ADR-017), `annule` produit
+  désormais `"Compromis annulé"` (grâce à `dateAnnulation`, ADR-020) — mais seulement pour les
+  compromis annulés après la mise en place de cette fonctionnalité, sans rattrapage automatique
+  des lignes déjà `annule` sans `dateAnnulation`.
 - **Sélection de l'offre acceptée non filtrée par acquéreur** : le formulaire "Ajouter un
   compromis" liste toutes les offres `acceptee` du bien, tous acquéreurs confondus (impossible de
   filtrer dynamiquement sans JS côté client) — si le conseiller choisit une offre d'un autre
@@ -151,6 +154,30 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   une offre même si le bien ou l'acquéreur est désormais archivé — choix volontaire (documenter un
   rapprochement entre faits existants n'est pas créer un nouveau fait commercial), mais qui
   diffère de la création d'une offre, elle bloquée sur une entité archivée.
+
+## Motifs et dates de perte (ADR-020)
+
+- **`dateDecision`/`motifPerte` (offres) et `dateAnnulation`/`motifAnnulation` (compromis) ne sont
+  jamais rétroactifs, aucun backfill** : les offres `refusee`/`retiree` et compromis `annule`
+  créés avant cette fonctionnalité restent valides sans date ni motif, et continuent de compter
+  dans les totaux par étape (`offresRefusees`, `offresRetirees`, `compromisAnnules`) — mais sont
+  silencieusement absents des répartitions par motif et des séries mensuelles, qui filtrent sur la
+  colonne correspondante non nulle. Aucune tâche de rattrapage n'est prévue.
+- **Un motif `NULL` historique n'est jamais reclassé vers `"autre"`** : la répartition par motif ne
+  contient que les motifs explicitement renseignés — un motif inconnu reste invisible dans cette
+  répartition plutôt que d'être fondu dans une catégorie fourre-tout qui fausserait sa taille
+  réelle.
+- **Aucun taux de conversion par cause en V1** : par exemple "des offres perdues pour désaccord de
+  prix, combien redeviennent une offre acceptée sur le même bien plus tard" n'est pas construit
+  dans cette passe — périmètre volontairement limité aux comptages/volumes/répartitions par motif
+  et par mois.
+- **Aucune déduction d'acteur depuis `refusee`/`retiree`** : ces deux statuts ne disent pas par
+  eux-mêmes qui est à l'origine de la perte (acquéreur ou vendeur) — seul le motif explicitement
+  choisi (`acquereur_se_retire`/`vendeur_se_retire`) le précise, et seulement si le conseiller l'a
+  sélectionné.
+- **`statutMandat` explicitement hors périmètre** : l'expiration ou la suspension d'un mandat
+  n'est pas une perte commerciale au sens de ce funnel (visite → offre → compromis → vente) — c'est
+  une notion orthogonale au cycle du mandat vendeur, analysable séparément plus tard si besoin.
 - **Moyenne de visites avant vente exclut les ventes sans compte rendu** du dénominateur plutôt
   que de les compter comme 0 — une vente conclue sans compte rendu enregistré (visite non
   formalisée, vente par un tiers, etc.) reste donc invisible dans cette moyenne plutôt que de la

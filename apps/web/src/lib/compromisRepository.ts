@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { compromis as compromisTable } from "@/db/schema";
 import type { Compromis, StatutCompromis } from "@/types/compromis";
+import type { MotifPerte } from "@/types/motifPerte";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -17,6 +18,8 @@ function ligneVersCompromis(ligne: LigneCompromis): Compromis {
     dateSignature: ligne.dateSignature,
     dateActe: ligne.dateActe ?? undefined,
     dateActeReelle: ligne.dateActeReelle ?? undefined,
+    dateAnnulation: ligne.dateAnnulation ?? undefined,
+    motifAnnulation: (ligne.motifAnnulation as MotifPerte | null) ?? undefined,
     statut: ligne.statut as StatutCompromis,
     creeLe: ligne.creeLe.toISOString(),
   };
@@ -88,14 +91,20 @@ export async function enregistrerCompromis(input: NouveauCompromis): Promise<Com
   return ligneVersCompromis(ligne);
 }
 
-// UPDATE pur du statut uniquement — réservée à la transition 'annule' (aucune donnée
-// supplémentaire). Aucune garde métier interne (transitions autorisées, archivage) : même
-// séparation que offreRepository.
-export async function changerStatutCompromis(id: string, statut: StatutCompromis): Promise<Compromis | undefined> {
+// Écriture atomique dédiée à la transition 'annule' (ADR-020, symétrique à
+// marquerCompromisRealise) : statut, dateAnnulation et motifAnnulation posés dans le même UPDATE —
+// jamais de fenêtre où le compromis serait 'annule' sans date ni motif. dateActeReelle n'est
+// jamais touchée ici (réservée à 'realise'). Aucune garde métier interne (transitions autorisées,
+// archivage) : même séparation que le reste du fichier.
+export async function marquerCompromisAnnule(
+  id: string,
+  dateAnnulation: string,
+  motifAnnulation: MotifPerte
+): Promise<Compromis | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(compromisTable)
-    .set({ statut })
+    .set({ statut: "annule", dateAnnulation, motifAnnulation })
     .where(eq(compromisTable.id, id))
     .returning();
   return ligne ? ligneVersCompromis(ligne) : undefined;

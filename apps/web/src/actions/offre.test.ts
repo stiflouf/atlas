@@ -15,7 +15,7 @@ const {
 } = await import("@/db/schema");
 const { creerBien, archiverBien, getBienById } = await import("@/lib/bienRepository");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
-const { enregistrerOffre, listerOffresPourBien } = await import("@/lib/offreRepository");
+const { enregistrerOffre, listerOffresPourBien, getOffreById } = await import("@/lib/offreRepository");
 const { listerLiensPourBien } = await import("@/lib/offreVisiteRepository");
 const { enregistrerCompteRenduVisite } = await import("@/lib/compteRenduVisiteRepository");
 const { ajouterOffreAction, changerStatutOffreAction } = await import("./offre");
@@ -225,7 +225,9 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
 describe("changerStatutOffreAction — garde-fous", () => {
   it("refuse explicitement (throw) sur une offre introuvable", async () => {
     await expect(
-      changerStatutOffreAction(formData({ offreId: "00000000-0000-0000-0000-000000000000", statut: "acceptee" }))
+      changerStatutOffreAction(
+        formData({ offreId: "00000000-0000-0000-0000-000000000000", statut: "acceptee", dateDecision: "2026-08-01" })
+      )
     ).rejects.toThrow(/introuvable/);
   });
 
@@ -241,7 +243,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee" }))
+      changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" }))
     ).rejects.toThrow(/archivé/);
   });
 
@@ -255,10 +257,14 @@ describe("changerStatutOffreAction — garde-fous", () => {
     });
     idsOffresCrees.push(offre.id);
 
-    await changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee" })).catch(() => {});
+    await changerStatutOffreAction(
+      formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" })
+    ).catch(() => {});
 
     await expect(
-      changerStatutOffreAction(formData({ offreId: offre.id, statut: "refusee" }))
+      changerStatutOffreAction(
+        formData({ offreId: offre.id, statut: "refusee", dateDecision: "2026-08-06", motifPerte: "autre" })
+      )
     ).rejects.toThrow(/statut final/);
   });
 
@@ -275,10 +281,109 @@ describe("changerStatutOffreAction — garde-fous", () => {
     const bienAvant = await getBienById(bien.id);
     expect(bienAvant?.offreEnCoursLe).toBeUndefined();
 
-    await changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee" })).catch(() => {});
+    await changerStatutOffreAction(
+      formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" })
+    ).catch(() => {});
 
     const bienApres = await getBienById(bien.id);
     expect(bienApres?.offreEnCoursLe).toBeUndefined();
     expect(bienApres?.compromisSigneLe).toBeUndefined();
+  });
+
+  it("refuse explicitement (throw) une transition sans dateDecision — aucune écriture (ADR-020)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("SANS-DATE-DECISION");
+    const offre = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offre.id);
+
+    await expect(
+      changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee" }))
+    ).rejects.toThrow(/date de décision/);
+
+    const inchangee = await getOffreById(offre.id);
+    expect(inchangee?.statut).toBe("en_cours");
+  });
+
+  it("refuse explicitement (throw) refusee/retiree sans motifPerte valide — aucune écriture", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("SANS-MOTIF");
+    const offre = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offre.id);
+
+    await expect(
+      changerStatutOffreAction(formData({ offreId: offre.id, statut: "refusee", dateDecision: "2026-08-06" }))
+    ).rejects.toThrow(/motif/);
+
+    const inchangee = await getOffreById(offre.id);
+    expect(inchangee?.statut).toBe("en_cours");
+    expect(inchangee?.motifPerte).toBeUndefined();
+  });
+
+  it("refuse explicitement (throw) un motifPerte fourni pour acceptee — jamais laissé sur une offre acceptée", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("MOTIF-SUR-ACCEPTEE");
+    const offre = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offre.id);
+
+    await expect(
+      changerStatutOffreAction(
+        formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-06", motifPerte: "desaccord_prix" })
+      )
+    ).rejects.toThrow(/n'a pas de sens/);
+
+    const inchangee = await getOffreById(offre.id);
+    expect(inchangee?.statut).toBe("en_cours");
+  });
+
+  it("refuse une offre pour un motif hors vocabulaire — aucune écriture", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("MOTIF-INVALIDE");
+    const offre = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offre.id);
+
+    await expect(
+      changerStatutOffreAction(
+        formData({ offreId: offre.id, statut: "retiree", dateDecision: "2026-08-06", motifPerte: "n'importe quoi" })
+      )
+    ).rejects.toThrow(/motif/);
+
+    const inchangee = await getOffreById(offre.id);
+    expect(inchangee?.statut).toBe("en_cours");
+  });
+
+  it("pose dateDecision et motifPerte sur une offre retirée valide", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("RETIREE-VALIDE");
+    const offre = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offre.id);
+
+    await changerStatutOffreAction(
+      formData({ offreId: offre.id, statut: "retiree", dateDecision: "2026-08-07", motifPerte: "acquereur_se_retire" })
+    ).catch(() => {});
+
+    const apres = await getOffreById(offre.id);
+    expect(apres?.statut).toBe("retiree");
+    expect(apres?.dateDecision).toBe("2026-08-07");
+    expect(apres?.motifPerte).toBe("acquereur_se_retire");
   });
 });

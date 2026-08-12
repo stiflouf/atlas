@@ -7,13 +7,18 @@ import { getOffreById } from "@/lib/offreRepository";
 import {
   enregistrerCompromis,
   getCompromisById,
-  changerStatutCompromis,
+  marquerCompromisAnnule,
   marquerCompromisRealise,
   listerCompromisPourBien,
 } from "@/lib/compromisRepository";
 import type { StatutCompromis } from "@/types/compromis";
+import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
 
 const TRANSITIONS_VALIDES: StatutCompromis[] = ["realise", "annule"];
+
+function parseMotifPerte(valeur: FormDataEntryValue | null): MotifPerte | undefined {
+  return MOTIFS_PERTE.includes(valeur as MotifPerte) ? (valeur as MotifPerte) : undefined;
+}
 
 function parseMontant(valeur: FormDataEntryValue | null): number | undefined {
   const montant = Number(valeur);
@@ -74,6 +79,9 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
 // archivé, si le compromis n'est plus 'en_cours', ou (transition 'realise' uniquement) si
 // dateActeReelle est absente/invalide — une vente ne doit jamais être marquée 'realise' sans date
 // réelle (ADR-017). L'écriture statut+dateActeReelle est atomique (marquerCompromisRealise).
+// Transition 'annule' (ADR-020) : dateAnnulation et motifAnnulation obligatoires, refus explicite
+// sinon, aucune écriture — écriture atomique via marquerCompromisAnnule. Aucune inférence
+// d'acteur : seul le motif choisi par le conseiller fait foi.
 // Ne modifie jamais compromisSigneLe, l'archivage du bien, ni stadeProjet de l'acquéreur —
 // gestes commerciaux volontairement séparés (ADR-014/ADR-016/ADR-017).
 export async function changerStatutCompromisAction(formData: FormData): Promise<void> {
@@ -104,7 +112,15 @@ export async function changerStatutCompromisAction(formData: FormData): Promise<
     }
     await marquerCompromisRealise(compromisId, dateActeReelle);
   } else {
-    await changerStatutCompromis(compromisId, statut);
+    const dateAnnulation = parseDateOptionnelle(formData.get("dateAnnulation"));
+    if (!dateAnnulation) {
+      throw new Error("La date d'annulation est obligatoire.");
+    }
+    const motifAnnulation = parseMotifPerte(formData.get("motifAnnulation"));
+    if (!motifAnnulation) {
+      throw new Error("Le motif de l'annulation est obligatoire.");
+    }
+    await marquerCompromisAnnule(compromisId, dateAnnulation, motifAnnulation);
   }
 
   redirect(`/biens/${compromisActuel.bienId}`);

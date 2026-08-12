@@ -178,7 +178,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, "acceptee");
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
 
     await expect(
       ajouterCompromisAction(
@@ -203,7 +203,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, "acceptee");
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
 
     await expect(
       ajouterCompromisAction(
@@ -250,7 +250,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, "acceptee");
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
 
     await ajouterCompromisAction(
       formData({
@@ -375,5 +375,73 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     expect(apres?.statut).toBe("realise");
     expect(apres?.dateActeReelle).toBe("2026-10-08");
     expect(apres?.dateActe).toBe("2026-10-01");
+  });
+
+  it("refuse explicitement (throw) le passage à annule sans dateAnnulation — aucune écriture (ADR-020)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("ANNULE-SANS-DATE");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    await expect(
+      changerStatutCompromisAction(
+        formData({ compromisId: compromisCree.id, statut: "annule", motifAnnulation: "autre" })
+      )
+    ).rejects.toThrow(/date d'annulation/);
+
+    const inchange = await getCompromisById(compromisCree.id);
+    expect(inchange?.statut).toBe("en_cours");
+    expect(inchange?.dateAnnulation).toBeUndefined();
+  });
+
+  it("refuse explicitement (throw) le passage à annule sans motifAnnulation valide — aucune écriture", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("ANNULE-SANS-MOTIF");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    await expect(
+      changerStatutCompromisAction(
+        formData({ compromisId: compromisCree.id, statut: "annule", dateAnnulation: "2026-08-15" })
+      )
+    ).rejects.toThrow(/motif/);
+
+    const inchange = await getCompromisById(compromisCree.id);
+    expect(inchange?.statut).toBe("en_cours");
+    expect(inchange?.motifAnnulation).toBeUndefined();
+  });
+
+  it("annule avec dateAnnulation et motifAnnulation valides, en conservant les autres champs", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("ANNULE-VALIDE");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    await changerStatutCompromisAction(
+      formData({
+        compromisId: compromisCree.id,
+        statut: "annule",
+        dateAnnulation: "2026-08-15",
+        motifAnnulation: "financement_refuse",
+      })
+    ).catch(() => {});
+
+    const apres = await getCompromisById(compromisCree.id);
+    expect(apres?.statut).toBe("annule");
+    expect(apres?.dateAnnulation).toBe("2026-08-15");
+    expect(apres?.motifAnnulation).toBe("financement_refuse");
+    expect(apres?.prixConvenu).toBe(300000);
   });
 });

@@ -205,6 +205,27 @@ antérieur. Débloque deux métriques dans `/dashboard` explicitement écartées
 visite → offre (Activité) et délai moyen visite → offre (Délais/pertes), toutes deux réservées aux
 visites explicitement liées.
 
+## 20. Motifs et dates de perte
+
+Audit des pertes commerciales (offre refusée/retirée, compromis annulé) : aucune date fiable de
+décision, aucun motif stocké jusqu'ici. Ajout de `dateDecision`/`motifPerte` sur `offres` et
+`dateAnnulation`/`motifAnnulation` sur `compromis` (ADR-020), posés atomiquement avec le statut
+(même patron que `marquerCompromisRealise`). Vocabulaire `MotifPerte` partagé (7 valeurs, dérivé
+d'un unique `as const`) — choisi explicitement par le conseiller, jamais déduit d'un texte libre
+ni d'un acteur implicite. `dateDecision` obligatoire pour les 3 transitions finales d'une offre,
+`motifPerte` obligatoire pour `refusee`/`retiree` et toujours `NULL` pour `acceptee` — imposé à la
+compilation via un type discriminé (`TransitionFinaleOffre`), pas seulement à l'exécution. Aucune
+corrélation `CHECK` SQL avec le statut (uniquement sur la valeur du motif) : les lignes historiques
+sans date ni motif restent valides, comptées dans les totaux par étape, mais absentes des
+répartitions par motif et des séries mensuelles — aucun backfill, aucun motif `NULL` reclassé en
+`"autre"`. `statutMandat` explicitement exclu du périmètre (cycle du mandat vendeur, pas une perte
+commerciale). Nouvelle section dashboard "Pertes commerciales" (`chargerPertes`, ex-`compromisAnnules`/
+`volumeCompromisAnnules` déplacées depuis `chargerDelaisPertes`, renommée `chargerDelais`) : pertes
+par étape, par motif, par mois, volume perdu jamais qualifié de "CA" (`volume des offres perdues`,
+`volume de transactions interrompues`). Trois nouveaux événements d'historique
+(`"Offre acceptée/refusée/retirée"`, `"Compromis annulé"`), datés par les nouveaux champs, jamais
+affichés sans eux. Pas de taux de conversion par cause en V1.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

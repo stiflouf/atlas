@@ -25,13 +25,13 @@ const {
 } = await import("@/db/schema");
 const { creerBien, archiverBien } = await import("./bienRepository");
 const { creerAcquereur } = await import("./clientRepository");
-const { enregistrerOffre } = await import("./offreRepository");
-const { enregistrerCompromis, changerStatutCompromis, marquerCompromisRealise } = await import(
+const { enregistrerOffre, changerStatutOffre } = await import("./offreRepository");
+const { enregistrerCompromis, marquerCompromisAnnule, marquerCompromisRealise } = await import(
   "./compromisRepository"
 );
 const { enregistrerCompteRenduVisite } = await import("./compteRenduVisiteRepository");
 const { lierVisiteAOffre } = await import("./offreVisiteRepository");
-const { chargerResultats, chargerPipeline, chargerActivite, chargerDelaisPertes } = await import(
+const { chargerResultats, chargerPipeline, chargerActivite, chargerDelais, chargerPertes } = await import(
   "./dashboardRepository"
 );
 
@@ -403,9 +403,9 @@ describe("dashboardRepository — chargerActivite", () => {
   });
 });
 
-describe("dashboardRepository — chargerDelaisPertes", () => {
+describe("dashboardRepository — chargerDelais", () => {
   it("delaiMoyenOffreCompromisJours exclut un compromis direct sans offreId (égalité avant/après)", async () => {
-    const avant = await chargerDelaisPertes();
+    const avant = await chargerDelais();
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("DELAIS-001");
     const c = await enregistrerCompromis({
       bienId: bien.id,
@@ -415,7 +415,7 @@ describe("dashboardRepository — chargerDelaisPertes", () => {
     });
     idsCompromisCrees.push(c.id);
 
-    const apres = await chargerDelaisPertes();
+    const apres = await chargerDelais();
 
     expect(apres.delaiMoyenOffreCompromisJours).toBe(avant.delaiMoyenOffreCompromisJours);
   });
@@ -438,7 +438,7 @@ describe("dashboardRepository — chargerDelaisPertes", () => {
     });
     idsCompromisCrees.push(c.id);
 
-    const { delaiMoyenOffreCompromisJours } = await chargerDelaisPertes();
+    const { delaiMoyenOffreCompromisJours } = await chargerDelais();
 
     expect(delaiMoyenOffreCompromisJours).toBeTypeOf("number");
   });
@@ -454,31 +454,13 @@ describe("dashboardRepository — chargerDelaisPertes", () => {
     idsCompromisCrees.push(c.id);
     await marquerCompromisRealise(c.id, "2026-08-20");
 
-    const { delaiMoyenCompromisActeJours } = await chargerDelaisPertes();
+    const { delaiMoyenCompromisActeJours } = await chargerDelais();
 
     expect(delaiMoyenCompromisActeJours).toBeTypeOf("number");
   });
 
-  it("compte et somme les compromis annulés (delta avant/après)", async () => {
-    const avant = await chargerDelaisPertes();
-    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DELAIS-004");
-    const c = await enregistrerCompromis({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      prixConvenu: 777000,
-      dateSignature: "2026-08-01",
-    });
-    idsCompromisCrees.push(c.id);
-    await changerStatutCompromis(c.id, "annule");
-
-    const apres = await chargerDelaisPertes();
-
-    expect(apres.compromisAnnules).toBe(avant.compromisAnnules + 1);
-    expect(apres.volumeCompromisAnnules).toBe(avant.volumeCompromisAnnules + 777000);
-  });
-
   it("delaiMoyenVisiteOffreJours reste inchangé pour une visite et une offre non liées entre elles (égalité avant/après)", async () => {
-    const avant = await chargerDelaisPertes();
+    const avant = await chargerDelais();
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("DELAIS-005");
     await creerCompteRendu(bien.id, acquereur.id, "2026-08-01");
     const o = await enregistrerOffre({
@@ -490,7 +472,7 @@ describe("dashboardRepository — chargerDelaisPertes", () => {
     idsOffresCrees.push(o.id);
     // Aucun lien posé entre cette visite et cette offre.
 
-    const apres = await chargerDelaisPertes();
+    const apres = await chargerDelais();
 
     expect(apres.delaiMoyenVisiteOffreJours).toBe(avant.delaiMoyenVisiteOffreJours);
   });
@@ -507,9 +489,161 @@ describe("dashboardRepository — chargerDelaisPertes", () => {
     idsOffresCrees.push(o.id);
     await lierVisiteAOffre(o.id, cr.id);
 
-    const { delaiMoyenVisiteOffreJours } = await chargerDelaisPertes();
+    const { delaiMoyenVisiteOffreJours } = await chargerDelais();
 
     expect(delaiMoyenVisiteOffreJours).toBeTypeOf("number");
     expect(delaiMoyenVisiteOffreJours).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("dashboardRepository — chargerPertes (ADR-020)", () => {
+  it("compte et somme les offres refusées/retirées (delta avant/après)", async () => {
+    const avant = await chargerPertes();
+    const { bien: bienR, acquereur: acqR } = await creerBienEtAcquereurDeTest("PERTES-001-REFUSEE");
+    const offreRefusee = await enregistrerOffre({
+      bienId: bienR.id,
+      acquereurId: acqR.id,
+      montant: 111000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offreRefusee.id);
+    await changerStatutOffre(offreRefusee.id, {
+      statut: "refusee",
+      dateDecision: "2026-08-05",
+      motifPerte: "desaccord_prix",
+    });
+
+    const { bien: bienT, acquereur: acqT } = await creerBienEtAcquereurDeTest("PERTES-002-RETIREE");
+    const offreRetiree = await enregistrerOffre({
+      bienId: bienT.id,
+      acquereurId: acqT.id,
+      montant: 222000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offreRetiree.id);
+    await changerStatutOffre(offreRetiree.id, {
+      statut: "retiree",
+      dateDecision: "2026-08-06",
+      motifPerte: "acquereur_se_retire",
+    });
+
+    const apres = await chargerPertes();
+
+    expect(apres.offresRefusees).toBe(avant.offresRefusees + 1);
+    expect(apres.offresRetirees).toBe(avant.offresRetirees + 1);
+    expect(apres.volumeOffresPerdues).toBe(avant.volumeOffresPerdues + 111000 + 222000);
+  });
+
+  it("compte et somme les compromis annulés (delta avant/après)", async () => {
+    const avant = await chargerPertes();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("PERTES-003");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 777000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    await marquerCompromisAnnule(c.id, "2026-08-10", "financement_refuse");
+
+    const apres = await chargerPertes();
+
+    expect(apres.compromisAnnules).toBe(avant.compromisAnnules + 1);
+    expect(apres.volumeCompromisAnnules).toBe(avant.volumeCompromisAnnules + 777000);
+  });
+
+  it("pertesOffresParMotif/pertesCompromisParMotif : une perte avec motif renseigné contribue à sa catégorie", async () => {
+    const { bien: bienO, acquereur: acqO } = await creerBienEtAcquereurDeTest("PERTES-004-OFFRE");
+    const avant = await chargerPertes();
+    const nombreAvantOffre =
+      avant.pertesOffresParMotif.find((p) => p.motif === "juridique_administratif")?.nombre ?? 0;
+    const offre = await enregistrerOffre({
+      bienId: bienO.id,
+      acquereurId: acqO.id,
+      montant: 130000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offre.id);
+    await changerStatutOffre(offre.id, {
+      statut: "refusee",
+      dateDecision: "2026-08-05",
+      motifPerte: "juridique_administratif",
+    });
+
+    const { bien: bienC, acquereur: acqC } = await creerBienEtAcquereurDeTest("PERTES-005-COMPROMIS");
+    const nombreAvantCompromis =
+      avant.pertesCompromisParMotif.find((p) => p.motif === "delai_calendrier")?.nombre ?? 0;
+    const c = await enregistrerCompromis({
+      bienId: bienC.id,
+      acquereurId: acqC.id,
+      prixConvenu: 140000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c.id);
+    await marquerCompromisAnnule(c.id, "2026-08-12", "delai_calendrier");
+
+    const apres = await chargerPertes();
+
+    expect(apres.pertesOffresParMotif.find((p) => p.motif === "juridique_administratif")?.nombre).toBe(
+      nombreAvantOffre + 1
+    );
+    expect(apres.pertesCompromisParMotif.find((p) => p.motif === "delai_calendrier")?.nombre).toBe(
+      nombreAvantCompromis + 1
+    );
+  });
+
+  it("pertesOffresParMois/pertesCompromisParMois regroupent par mois de dateDecision/dateAnnulation (mois distinctif)", async () => {
+    const { bien: bienO, acquereur: acqO } = await creerBienEtAcquereurDeTest("PERTES-006-OFFRE");
+    const offre = await enregistrerOffre({
+      bienId: bienO.id,
+      acquereurId: acqO.id,
+      montant: 150000,
+      dateOffre: "2031-05-01",
+    });
+    idsOffresCrees.push(offre.id);
+    await changerStatutOffre(offre.id, {
+      statut: "retiree",
+      dateDecision: "2031-05-15",
+      motifPerte: "autre",
+    });
+
+    const { bien: bienC, acquereur: acqC } = await creerBienEtAcquereurDeTest("PERTES-007-COMPROMIS");
+    const c = await enregistrerCompromis({
+      bienId: bienC.id,
+      acquereurId: acqC.id,
+      prixConvenu: 160000,
+      dateSignature: "2031-06-01",
+    });
+    idsCompromisCrees.push(c.id);
+    await marquerCompromisAnnule(c.id, "2031-06-20", "autre");
+
+    const { pertesOffresParMois, pertesCompromisParMois } = await chargerPertes();
+
+    expect(pertesOffresParMois).toContainEqual({ mois: "2031-05", montant: 150000 });
+    expect(pertesCompromisParMois).toContainEqual({ mois: "2031-06", montant: 160000 });
+  });
+
+  it("une perte SANS date ni motif (ligne historique simulée) compte dans les totaux par étape mais jamais dans les répartitions par motif ou par mois — aucun backfill, aucune reclassification (ADR-020)", async () => {
+    const avant = await chargerPertes();
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("PERTES-008-HISTORIQUE");
+    const offre = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 999000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(offre.id);
+    // Simule une ligne créée avant ADR-020 : statut final posé directement en base, sans passer
+    // par changerStatutOffre — donc sans dateDecision ni motifPerte.
+    await getDb().update(offresTable).set({ statut: "refusee" }).where(eq(offresTable.id, offre.id));
+
+    const apres = await chargerPertes();
+
+    expect(apres.offresRefusees).toBe(avant.offresRefusees + 1);
+    expect(apres.volumeOffresPerdues).toBe(avant.volumeOffresPerdues + 999000);
+    const sommeNombreAvant = avant.pertesOffresParMotif.reduce((acc, p) => acc + p.nombre, 0);
+    const sommeNombreApres = apres.pertesOffresParMotif.reduce((acc, p) => acc + p.nombre, 0);
+    expect(sommeNombreApres).toBe(sommeNombreAvant);
+    expect(apres.pertesOffresParMois).toEqual(avant.pertesOffresParMois);
   });
 });

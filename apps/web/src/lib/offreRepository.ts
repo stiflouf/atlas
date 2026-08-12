@@ -3,6 +3,7 @@ import { getDb, type Executeur } from "@/db/client";
 import { offres as offresTable } from "@/db/schema";
 import type { Offre, StatutOffre } from "@/types/offre";
 import type { OffreVisite } from "@/types/offreVisite";
+import type { MotifPerte } from "@/types/motifPerte";
 import { lierVisiteAOffre } from "@/lib/offreVisiteRepository";
 import { marquerOffreEnCours } from "@/lib/bienRepository";
 
@@ -19,6 +20,8 @@ function ligneVersOffre(ligne: LigneOffre): Offre {
     dateOffre: ligne.dateOffre,
     statut: ligne.statut as StatutOffre,
     dateValidite: ligne.dateValidite ?? undefined,
+    dateDecision: ligne.dateDecision ?? undefined,
+    motifPerte: (ligne.motifPerte as MotifPerte | null) ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
   };
 }
@@ -113,13 +116,27 @@ export async function enregistrerOffreAvecLiensEtJalon(
   });
 }
 
-// UPDATE pur du statut uniquement — aucune garde métier interne (transitions autorisées,
-// archivage) : même séparation que bienRepository, la garde vit dans la Server Action.
-export async function changerStatutOffre(id: string, statut: StatutOffre): Promise<Offre | undefined> {
+// Type discriminé (ADR-020) plutôt que des paramètres optionnels plats : rend l'état "motifPerte
+// renseigné pour une offre acceptee" irreprésentable à la compilation, pas seulement vérifié à
+// l'exécution — dateDecision obligatoire pour les trois transitions finales, motifPerte
+// obligatoire uniquement pour refusee/retiree, absent pour acceptee.
+export type TransitionFinaleOffre =
+  | { statut: "acceptee"; dateDecision: string }
+  | { statut: "refusee" | "retiree"; dateDecision: string; motifPerte: MotifPerte };
+
+// UPDATE atomique (statut + dateDecision + motifPerte ensemble, même principe que
+// marquerCompromisRealise) — aucune garde métier interne (bien/acquéreur archivés, offre déjà
+// dans un statut final) : même séparation que le reste du fichier, la garde vit dans la Server
+// Action.
+export async function changerStatutOffre(id: string, transition: TransitionFinaleOffre): Promise<Offre | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(offresTable)
-    .set({ statut })
+    .set({
+      statut: transition.statut,
+      dateDecision: transition.dateDecision,
+      motifPerte: transition.statut === "acceptee" ? null : transition.motifPerte,
+    })
     .where(eq(offresTable.id, id))
     .returning();
   return ligne ? ligneVersOffre(ligne) : undefined;

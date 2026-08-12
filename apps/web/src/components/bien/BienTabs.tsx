@@ -10,6 +10,7 @@ import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite
 import { LABEL_CATEGORIE_DOCUMENT, type CategorieDocument, type DocumentBien } from "@/types/documentBien";
 import { LABEL_STATUT_OFFRE, type Offre } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS, type Compromis } from "@/types/compromis";
+import { MOTIFS_PERTE, LABEL_MOTIF_PERTE } from "@/types/motifPerte";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
@@ -490,12 +491,46 @@ export default function BienTabs({
                     {offre.dateValidite && (
                       <p className="text-[13px] text-[#94a3b8] mt-1">Valable jusqu'au {formatDate(offre.dateValidite)}</p>
                     )}
+                    {offre.dateDecision && (
+                      <p className="text-[13px] text-[#94a3b8] mt-1">
+                        Décidée le {formatDate(offre.dateDecision)}
+                        {offre.motifPerte && ` — ${LABEL_MOTIF_PERTE[offre.motifPerte]}`}
+                      </p>
+                    )}
                     {offre.statut === "en_cours" && !bien.archiveLe && (
-                      <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
+                      <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
                         {(["acceptee", "refusee", "retiree"] as const).map((statut) => (
-                          <form key={statut} action={changerStatutOffreAction}>
+                          <form
+                            key={statut}
+                            action={changerStatutOffreAction}
+                            className="flex flex-wrap items-center gap-2"
+                          >
                             <input type="hidden" name="offreId" value={offre.id} />
                             <input type="hidden" name="statut" value={statut} />
+                            <input
+                              type="date"
+                              name="dateDecision"
+                              required
+                              defaultValue={new Date().toISOString().slice(0, 10)}
+                              className="border border-[#e2e8f0] rounded-lg px-2 py-1 text-[12px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                            />
+                            {statut !== "acceptee" && (
+                              <select
+                                name="motifPerte"
+                                required
+                                defaultValue=""
+                                className="border border-[#e2e8f0] rounded-lg px-2 py-1 text-[12px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              >
+                                <option value="" disabled>
+                                  Motif
+                                </option>
+                                {MOTIFS_PERTE.map((motif) => (
+                                  <option key={motif} value={motif}>
+                                    {LABEL_MOTIF_PERTE[motif]}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
                             <button
                               type="submit"
                               className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
@@ -684,6 +719,12 @@ export default function BienTabs({
                     {c.dateActeReelle && (
                       <p className="text-[13px] text-[#16a34a] mt-1">Acte signé le {formatDate(c.dateActeReelle)}</p>
                     )}
+                    {c.dateAnnulation && (
+                      <p className="text-[13px] text-[#94a3b8] mt-1">
+                        Annulé le {formatDate(c.dateAnnulation)}
+                        {c.motifAnnulation && ` — ${LABEL_MOTIF_PERTE[c.motifAnnulation]}`}
+                      </p>
+                    )}
                     {c.statut === "en_cours" && !bien.archiveLe && (
                       <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
                         <form action={changerStatutCompromisAction} className="flex items-end gap-2">
@@ -706,12 +747,37 @@ export default function BienTabs({
                             Marquer réalisé
                           </button>
                         </form>
-                        <form action={changerStatutCompromisAction}>
+                        <form action={changerStatutCompromisAction} className="flex items-end gap-2">
                           <input type="hidden" name="compromisId" value={c.id} />
                           <input type="hidden" name="statut" value="annule" />
+                          <label className="text-[11px] text-[#94a3b8]">
+                            Date d'annulation
+                            <input
+                              type="date"
+                              name="dateAnnulation"
+                              required
+                              defaultValue={new Date().toISOString().slice(0, 10)}
+                              className="block mt-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                            />
+                          </label>
+                          <select
+                            name="motifAnnulation"
+                            required
+                            defaultValue=""
+                            className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                          >
+                            <option value="" disabled>
+                              Motif
+                            </option>
+                            {MOTIFS_PERTE.map((motif) => (
+                              <option key={motif} value={motif}>
+                                {LABEL_MOTIF_PERTE[motif]}
+                              </option>
+                            ))}
+                          </select>
                           <button
                             type="submit"
-                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
                           >
                             Annuler
                           </button>

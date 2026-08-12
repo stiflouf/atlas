@@ -115,19 +115,44 @@ describe("offreRepository (intégration Postgres)", () => {
     });
     idsOffresCrees.push(offre.id);
 
-    const acceptee = await changerStatutOffre(offre.id, "acceptee");
+    const acceptee = await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-06" });
 
     expect(acceptee?.statut).toBe("acceptee");
     expect(acceptee?.montant).toBe(350000);
     expect(acceptee?.acquereurId).toBe(acquereur.id);
     expect(acceptee?.bienId).toBe(bien.id);
     expect(acceptee?.dateOffre).toBe("2026-08-05");
+    expect(acceptee?.dateDecision).toBe("2026-08-06");
+    expect(acceptee?.motifPerte).toBeUndefined();
   });
 
   it("changerStatutOffre() retourne undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(changerStatutOffre("offre-mock", "acceptee")).resolves.toBeUndefined();
     await expect(
-      changerStatutOffre("00000000-0000-0000-0000-000000000000", "acceptee")
+      changerStatutOffre("offre-mock", { statut: "acceptee", dateDecision: "2026-08-01" })
     ).resolves.toBeUndefined();
+    await expect(
+      changerStatutOffre("00000000-0000-0000-0000-000000000000", { statut: "acceptee", dateDecision: "2026-08-01" })
+    ).resolves.toBeUndefined();
+  });
+
+  it("changerStatutOffre() pose dateDecision et motifPerte atomiquement pour refusee/retiree (ADR-020)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("003");
+    const offre = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 360000,
+      dateOffre: "2026-08-05",
+    });
+    idsOffresCrees.push(offre.id);
+
+    const refusee = await changerStatutOffre(offre.id, {
+      statut: "refusee",
+      dateDecision: "2026-08-12",
+      motifPerte: "desaccord_prix",
+    });
+
+    expect(refusee?.statut).toBe("refusee");
+    expect(refusee?.dateDecision).toBe("2026-08-12");
+    expect(refusee?.motifPerte).toBe("desaccord_prix");
   });
 });

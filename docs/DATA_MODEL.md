@@ -365,7 +365,7 @@ par le Route Handler `/api/documents/[id]`.
 ## `offres`
 
 **Rôle** : offre d'achat structurée sur un bien — bien, acquéreur, montant, date, statut, date de
-validité optionnelle. Voir ADR-015.
+validité optionnelle, date de décision et motif de perte (ADR-020). Voir ADR-015 et ADR-020.
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
@@ -374,26 +374,33 @@ validité optionnelle. Voir ADR-015.
 | `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE CASCADE`) | non | vraie FK |
 | `montant` | integer | non | immuable après création |
 | `date_offre` | date | non | immuable après création |
-| `statut` | text | non | défaut `"en_cours"`, `CHECK` — seul champ mutable (`UPDATE` en place, ADR-015) |
+| `statut` | text | non | défaut `"en_cours"`, `CHECK` — seul champ mutable avec `date_decision`/`motif_perte` (`UPDATE` atomique, ADR-015/ADR-020) |
 | `date_validite` | date | **oui** | optionnel |
+| `date_decision` | date | **oui** | posée atomiquement avec `statut` pour les 3 transitions finales (`acceptee`/`refusee`/`retiree`, ADR-020) ; `NULL` sur les lignes créées avant cette fonctionnalité, aucun backfill |
+| `motif_perte` | text | **oui** | `CHECK` sur la valeur (vocabulaire `MotifPerte`) uniquement, jamais sur son obligation ; obligatoire pour `refusee`/`retiree`, toujours `NULL` pour `acceptee` — appliqué côté Server Action (type discriminé `TransitionFinaleOffre`) |
 | `cree_le` | timestamptz | non | |
 
-**Contrainte `CHECK`** : `statut IN ('en_cours','acceptee','refusee','retiree')`. Transitions
-autorisées (`en_cours` → une valeur finale, jamais l'inverse) validées côté Server Action, pas en
-`CHECK` SQL.
+**Contrainte `CHECK`** : `statut IN ('en_cours','acceptee','refusee','retiree')` ;
+`motif_perte IS NULL OR motif_perte IN (...)` (les 7 valeurs de `MotifPerte`, voir plus bas).
+Transitions autorisées (`en_cours` → une valeur finale, jamais l'inverse), et l'obligation
+conditionnelle de `date_decision`/`motif_perte` selon le statut, sont validées côté Server Action,
+jamais en `CHECK` SQL — une contrainte corrélée au statut casserait les lignes historiques sans
+date ni motif (aucun backfill, ADR-020).
 
-Pas de `modifie_le` distinct — seul `statut` change après création, en place. Relation
-fonctionnelle : lue par `listerOffresPourBien()`/`listerOffresPourAcquereur()`/`getOffreById()`
+Pas de `modifie_le` distinct — seuls `statut`/`date_decision`/`motif_perte` changent après
+création, en place. Relation fonctionnelle : lue par
+`listerOffresPourBien()`/`listerOffresPourAcquereur()`/`getOffreById()`
 (`src/lib/offreRepository.ts`), écrite par `ajouterOffreAction`/`changerStatutOffreAction`
-(`src/actions/offre.ts`). Créer une offre pose aussi `biens.offreEnCoursLe` (couplage
-unidirectionnel, ADR-015) ; changer son statut ne modifie jamais
-`offreEnCoursLe`/`compromisSigneLe`.
+(`src/actions/offre.ts`, qui construit un `TransitionFinaleOffre` — type discriminé rendant
+`motif_perte` renseigné pour `acceptee` irreprésentable à la compilation). Créer une offre pose
+aussi `biens.offreEnCoursLe` (couplage unidirectionnel, ADR-015) ; changer son statut ne modifie
+jamais `offreEnCoursLe`/`compromisSigneLe`.
 
 ## `compromis`
 
 **Rôle** : compromis de vente structuré — bien, acquéreur, prix convenu, date de signature, date
-d'acte prévue optionnelle, date d'acte réelle, statut, lien optionnel vers l'offre acceptée
-d'origine. Voir ADR-016 et ADR-017.
+d'acte prévue optionnelle, date d'acte réelle, date d'annulation et motif d'annulation (ADR-020),
+statut, lien optionnel vers l'offre acceptée d'origine. Voir ADR-016, ADR-017 et ADR-020.
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
@@ -405,25 +412,49 @@ d'origine. Voir ADR-016 et ADR-017.
 | `date_signature` | date | non | immuable après création |
 | `date_acte` | date | **oui** | **prévue**, saisie à la création, jamais modifiée ensuite (ADR-017) |
 | `date_acte_reelle` | date | **oui** | **constatée**, posée uniquement au passage à `realise`, atomiquement avec le statut — jamais fusionnée avec `date_acte` (ADR-017) |
-| `statut` | text | non | défaut `"en_cours"`, `CHECK` — seul champ mutable (`UPDATE` en place, ADR-016) |
+| `date_annulation` | date | **oui** | posée atomiquement avec `statut = 'annule'` uniquement (ADR-020) ; jamais touchée par `realise` ; `NULL` sur les lignes créées avant cette fonctionnalité, aucun backfill |
+| `motif_annulation` | text | **oui** | `CHECK` sur la valeur (vocabulaire `MotifPerte`) uniquement ; obligatoire pour `annule`, appliqué côté Server Action |
+| `statut` | text | non | défaut `"en_cours"`, `CHECK` — seul champ mutable avec `date_acte_reelle` ou `date_annulation`/`motif_annulation` selon la transition (`UPDATE` atomique, ADR-016/ADR-017/ADR-020) |
 | `cree_le` | timestamptz | non | |
 
-**Contrainte `CHECK`** : `statut IN ('en_cours','realise','annule')`. Transitions autorisées
-(`en_cours` → une valeur finale, jamais l'inverse), cohérence de l'offre liée (même bien, même
-acquéreur, statut `acceptee`), et obligation de `date_acte_reelle` pour la transition `realise` —
-toutes validées côté Server Action, pas en `CHECK` SQL. Un seul compromis `en_cours` par bien à la
-fois : garde applicative, pas une contrainte SQL d'unicité.
+**Contrainte `CHECK`** : `statut IN ('en_cours','realise','annule')` ;
+`motif_annulation IS NULL OR motif_annulation IN (...)` (mêmes 7 valeurs `MotifPerte` qu'`offres`).
+Transitions autorisées (`en_cours` → une valeur finale, jamais l'inverse), cohérence de l'offre
+liée (même bien, même acquéreur, statut `acceptee`), obligation de `date_acte_reelle` pour
+`realise`, et obligation de `date_annulation`/`motif_annulation` pour `annule` — toutes validées
+côté Server Action, pas en `CHECK` SQL (même raison qu'`offres.date_decision`/`motif_perte` :
+aucun backfill possible sur une contrainte corrélée au statut). Un seul compromis `en_cours` par
+bien à la fois : garde applicative, pas une contrainte SQL d'unicité.
 
 Pas de `modifie_le` distinct. Relation fonctionnelle : lue par
 `listerCompromisPourBien()`/`listerCompromisPourAcquereur()`/`getCompromisById()`
 (`src/lib/compromisRepository.ts`), écrite par `ajouterCompromisAction` /
 `changerStatutCompromisAction` (`src/actions/compromis.ts`, qui appelle
-`changerStatutCompromis()` pour `annule` et `marquerCompromisRealise()` pour `realise` — deux
-fonctions repository distinctes, la seconde posant `statut` et `date_acte_reelle` dans un seul
-`UPDATE` atomique). Créer un compromis pose aussi `biens.compromisSigneLe` (couplage
-unidirectionnel, ADR-016) ; changer son statut ne le modifie jamais. `date_acte`/`date_acte_reelle`
-distinctes délibérément conservées pour permettre plus tard un suivi de pipeline/délais/CA
-prévisionnel vs réalisé (ADR-017) — aucun calcul de ce type n'existe dans cette passe.
+`marquerCompromisAnnule()` pour `annule` et `marquerCompromisRealise()` pour `realise` — deux
+fonctions repository distinctes et mutuellement exclusives, chacune posant son statut et ses
+champs dédiés dans un seul `UPDATE` atomique). Créer un compromis pose aussi
+`biens.compromisSigneLe` (couplage unidirectionnel, ADR-016) ; changer son statut ne le modifie
+jamais. `date_acte`/`date_acte_reelle` distinctes délibérément conservées pour permettre plus tard
+un suivi de pipeline/délais/CA prévisionnel vs réalisé (ADR-017) — aucun calcul de ce type
+n'existe dans cette passe.
+
+## Vocabulaire `MotifPerte` (ADR-020)
+
+Partagé entre `offres.motif_perte` et `compromis.motif_annulation` — un seul type TypeScript
+(`src/types/motifPerte.ts`), dérivé d'un unique tableau `as const` (`MOTIFS_PERTE`), source de
+vérité unique dupliquée à la main dans les deux `CHECK` SQL (même convention que
+`offres_statut_check`/`compromis_statut_check`, qui dupliquent déjà leurs valeurs sans mécanisme de
+synchronisation automatique) :
+
+```
+financement_refuse | acquereur_se_retire | vendeur_se_retire | desaccord_prix
+| juridique_administratif | delai_calendrier | autre
+```
+
+Toujours choisi explicitement par le conseiller dans un menu fermé au moment de la transition,
+jamais déduit d'un texte libre (`retour` des comptes rendus, notes) ni d'un acteur implicite —
+`retiree`/`refusee` ne disent pas par eux-mêmes qui est à l'origine de la perte, seul le motif
+choisi fait foi.
 
 ## `offre_visites`
 
@@ -454,12 +485,15 @@ Créée soit dans la même transaction que l'offre (`enregistrerOffreAvecLiensEt
 
 ## Tableau de bord commercial (`dashboardRepository.ts`)
 
-`src/lib/dashboardRepository.ts` (lecture seule, ADR-018/ADR-019) agrège
+`src/lib/dashboardRepository.ts` (lecture seule, ADR-018/ADR-019/ADR-020) agrège
 `compromis`/`offres`/`comptes_rendus_visite`/`biens`/`offre_visites` existants via
 `COUNT`/`SUM`/`AVG`/`GROUP BY` exécutés par Postgres — jamais recalculé en mémoire côté
-application. Voir `docs/BUSINESS_RULES.md`
+application. `chargerDelaisPertes()` a été scindée en `chargerDelais()` et `chargerPertes()`
+(ADR-020) : les compromis annulés (compteur et volume) ont été déplacés de la première vers la
+seconde, sans duplication. Voir `docs/BUSINESS_RULES.md`
 pour le détail des métriques et ADR-018 pour la règle d'archivage et les métriques écartées ;
-ADR-019 pour `offre_visites` et les métriques visite → offre.
+ADR-019 pour `offre_visites` et les métriques visite → offre ; ADR-020 pour les motifs/dates de
+perte et la famille "Pertes commerciales".
 
 ## Migrations
 
@@ -477,6 +511,7 @@ ADR-019 pour `offre_visites` et les métriques visite → offre.
 | `0009_high_lenny_balinger.sql` | `compromis` |
 | `0010_tiny_earthquake.sql` | `date_acte_reelle` sur `compromis` |
 | `0011_friendly_captain_flint.sql` | `offre_visites` |
+| `0012_furry_cassandra_nova.sql` | `date_decision`/`motif_perte` sur `offres`, `date_annulation`/`motif_annulation` sur `compromis` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

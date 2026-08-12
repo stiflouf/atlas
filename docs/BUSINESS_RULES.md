@@ -259,13 +259,17 @@ ADR-015.
 | Créer une offre — refus | Bien/acquéreur introuvable, archivé, ou montant invalide | `throw` explicite (`ajouterOffreAction`) |
 | Changer le statut | Offre `en_cours`, bien et acquéreur non archivés | `en_cours` → `acceptee`/`refusee`/`retiree` uniquement — jamais l'inverse, jamais entre deux valeurs finales |
 | Changer le statut — refus | Offre introuvable, bien/acquéreur archivé, ou offre déjà dans un statut final | `throw` explicite (`changerStatutOffreAction`) |
+| `dateDecision` (ADR-020) | Obligatoire pour les trois transitions finales | `throw` explicite si absente, **aucune écriture** — posée atomiquement avec `statut` (`changerStatutOffre`) |
+| `motifPerte` (ADR-020) | Obligatoire pour `refusee`/`retiree` ; doit rester `NULL` pour `acceptee` | `throw` explicite si absent/invalide pour `refusee`/`retiree`, ou si fourni pour `acceptee` — type discriminé `TransitionFinaleOffre` rendant ce dernier cas irreprésentable à la compilation |
 | Couplage avec le statut commercial | Toujours | Créer une offre pose `offreEnCoursLe` ; changer son statut **ne modifie jamais** `offreEnCoursLe`/`compromisSigneLe` — gestes commerciaux volontairement séparés (ADR-014 non touchée) |
 | Consultation | Toujours | `listerOffresPourBien()`/`listerOffresPourAcquereur()`/`getOffreById()` résolvent toujours, même sur un bien/acquéreur archivé |
 
-**Historique dérivé** : un seul événement par offre, à la création (`"Offre reçue — {montant}"`),
-**sans nommer l'acquéreur** (même convention que les visites — le détail vit dans l'onglet Offres).
-Aucun événement pour un changement de statut : pas de date de transition fiable disponible (pas de
-champ `statutModifieLe`, volontairement absent du modèle).
+**Historique dérivé** : un événement par offre à la création (`"Offre reçue — {montant}"`), plus un
+second événement à la transition finale — `"Offre acceptée/refusée/retirée — {montant}"`, daté par
+`dateDecision`, uniquement si cette date est présente (ADR-020 ; lignes créées avant cette
+fonctionnalité, sans aucun backfill, n'affichent jamais ce second événement). **Sans nommer
+l'acquéreur** (même convention que les visites) et **sans jamais afficher le motif** dans le texte
+de l'historique — le détail vit dans l'onglet Offres.
 
 ## Compromis structuré
 
@@ -282,8 +286,9 @@ mutable, `UPDATE` en place (même patron qu'`offres.statut`).
 | Créer un compromis | Bien et acquéreur réels, non archivés ; prix convenu > 0 ; aucun compromis `en_cours` déjà présent pour ce bien | `enregistrerCompromis(...)` **puis** `marquerCompromisSigne(bienId)` — un seul geste |
 | Créer un compromis — refus | Bien/acquéreur introuvable ou archivé, prix invalide, ou compromis déjà `en_cours` pour ce bien | `throw` explicite (`ajouterCompromisAction`) — garde d'unicité applicative, pas une contrainte SQL |
 | Offre liée (`offreId` optionnel) | Fournie | Doit exister, appartenir au même bien, au même acquéreur, et être `acceptee` — sinon `throw` explicite spécifique à chaque cas |
-| Changer le statut vers `annule` | Compromis `en_cours`, bien et acquéreur non archivés | `changerStatutCompromis(id, "annule")` |
-| Changer le statut vers `realise` | Compromis `en_cours`, bien et acquéreur non archivés, `dateActeReelle` fournie et valide | `marquerCompromisRealise(id, dateActeReelle)` — **écriture atomique** : `statut` et `dateActeReelle` posés dans le même `UPDATE` (ADR-017) |
+| Changer le statut vers `annule` | Compromis `en_cours`, bien et acquéreur non archivés, `dateAnnulation` et `motifAnnulation` fournis et valides | `marquerCompromisAnnule(id, dateAnnulation, motifAnnulation)` — **écriture atomique** : `statut`, `dateAnnulation` et `motifAnnulation` posés dans le même `UPDATE` (ADR-020) |
+| Changer le statut vers `annule` — refus | `dateAnnulation` absente, ou `motifAnnulation` absent/hors vocabulaire | `throw` explicite, **aucune écriture** |
+| Changer le statut vers `realise` | Compromis `en_cours`, bien et acquéreur non archivés, `dateActeReelle` fournie et valide | `marquerCompromisRealise(id, dateActeReelle)` — **écriture atomique** : `statut` et `dateActeReelle` posés dans le même `UPDATE` (ADR-017) ; ne touche jamais `dateAnnulation`/`motifAnnulation` |
 | Changer le statut vers `realise` — refus | `dateActeReelle` absente ou invalide | `throw` explicite, **aucune écriture** — un compromis ne peut jamais devenir `realise` sans date réelle |
 | Changer le statut — refus (commun) | Compromis introuvable, bien/acquéreur archivé, ou compromis déjà dans un statut final | `throw` explicite (`changerStatutCompromisAction`) |
 | `dateActe` (prévue) vs `dateActeReelle` (constatée) | Toujours | Deux champs strictement distincts, jamais fusionnés — `dateActe` immuable après création, `dateActeReelle` posée uniquement au passage à `realise` (ADR-017) |
@@ -296,9 +301,10 @@ mutable, `UPDATE` en place (même patron qu'`offres.statut`).
 distinct de l'événement générique ADR-014 (`"Compromis signé"`, dérivé de `compromisSigneLe`), qui
 continue de coexister séparément — le premier est la création de l'entité détaillée, le second le
 jalon commercial synthétique du bien. Aucun événement pour un changement de statut, **sauf**
-`realise` avec `dateActeReelle` présente : `"Vente finalisée — {prixConvenu}"`, daté par
-`dateActeReelle` — exception assumée à "pas d'événement sans date fiable" puisque l'écriture
-atomique garantit justement cette date (ADR-017).
+`realise` avec `dateActeReelle` présente (`"Vente finalisée — {prixConvenu}"`, ADR-017) et
+**sauf** `annule` avec `dateAnnulation` présente (`"Compromis annulé — {prixConvenu}"`, ADR-020) —
+chacune datée par son champ dédié, jamais affichée si la date manque (aucun backfill), jamais avec
+le motif dans le texte de l'événement.
 
 **Pilotage futur (non construit dans cette passe)** : la distinction `dateActe`/`dateActeReelle`
 est délibérément conservée pour permettre plus tard, sans changement de modèle, un suivi de
@@ -315,9 +321,10 @@ Convention de retour : un compteur/une somme à `0` est une vraie valeur mesuré
 moyenne ou un délai dont le dénominateur est vide retourne `undefined` (affiché "—"), jamais `0`
 (même principe qu'ADR-009 appliqué aux agrégats).
 
-**Règle d'archivage** : Résultats/Activité/Délais-pertes incluent les biens et acquéreurs
-archivés (l'historique ne se réécrit pas rétroactivement) ; Pipeline exclut les biens archivés
-uniquement (jointure `biens.archive_le is null` — l'archivage acquéreur n'est pas pris en compte).
+**Règle d'archivage** : Résultats/Activité/Délais/Pertes commerciales incluent les biens et
+acquéreurs archivés (l'historique ne se réécrit pas rétroactivement) ; Pipeline exclut les biens
+archivés uniquement (jointure `biens.archive_le is null` — l'archivage acquéreur n'est pas pris en
+compte).
 
 | Famille | Métrique | Formule / source | Réserve affichée dans l'UI |
 |---|---|---|---|
@@ -332,17 +339,23 @@ uniquement (jointure `biens.archive_le is null` — l'archivage acquéreur n'est
 | Activité | Visites / offres / compromis enregistrés | `count(*)` sur chaque table, sans filtre d'archivage | — |
 | Activité | Moyenne de visites avant vente | Moyenne, par vente `realise`, du nombre de `comptes_rendus_visite` du même couple bien/acquéreur antérieurs à `date_signature` — **ventes sans compte rendu exclues du dénominateur**, jamais comptées comme 0 | "Calculé uniquement sur les ventes disposant d'au moins un compte rendu de visite" |
 | Activité | Taux visite → offre | Comptes rendus distincts référencés par au moins une ligne `offre_visites`, sur le total des comptes rendus enregistrés (ADR-019) — lien explicite uniquement, jamais par proximité de date | "Calculé uniquement à partir des visites explicitement associées à une offre" |
-| Délais/pertes | Délai moyen offre → compromis | `avg(date_signature - date_offre)` sur les compromis liés à une offre (`offre_id` non nul) | Uniquement les compromis liés à une offre enregistrée |
-| Délais/pertes | Délai moyen compromis → acte | `avg(date_acte_reelle - date_signature)` sur les compromis `realise` | — |
-| Délais/pertes | Compromis annulés / leur volume | `count(*)`/`sum(prix_convenu)` sur `compromis` `annule` | — |
-| Délais/pertes | Délai moyen visite → offre | `avg(date_offre - date_visite)` sur chaque paire explicitement liée via `offre_visites` (ADR-019) | "Calculé uniquement à partir des visites explicitement associées à une offre" |
+| Délais | Délai moyen offre → compromis | `avg(date_signature - date_offre)` sur les compromis liés à une offre (`offre_id` non nul) | Uniquement les compromis liés à une offre enregistrée |
+| Délais | Délai moyen compromis → acte | `avg(date_acte_reelle - date_signature)` sur les compromis `realise` | — |
+| Délais | Délai moyen visite → offre | `avg(date_offre - date_visite)` sur chaque paire explicitement liée via `offre_visites` (ADR-019) | "Calculé uniquement à partir des visites explicitement associées à une offre" |
+| Pertes commerciales | Offres refusées / retirées | `count(*)` sur `offres` `statut in ('refusee','retiree')` (ADR-020) | — |
+| Pertes commerciales | Volume des offres perdues | `sum(montant)` même périmètre | "Montant proposé, jamais accepté — pas un chiffre d'affaires" |
+| Pertes commerciales | Compromis annulés | `count(*)` sur `compromis` `annule` (déplacé depuis Délais, ADR-020) | — |
+| Pertes commerciales | Volume de transactions interrompues | `sum(prix_convenu)` même périmètre | "Volume de transaction, pas un chiffre d'affaires" |
+| Pertes commerciales | Offres perdues / compromis annulés par motif | `GROUP BY motif_perte`/`motif_annulation`, `WHERE motif ... IS NOT NULL` (ADR-020) | "Calculé uniquement sur les pertes disposant d'un motif renseigné" |
+| Pertes commerciales | Offres perdues / compromis annulés par mois | `GROUP BY` mois de `date_decision`/`date_annulation`, `WHERE ... IS NOT NULL` — jamais approximé depuis `date_offre`/`date_signature` | "Calculé uniquement sur les pertes disposant d'une date de décision/d'annulation fiable" |
 
 **Explicitement écarté** (donnée non instrumentée) : chiffre d'affaires, commission, fiscalité
 (aucun modèle de commission dans le schéma) — voir ADR-018 et `docs/KNOWN_LIMITATIONS.md`. Le taux
 et le délai visite → offre, écartés dans ADR-018 faute de lien matérialisé, sont désormais
 disponibles via le lien explicite `offre_visites` (ADR-019) — avec la réserve que seules les
 visites explicitement liées après la mise en place de ce lien sont comptées (aucun rattrapage
-automatique de l'historique).
+automatique de l'historique). Aucun taux de conversion par cause en V1 (ADR-020) — voir
+`docs/KNOWN_LIMITATIONS.md`.
 
 Pas de graphiques, pas de filtre temporel en V1 — les séries "par mois" s'affichent en liste
 simple.

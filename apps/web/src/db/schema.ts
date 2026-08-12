@@ -240,6 +240,12 @@ export const comptesRendusVisite = pgTable(
 // 'en_cours' uniquement — validées côté Server Action, pas en CHECK SQL. Couplage unidirectionnel
 // avec biens.offreEnCoursLe : créer une offre le pose, mais aucun changement de statut ne le
 // modifie (voir src/actions/offre.ts).
+// dateDecision/motifPerte (ADR-020) : posés atomiquement avec statut lors de la transition finale
+// (acceptee/refusee/retiree — voir TransitionFinaleOffre, src/lib/offreRepository.ts). Nullables
+// sans corrélation CHECK avec statut : les lignes historiques créées avant cette fonctionnalité
+// restent valides sans date ni motif (aucun backfill), une contrainte "statut final => date/motif
+// non nul" les casserait. motif_perte : CHECK sur la valeur uniquement (vocabulaire MotifPerte),
+// jamais sur son obligation, qui reste entièrement portée par la Server Action.
 export const offres = pgTable(
   "offres",
   {
@@ -254,10 +260,16 @@ export const offres = pgTable(
     dateOffre: date("date_offre").notNull(),
     statut: text("statut").notNull().default("en_cours"),
     dateValidite: date("date_validite"),
+    dateDecision: date("date_decision"),
+    motifPerte: text("motif_perte"),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check("offres_statut_check", sql`${table.statut} IN ('en_cours','acceptee','refusee','retiree')`),
+    check(
+      "offres_motif_perte_check",
+      sql`${table.motifPerte} IS NULL OR ${table.motifPerte} IN ('financement_refuse','acquereur_se_retire','vendeur_se_retire','desaccord_prix','juridique_administratif','delai_calendrier','autre')`
+    ),
   ]
 );
 
@@ -321,10 +333,20 @@ export const compromis = pgTable(
     dateSignature: date("date_signature").notNull(),
     dateActe: date("date_acte"),
     dateActeReelle: date("date_acte_reelle"),
+    // dateAnnulation/motifAnnulation (ADR-020) : posés atomiquement avec statut uniquement lors de
+    // la transition vers 'annule' (marquerCompromisAnnule) — 'realise' continue d'utiliser
+    // exclusivement dateActeReelle, jamais ces deux colonnes. Même absence de corrélation CHECK
+    // avec statut qu'offres.dateDecision/motifPerte, pour la même raison (pas de backfill).
+    dateAnnulation: date("date_annulation"),
+    motifAnnulation: text("motif_annulation"),
     statut: text("statut").notNull().default("en_cours"),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check("compromis_statut_check", sql`${table.statut} IN ('en_cours','realise','annule')`),
+    check(
+      "compromis_motif_annulation_check",
+      sql`${table.motifAnnulation} IS NULL OR ${table.motifAnnulation} IN ('financement_refuse','acquereur_se_retire','vendeur_se_retire','desaccord_prix','juridique_administratif','delai_calendrier','autre')`
+    ),
   ]
 );

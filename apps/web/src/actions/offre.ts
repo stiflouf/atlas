@@ -6,8 +6,13 @@ import { getClientById } from "@/lib/clientRepository";
 import { enregistrerOffreAvecLiensEtJalon, getOffreById, changerStatutOffre } from "@/lib/offreRepository";
 import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import type { StatutOffre } from "@/types/offre";
+import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
 
 const TRANSITIONS_VALIDES: StatutOffre[] = ["acceptee", "refusee", "retiree"];
+
+function parseMotifPerte(valeur: FormDataEntryValue | null): MotifPerte | undefined {
+  return MOTIFS_PERTE.includes(valeur as MotifPerte) ? (valeur as MotifPerte) : undefined;
+}
 
 function parseMontant(valeur: FormDataEntryValue | null): number | undefined {
   const montant = Number(valeur);
@@ -63,12 +68,21 @@ export async function ajouterOffreAction(formData: FormData): Promise<void> {
 // si l'offre n'est plus 'en_cours' (transition déjà résolue — les boutons UI ne l'exposent déjà
 // plus, ce garde-fou couvre un appel contourné). Ne modifie jamais offreEnCoursLe/
 // compromisSigneLe (couplage unidirectionnel, geste commercial séparé — ADR-014/ADR-015).
+// dateDecision obligatoire pour les trois transitions finales (ADR-020) ; motifPerte obligatoire
+// uniquement pour refusee/retiree, et refusé explicitement (throw) s'il est fourni pour acceptee —
+// jamais déduit, jamais laissé sur une offre acceptée. Aucune inférence d'acteur : seul le motif
+// choisi par le conseiller fait foi.
 export async function changerStatutOffreAction(formData: FormData): Promise<void> {
   const offreId = String(formData.get("offreId") ?? "");
   const statut = String(formData.get("statut") ?? "") as StatutOffre;
+  const dateDecision = String(formData.get("dateDecision") ?? "").trim();
+  const motifPerteBrut = String(formData.get("motifPerte") ?? "").trim();
 
   if (!TRANSITIONS_VALIDES.includes(statut)) {
     throw new Error("Transition de statut invalide.");
+  }
+  if (!dateDecision) {
+    throw new Error("La date de décision est obligatoire.");
   }
 
   const offre = await getOffreById(offreId);
@@ -81,7 +95,16 @@ export async function changerStatutOffreAction(formData: FormData): Promise<void
   if (bien?.archiveLe) throw new Error("Impossible de modifier une offre sur un bien archivé.");
   if (acquereur?.archiveLe) throw new Error("Impossible de modifier une offre pour un acquéreur archivé.");
 
-  await changerStatutOffre(offreId, statut);
+  if (statut === "acceptee") {
+    if (motifPerteBrut) throw new Error("Un motif de perte n'a pas de sens pour une offre acceptée.");
+    await changerStatutOffre(offreId, { statut: "acceptee", dateDecision });
+  } else if (statut === "refusee" || statut === "retiree") {
+    const motifPerte = parseMotifPerte(motifPerteBrut);
+    if (!motifPerte) throw new Error("Le motif de la perte est obligatoire.");
+    await changerStatutOffre(offreId, { statut, dateDecision, motifPerte });
+  } else {
+    throw new Error("Transition de statut invalide.");
+  }
 
   redirect(`/biens/${offre.bienId}`);
 }

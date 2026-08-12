@@ -4,9 +4,12 @@ import {
   chargerResultats,
   chargerPipeline,
   chargerActivite,
-  chargerDelaisPertes,
+  chargerDelais,
+  chargerPertes,
   type MontantParMois,
+  type PerteParMotif,
 } from "@/lib/dashboardRepository";
+import { LABEL_MOTIF_PERTE } from "@/types/motifPerte";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, le tableau de bord figerait au moment du build.
@@ -74,12 +77,33 @@ function ParMoisListe({ items }: { items: MontantParMois[] }) {
   );
 }
 
+// Motif NULL historique jamais affiché ici ni reclassé (ADR-020) : la liste ne contient que les
+// motifs explicitement renseignés — voir la réserve affichée au-dessus de chaque liste.
+function ParMotifListe({ items }: { items: PerteParMotif[] }) {
+  if (items.length === 0) {
+    return <p className="text-[13px] text-[#94a3b8]">Aucune perte avec motif renseigné pour l'instant.</p>;
+  }
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {items.map(({ motif, nombre, volume }) => (
+        <li key={motif} className="flex items-center justify-between text-[13px]">
+          <span className="text-[#64748b]">
+            {LABEL_MOTIF_PERTE[motif]} <span className="text-[#94a3b8]">({nombre})</span>
+          </span>
+          <span className="font-medium text-[#0f172a]">{formatPrix(volume)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default async function DashboardPage() {
-  const [resultats, pipeline, activite, delaisPertes] = await Promise.all([
+  const [resultats, pipeline, activite, delais, pertes] = await Promise.all([
     chargerResultats(),
     chargerPipeline(),
     chargerActivite(),
-    chargerDelaisPertes(),
+    chargerDelais(),
+    chargerPertes(),
   ]);
 
   return (
@@ -166,30 +190,71 @@ export default async function DashboardPage() {
         </Card>
       </section>
 
-      <section>
-        <SectionTitle>Délais et pertes</SectionTitle>
+      <section className="mb-8">
+        <SectionTitle>Délais</SectionTitle>
         <Card className="p-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-5">
             <MetricCard
               label="Délai offre → compromis"
-              valeur={formatJours(delaisPertes.delaiMoyenOffreCompromisJours)}
+              valeur={formatJours(delais.delaiMoyenOffreCompromisJours)}
               reserve="Uniquement les compromis liés à une offre enregistrée."
             />
-            <MetricCard
-              label="Délai compromis → acte"
-              valeur={formatJours(delaisPertes.delaiMoyenCompromisActeJours)}
-            />
-            <MetricCard label="Compromis annulés" valeur={delaisPertes.compromisAnnules.toString()} />
-            <MetricCard
-              label="Volume des compromis annulés"
-              valeur={formatPrix(delaisPertes.volumeCompromisAnnules)}
-            />
+            <MetricCard label="Délai compromis → acte" valeur={formatJours(delais.delaiMoyenCompromisActeJours)} />
             <MetricCard
               label="Délai moyen entre une visite liée et l'offre"
-              valeur={formatJours(delaisPertes.delaiMoyenVisiteOffreJours)}
+              valeur={formatJours(delais.delaiMoyenVisiteOffreJours)}
               reserve="Calculé uniquement à partir des visites explicitement associées à une offre."
             />
           </div>
+        </Card>
+      </section>
+
+      <section>
+        <SectionTitle>Pertes commerciales</SectionTitle>
+        <Card className="p-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6">
+            <MetricCard label="Offres refusées" valeur={pertes.offresRefusees.toString()} />
+            <MetricCard label="Offres retirées" valeur={pertes.offresRetirees.toString()} />
+            <MetricCard
+              label="Volume des offres perdues"
+              valeur={formatPrix(pertes.volumeOffresPerdues)}
+              reserve="Montant proposé, jamais accepté — pas un chiffre d'affaires."
+            />
+            <MetricCard label="Compromis annulés" valeur={pertes.compromisAnnules.toString()} />
+            <MetricCard
+              label="Volume de transactions interrompues"
+              valeur={formatPrix(pertes.volumeCompromisAnnules)}
+              reserve="Volume de transaction, pas un chiffre d'affaires."
+            />
+          </div>
+
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+            Offres perdues par motif
+          </p>
+          <p className="text-[11px] text-[#94a3b8] mb-2">Calculé uniquement sur les pertes disposant d'un motif renseigné.</p>
+          <ParMotifListe items={pertes.pertesOffresParMotif} />
+
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2 mt-6">
+            Compromis annulés par motif
+          </p>
+          <p className="text-[11px] text-[#94a3b8] mb-2">Calculé uniquement sur les pertes disposant d'un motif renseigné.</p>
+          <ParMotifListe items={pertes.pertesCompromisParMotif} />
+
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2 mt-6">
+            Offres perdues par mois
+          </p>
+          <p className="text-[11px] text-[#94a3b8] mb-2">
+            Calculé uniquement sur les pertes disposant d'une date de décision fiable.
+          </p>
+          <ParMoisListe items={pertes.pertesOffresParMois} />
+
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2 mt-6">
+            Compromis annulés par mois
+          </p>
+          <p className="text-[11px] text-[#94a3b8] mb-2">
+            Calculé uniquement sur les pertes disposant d'une date d'annulation fiable.
+          </p>
+          <ParMoisListe items={pertes.pertesCompromisParMois} />
         </Card>
       </section>
     </div>

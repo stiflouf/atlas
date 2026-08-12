@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
   biens as biensTable,
@@ -7,6 +7,7 @@ import {
   offres as offresTable,
   offreVisites as offreVisitesTable,
 } from "@/db/schema";
+import type { MotifPerte } from "@/types/motifPerte";
 
 // Agrégation entièrement côté SQL (COUNT/SUM/AVG/GROUP BY par Postgres) — ADR-018. La page ne
 // charge jamais les lignes métier pour recalculer en mémoire.
@@ -54,15 +55,37 @@ export type DashboardActivite = {
   tauxVisiteOffre: number | undefined;
 };
 
-export type DashboardDelaisPertes = {
+export type DashboardDelais = {
   delaiMoyenOffreCompromisJours: number | undefined;
   delaiMoyenCompromisActeJours: number | undefined;
-  compromisAnnules: number;
-  volumeCompromisAnnules: number;
   // Moyenne de (offre.dateOffre - visite.dateVisite) sur chaque paire explicitement liée
   // (ADR-019) — une visite liée à plusieurs offres, ou une offre liée à plusieurs visites,
   // contribue une valeur par paire. undefined si aucune paire liée n'existe.
   delaiMoyenVisiteOffreJours: number | undefined;
+};
+
+export type PerteParMotif = { motif: MotifPerte; nombre: number; volume: number };
+
+// Convention ADR-020, symétrique à ADR-018/019 : les pertes historiques créées avant
+// dateDecision/motifPerte/dateAnnulation/motifAnnulation comptent dans les totaux par étape
+// (offresRefusees/offresRetirees/compromisAnnules — ne dépendent que de `statut`), mais sont
+// silencieusement absentes des répartitions par motif et des séries mensuelles (qui filtrent sur
+// la colonne correspondante non nulle) — jamais reclassées vers "autre", jamais approximées
+// depuis dateOffre/dateSignature. Même règle d'archivage qu'ADR-018 (Résultats/Activité/
+// Délais/pertes) : aucune requête ci-dessous ne filtre sur biens.archive_le.
+export type DashboardPertes = {
+  offresRefusees: number;
+  offresRetirees: number;
+  // sum(montant) où statut in (refusee, retiree) — jamais un "CA perdu" (montant proposé, jamais
+  // accepté).
+  volumeOffresPerdues: number;
+  compromisAnnules: number;
+  // sum(prixConvenu) où statut = annule — jamais un "CA perdu" (volume de transaction interrompu).
+  volumeCompromisAnnules: number;
+  pertesOffresParMotif: PerteParMotif[];
+  pertesCompromisParMotif: PerteParMotif[];
+  pertesOffresParMois: MontantParMois[];
+  pertesCompromisParMois: MontantParMois[];
 };
 
 export async function chargerResultats(): Promise<DashboardResultats> {
@@ -186,7 +209,7 @@ export async function chargerActivite(): Promise<DashboardActivite> {
   return { visitesEnregistrees, offresEnregistrees, compromisEnregistres, moyenneVisitesAvantVente, tauxVisiteOffre };
 }
 
-export async function chargerDelaisPertes(): Promise<DashboardDelaisPertes> {
+export async function chargerDelais(): Promise<DashboardDelais> {
   const offreCompromisResultat = await getDb()
     .select({ moyenne: sql<string | null>`avg(${compromisTable.dateSignature} - ${offresTable.dateOffre})` })
     .from(compromisTable)
@@ -201,14 +224,6 @@ export async function chargerDelaisPertes(): Promise<DashboardDelaisPertes> {
   const delaiMoyenCompromisActeJours =
     compromisActeResultat[0]?.moyenne == null ? undefined : Number(compromisActeResultat[0].moyenne);
 
-  const [{ compromisAnnules, volumeCompromisAnnules }] = await getDb()
-    .select({
-      compromisAnnules: sql<number>`count(*)::int`,
-      volumeCompromisAnnules: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
-    })
-    .from(compromisTable)
-    .where(eq(compromisTable.statut, "annule"));
-
   // Une ligne par paire (visite, offre) explicitement liée (ADR-019) — une même visite ou une
   // même offre peut contribuer plusieurs fois si elle est liée à plusieurs offres/visites.
   const visiteOffreResultat = await getDb()
@@ -219,11 +234,90 @@ export async function chargerDelaisPertes(): Promise<DashboardDelaisPertes> {
   const delaiMoyenVisiteOffreJours =
     visiteOffreResultat[0]?.moyenne == null ? undefined : Number(visiteOffreResultat[0].moyenne);
 
+  return { delaiMoyenOffreCompromisJours, delaiMoyenCompromisActeJours, delaiMoyenVisiteOffreJours };
+}
+
+export async function chargerPertes(): Promise<DashboardPertes> {
+  const [{ offresRefusees, offresRetirees, volumeOffresPerdues }] = await getDb()
+    .select({
+      offresRefusees: sql<number>`count(*) filter (where ${offresTable.statut} = 'refusee')::int`,
+      offresRetirees: sql<number>`count(*) filter (where ${offresTable.statut} = 'retiree')::int`,
+      volumeOffresPerdues: sql<number>`coalesce(sum(${offresTable.montant}) filter (where ${offresTable.statut} in ('refusee','retiree')), 0)::int`,
+    })
+    .from(offresTable);
+
+  const [{ compromisAnnules, volumeCompromisAnnules }] = await getDb()
+    .select({
+      compromisAnnules: sql<number>`count(*)::int`,
+      volumeCompromisAnnules: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
+    })
+    .from(compromisTable)
+    .where(eq(compromisTable.statut, "annule"));
+
+  // motif_perte/motif_annulation non nul uniquement (ADR-020) — une perte historique sans motif
+  // compte dans offresRefusees/offresRetirees/compromisAnnules ci-dessus, jamais ici : ne jamais
+  // reclassifier un motif inconnu vers "autre".
+  const pertesOffresParMotifBrut = await getDb()
+    .select({
+      motif: offresTable.motifPerte,
+      nombre: sql<number>`count(*)::int`,
+      volume: sql<number>`coalesce(sum(${offresTable.montant}), 0)::int`,
+    })
+    .from(offresTable)
+    .where(and(inArray(offresTable.statut, ["refusee", "retiree"]), isNotNull(offresTable.motifPerte)))
+    .groupBy(offresTable.motifPerte);
+  const pertesOffresParMotif: PerteParMotif[] = pertesOffresParMotifBrut.map((ligne) => ({
+    motif: ligne.motif as MotifPerte,
+    nombre: ligne.nombre,
+    volume: ligne.volume,
+  }));
+
+  const pertesCompromisParMotifBrut = await getDb()
+    .select({
+      motif: compromisTable.motifAnnulation,
+      nombre: sql<number>`count(*)::int`,
+      volume: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
+    })
+    .from(compromisTable)
+    .where(and(eq(compromisTable.statut, "annule"), isNotNull(compromisTable.motifAnnulation)))
+    .groupBy(compromisTable.motifAnnulation);
+  const pertesCompromisParMotif: PerteParMotif[] = pertesCompromisParMotifBrut.map((ligne) => ({
+    motif: ligne.motif as MotifPerte,
+    nombre: ligne.nombre,
+    volume: ligne.volume,
+  }));
+
+  // date_decision/date_annulation non nulle uniquement — jamais approximé depuis dateOffre/
+  // dateSignature (la date de création, pas de la perte).
+  const pertesOffresParMois = await getDb()
+    .select({
+      mois: sql<string>`to_char(date_trunc('month', ${offresTable.dateDecision}), 'YYYY-MM')`,
+      montant: sql<number>`sum(${offresTable.montant})::int`,
+    })
+    .from(offresTable)
+    .where(and(inArray(offresTable.statut, ["refusee", "retiree"]), isNotNull(offresTable.dateDecision)))
+    .groupBy(sql`date_trunc('month', ${offresTable.dateDecision})`)
+    .orderBy(sql`date_trunc('month', ${offresTable.dateDecision})`);
+
+  const pertesCompromisParMois = await getDb()
+    .select({
+      mois: sql<string>`to_char(date_trunc('month', ${compromisTable.dateAnnulation}), 'YYYY-MM')`,
+      montant: sql<number>`sum(${compromisTable.prixConvenu})::int`,
+    })
+    .from(compromisTable)
+    .where(and(eq(compromisTable.statut, "annule"), isNotNull(compromisTable.dateAnnulation)))
+    .groupBy(sql`date_trunc('month', ${compromisTable.dateAnnulation})`)
+    .orderBy(sql`date_trunc('month', ${compromisTable.dateAnnulation})`);
+
   return {
-    delaiMoyenOffreCompromisJours,
-    delaiMoyenCompromisActeJours,
+    offresRefusees,
+    offresRetirees,
+    volumeOffresPerdues,
     compromisAnnules,
     volumeCompromisAnnules,
-    delaiMoyenVisiteOffreJours,
+    pertesOffresParMotif,
+    pertesCompromisParMotif,
+    pertesOffresParMois,
+    pertesCompromisParMois,
   };
 }

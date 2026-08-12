@@ -23,7 +23,7 @@ const {
   listerCompromisPourAcquereur,
   getCompromisById,
   enregistrerCompromis,
-  changerStatutCompromis,
+  marquerCompromisAnnule,
   marquerCompromisRealise,
 } = await import("./compromisRepository");
 
@@ -131,7 +131,7 @@ describe("compromisRepository (intégration Postgres)", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, "acceptee");
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
 
     const compromisCree = await enregistrerCompromis({
       bienId: bien.id,
@@ -145,7 +145,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     expect(compromisCree.offreId).toBe(offre.id);
   });
 
-  it("changerStatutCompromis() (transition 'annule') met à jour uniquement le statut, le reste des champs reste immuable", async () => {
+  it("marquerCompromisAnnule() pose atomiquement statut='annule', dateAnnulation et motifAnnulation, le reste des champs reste immuable (ADR-020)", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("003");
     const compromisCree = await enregistrerCompromis({
       bienId: bien.id,
@@ -155,9 +155,11 @@ describe("compromisRepository (intégration Postgres)", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    const annule = await changerStatutCompromis(compromisCree.id, "annule");
+    const annule = await marquerCompromisAnnule(compromisCree.id, "2026-08-12", "desaccord_prix");
 
     expect(annule?.statut).toBe("annule");
+    expect(annule?.dateAnnulation).toBe("2026-08-12");
+    expect(annule?.motifAnnulation).toBe("desaccord_prix");
     expect(annule?.prixConvenu).toBe(350000);
     expect(annule?.acquereurId).toBe(acquereur.id);
     expect(annule?.bienId).toBe(bien.id);
@@ -165,10 +167,10 @@ describe("compromisRepository (intégration Postgres)", () => {
     expect(annule?.dateActeReelle).toBeUndefined();
   });
 
-  it("changerStatutCompromis() retourne undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(changerStatutCompromis("compromis-mock", "annule")).resolves.toBeUndefined();
+  it("marquerCompromisAnnule() retourne undefined pour un id non-UUID ou inexistant", async () => {
+    await expect(marquerCompromisAnnule("compromis-mock", "2026-08-12", "autre")).resolves.toBeUndefined();
     await expect(
-      changerStatutCompromis("00000000-0000-0000-0000-000000000000", "annule")
+      marquerCompromisAnnule("00000000-0000-0000-0000-000000000000", "2026-08-12", "autre")
     ).resolves.toBeUndefined();
   });
 
