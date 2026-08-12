@@ -198,6 +198,23 @@ Complémentaire de l'historique dérivé (ligne courte, sans `retour` ni acquér
 "Historique dérivé du bien" ci-dessus) : aucun des deux n'est une reformulation de l'autre, ce sont
 deux granularités différentes des mêmes faits.
 
+## Documents réels d'un bien
+
+**Fichiers** : `src/lib/documentBienRepository.ts`, `src/lib/stockageDocuments.ts`,
+`src/actions/ajouterDocumentBien.ts`, `src/app/api/documents/[id]/route.ts`. Détail de la
+stratégie de stockage : ADR-013.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Type de fichier accepté | Toujours | Liste blanche stricte : `application/pdf`, `image/jpeg`, `image/png` — tout autre type MIME est refusé silencieusement (redirection sans insertion ni écriture disque) |
+| Taille maximale | Toujours | 10 Mo (validation applicative) — au-delà de la limite framework (11 Mo, `next.config.ts`), la requête échoue avant même d'atteindre cette validation, voir `docs/KNOWN_LIMITATIONS.md` |
+| Ajout sur un bien archivé | `bien.archiveLe` non NULL | Refusé — formulaire masqué côté UI, refus silencieux côté serveur si l'appel est contourné (même patron que Notes/Comptes rendus, ADR-012) |
+| Documents existants d'un bien archivé | Toujours | Restent listés et téléchargeables (`getBienById()`/`getDocumentBienById()` résolvent toujours une entité archivée) |
+| Nom physique sur disque | Toujours | Clé opaque générée côté serveur (`genererCleStockage()`) — jamais le nom original, jamais un chemin fourni par l'utilisateur (ADR-013) |
+| Nom affiché au téléchargement | Toujours | `nomFichierOriginal` (métadonnée DB), restitué via `Content-Disposition: attachment` — le chemin physique n'est jamais révélé |
+| Document introuvable (id invalide, métadonnée absente, fichier physique absent) | Toujours | `404`, sans distinction observable entre ces cas |
+| Suppression | — | Aucune en V1 — voir ADR-013 |
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

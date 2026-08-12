@@ -114,12 +114,11 @@ permet de consulter ce bien via `/biens?archives=1`.
 Aucun équivalent réel n'existe à ce jour pour :
 
 - **`data/dossier.ts` (`DossierBien`)** — historique manuscrit, notes en un seul bloc de texte,
-  documents, visites effectuées. Concerne uniquement les deux biens mockés historiques
-  (`bien-001`, `bien-002`) ; un bien réel n'a jamais de `DossierBien`. Trois de ses quatre
-  dimensions ont depuis reçu un équivalent réel dérivé indépendant : Historique
-  (`deriverHistoriqueBien`), Notes (`notes_bien`) et Visites → Effectuées
-  (`comptes_rendus_visite`) — voir `docs/BUSINESS_RULES.md`. **Documents** reste 100% mock, sans
-  aucun équivalent réel (détaillé dans `docs/KNOWN_LIMITATIONS.md`).
+  documents (`DocumentDossier`), visites effectuées. Concerne uniquement les deux biens mockés
+  historiques (`bien-001`, `bien-002`) ; un bien réel n'a jamais de `DossierBien`. Les quatre
+  dimensions ont désormais un équivalent réel dérivé indépendant : Historique
+  (`deriverHistoriqueBien`), Notes (`notes_bien`), Visites → Effectuées (`comptes_rendus_visite`)
+  et Documents (`documents_bien`, stockage local — ADR-013) — voir `docs/BUSINESS_RULES.md`.
 - **`data/preparations.ts`** — une seule préparation de visite entièrement curatée à la main
   (`prep-rdv-001`, couple bien Oberkampf / acquéreurs Dubois). Pour tout autre couple bien/
   acquéreur, `construirePreparationMinimale()` (`visites/[id]/preparer/page.tsx`) prend le relais
@@ -137,3 +136,4 @@ Aucun équivalent réel n'existe à ce jour pour :
 - Limites connues liées au mode mock : `docs/KNOWN_LIMITATIONS.md`
 - Décision d'architecture sur les identifiants texte vs FK réelles : `docs/adr/010-identifiants-texte-vs-fk-reelles.md`
 - Décision d'architecture sur l'archivage : `docs/adr/012-archivage-timestamp-vs-statut.md`
+- Décision d'architecture sur le stockage des documents : `docs/adr/013-stockage-local-documents-v1.md`

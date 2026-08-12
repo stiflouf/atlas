@@ -6,8 +6,6 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Fonctionnalités encore mock-only
 
-- **Onglet "Documents" de la fiche bien** (`BienTabs.tsx`) — aucun stockage de documents réel
-  n'existe. Visible uniquement pour un bien mocké avec `DossierBien` (`data/dossier.ts`).
 - **Onglet "Visites → Effectuées"** — pour un bien réel, lit désormais `comptes_rendus_visite`
   (date, acquéreur résolu via `getClientById`, intérêt, retour brut, prochaine étape) ; pour un
   bien mocké avec `DossierBien`, comportement inchangé (`dossier.visitesEffectuees`). Si
@@ -51,6 +49,27 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   aucune règle d'archivage automatique (ex. archiver un mandat expiré depuis longtemps) n'existe,
   l'archivage est toujours un geste manuel du conseiller ; aucun archivage groupé (un bien/
   acquéreur à la fois).
+- **Documents** (`documents_bien`) : append-only comme Notes/Comptes rendus, **aucune suppression
+  en V1**, ni de la métadonnée ni du fichier physique. Voir ADR-013 pour la justification et le
+  garde-fou à respecter le jour où une suppression sera implémentée (`ON DELETE CASCADE` seul ne
+  nettoiera jamais le fichier).
+
+## Documents réels : stockage local V1
+
+- **Pas de persistance garantie hors dev local.** `apps/web/stockage-documents/` n'a pas de volume
+  dédié (contrairement à Postgres) — un futur déploiement serverless/conteneurisé sans volume
+  monté perdrait les fichiers à chaque redéploiement. Non problématique aujourd'hui (aucune cible
+  de déploiement n'existe), verrou explicite pour plus tard — voir ADR-013.
+- **Aucune sauvegarde automatique** de ce répertoire (un `pg_dump` seul ne couvre pas les fichiers).
+- **Deux limites de taille non alignées, comportement vérifié en conditions réelles** : un upload
+  entre 10 et 11 Mo est rejeté proprement par la validation applicative (redirection silencieuse,
+  aucune écriture) ; un upload dépassant 11 Mo (`serverActions.bodySizeLimit`, `next.config.ts`)
+  échoue en erreur serveur (500) **avant** d'atteindre cette validation — pas de message utilisateur
+  propre dans ce cas, seulement le crash générique de Next.js. Corriger ce cas proprement
+  nécessiterait une validation côté client (taille du fichier avant soumission), hors périmètre V1.
+- **Liste blanche de types de fichiers volontairement restreinte** (`application/pdf`,
+  `image/jpeg`, `image/png`) — pas de Word/Excel, pas d'archives ZIP, pas de scans TIFF.
+- **Un seul fichier par soumission** — pas d'upload multiple en une fois.
 
 ## Limites du moteur de matching
 

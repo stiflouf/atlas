@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0005`, vérifiées le 2026-08-12). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0006`, vérifiées le 2026-08-12). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -16,6 +16,7 @@ part entière signifiant *explicitement connue comme négative* — pas une vale
 erDiagram
     biens ||--o{ notes_bien : "bien_id (FK)"
     biens ||--o{ comptes_rendus_visite : "bien_id (FK)"
+    biens ||--o{ documents_bien : "bien_id (FK)"
     acquereurs ||--o{ comptes_rendus_visite : "acquereur_id (FK)"
     biens ||..o{ actions : "bien_id (text, sans FK)"
     acquereurs ||..o{ actions : "acquereur_id (text, sans FK)"
@@ -114,6 +115,17 @@ erDiagram
         text retour
         text interet
         text prochaine_etape "nullable"
+        timestamptz cree_le
+    }
+    documents_bien {
+        uuid id PK
+        uuid bien_id FK
+        text nom
+        text categorie
+        text nom_fichier_original
+        text cle_stockage "opaque, généré serveur — ADR-013"
+        integer taille_octets
+        text type_mime
         timestamptz cree_le
     }
 ```
@@ -289,6 +301,34 @@ Relation fonctionnelle : alimente l'historique dérivé du bien (`"Visite effect
 jamais le texte de `retour`) et la "Mémoire du dossier" de la page de préparation, filtrée sur le
 couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`.
 
+## `documents_bien`
+
+**Rôle** : documents réels attachés à un bien (mandat, diagnostics, plans, compromis...),
+append-only, aucune suppression en V1 — voir ADR-013 (stratégie de stockage local hors `public/`).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | non | vraie FK — voir ADR-010 |
+| `nom` | text | non | libellé saisi par le conseiller |
+| `categorie` | text | non | défaut `"autre"`, `CHECK` |
+| `nom_fichier_original` | text | non | nom du fichier tel qu'uploadé — **jamais** utilisé comme chemin physique |
+| `cle_stockage` | text | non | identifiant opaque généré côté serveur (ADR-013), reconstruit en chemin uniquement dans `src/lib/stockageDocuments.ts` |
+| `taille_octets` | integer | non | |
+| `type_mime` | text | non | liste blanche applicative : `application/pdf`, `image/jpeg`, `image/png` |
+| `cree_le` | timestamptz | non | |
+
+**Contrainte `CHECK`** : `categorie IN ('mandat','diagnostic','copropriete','technique','commercial','compromis','autre')`.
+
+Pas de `modifie_le` (append-only, même principe que `notes_bien`/`comptes_rendus_visite`,
+ADR-011). `ON DELETE CASCADE` nettoie la ligne si un bien était supprimé, mais **ne nettoie
+jamais le fichier physique associé** — aucune fonction de suppression n'existe aujourd'hui, voir
+ADR-013.
+
+Relation fonctionnelle : lue par `listerDocumentsPourBien()`/`getDocumentBienById()`
+(`src/lib/documentBienRepository.ts`), écrite par `ajouterDocumentBienAction`, servie en lecture
+par le Route Handler `/api/documents/[id]`.
+
 ## Migrations
 
 | Fichier | Tables introduites |
@@ -299,6 +339,7 @@ couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`.
 | `0003_black_risque.sql` | `notes_bien` |
 | `0004_needy_norrin_radd.sql` | `comptes_rendus_visite` |
 | `0005_happy_wolfsbane.sql` | `archive_le` sur `biens` et `acquereurs` |
+| `0006_volatile_starbolt.sql` | `documents_bien` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

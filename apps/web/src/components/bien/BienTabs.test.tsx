@@ -5,6 +5,7 @@ import type { DossierBien } from "@/data/dossier";
 import type { ActionMetier } from "@/types/action";
 import type { NoteBien } from "@/types/noteBien";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
+import type { DocumentBien } from "@/types/documentBien";
 import BienTabs from "./BienTabs";
 
 function bienTest(surcharge: Partial<Bien> = {}): Bien {
@@ -42,23 +43,23 @@ function dossierTest(): DossierBien {
 const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Actions"];
 
 describe("BienTabs", () => {
-  it("n'affiche que Contexte, Notes, Visites et Actions pour un bien réel sans dossier", () => {
+  it("n'affiche que Contexte, Notes, Visites, Documents et Actions pour un bien réel sans dossier", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
         actions={[] as ActionMetier[]}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
+        documents={[] as DocumentBien[]}
       />
     );
 
     expect(html).toContain("Contexte");
     expect(html).toContain("Notes");
     expect(html).toContain("Visites");
+    expect(html).toContain("Documents");
     expect(html).toContain("Actions");
-    for (const onglet of ["Historique", "Documents"]) {
-      expect(html).not.toContain(onglet);
-    }
+    expect(html).not.toContain("Historique");
   });
 
   it("conserve tous les onglets existants quand un dossier (mock) est fourni", () => {
@@ -69,6 +70,7 @@ describe("BienTabs", () => {
         actions={[] as ActionMetier[]}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
+        documents={[] as DocumentBien[]}
       />
     );
 
@@ -98,11 +100,11 @@ describe("BienTabs", () => {
         actions={actions}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
+        documents={[] as DocumentBien[]}
       />
     );
 
     expect(html).toContain("Historique");
-    expect(html).not.toContain("Documents");
   });
 
   it("affiche l'onglet Historique pour un bien réel dès qu'un compte rendu de visite existe, sans creeLe ni action", () => {
@@ -123,6 +125,7 @@ describe("BienTabs", () => {
         actions={[] as ActionMetier[]}
         notes={[] as NoteBien[]}
         comptesRendus={comptesRendus}
+        documents={[] as DocumentBien[]}
       />
     );
 
@@ -136,6 +139,7 @@ describe("BienTabs", () => {
         actions={[] as ActionMetier[]}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
+        documents={[] as DocumentBien[]}
       />
     );
 

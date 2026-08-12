@@ -9,6 +9,7 @@ import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getActionsPourBien } from "@/lib/actionRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
+import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
@@ -40,6 +41,7 @@ export default async function FicheBien({ params }: PageProps) {
   const actions = await getActionsPourBien(bien.id);
   const notes = await listerNotesPourBien(bien.id);
   const comptesRendus = await listerComptesRendusPourBien(bien.id);
+  const documents = await listerDocumentsPourBien(bien.id);
   const acquereurIds = [...new Set(comptesRendus.map((cr) => cr.acquereurId))];
   const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
   const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
@@ -147,14 +149,15 @@ export default async function FicheBien({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Onglets — Contexte, Notes, Visites et Actions sont toujours réels ; Documents n'apparaît
-          que si un dossier existe (voir BienTabs, aucun DossierBien artificiel fabriqué ici). */}
+      {/* Onglets — Contexte, Notes, Visites, Documents et Actions sont tous réels (voir BienTabs,
+          aucun DossierBien artificiel fabriqué ici). */}
       <BienTabs
         bien={bien}
         dossier={dossier}
         actions={actions}
         notes={notes}
         comptesRendus={comptesRendus}
+        documents={documents}
         acquereursParId={acquereursParId}
       />
     </div>

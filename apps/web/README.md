@@ -35,7 +35,7 @@ atlas/
 ├── apps/
 │   └── web/          ← ce module (tout le code applicatif actuel)
 ├── docs/
-│   ├── adr/           Décisions architecturales (001 à 011)
+│   ├── adr/           Décisions architecturales (001 à 013)
 │   └── *.md            Architecture, modèle de données, règles métier, parcours, etc.
 ├── infra/
 │   └── docker-compose.yml   Postgres local
@@ -134,8 +134,8 @@ pnpm build                           # build de production
 
 **`pnpm test` nécessite un Postgres local démarré et migré** : plusieurs suites sont des tests
 d'intégration réels sur la base (`actionRepository.test.ts`, `noteBienRepository.test.ts`,
-`compteRenduVisiteRepository.test.ts`) — elles ne mockent jamais la base de données, elles créent
-et nettoient leurs propres lignes de test.
+`compteRenduVisiteRepository.test.ts`, `documentBienRepository.test.ts`) — elles ne mockent jamais
+la base de données, elles créent et nettoient leurs propres lignes de test.
 
 ## Connexion Google Calendar
 
@@ -194,6 +194,7 @@ voir la procédure détaillée dans `docs/BUSINESS_RULES.md#mémoire-contextuell
 | `/actions/nouveau` | Création d'une action (préremplissable via `?bienId=`/`?acquereurId=`) |
 | `/visites/[id]/preparer` | Préparation de visite + formulaire de compte rendu après la visite |
 | `/api/auth/google/{login,callback,logout}` | Flux OAuth Google Calendar |
+| `/api/documents/[id]` | Téléchargement d'un document réel attaché à un bien (lecture seule, voir ADR-013) |
 
 ## Où commencer pour comprendre le code
 

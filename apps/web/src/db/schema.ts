@@ -167,6 +167,37 @@ export const notesBien = pgTable("notes_bien", {
   creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Document réel attaché à un bien. bienId est une vraie FK, même rationale que notes_bien : un
+// document n'est attachable que depuis la fiche d'un bien déjà réel. cleStockage est un
+// identifiant opaque généré côté serveur (jamais dérivé d'un nom fourni par l'utilisateur) — le
+// chemin physique sur disque est reconstruit uniquement dans src/lib/stockageDocuments.ts à
+// partir de STORAGE_ROOT + cleStockage. Append-only comme notes_bien/comptes_rendus_visite
+// (ADR-011) : aucune suppression en V1 — voir docs/adr pour le stockage (ON DELETE CASCADE
+// nettoie la ligne DB mais jamais le fichier physique, à traiter le jour où une suppression est
+// implémentée).
+export const documentsBien = pgTable(
+  "documents_bien",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id, { onDelete: "cascade" }),
+    nom: text("nom").notNull(),
+    categorie: text("categorie").notNull().default("autre"),
+    nomFichierOriginal: text("nom_fichier_original").notNull(),
+    cleStockage: text("cle_stockage").notNull(),
+    tailleOctets: integer("taille_octets").notNull(),
+    typeMime: text("type_mime").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "documents_bien_categorie_check",
+      sql`${table.categorie} IN ('mandat','diagnostic','copropriete','technique','commercial','compromis','autre')`
+    ),
+  ]
+);
+
 // Compte rendu après une visite. bienId/acquereurId sont de vraies FK, même rationale que
 // notes_bien : un compte rendu n'est créable que depuis /visites/[id]/preparer, où bien et
 // acquéreur sont déjà résolus et réels. dateVisite (date réelle de la visite, préremplie depuis

@@ -7,10 +7,27 @@ import type { ActionMetier } from "@/types/action";
 import type { NoteBien } from "@/types/noteBien";
 import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
+import { LABEL_CATEGORIE_DOCUMENT, type CategorieDocument, type DocumentBien } from "@/types/documentBien";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
+import { ajouterDocumentBienAction } from "@/actions/ajouterDocumentBien";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
+
+const CATEGORIES_DOCUMENT: CategorieDocument[] = [
+  "mandat",
+  "diagnostic",
+  "copropriete",
+  "technique",
+  "commercial",
+  "compromis",
+  "autre",
+];
+
+function formatTaille(octets: number): string {
+  if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} Ko`;
+  return `${(octets / (1024 * 1024)).toFixed(1)} Mo`;
+}
 
 type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "actions";
 
@@ -24,6 +41,7 @@ export default function BienTabs({
   actions,
   notes,
   comptesRendus,
+  documents,
   acquereursParId = new Map(),
 }: {
   bien: Bien;
@@ -31,15 +49,15 @@ export default function BienTabs({
   actions: ActionMetier[];
   notes: NoteBien[];
   comptesRendus: CompteRenduVisite[];
+  documents: DocumentBien[];
   acquereursParId?: Map<string, ProfilAcquereur | undefined>;
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
-  // Contexte, Actions, Notes et Visites reposent sur des données réelles (bien, actionRepository,
-  // noteBienRepository, compteRenduVisiteRepository), toujours disponibles — Notes et Visites
-  // restent affichés même vides, c'est justement là que le conseiller ajoute sa première entrée.
-  // Documents n'a pas d'équivalent réel aujourd'hui (aucun stockage de documents) : masqué plutôt
-  // que de fabriquer un DossierBien artificiel pour un bien réel. Historique, lui, est dérivé de
+  // Contexte, Actions, Notes, Visites et Documents reposent tous sur des données réelles (bien,
+  // actionRepository, noteBienRepository, compteRenduVisiteRepository, documentBienRepository),
+  // toujours disponibles — Notes, Visites et Documents restent affichés même vides, c'est
+  // justement là que le conseiller ajoute sa première entrée. Historique, lui, est dérivé de
   // faits réels (bien.creeLe, action.creeLe/termineLe, comptes rendus de visite) quand aucun
   // dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
@@ -51,7 +69,7 @@ export default function BienTabs({
     ...(evenementsHistorique.length > 0 ? ([{ id: "historique", label: "Historique" }] as const) : []),
     { id: "notes", label: "Notes" },
     { id: "visites", label: "Visites" },
-    ...(dossier ? ([{ id: "documents", label: "Documents" }] as const) : []),
+    { id: "documents", label: "Documents" },
     { id: "actions", label: "Actions" },
   ];
 
@@ -263,6 +281,76 @@ export default function BienTabs({
               <span className="text-[13px] text-[#4338ca] font-medium shrink-0">Voir</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {active === "documents" && !dossier && (
+        <div className="flex flex-col gap-4">
+          {bien.archiveLe ? (
+            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+              Ce bien est archivé — impossible d'ajouter un nouveau document.
+            </p>
+          ) : (
+            <form action={ajouterDocumentBienAction} className="flex flex-col gap-2">
+              <input type="hidden" name="bienId" value={bien.id} />
+              <input
+                type="text"
+                name="nom"
+                required
+                placeholder="Nom du document (ex. Diagnostics énergétiques)"
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              />
+              <select
+                name="categorie"
+                defaultValue="autre"
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              >
+                {CATEGORIES_DOCUMENT.map((categorie) => (
+                  <option key={categorie} value={categorie}>
+                    {LABEL_CATEGORIE_DOCUMENT[categorie]}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="file"
+                name="fichier"
+                required
+                accept="application/pdf,image/jpeg,image/png"
+                className="w-full text-[13px] text-[#64748b]"
+              />
+              <p className="text-[11px] text-[#94a3b8]">PDF, JPEG ou PNG — 10 Mo maximum.</p>
+              <button
+                type="submit"
+                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              >
+                Ajouter le document
+              </button>
+            </form>
+          )}
+
+          {documents.length === 0 ? (
+            <p className="text-[14px] text-[#94a3b8]">Aucun document pour l'instant.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+              {documents.map((doc) => (
+                <div key={doc.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[14px] text-[#0f172a] truncate">{doc.nom}</p>
+                    <p className="text-[11px] text-[#94a3b8]">
+                      {LABEL_CATEGORIE_DOCUMENT[doc.categorie]} · {formatTaille(doc.tailleOctets)} ·{" "}
+                      {formatDate(doc.creeLe)}
+                    </p>
+                  </div>
+                  <a
+                    href={`/api/documents/${doc.id}`}
+                    className="text-[13px] text-[#4338ca] font-medium shrink-0"
+                  >
+                    Télécharger
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,5 +1,5 @@
 export type EvenementHistorique = { date: string; auteur: string; texte: string };
-export type DocumentBien = { nom: string; date: string; type: string };
+export type DocumentDossier = { nom: string; date: string; type: string };
 export type VisiteEffectuee = { id: string; date: string; client: string; retour: string };
 
 export type StatutDossier = "en_commercialisation" | "offre_en_cours" | "compromis_signe";
@@ -13,7 +13,7 @@ export type DossierBien = {
   derniereActivite: string;
   historique: EvenementHistorique[];
   notes: string;
-  documents: DocumentBien[];
+  documents: DocumentDossier[];
   visitesEffectuees: VisiteEffectuee[];
 };
 

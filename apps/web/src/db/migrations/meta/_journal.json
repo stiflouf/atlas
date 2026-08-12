@@ -43,6 +43,13 @@
       "when": 1786463059756,
       "tag": "0005_happy_wolfsbane",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786521667501,
+      "tag": "0006_volatile_starbolt",
+      "breakpoints": true
     }
   ]
 }

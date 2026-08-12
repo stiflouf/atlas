@@ -101,6 +101,18 @@ silencieusement côté serveur (l'UI empêche déjà le cas normal). Le moteur d
 archivés puisqu'il ne consomme que `listerBiens()`/`listerClients()`, sans code spécifique
 supplémentaire. Actions liées à un acquéreur archivé exclues de "Autres actions" à l'accueil.
 
+## 13. Documents réels attachés à un bien
+
+Dernier onglet majeur de la fiche bien sortant du mock : `documents_bien` (table dédiée, FK réelle
+vers `biens`), stockage du binaire sur le filesystem local du serveur (`stockage-documents/`, hors
+`public/`), jamais en base et sans dépendance objet externe (ADR-013). Nom physique sur disque =
+clé opaque générée côté serveur, jamais le nom fourni par le conseiller — le nom original reste
+une métadonnée, restituée uniquement au téléchargement via `Content-Disposition`. Liste blanche
+stricte (PDF, JPEG, PNG), 10 Mo maximum côté validation applicative. Ajout bloqué sur un bien
+archivé (formulaire masqué + refus silencieux serveur, même patron que Notes) ; documents déjà
+existants d'un bien archivé restent consultables et téléchargeables. Aucune suppression en V1,
+append-only comme Notes et Comptes rendus (ADR-011).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

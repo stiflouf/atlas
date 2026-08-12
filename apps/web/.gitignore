@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# stockage local des documents réels (voir src/lib/stockageDocuments.ts) — jamais commité
+/stockage-documents/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
