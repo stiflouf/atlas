@@ -306,6 +306,42 @@ pipeline/délais (écart prévu/réel), un CA prévisionnel (compromis non acté
 `vendu`), des taux de conversion, et une analyse des ventes perdues (compromis `annule`) — voir
 ADR-017.
 
+## Dashboard commercial
+
+**Fichiers** : `src/lib/dashboardRepository.ts` (lecture seule, aucune Server Action),
+`src/app/dashboard/page.tsx`. Détail de la décision : ADR-018.
+
+Convention de retour : un compteur/une somme à `0` est une vraie valeur mesurée ; un taux, une
+moyenne ou un délai dont le dénominateur est vide retourne `undefined` (affiché "—"), jamais `0`
+(même principe qu'ADR-009 appliqué aux agrégats).
+
+**Règle d'archivage** : Résultats/Activité/Délais-pertes incluent les biens et acquéreurs
+archivés (l'historique ne se réécrit pas rétroactivement) ; Pipeline exclut les biens archivés
+uniquement (jointure `biens.archive_le is null` — l'archivage acquéreur n'est pas pris en compte).
+
+| Famille | Métrique | Formule / source | Réserve affichée dans l'UI |
+|---|---|---|---|
+| Résultats | Ventes finalisées | `count(*)` sur `compromis` où `statut = 'realise'` et `date_acte_reelle` non nulle | — |
+| Résultats | Volume vendu | `sum(prix_convenu)` sur le même périmètre | Volume de transaction, jamais le CA du conseiller |
+| Résultats | Taux compromis → vente | `realise / (realise + annule)` parmi les compromis résolus | `undefined` si aucun compromis résolu |
+| Résultats | Réalisé par mois | `sum(prix_convenu)` groupé par mois de `date_acte_reelle` | — |
+| Pipeline | Compromis en cours | `count(*)` sur `compromis` `en_cours`, bien non archivé | Biens archivés exclus |
+| Pipeline | Volume sous compromis | `sum(prix_convenu)` même périmètre | Biens archivés exclus |
+| Pipeline | Pipeline prévisionnel par mois | `sum(prix_convenu)` groupé par mois de `date_acte` (prévue), compromis `en_cours`, bien non archivé | Prévisionnel, non garanti (annulation/décalage possibles) |
+| Pipeline | Offres en cours / leur volume | `count(*)`/`sum(montant)` sur `offres` `en_cours`, bien non archivé | Biens archivés exclus |
+| Activité | Visites / offres / compromis enregistrés | `count(*)` sur chaque table, sans filtre d'archivage | — |
+| Activité | Moyenne de visites avant vente | Moyenne, par vente `realise`, du nombre de `comptes_rendus_visite` du même couple bien/acquéreur antérieurs à `date_signature` — **ventes sans compte rendu exclues du dénominateur**, jamais comptées comme 0 | "Calculé uniquement sur les ventes disposant d'au moins un compte rendu de visite" |
+| Délais/pertes | Délai moyen offre → compromis | `avg(date_signature - date_offre)` sur les compromis liés à une offre (`offre_id` non nul) | Uniquement les compromis liés à une offre enregistrée |
+| Délais/pertes | Délai moyen compromis → acte | `avg(date_acte_reelle - date_signature)` sur les compromis `realise` | — |
+| Délais/pertes | Compromis annulés / leur volume | `count(*)`/`sum(prix_convenu)` sur `compromis` `annule` | — |
+
+**Explicitement écarté** (donnée non instrumentée) : taux et délai visite → offre (aucun lien
+visite ↔ offre matérialisé), chiffre d'affaires, commission, fiscalité (aucun modèle de commission
+dans le schéma) — voir ADR-018 et `docs/KNOWN_LIMITATIONS.md`.
+
+Pas de graphiques, pas de filtre temporel en V1 — les séries "par mois" s'affichent en liste
+simple.
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

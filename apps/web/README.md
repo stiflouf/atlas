@@ -189,6 +189,7 @@ voir la procédure détaillée dans `docs/BUSINESS_RULES.md#mémoire-contextuell
 | Route | Rôle |
 |---|---|
 | `/` | Accueil — agenda du jour + à venir, actions prioritaires |
+| `/dashboard` | Tableau de bord commercial — résultats, pipeline, activité, délais/pertes, agrégés côté SQL (voir ADR-018) |
 | `/biens`, `/biens?archives=1`, `/biens/nouveau`, `/biens/[id]`, `/biens/[id]/modifier` | Liste active / archivée, création, fiche bien (onglets Contexte/Historique/Notes/Visites/Documents/Actions), édition — édition et archivage réservés à un bien réel |
 | `/clients`, `/clients?archives=1`, `/clients/nouveau`, `/clients/[id]`, `/clients/[id]/modifier` | Liste active / archivée, création, fiche acquéreur, édition — édition et archivage réservés à un acquéreur réel |
 | `/actions/nouveau` | Création d'une action (préremplissable via `?bienId=`/`?acquereurId=`) |

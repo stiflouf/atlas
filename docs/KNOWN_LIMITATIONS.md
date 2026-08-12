@@ -126,10 +126,29 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Aucun couplage automatique** vers l'archivage du bien, `stadeProjet` de l'acquéreur, ou une
   quelconque commission/facturation lors d'une vente réalisée — gestes manuels volontairement
   séparés (ADR-017), pas des oublis.
-- **Aucune métrique ni tableau de bord calculés** à partir de `dateActe`/`dateActeReelle` dans
-  cette passe (pas de délai moyen, pas de CA prévisionnel/réalisé, pas de taux de conversion, pas
-  d'analyse des ventes perdues) — cette passe prépare uniquement des données propres pour un
-  pilotage futur, ne construit aucun calcul ni affichage agrégé (ADR-017).
+- **Métriques et tableau de bord** : construits dans une passe ultérieure (ADR-018,
+  `/dashboard`) — voir section dédiée ci-dessous.
+
+## Dashboard commercial
+
+- **Pas de taux ni délai visite → offre, pas de CA, pas de commission, pas de fiscalité** —
+  aucun lien visite ↔ offre matérialisé dans le modèle, aucune donnée de commission ou fiscale
+  instrumentée. Afficher un chiffre approximatif aurait été plus trompeur qu'une absence de
+  métrique (ADR-018).
+- **`prixConvenu` = volume de transaction, jamais le CA du conseiller** — rappelé dans l'UI à
+  chaque métrique de volume, mais reste une donnée qu'un lecteur non averti pourrait mal
+  interpréter hors contexte.
+- **Moyenne de visites avant vente exclut les ventes sans compte rendu** du dénominateur plutôt
+  que de les compter comme 0 — une vente conclue sans compte rendu enregistré (visite non
+  formalisée, vente par un tiers, etc.) reste donc invisible dans cette moyenne plutôt que de la
+  tirer vers le bas (ADR-018).
+- **Pas de filtre temporel, pas de graphiques** en V1 — le tableau de bord montre l'état courant
+  (et les séries mensuelles en liste simple), pas d'évolution dans le temps comparée sur plusieurs
+  périodes.
+- **Agrégats non scindés par bien/acquéreur/conseiller** — un seul jeu de chiffres global (cohérent
+  avec le modèle mono-conseiller, ADR-006), pas de vue par mandat ou par secteur.
+- **Délais offre → compromis / compromis → acte non pondérés par le volume** — une vente à
+  10 000 € et une vente à 500 000 € comptent également dans la moyenne des délais.
 
 ## Limites du moteur de matching
 

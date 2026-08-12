@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Building2, Users } from "lucide-react";
+import { Home, Building2, Users, LayoutDashboard } from "lucide-react";
 
 const items = [
   { label: "Aujourd'hui", href: "/", icon: Home },
+  { label: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
   { label: "Biens", href: "/biens", icon: Building2 },
   { label: "Clients", href: "/clients", icon: Users },
 ];

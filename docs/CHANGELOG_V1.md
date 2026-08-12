@@ -170,6 +170,23 @@ La distinction `dateActe`/`dateActeReelle` est conservée délibérément pour u
 pipeline/délais/CA prévisionnel vs réalisé/conversions — aucun calcul de ce type construit dans
 cette passe.
 
+## 18. Tableau de bord commercial
+
+Premier tableau de bord d'Atlas, entièrement calculé côté SQL (`dashboardRepository.ts`,
+`COUNT`/`SUM`/`AVG`/`GROUP BY` par Postgres, jamais recalculé en mémoire — ADR-018). Quatre
+familles de métriques bâties uniquement sur des données déjà persistées : Résultats (ventes
+finalisées, volume vendu, taux compromis → vente, réalisé par mois), Pipeline (compromis/offres en
+cours et leurs volumes, prévisionnel par mois via `dateActe`, biens archivés exclus), Activité
+(visites/offres/compromis enregistrés, moyenne de visites avant vente), Délais/pertes (délai offre
+→ compromis, délai compromis → acte, compromis annulés et leur volume). Convention `0` mesuré vs
+`undefined` absence de donnée étendue aux agrégats (ADR-009). Règle d'archivage différenciée :
+l'historique inclut les entités archivées, le pipeline actif exclut les biens archivés. Correction
+notable sur la moyenne de visites avant vente : une vente sans compte rendu enregistré est exclue
+du dénominateur, jamais comptée comme "0 visite". `prixConvenu` rappelé partout comme volume de
+transaction, jamais le CA du conseiller. Explicitement écarté faute d'instrumentation suffisante :
+taux/délai visite → offre, CA, commission, fiscalité. Pas de graphiques, pas de filtre temporel en
+V1. Nouvelle route `/dashboard`, ajoutée à la navigation principale sous "Tableau de bord".
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

@@ -1,0 +1,188 @@
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { getDb } from "@/db/client";
+import { biens as biensTable, compromis as compromisTable, comptesRendusVisite, offres as offresTable } from "@/db/schema";
+
+// Agrégation entièrement côté SQL (COUNT/SUM/AVG/GROUP BY par Postgres) — ADR-018. La page ne
+// charge jamais les lignes métier pour recalculer en mémoire.
+//
+// Convention de retour : 0 est une vraie valeur (compteurs/sommes) ; `undefined` signifie
+// "aucune donnée pour calculer ce taux/cette moyenne/ce délai" (dénominateur vide), jamais
+// confondu avec un 0 mesuré — même principe que ADR-009 (NULL ≠ false) appliqué à l'absence
+// de donnée.
+//
+// Règle d'archivage (ADR-018) : les métriques historiques/réalisées (Résultats, Activité,
+// Délais/pertes) incluent les biens/acquéreurs archivés — une vente reste une vente après
+// archivage du bien. Les métriques de Pipeline excluent les biens archivés (jointure sur
+// biens.archive_le IS NULL) ; l'archivage acquéreur n'est volontairement pas pris en compte ici.
+
+export type MontantParMois = { mois: string; montant: number };
+
+export type DashboardResultats = {
+  nombreVentes: number;
+  volumeVendu: number;
+  tauxCompromisVente: number | undefined;
+  realiseParMois: MontantParMois[];
+};
+
+export type DashboardPipeline = {
+  compromisEnCours: number;
+  volumeSousCompromis: number;
+  pipelinePrevisionnelParMois: MontantParMois[];
+  offresEnCours: number;
+  volumeOffresEnCours: number;
+};
+
+export type DashboardActivite = {
+  visitesEnregistrees: number;
+  offresEnregistrees: number;
+  compromisEnregistres: number;
+  // Calculée uniquement sur les ventes disposant d'au moins un compte rendu de visite
+  // correspondant (même bienId + acquereurId, dateVisite < dateSignature). Une vente sans
+  // compte rendu n'est jamais comptée comme "0 visite" — absence de donnée, pas zéro — elle est
+  // exclue du dénominateur. undefined si aucune vente réalisée ne dispose d'un compte rendu.
+  moyenneVisitesAvantVente: number | undefined;
+};
+
+export type DashboardDelaisPertes = {
+  delaiMoyenOffreCompromisJours: number | undefined;
+  delaiMoyenCompromisActeJours: number | undefined;
+  compromisAnnules: number;
+  volumeCompromisAnnules: number;
+};
+
+export async function chargerResultats(): Promise<DashboardResultats> {
+  const [{ nombreVentes, volumeVendu }] = await getDb()
+    .select({
+      nombreVentes: sql<number>`count(*)::int`,
+      volumeVendu: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
+    })
+    .from(compromisTable)
+    .where(and(eq(compromisTable.statut, "realise"), isNotNull(compromisTable.dateActeReelle)));
+
+  const [{ realises, resolus }] = await getDb()
+    .select({
+      realises: sql<number>`count(*) filter (where ${compromisTable.statut} = 'realise' and ${compromisTable.dateActeReelle} is not null)::int`,
+      resolus: sql<number>`count(*) filter (where ${compromisTable.statut} in ('realise','annule'))::int`,
+    })
+    .from(compromisTable);
+
+  const realiseParMois = await getDb()
+    .select({
+      mois: sql<string>`to_char(date_trunc('month', ${compromisTable.dateActeReelle}), 'YYYY-MM')`,
+      montant: sql<number>`sum(${compromisTable.prixConvenu})::int`,
+    })
+    .from(compromisTable)
+    .where(and(eq(compromisTable.statut, "realise"), isNotNull(compromisTable.dateActeReelle)))
+    .groupBy(sql`date_trunc('month', ${compromisTable.dateActeReelle})`)
+    .orderBy(sql`date_trunc('month', ${compromisTable.dateActeReelle})`);
+
+  return {
+    nombreVentes,
+    volumeVendu,
+    tauxCompromisVente: resolus > 0 ? realises / resolus : undefined,
+    realiseParMois,
+  };
+}
+
+export async function chargerPipeline(): Promise<DashboardPipeline> {
+  const [{ compromisEnCours, volumeSousCompromis }] = await getDb()
+    .select({
+      compromisEnCours: sql<number>`count(*)::int`,
+      volumeSousCompromis: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
+    })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe)));
+
+  const pipelinePrevisionnelParMois = await getDb()
+    .select({
+      mois: sql<string>`to_char(date_trunc('month', ${compromisTable.dateActe}), 'YYYY-MM')`,
+      montant: sql<number>`sum(${compromisTable.prixConvenu})::int`,
+    })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "en_cours"),
+        isNotNull(compromisTable.dateActe),
+        isNull(biensTable.archiveLe)
+      )
+    )
+    .groupBy(sql`date_trunc('month', ${compromisTable.dateActe})`)
+    .orderBy(sql`date_trunc('month', ${compromisTable.dateActe})`);
+
+  const [{ offresEnCours, volumeOffresEnCours }] = await getDb()
+    .select({
+      offresEnCours: sql<number>`count(*)::int`,
+      volumeOffresEnCours: sql<number>`coalesce(sum(${offresTable.montant}), 0)::int`,
+    })
+    .from(offresTable)
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(and(eq(offresTable.statut, "en_cours"), isNull(biensTable.archiveLe)));
+
+  return {
+    compromisEnCours,
+    volumeSousCompromis,
+    pipelinePrevisionnelParMois,
+    offresEnCours,
+    volumeOffresEnCours,
+  };
+}
+
+export async function chargerActivite(): Promise<DashboardActivite> {
+  const [{ visitesEnregistrees }] = await getDb()
+    .select({ visitesEnregistrees: sql<number>`count(*)::int` })
+    .from(comptesRendusVisite);
+  const [{ offresEnregistrees }] = await getDb()
+    .select({ offresEnregistrees: sql<number>`count(*)::int` })
+    .from(offresTable);
+  const [{ compromisEnregistres }] = await getDb()
+    .select({ compromisEnregistres: sql<number>`count(*)::int` })
+    .from(compromisTable);
+
+  // Sous-requête corrélée (nombre de comptes rendus par vente) non exprimable proprement via le
+  // query builder — SQL brut paramétré, seule fonction du fichier écrite ainsi. Le filtre
+  // "where visite_count > 0" exclut les ventes sans compte rendu du dénominateur (jamais
+  // comptées comme 0 visite) — voir ADR-018.
+  const resultat = await getDb().execute<{ moyenne: string | null }>(sql`
+    select avg(visite_count)::float as moyenne from (
+      select (
+        select count(*) from comptes_rendus_visite v
+        where v.bien_id = c.bien_id and v.acquereur_id = c.acquereur_id and v.date_visite < c.date_signature
+      ) as visite_count
+      from compromis c
+      where c.statut = 'realise' and c.date_acte_reelle is not null
+    ) sous_requete
+    where visite_count > 0
+  `);
+  const moyenneBrute = resultat[0]?.moyenne;
+  const moyenneVisitesAvantVente = moyenneBrute === null || moyenneBrute === undefined ? undefined : Number(moyenneBrute);
+
+  return { visitesEnregistrees, offresEnregistrees, compromisEnregistres, moyenneVisitesAvantVente };
+}
+
+export async function chargerDelaisPertes(): Promise<DashboardDelaisPertes> {
+  const offreCompromisResultat = await getDb()
+    .select({ moyenne: sql<string | null>`avg(${compromisTable.dateSignature} - ${offresTable.dateOffre})` })
+    .from(compromisTable)
+    .innerJoin(offresTable, eq(compromisTable.offreId, offresTable.id));
+  const delaiMoyenOffreCompromisJours =
+    offreCompromisResultat[0]?.moyenne == null ? undefined : Number(offreCompromisResultat[0].moyenne);
+
+  const compromisActeResultat = await getDb()
+    .select({ moyenne: sql<string | null>`avg(${compromisTable.dateActeReelle} - ${compromisTable.dateSignature})` })
+    .from(compromisTable)
+    .where(and(eq(compromisTable.statut, "realise"), isNotNull(compromisTable.dateActeReelle)));
+  const delaiMoyenCompromisActeJours =
+    compromisActeResultat[0]?.moyenne == null ? undefined : Number(compromisActeResultat[0].moyenne);
+
+  const [{ compromisAnnules, volumeCompromisAnnules }] = await getDb()
+    .select({
+      compromisAnnules: sql<number>`count(*)::int`,
+      volumeCompromisAnnules: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
+    })
+    .from(compromisTable)
+    .where(eq(compromisTable.statut, "annule"));
+
+  return { delaiMoyenOffreCompromisJours, delaiMoyenCompromisActeJours, compromisAnnules, volumeCompromisAnnules };
+}

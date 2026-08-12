@@ -425,6 +425,13 @@ unidirectionnel, ADR-016) ; changer son statut ne le modifie jamais. `date_acte`
 distinctes délibérément conservées pour permettre plus tard un suivi de pipeline/délais/CA
 prévisionnel vs réalisé (ADR-017) — aucun calcul de ce type n'existe dans cette passe.
 
+## Tableau de bord commercial (`dashboardRepository.ts`)
+
+Aucune nouvelle table. `src/lib/dashboardRepository.ts` (lecture seule, ADR-018) agrège
+`compromis`/`offres`/`comptes_rendus_visite`/`biens` existants via `COUNT`/`SUM`/`AVG`/`GROUP BY`
+exécutés par Postgres — jamais recalculé en mémoire côté application. Voir `docs/BUSINESS_RULES.md`
+pour le détail des métriques et ADR-018 pour la règle d'archivage et les métriques écartées.
+
 ## Migrations
 
 | Fichier | Tables introduites |
