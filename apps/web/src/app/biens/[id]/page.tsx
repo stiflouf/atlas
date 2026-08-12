@@ -43,6 +43,7 @@ const variantStatutCommercial: Record<StatutCommercial, "default" | "accent" | "
   en_commercialisation: "default",
   offre_en_cours: "accent",
   compromis_signe: "success",
+  vendu: "success",
 };
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -70,6 +71,7 @@ export default async function FicheBien({ params }: PageProps) {
   const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
   const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
   const actionPrincipale = actionPrioritaire(actions);
+  const statutCommercial = deriverStatutCommercial(bien, compromis);
   const prochaineVisite = rendezVousDuJour.find(
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
   );
@@ -137,8 +139,8 @@ export default async function FicheBien({ params }: PageProps) {
         ) : (
           <div className="mt-4 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={variantStatutCommercial[deriverStatutCommercial(bien)]}>
-                {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
+              <Badge variant={variantStatutCommercial[statutCommercial]}>
+                {LABEL_STATUT_COMMERCIAL[statutCommercial]}
               </Badge>
             </div>
             {actionPrincipale && (

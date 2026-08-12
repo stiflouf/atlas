@@ -8,6 +8,7 @@ import {
   enregistrerCompromis,
   getCompromisById,
   changerStatutCompromis,
+  marquerCompromisRealise,
   listerCompromisPourBien,
 } from "@/lib/compromisRepository";
 import type { StatutCompromis } from "@/types/compromis";
@@ -70,8 +71,11 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
 }
 
 // Refus explicite (throw) si le compromis est introuvable, si le bien ou l'acquéreur est
-// archivé, ou si le compromis n'est plus 'en_cours'. Ne modifie jamais compromisSigneLe (couplage
-// unidirectionnel, geste commercial séparé — ADR-014/ADR-016).
+// archivé, si le compromis n'est plus 'en_cours', ou (transition 'realise' uniquement) si
+// dateActeReelle est absente/invalide — une vente ne doit jamais être marquée 'realise' sans date
+// réelle (ADR-017). L'écriture statut+dateActeReelle est atomique (marquerCompromisRealise).
+// Ne modifie jamais compromisSigneLe, l'archivage du bien, ni stadeProjet de l'acquéreur —
+// gestes commerciaux volontairement séparés (ADR-014/ADR-016/ADR-017).
 export async function changerStatutCompromisAction(formData: FormData): Promise<void> {
   const compromisId = String(formData.get("compromisId") ?? "");
   const statut = String(formData.get("statut") ?? "") as StatutCompromis;
@@ -93,7 +97,15 @@ export async function changerStatutCompromisAction(formData: FormData): Promise<
   if (bien?.archiveLe) throw new Error("Impossible de modifier un compromis sur un bien archivé.");
   if (acquereur?.archiveLe) throw new Error("Impossible de modifier un compromis pour un acquéreur archivé.");
 
-  await changerStatutCompromis(compromisId, statut);
+  if (statut === "realise") {
+    const dateActeReelle = parseDateOptionnelle(formData.get("dateActeReelle"));
+    if (!dateActeReelle) {
+      throw new Error("La date réelle de signature de l'acte est obligatoire pour marquer une vente réalisée.");
+    }
+    await marquerCompromisRealise(compromisId, dateActeReelle);
+  } else {
+    await changerStatutCompromis(compromisId, statut);
+  }
 
   redirect(`/biens/${compromisActuel.bienId}`);
 }

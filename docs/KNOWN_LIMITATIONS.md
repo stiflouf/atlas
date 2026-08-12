@@ -105,11 +105,11 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 ## Compromis structuré
 
 - **Transitions de statut non réversibles en V1** — une fois `realise`/`annule`, aucune action ne
-  permet de revenir à `en_cours`. Une erreur de saisie nécessite une intervention directe en base
-  (ADR-016).
-- **Aucun historique des changements de statut**, même limite qu'Offres : ni dans l'onglet
-  Compromis, ni dans l'historique dérivé du bien (un seul événement à la création). Conséquence du
-  choix de ne pas ajouter de champ de date de transition non demandé (ADR-016).
+  permet de revenir à `en_cours`. Une erreur de saisie (y compris `dateActeReelle`) nécessite une
+  intervention directe en base (ADR-016/ADR-017).
+- **Historique des changements de statut limité à `realise`** : seule cette transition produit un
+  événement daté (`"Vente finalisée"`, grâce à `dateActeReelle` — ADR-017) ; `annule` n'en produit
+  toujours aucun, même limite qu'Offres (pas de champ de date de transition générique).
 - **Sélection de l'offre acceptée non filtrée par acquéreur** : le formulaire "Ajouter un
   compromis" liste toutes les offres `acceptee` du bien, tous acquéreurs confondus (impossible de
   filtrer dynamiquement sans JS côté client) — si le conseiller choisit une offre d'un autre
@@ -121,8 +121,15 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Préparation de visite non enrichie** : contrairement à Offre, ce n'est pas considéré comme une
   extension naturelle — un bien avec compromis signé n'est normalement plus en phase de visite
   active (ADR-016).
-- **Bandeau "État du dossier" inchangé** : ne montre que le badge générique, pas le détail du
-  compromis (prix, acquéreur, date d'acte) — consultable uniquement dans l'onglet Compromis.
+- **Bandeau "État du dossier"** : affiche désormais un badge "Vendu" (ADR-017) mais toujours aucun
+  détail (prix, acquéreur, dates) — consultable uniquement dans l'onglet Compromis.
+- **Aucun couplage automatique** vers l'archivage du bien, `stadeProjet` de l'acquéreur, ou une
+  quelconque commission/facturation lors d'une vente réalisée — gestes manuels volontairement
+  séparés (ADR-017), pas des oublis.
+- **Aucune métrique ni tableau de bord calculés** à partir de `dateActe`/`dateActeReelle` dans
+  cette passe (pas de délai moyen, pas de CA prévisionnel/réalisé, pas de taux de conversion, pas
+  d'analyse des ventes perdues) — cette passe prépare uniquement des données propres pour un
+  pilotage futur, ne construit aucun calcul ni affichage agrégé (ADR-017).
 
 ## Limites du moteur de matching
 

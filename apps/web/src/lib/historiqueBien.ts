@@ -73,6 +73,13 @@ export function deriverHistoriqueBien(
   // (ADR-016).
   for (const c of compromis) {
     evenements.push({ date: c.dateSignature, texte: `Compromis structuré — ${formatPrix(c.prixConvenu)}` });
+
+    // Exception à "pas d'événement pour un changement de statut" : contrairement aux autres
+    // transitions, 'realise' porte désormais une date fiable (dateActeReelle, ADR-017), posée
+    // atomiquement avec le statut — jamais affiché si l'une des deux conditions manque.
+    if (c.statut === "realise" && c.dateActeReelle) {
+      evenements.push({ date: c.dateActeReelle, texte: `Vente finalisée — ${formatPrix(c.prixConvenu)}` });
+    }
   }
 
   return evenements.sort((a, b) => (a.date < b.date ? 1 : -1));

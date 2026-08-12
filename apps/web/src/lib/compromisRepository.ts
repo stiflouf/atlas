@@ -16,6 +16,7 @@ function ligneVersCompromis(ligne: LigneCompromis): Compromis {
     prixConvenu: ligne.prixConvenu,
     dateSignature: ligne.dateSignature,
     dateActe: ligne.dateActe ?? undefined,
+    dateActeReelle: ligne.dateActeReelle ?? undefined,
     statut: ligne.statut as StatutCompromis,
     creeLe: ligne.creeLe.toISOString(),
   };
@@ -87,13 +88,27 @@ export async function enregistrerCompromis(input: NouveauCompromis): Promise<Com
   return ligneVersCompromis(ligne);
 }
 
-// UPDATE pur du statut uniquement — aucune garde métier interne (transitions autorisées,
-// archivage) : même séparation que offreRepository.
+// UPDATE pur du statut uniquement — réservée à la transition 'annule' (aucune donnée
+// supplémentaire). Aucune garde métier interne (transitions autorisées, archivage) : même
+// séparation que offreRepository.
 export async function changerStatutCompromis(id: string, statut: StatutCompromis): Promise<Compromis | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(compromisTable)
     .set({ statut })
+    .where(eq(compromisTable.id, id))
+    .returning();
+  return ligne ? ligneVersCompromis(ligne) : undefined;
+}
+
+// Écriture atomique dédiée à la transition 'realise' (ADR-017) : statut et dateActeReelle posés
+// dans le même UPDATE, jamais deux écritures séparées — aucune fenêtre où le compromis serait
+// 'realise' sans dateActeReelle. dateActe (prévue) n'est jamais touchée ici.
+export async function marquerCompromisRealise(id: string, dateActeReelle: string): Promise<Compromis | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(compromisTable)
+    .set({ statut: "realise", dateActeReelle })
     .where(eq(compromisTable.id, id))
     .returning();
   return ligne ? ligneVersCompromis(ligne) : undefined;

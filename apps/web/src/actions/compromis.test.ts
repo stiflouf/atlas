@@ -17,7 +17,9 @@ const {
 const { creerBien, archiverBien, getBienById } = await import("@/lib/bienRepository");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
 const { enregistrerOffre, changerStatutOffre } = await import("@/lib/offreRepository");
-const { enregistrerCompromis, listerCompromisPourBien } = await import("@/lib/compromisRepository");
+const { enregistrerCompromis, listerCompromisPourBien, getCompromisById } = await import(
+  "@/lib/compromisRepository"
+);
 const { ajouterCompromisAction, changerStatutCompromisAction } = await import("./compromis");
 
 const idsCompromisCrees: string[] = [];
@@ -305,9 +307,9 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    await changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise" })).catch(
-      () => {}
-    );
+    await changerStatutCompromisAction(
+      formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" })
+    ).catch(() => {});
 
     await expect(
       changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "annule" }))
@@ -327,11 +329,51 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     const bienAvant = await getBienById(bien.id);
     expect(bienAvant?.compromisSigneLe).toBeUndefined();
 
-    await changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise" })).catch(
-      () => {}
-    );
+    await changerStatutCompromisAction(
+      formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" })
+    ).catch(() => {});
 
     const bienApres = await getBienById(bien.id);
     expect(bienApres?.compromisSigneLe).toBeUndefined();
+  });
+
+  it("refuse explicitement (throw) le passage à realise sans dateActeReelle — aucune écriture", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REALISE-SANS-DATE-REELLE");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    await expect(
+      changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise" }))
+    ).rejects.toThrow(/date réelle/);
+
+    const inchange = await getCompromisById(compromisCree.id);
+    expect(inchange?.statut).toBe("en_cours");
+    expect(inchange?.dateActeReelle).toBeUndefined();
+  });
+
+  it("marque réalisé avec dateActeReelle, en conservant dateActe (prévue) telle quelle", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("REALISE-AVEC-DATE-REELLE");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+      dateActe: "2026-10-01",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    await changerStatutCompromisAction(
+      formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-10-08" })
+    ).catch(() => {});
+
+    const apres = await getCompromisById(compromisCree.id);
+    expect(apres?.statut).toBe("realise");
+    expect(apres?.dateActeReelle).toBe("2026-10-08");
+    expect(apres?.dateActe).toBe("2026-10-01");
   });
 });

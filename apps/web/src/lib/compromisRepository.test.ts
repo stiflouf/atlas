@@ -24,6 +24,7 @@ const {
   getCompromisById,
   enregistrerCompromis,
   changerStatutCompromis,
+  marquerCompromisRealise,
 } = await import("./compromisRepository");
 
 const idsCompromisCrees: string[] = [];
@@ -144,7 +145,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     expect(compromisCree.offreId).toBe(offre.id);
   });
 
-  it("changerStatutCompromis() met à jour uniquement le statut, le reste des champs reste immuable", async () => {
+  it("changerStatutCompromis() (transition 'annule') met à jour uniquement le statut, le reste des champs reste immuable", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("003");
     const compromisCree = await enregistrerCompromis({
       bienId: bien.id,
@@ -154,19 +155,64 @@ describe("compromisRepository (intégration Postgres)", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    const realise = await changerStatutCompromis(compromisCree.id, "realise");
+    const annule = await changerStatutCompromis(compromisCree.id, "annule");
 
-    expect(realise?.statut).toBe("realise");
-    expect(realise?.prixConvenu).toBe(350000);
-    expect(realise?.acquereurId).toBe(acquereur.id);
-    expect(realise?.bienId).toBe(bien.id);
-    expect(realise?.dateSignature).toBe("2026-08-05");
+    expect(annule?.statut).toBe("annule");
+    expect(annule?.prixConvenu).toBe(350000);
+    expect(annule?.acquereurId).toBe(acquereur.id);
+    expect(annule?.bienId).toBe(bien.id);
+    expect(annule?.dateSignature).toBe("2026-08-05");
+    expect(annule?.dateActeReelle).toBeUndefined();
   });
 
   it("changerStatutCompromis() retourne undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(changerStatutCompromis("compromis-mock", "realise")).resolves.toBeUndefined();
+    await expect(changerStatutCompromis("compromis-mock", "annule")).resolves.toBeUndefined();
     await expect(
-      changerStatutCompromis("00000000-0000-0000-0000-000000000000", "realise")
+      changerStatutCompromis("00000000-0000-0000-0000-000000000000", "annule")
+    ).resolves.toBeUndefined();
+  });
+
+  it("marquerCompromisRealise() pose atomiquement statut='realise' et dateActeReelle, sans toucher dateActe (prévue)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("004");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 360000,
+      dateSignature: "2026-08-05",
+      dateActe: "2026-10-01",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    const realise = await marquerCompromisRealise(compromisCree.id, "2026-10-15");
+
+    expect(realise?.statut).toBe("realise");
+    expect(realise?.dateActeReelle).toBe("2026-10-15");
+    expect(realise?.dateActe).toBe("2026-10-01");
+    expect(realise?.prixConvenu).toBe(360000);
+  });
+
+  it("marquerCompromisRealise() fonctionne même sans dateActe (prévue) préalable", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("005");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 340000,
+      dateSignature: "2026-08-05",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+    expect(compromisCree.dateActe).toBeUndefined();
+
+    const realise = await marquerCompromisRealise(compromisCree.id, "2026-09-20");
+
+    expect(realise?.statut).toBe("realise");
+    expect(realise?.dateActeReelle).toBe("2026-09-20");
+    expect(realise?.dateActe).toBeUndefined();
+  });
+
+  it("marquerCompromisRealise() retourne undefined pour un id non-UUID ou inexistant", async () => {
+    await expect(marquerCompromisRealise("compromis-mock", "2026-09-20")).resolves.toBeUndefined();
+    await expect(
+      marquerCompromisRealise("00000000-0000-0000-0000-000000000000", "2026-09-20")
     ).resolves.toBeUndefined();
   });
 });

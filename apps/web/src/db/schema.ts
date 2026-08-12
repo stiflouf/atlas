@@ -271,6 +271,11 @@ export const offres = pgTable(
 // compromis 'en_cours' par bien à la fois : garde applicative, pas une contrainte SQL. Couplage
 // unidirectionnel avec biens.compromisSigneLe : créer un compromis le pose, mais aucun changement
 // de statut ne le modifie (voir src/actions/compromis.ts).
+// dateActe (prévue) et dateActeReelle (constatée) sont deux champs distincts et jamais fusionnés
+// (ADR-017) : dateActe ne change jamais après création, dateActeReelle n'est posée qu'au passage
+// à 'realise', atomiquement avec le changement de statut. Distinction conservée pour permettre
+// plus tard un suivi de pipeline/délais/CA prévisionnel vs réalisé — aucun calcul de ce type
+// n'existe dans cette passe.
 export const compromis = pgTable(
   "compromis",
   {
@@ -285,6 +290,7 @@ export const compromis = pgTable(
     prixConvenu: integer("prix_convenu").notNull(),
     dateSignature: date("date_signature").notNull(),
     dateActe: date("date_acte"),
+    dateActeReelle: date("date_acte_reelle"),
     statut: text("statut").notNull().default("en_cours"),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },

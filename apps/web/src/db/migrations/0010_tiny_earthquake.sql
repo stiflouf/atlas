@@ -1,0 +1,1 @@
+ALTER TABLE "compromis" ADD COLUMN "date_acte_reelle" date;

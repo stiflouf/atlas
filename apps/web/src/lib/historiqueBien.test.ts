@@ -240,7 +240,7 @@ describe("deriverHistoriqueBien", () => {
     expect(evenements.some((e) => e.texte.includes("acquereur-confidentiel"))).toBe(false);
   });
 
-  it("ne produit aucun événement pour un changement de statut de compromis (pas de date de transition fiable)", () => {
+  it("ne produit pas « Vente finalisée » pour un compromis realise sans dateActeReelle (garde défensive)", () => {
     const c: Compromis = {
       id: "compromis-2",
       bienId: "bien-test",
@@ -254,6 +254,28 @@ describe("deriverHistoriqueBien", () => {
     const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [], [c]);
 
     expect(evenements).toEqual([{ date: "2026-08-05", texte: `Compromis structuré — ${formatPrix(500000)}` }]);
+  });
+
+  it("produit « Vente finalisée — {prix} » daté par dateActeReelle quand le compromis est realise avec une date réelle", () => {
+    const c: Compromis = {
+      id: "compromis-vendu",
+      bienId: "bien-test",
+      acquereurId: "acquereur-confidentiel",
+      prixConvenu: 495000,
+      dateSignature: "2026-08-05",
+      dateActe: "2026-10-01",
+      dateActeReelle: "2026-10-08",
+      statut: "realise",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [], [c]);
+
+    expect(evenements).toEqual([
+      { date: "2026-10-08", texte: `Vente finalisée — ${formatPrix(495000)}` },
+      { date: "2026-08-05", texte: `Compromis structuré — ${formatPrix(495000)}` },
+    ]);
+    expect(evenements.some((e) => e.texte.includes("acquereur-confidentiel"))).toBe(false);
   });
 
   it("distingue « Compromis structuré » (entité détaillée) de « Compromis signé » (jalon générique ADR-014) quand les deux coexistent", () => {
@@ -274,5 +296,30 @@ describe("deriverHistoriqueBien", () => {
       expect.arrayContaining(["Compromis signé", `Compromis structuré — ${formatPrix(500000)}`])
     );
     expect(evenements).toHaveLength(2);
+  });
+
+  it("distingue les trois événements liés au compromis quand ils coexistent tous : générique ADR-014, création, vente finalisée", () => {
+    const bien = bienTest({ creeLe: undefined, compromisSigneLe: "2026-08-05T10:00:00.000Z" });
+    const c: Compromis = {
+      id: "compromis-4",
+      bienId: "bien-test",
+      acquereurId: "acquereur-test",
+      prixConvenu: 500000,
+      dateSignature: "2026-08-05",
+      dateActeReelle: "2026-10-08",
+      statut: "realise",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bien, [], [], [], [c]);
+
+    expect(evenements.map((e) => e.texte)).toEqual(
+      expect.arrayContaining([
+        "Compromis signé",
+        `Compromis structuré — ${formatPrix(500000)}`,
+        `Vente finalisée — ${formatPrix(500000)}`,
+      ])
+    );
+    expect(evenements).toHaveLength(3);
   });
 });

@@ -576,20 +576,41 @@ export default function BienTabs({
                     {c.dateActe && (
                       <p className="text-[13px] text-[#94a3b8] mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
                     )}
+                    {c.dateActeReelle && (
+                      <p className="text-[13px] text-[#16a34a] mt-1">Acte signé le {formatDate(c.dateActeReelle)}</p>
+                    )}
                     {c.statut === "en_cours" && !bien.archiveLe && (
-                      <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
-                        {(["realise", "annule"] as const).map((statut) => (
-                          <form key={statut} action={changerStatutCompromisAction}>
-                            <input type="hidden" name="compromisId" value={c.id} />
-                            <input type="hidden" name="statut" value={statut} />
-                            <button
-                              type="submit"
-                              className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
-                            >
-                              {statut === "realise" ? "Marquer réalisé" : "Annuler"}
-                            </button>
-                          </form>
-                        ))}
+                      <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
+                        <form action={changerStatutCompromisAction} className="flex items-end gap-2">
+                          <input type="hidden" name="compromisId" value={c.id} />
+                          <input type="hidden" name="statut" value="realise" />
+                          <label className="text-[11px] text-[#94a3b8]">
+                            Date réelle de l'acte
+                            <input
+                              type="date"
+                              name="dateActeReelle"
+                              required
+                              defaultValue={c.dateActe ?? ""}
+                              className="block mt-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                            />
+                          </label>
+                          <button
+                            type="submit"
+                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
+                          >
+                            Marquer réalisé
+                          </button>
+                        </form>
+                        <form action={changerStatutCompromisAction}>
+                          <input type="hidden" name="compromisId" value={c.id} />
+                          <input type="hidden" name="statut" value="annule" />
+                          <button
+                            type="submit"
+                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                          >
+                            Annuler
+                          </button>
+                        </form>
                       </div>
                     )}
                   </div>

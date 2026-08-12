@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0009`, vérifiées le 2026-08-12). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0010`, vérifiées le 2026-08-12). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -152,7 +152,8 @@ erDiagram
         uuid offre_id "FK nullable, ON DELETE SET NULL"
         integer prix_convenu
         date date_signature
-        date date_acte "nullable"
+        date date_acte "nullable, prévue"
+        date date_acte_reelle "nullable, ADR-017, constatée"
         text statut "ADR-016, mutable"
         timestamptz cree_le
     }
@@ -391,7 +392,8 @@ unidirectionnel, ADR-015) ; changer son statut ne modifie jamais
 ## `compromis`
 
 **Rôle** : compromis de vente structuré — bien, acquéreur, prix convenu, date de signature, date
-d'acte optionnelle, statut, lien optionnel vers l'offre acceptée d'origine. Voir ADR-016.
+d'acte prévue optionnelle, date d'acte réelle, statut, lien optionnel vers l'offre acceptée
+d'origine. Voir ADR-016 et ADR-017.
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
@@ -401,21 +403,27 @@ d'acte optionnelle, statut, lien optionnel vers l'offre acceptée d'origine. Voi
 | `offre_id` | uuid (FK → `offres.id`, `ON DELETE SET NULL`) | **oui** | optionnel — un compromis peut être marqué directement sans offre structurée préalable |
 | `prix_convenu` | integer | non | immuable après création |
 | `date_signature` | date | non | immuable après création |
-| `date_acte` | date | **oui** | optionnel, "si connue" |
+| `date_acte` | date | **oui** | **prévue**, saisie à la création, jamais modifiée ensuite (ADR-017) |
+| `date_acte_reelle` | date | **oui** | **constatée**, posée uniquement au passage à `realise`, atomiquement avec le statut — jamais fusionnée avec `date_acte` (ADR-017) |
 | `statut` | text | non | défaut `"en_cours"`, `CHECK` — seul champ mutable (`UPDATE` en place, ADR-016) |
 | `cree_le` | timestamptz | non | |
 
 **Contrainte `CHECK`** : `statut IN ('en_cours','realise','annule')`. Transitions autorisées
-(`en_cours` → une valeur finale, jamais l'inverse) et cohérence de l'offre liée (même bien, même
-acquéreur, statut `acceptee`) validées côté Server Action, pas en `CHECK` SQL. Un seul compromis
-`en_cours` par bien à la fois : garde applicative, pas une contrainte SQL d'unicité.
+(`en_cours` → une valeur finale, jamais l'inverse), cohérence de l'offre liée (même bien, même
+acquéreur, statut `acceptee`), et obligation de `date_acte_reelle` pour la transition `realise` —
+toutes validées côté Server Action, pas en `CHECK` SQL. Un seul compromis `en_cours` par bien à la
+fois : garde applicative, pas une contrainte SQL d'unicité.
 
 Pas de `modifie_le` distinct. Relation fonctionnelle : lue par
 `listerCompromisPourBien()`/`listerCompromisPourAcquereur()`/`getCompromisById()`
-(`src/lib/compromisRepository.ts`), écrite par
-`ajouterCompromisAction`/`changerStatutCompromisAction` (`src/actions/compromis.ts`). Créer un
-compromis pose aussi `biens.compromisSigneLe` (couplage unidirectionnel, ADR-016) ; changer son
-statut ne le modifie jamais.
+(`src/lib/compromisRepository.ts`), écrite par `ajouterCompromisAction` /
+`changerStatutCompromisAction` (`src/actions/compromis.ts`, qui appelle
+`changerStatutCompromis()` pour `annule` et `marquerCompromisRealise()` pour `realise` — deux
+fonctions repository distinctes, la seconde posant `statut` et `date_acte_reelle` dans un seul
+`UPDATE` atomique). Créer un compromis pose aussi `biens.compromisSigneLe` (couplage
+unidirectionnel, ADR-016) ; changer son statut ne le modifie jamais. `date_acte`/`date_acte_reelle`
+distinctes délibérément conservées pour permettre plus tard un suivi de pipeline/délais/CA
+prévisionnel vs réalisé (ADR-017) — aucun calcul de ce type n'existe dans cette passe.
 
 ## Migrations
 
@@ -431,6 +439,7 @@ statut ne le modifie jamais.
 | `0007_absurd_rumiko_fujikawa.sql` | `offre_en_cours_le`, `compromis_signe_le` sur `biens` |
 | `0008_great_kid_colt.sql` | `offres` |
 | `0009_high_lenny_balinger.sql` | `compromis` |
+| `0010_tiny_earthquake.sql` | `date_acte_reelle` sur `compromis` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -218,15 +218,17 @@ stratégie de stockage : ADR-013.
 ## Statut commercial du bien
 
 **Fichiers** : `src/lib/statutCommercialBien.ts` (`deriverStatutCommercial`),
-`src/actions/statutCommercialBien.ts`. Détail de la décision : ADR-014.
+`src/actions/statutCommercialBien.ts`. Détail de la décision : ADR-014, 4e état `vendu` : ADR-017.
 
-Aucun statut stocké — dérivé en lecture depuis deux timestamps de jalons sur `biens` :
+Aucun statut stocké — dérivé en lecture depuis deux timestamps de jalons sur `biens` et la liste
+des compromis du bien :
 
-| Jalons | Statut dérivé |
+| Condition | Statut dérivé |
 |---|---|
 | `offreEnCoursLe` NULL et `compromisSigneLe` NULL | `en_commercialisation` |
 | `offreEnCoursLe` non NULL, `compromisSigneLe` NULL | `offre_en_cours` |
-| `compromisSigneLe` non NULL (quel que soit `offreEnCoursLe`) | `compromis_signe` |
+| `compromisSigneLe` non NULL | `compromis_signe` |
+| Un compromis `realise` avec `dateActeReelle` existe | `vendu` (prioritaire sur les 3 précédents) |
 
 | Règle | Condition | Résultat |
 |---|---|---|
@@ -280,17 +282,29 @@ mutable, `UPDATE` en place (même patron qu'`offres.statut`).
 | Créer un compromis | Bien et acquéreur réels, non archivés ; prix convenu > 0 ; aucun compromis `en_cours` déjà présent pour ce bien | `enregistrerCompromis(...)` **puis** `marquerCompromisSigne(bienId)` — un seul geste |
 | Créer un compromis — refus | Bien/acquéreur introuvable ou archivé, prix invalide, ou compromis déjà `en_cours` pour ce bien | `throw` explicite (`ajouterCompromisAction`) — garde d'unicité applicative, pas une contrainte SQL |
 | Offre liée (`offreId` optionnel) | Fournie | Doit exister, appartenir au même bien, au même acquéreur, et être `acceptee` — sinon `throw` explicite spécifique à chaque cas |
-| Changer le statut | Compromis `en_cours`, bien et acquéreur non archivés | `en_cours` → `realise`/`annule` uniquement — jamais l'inverse |
-| Changer le statut — refus | Compromis introuvable, bien/acquéreur archivé, ou compromis déjà dans un statut final | `throw` explicite (`changerStatutCompromisAction`) |
-| Couplage avec le statut commercial | Toujours | Créer un compromis pose `compromisSigneLe` ; changer son statut **ne le modifie jamais** — geste commercial séparé (ADR-014 non touchée) |
+| Changer le statut vers `annule` | Compromis `en_cours`, bien et acquéreur non archivés | `changerStatutCompromis(id, "annule")` |
+| Changer le statut vers `realise` | Compromis `en_cours`, bien et acquéreur non archivés, `dateActeReelle` fournie et valide | `marquerCompromisRealise(id, dateActeReelle)` — **écriture atomique** : `statut` et `dateActeReelle` posés dans le même `UPDATE` (ADR-017) |
+| Changer le statut vers `realise` — refus | `dateActeReelle` absente ou invalide | `throw` explicite, **aucune écriture** — un compromis ne peut jamais devenir `realise` sans date réelle |
+| Changer le statut — refus (commun) | Compromis introuvable, bien/acquéreur archivé, ou compromis déjà dans un statut final | `throw` explicite (`changerStatutCompromisAction`) |
+| `dateActe` (prévue) vs `dateActeReelle` (constatée) | Toujours | Deux champs strictement distincts, jamais fusionnés — `dateActe` immuable après création, `dateActeReelle` posée uniquement au passage à `realise` (ADR-017) |
+| Couplage avec le statut commercial | Toujours | Créer un compromis pose `compromisSigneLe` ; changer son statut **ne le modifie jamais** — geste commercial séparé (ADR-014/ADR-016 non touchées) |
+| Couplage vers archivage/`stadeProjet`/commission | Jamais | Aucune automatisation — gestes manuels séparés (ADR-017) |
 | Consultation | Toujours | `listerCompromisPourBien()`/`listerCompromisPourAcquereur()`/`getCompromisById()` résolvent toujours, même sur un bien/acquéreur archivé |
 
 **Historique dérivé** : un événement par compromis, à la création
 (`"Compromis structuré — {prixConvenu}"`), **sans nommer l'acquéreur**. Libellé volontairement
 distinct de l'événement générique ADR-014 (`"Compromis signé"`, dérivé de `compromisSigneLe`), qui
 continue de coexister séparément — le premier est la création de l'entité détaillée, le second le
-jalon commercial synthétique du bien. Aucun événement pour un changement de statut (pas de date de
-transition fiable disponible).
+jalon commercial synthétique du bien. Aucun événement pour un changement de statut, **sauf**
+`realise` avec `dateActeReelle` présente : `"Vente finalisée — {prixConvenu}"`, daté par
+`dateActeReelle` — exception assumée à "pas d'événement sans date fiable" puisque l'écriture
+atomique garantit justement cette date (ADR-017).
+
+**Pilotage futur (non construit dans cette passe)** : la distinction `dateActe`/`dateActeReelle`
+est délibérément conservée pour permettre plus tard, sans changement de modèle, un suivi de
+pipeline/délais (écart prévu/réel), un CA prévisionnel (compromis non actés) vs réalisé (ventes
+`vendu`), des taux de conversion, et une analyse des ventes perdues (compromis `annule`) — voir
+ADR-017.
 
 ## Archivage
 

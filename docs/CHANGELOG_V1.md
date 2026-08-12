@@ -155,6 +155,21 @@ de lecture sur la fiche acquéreur. Historique dérivé enrichi de "Compromis st
 libellé volontairement distinct de l'événement générique ADR-014 ("Compromis signé") qui continue
 de coexister séparément.
 
+## 17. Vente finalisée
+
+Nouveau champ `dateActeReelle` sur `compromis`, distinct de `dateActe` (prévue, inchangée) — le
+"vendu, à qui, à quel prix, quand réellement" qu'aucune donnée existante ne pouvait représenter
+(ADR-017). Aucune nouvelle entité : `Compromis` portait déjà bien/acquéreur/prix. Passage à
+`realise` : `dateActeReelle` obligatoire, écriture atomique avec le statut
+(`marquerCompromisRealise`) — jamais de compromis `realise` sans date réelle. 4e état commercial
+dérivé `vendu` (`deriverStatutCommercial`, prioritaire sur `compromis_signe`), badge "Vendu" sur le
+bandeau. Historique dérivé enrichi de "Vente finalisée — {prix}", daté par `dateActeReelle` —
+seule exception à "pas d'événement pour un changement de statut", justifiée par l'écriture
+atomique. Toujours aucun couplage automatique vers l'archivage, `stadeProjet`, ou une commission.
+La distinction `dateActe`/`dateActeReelle` est conservée délibérément pour un futur suivi de
+pipeline/délais/CA prévisionnel vs réalisé/conversions — aucun calcul de ce type construit dans
+cette passe.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,
