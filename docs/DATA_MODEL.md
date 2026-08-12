@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0007`, vérifiées le 2026-08-12). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0008`, vérifiées le 2026-08-12). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -17,6 +17,8 @@ erDiagram
     biens ||--o{ notes_bien : "bien_id (FK)"
     biens ||--o{ comptes_rendus_visite : "bien_id (FK)"
     biens ||--o{ documents_bien : "bien_id (FK)"
+    biens ||--o{ offres : "bien_id (FK)"
+    acquereurs ||--o{ offres : "acquereur_id (FK)"
     acquereurs ||--o{ comptes_rendus_visite : "acquereur_id (FK)"
     biens ||..o{ actions : "bien_id (text, sans FK)"
     acquereurs ||..o{ actions : "acquereur_id (text, sans FK)"
@@ -128,6 +130,16 @@ erDiagram
         text cle_stockage "opaque, généré serveur — ADR-013"
         integer taille_octets
         text type_mime
+        timestamptz cree_le
+    }
+    offres {
+        uuid id PK
+        uuid bien_id FK
+        uuid acquereur_id FK
+        integer montant
+        date date_offre
+        text statut "ADR-015, mutable"
+        date date_validite "nullable"
         timestamptz cree_le
     }
 ```
@@ -335,6 +347,33 @@ Relation fonctionnelle : lue par `listerDocumentsPourBien()`/`getDocumentBienByI
 (`src/lib/documentBienRepository.ts`), écrite par `ajouterDocumentBienAction`, servie en lecture
 par le Route Handler `/api/documents/[id]`.
 
+## `offres`
+
+**Rôle** : offre d'achat structurée sur un bien — bien, acquéreur, montant, date, statut, date de
+validité optionnelle. Voir ADR-015.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | non | vraie FK — voir ADR-010 |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `montant` | integer | non | immuable après création |
+| `date_offre` | date | non | immuable après création |
+| `statut` | text | non | défaut `"en_cours"`, `CHECK` — seul champ mutable (`UPDATE` en place, ADR-015) |
+| `date_validite` | date | **oui** | optionnel |
+| `cree_le` | timestamptz | non | |
+
+**Contrainte `CHECK`** : `statut IN ('en_cours','acceptee','refusee','retiree')`. Transitions
+autorisées (`en_cours` → une valeur finale, jamais l'inverse) validées côté Server Action, pas en
+`CHECK` SQL.
+
+Pas de `modifie_le` distinct — seul `statut` change après création, en place. Relation
+fonctionnelle : lue par `listerOffresPourBien()`/`listerOffresPourAcquereur()`/`getOffreById()`
+(`src/lib/offreRepository.ts`), écrite par `ajouterOffreAction`/`changerStatutOffreAction`
+(`src/actions/offre.ts`). Créer une offre pose aussi `biens.offreEnCoursLe` (couplage
+unidirectionnel, ADR-015) ; changer son statut ne modifie jamais
+`offreEnCoursLe`/`compromisSigneLe`.
+
 ## Migrations
 
 | Fichier | Tables introduites |
@@ -347,6 +386,7 @@ par le Route Handler `/api/documents/[id]`.
 | `0005_happy_wolfsbane.sql` | `archive_le` sur `biens` et `acquereurs` |
 | `0006_volatile_starbolt.sql` | `documents_bien` |
 | `0007_absurd_rumiko_fujikawa.sql` | `offre_en_cours_le`, `compromis_signe_le` sur `biens` |
+| `0008_great_kid_colt.sql` | `offres` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

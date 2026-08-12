@@ -86,6 +86,22 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   contrairement au mock (`dossier.derniereActivite`, valeur statique) — seul le badge de statut
   est affiché.
 
+## Offres structurées
+
+- **Transitions de statut non réversibles en V1** — une fois `acceptee`/`refusee`/`retiree`,
+  aucune action ne permet de revenir à `en_cours` ni de changer vers un autre statut final. Une
+  erreur de saisie nécessite une intervention directe en base (ADR-015).
+- **Aucun historique des changements de statut** : ni dans l'onglet Offres (seul le statut courant
+  est affiché, pas les dates de transition), ni dans l'historique dérivé du bien (un seul
+  événement par offre, à la création — voir `docs/BUSINESS_RULES.md`). Conséquence du choix de ne
+  pas ajouter de champ `statutModifieLe` non demandé (ADR-015).
+- **Préparation de visite non enrichie** : la "Mémoire du dossier" (page de préparation) n'affiche
+  pas encore les offres précédentes du couple bien/acquéreur — extension naturelle documentée mais
+  non implémentée dans cette passe (ADR-015).
+- **Bandeau "État du dossier" inchangé** : ne montre toujours que le badge générique
+  (`en_commercialisation`/`offre_en_cours`/`compromis_signe`), pas le détail de l'offre en cours
+  (montant, acquéreur) — consultable uniquement dans l'onglet Offres.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

@@ -6,6 +6,9 @@ import ActionItem from "@/components/aujourd-hui/ActionItem";
 import { getClientById } from "@/lib/clientRepository";
 import { getActionsPourAcquereur } from "@/lib/actionRepository";
 import { archiverAcquereurAction, desarchiverAcquereurAction } from "@/actions/archivageAcquereur";
+import { listerOffresPourAcquereur } from "@/lib/offreRepository";
+import { getBienById } from "@/lib/bienRepository";
+import { LABEL_STATUT_OFFRE } from "@/types/offre";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -37,6 +40,13 @@ export default async function FicheClient({ params }: PageProps) {
   const actions = await getActionsPourAcquereur(client.id);
   const actionsAFaire = actions.filter((a) => a.statut === "a_faire");
   const actionsTerminees = actions.filter((a) => a.statut === "termine");
+
+  const offres = (await listerOffresPourAcquereur(client.id)).sort((a, b) =>
+    a.dateOffre < b.dateOffre ? 1 : -1
+  );
+  const bienIds = [...new Set(offres.map((o) => o.bienId))];
+  const biensPourOffres = await Promise.all(bienIds.map((id) => getBienById(id)));
+  const biensParId = new Map(bienIds.map((id, i) => [id, biensPourOffres[i]]));
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -101,6 +111,31 @@ export default async function FicheClient({ params }: PageProps) {
           )}
         </div>
       </div>
+
+      <section className="mb-8">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Offres</p>
+        {offres.length === 0 ? (
+          <p className="text-[14px] text-[#94a3b8]">Aucune offre pour l'instant.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {offres.map((offre) => {
+              const bienOffre = biensParId.get(offre.bienId);
+              return (
+                <div key={offre.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-[13px] font-medium text-[#64748b]">{formatDate(offre.dateOffre)}</p>
+                    <span className="text-[11px] text-[#94a3b8]">·</span>
+                    <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_OFFRE[offre.statut]}</span>
+                  </div>
+                  <p className="text-[14px] font-medium text-[#0f172a]">
+                    {formatPrix(offre.montant)} — {bienOffre ? bienOffre.titre : "Bien indisponible"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="mb-8">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Actions</p>

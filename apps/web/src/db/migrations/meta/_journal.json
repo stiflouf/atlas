@@ -57,6 +57,13 @@
       "when": 1786524132911,
       "tag": "0007_absurd_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786527633529,
+      "tag": "0008_great_kid_colt",
+      "breakpoints": true
     }
   ]
 }

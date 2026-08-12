@@ -1,6 +1,13 @@
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
+import type { Offre } from "@/types/offre";
+
+function formatPrix(montant: number): string {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
+    montant
+  );
+}
 
 // Sans `auteur` : contrairement au DossierBien mocké (data/dossier.ts), un événement dérivé est
 // un fait automatique — l'app est mono-conseiller (ADR-006), il n'y a personne d'honnête à nommer.
@@ -13,7 +20,8 @@ export type EvenementHistorique = { date: string; texte: string };
 export function deriverHistoriqueBien(
   bien: Bien,
   actions: ActionMetier[],
-  comptesRendus: CompteRenduVisite[] = []
+  comptesRendus: CompteRenduVisite[] = [],
+  offres: Offre[] = []
 ): EvenementHistorique[] {
   const evenements: EvenementHistorique[] = [];
 
@@ -45,6 +53,14 @@ export function deriverHistoriqueBien(
       date: compteRendu.dateVisite,
       texte: `Visite effectuée — ${LABEL_INTERET[compteRendu.interet]}`,
     });
+  }
+
+  // Un seul événement par offre, à la création — jamais l'acquéreur nommé (même convention que
+  // les visites, le détail vit dans l'onglet Offres). Aucun événement pour un changement de
+  // statut : pas de date de transition fiable disponible (ADR-015), le statut courant se
+  // consulte dans l'onglet Offres, pas dans l'historique.
+  for (const offre of offres) {
+    evenements.push({ date: offre.dateOffre, texte: `Offre reçue — ${formatPrix(offre.montant)}` });
   }
 
   return evenements.sort((a, b) => (a.date < b.date ? 1 : -1));

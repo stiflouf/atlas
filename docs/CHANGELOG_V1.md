@@ -126,6 +126,19 @@ archivé. Historique dérivé enrichi de "Offre en cours"/"Compromis signé", da
 timestamps — non append-only, annuler un jalon efface rétroactivement l'événement correspondant
 (conséquence assumée, voir `docs/KNOWN_LIMITATIONS.md`).
 
+## 15. Offre d'achat structurée
+
+Table `offres` (bien, acquéreur, montant, date, statut, date de validité optionnelle) : le "qui,
+combien" que `offreEnCoursLe` seul ne pouvait pas représenter (ADR-015). Montant/acquéreur/bien/
+date immuables après création — une nouvelle proposition est une nouvelle ligne. Statut mutable
+en place (`en_cours` → `acceptee`/`refusee`/`retiree` uniquement, jamais l'inverse). Créer une
+offre pose aussi `offreEnCoursLe` (couplage unidirectionnel) ; changer son statut ne touche jamais
+`offreEnCoursLe`/`compromisSigneLe` — gestes commerciaux séparés. Refus explicites sur bien/
+acquéreur archivé, offre déjà résolue, ou montant invalide. Nouvel onglet "Offres" sur la fiche
+bien réelle (aucun équivalent mock), section de lecture sur la fiche acquéreur. Historique dérivé
+enrichi d'un événement de création par offre, jamais l'acquéreur nommé, aucun événement pour un
+changement de statut (pas de date de transition fiable disponible).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

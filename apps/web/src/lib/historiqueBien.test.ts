@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { Bien } from "@/types/bien";
 import type { ActionMetier } from "@/types/action";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
+import type { Offre } from "@/types/offre";
 import { deriverHistoriqueBien } from "./historiqueBien";
+
+// Réplique le formatage de historiqueBien.ts (Intl.NumberFormat produit des espaces insécables
+// spéciales, pas des espaces classiques — comparer via ce même formateur plutôt qu'une chaîne
+// littérale codée en dur évite un faux échec dépendant de l'environnement ICU).
+function formatPrix(montant: number): string {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
+    montant
+  );
+}
 
 function bienTest(surcharge: Partial<Bien> = {}): Bien {
   return {
@@ -149,5 +159,66 @@ describe("deriverHistoriqueBien", () => {
     const evenements = deriverHistoriqueBien(bien, []);
 
     expect(evenements).toEqual([{ date: "2026-08-10T10:00:00.000Z", texte: "Compromis signé" }]);
+  });
+
+  it("produit « Offre reçue — {montant} » à partir d'une offre, sans jamais nommer l'acquéreur", () => {
+    const offre: Offre = {
+      id: "offre-1",
+      bienId: "bien-test",
+      acquereurId: "acquereur-confidentiel",
+      montant: 480000,
+      dateOffre: "2026-08-01",
+      statut: "en_cours",
+      creeLe: "2026-08-01T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [offre]);
+
+    expect(evenements).toEqual([{ date: "2026-08-01", texte: `Offre reçue — ${formatPrix(480000)}` }]);
+    expect(evenements.some((e) => e.texte.includes("acquereur-confidentiel"))).toBe(false);
+  });
+
+  it("ne produit aucun événement pour un changement de statut d'offre (pas de date de transition fiable)", () => {
+    const offreAcceptee: Offre = {
+      id: "offre-2",
+      bienId: "bien-test",
+      acquereurId: "acquereur-test",
+      montant: 500000,
+      dateOffre: "2026-08-01",
+      statut: "acceptee",
+      creeLe: "2026-08-01T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [offreAcceptee]);
+
+    expect(evenements).toEqual([{ date: "2026-08-01", texte: `Offre reçue — ${formatPrix(500000)}` }]);
+  });
+
+  it("inclut toutes les offres du bien, triées avec le reste des événements", () => {
+    const offreA: Offre = {
+      id: "offre-a",
+      bienId: "bien-test",
+      acquereurId: "acquereur-a",
+      montant: 400000,
+      dateOffre: "2026-08-01",
+      statut: "en_cours",
+      creeLe: "2026-08-01T10:00:00.000Z",
+    };
+    const offreB: Offre = {
+      id: "offre-b",
+      bienId: "bien-test",
+      acquereurId: "acquereur-b",
+      montant: 420000,
+      dateOffre: "2026-08-05",
+      statut: "en_cours",
+      creeLe: "2026-08-05T10:00:00.000Z",
+    };
+
+    const evenements = deriverHistoriqueBien(bienTest({ creeLe: undefined }), [], [], [offreA, offreB]);
+
+    expect(evenements.map((e) => e.texte)).toEqual([
+      `Offre reçue — ${formatPrix(420000)}`,
+      `Offre reçue — ${formatPrix(400000)}`,
+    ]);
   });
 });

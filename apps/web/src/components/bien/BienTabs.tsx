@@ -8,10 +8,12 @@ import type { NoteBien } from "@/types/noteBien";
 import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import { LABEL_CATEGORIE_DOCUMENT, type CategorieDocument, type DocumentBien } from "@/types/documentBien";
+import { LABEL_STATUT_OFFRE, type Offre } from "@/types/offre";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerActionAction } from "@/actions/terminerAction";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
 import { ajouterDocumentBienAction } from "@/actions/ajouterDocumentBien";
+import { ajouterOffreAction, changerStatutOffreAction } from "@/actions/offre";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 
 const CATEGORIES_DOCUMENT: CategorieDocument[] = [
@@ -29,7 +31,13 @@ function formatTaille(octets: number): string {
   return `${(octets / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "actions";
+function formatPrix(montant: number): string {
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(
+    montant
+  );
+}
+
+type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "offres" | "actions";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -42,6 +50,8 @@ export default function BienTabs({
   notes,
   comptesRendus,
   documents,
+  offres,
+  acquereursActifs = [],
   acquereursParId = new Map(),
 }: {
   bien: Bien;
@@ -50,6 +60,8 @@ export default function BienTabs({
   notes: NoteBien[];
   comptesRendus: CompteRenduVisite[];
   documents: DocumentBien[];
+  offres: Offre[];
+  acquereursActifs?: ProfilAcquereur[];
   acquereursParId?: Map<string, ProfilAcquereur | undefined>;
 }) {
   const [active, setActive] = useState<Tab>("contexte");
@@ -62,7 +74,7 @@ export default function BienTabs({
   // dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
     ? dossier.historique
-    : deriverHistoriqueBien(bien, actions, comptesRendus);
+    : deriverHistoriqueBien(bien, actions, comptesRendus, offres);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "contexte", label: "Contexte" },
@@ -70,6 +82,8 @@ export default function BienTabs({
     { id: "notes", label: "Notes" },
     { id: "visites", label: "Visites" },
     { id: "documents", label: "Documents" },
+    // Pas d'équivalent mock (aucun DossierBien.offres) — visible pour un bien réel uniquement.
+    ...(!dossier ? ([{ id: "offres", label: "Offres" }] as const) : []),
     { id: "actions", label: "Actions" },
   ];
 
@@ -78,6 +92,7 @@ export default function BienTabs({
     ? [...dossier.visitesEffectuees].sort((a, b) => (a.date < b.date ? 1 : -1))
     : [];
   const comptesRendusTries = [...comptesRendus].sort((a, b) => (a.dateVisite < b.dateVisite ? 1 : -1));
+  const offresTriees = [...offres].sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
 
   return (
     <div>
@@ -349,6 +364,107 @@ export default function BienTabs({
                   </a>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {active === "offres" && (
+        <div className="flex flex-col gap-4">
+          {bien.archiveLe ? (
+            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+              Ce bien est archivé — impossible d'ajouter une nouvelle offre.
+            </p>
+          ) : (
+            <form action={ajouterOffreAction} className="flex flex-col gap-2">
+              <input type="hidden" name="bienId" value={bien.id} />
+              <select
+                name="acquereurId"
+                required
+                defaultValue=""
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              >
+                <option value="" disabled>
+                  Acquéreur
+                </option>
+                {acquereursActifs.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.prenom} {a.nom}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                name="montant"
+                required
+                min={1}
+                placeholder="Montant de l'offre (€)"
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              />
+              <label className="text-[11px] text-[#94a3b8]">
+                Date de l'offre
+                <input
+                  type="date"
+                  name="dateOffre"
+                  required
+                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                />
+              </label>
+              <label className="text-[11px] text-[#94a3b8]">
+                Date de validité (optionnelle)
+                <input
+                  type="date"
+                  name="dateValidite"
+                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                />
+              </label>
+              <button
+                type="submit"
+                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              >
+                Ajouter l'offre
+              </button>
+            </form>
+          )}
+
+          {offresTriees.length === 0 ? (
+            <p className="text-[14px] text-[#94a3b8]">Aucune offre pour l'instant.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {offresTriees.map((offre) => {
+                const acquereur = acquereursParId.get(offre.acquereurId);
+                return (
+                  <div key={offre.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-[13px] font-medium text-[#64748b]">{formatDate(offre.dateOffre)}</p>
+                      <span className="text-[11px] text-[#94a3b8]">·</span>
+                      <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_OFFRE[offre.statut]}</span>
+                    </div>
+                    <p className="text-[14px] font-medium text-[#0f172a]">
+                      {formatPrix(offre.montant)} — {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                    </p>
+                    {offre.dateValidite && (
+                      <p className="text-[13px] text-[#94a3b8] mt-1">Valable jusqu'au {formatDate(offre.dateValidite)}</p>
+                    )}
+                    {offre.statut === "en_cours" && !bien.archiveLe && (
+                      <div className="flex flex-wrap gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
+                        {(["acceptee", "refusee", "retiree"] as const).map((statut) => (
+                          <form key={statut} action={changerStatutOffreAction}>
+                            <input type="hidden" name="offreId" value={offre.id} />
+                            <input type="hidden" name="statut" value={statut} />
+                            <button
+                              type="submit"
+                              className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                            >
+                              {statut === "acceptee" ? "Accepter" : statut === "refusee" ? "Refuser" : "Retirer"}
+                            </button>
+                          </form>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

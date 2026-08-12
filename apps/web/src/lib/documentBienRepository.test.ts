@@ -8,15 +8,20 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
 const { biens: biensTable, documentsBien: documentsBienTable } = await import("@/db/schema");
+const { creerBien } = await import("./bienRepository");
 const { listerDocumentsPourBien, getDocumentBienById, enregistrerDocumentBien } = await import(
   "./documentBienRepository"
 );
 
 const idsCrees: string[] = [];
+const idsBiensCrees: string[] = [];
 
 afterAll(async () => {
   for (const id of idsCrees) {
     await getDb().delete(documentsBienTable).where(eq(documentsBienTable.id, id));
+  }
+  for (const id of idsBiensCrees) {
+    await getDb().delete(biensTable).where(eq(biensTable.id, id));
   }
 });
 
@@ -31,8 +36,25 @@ describe("documentBienRepository (intégration Postgres)", () => {
   });
 
   it("enregistrerDocumentBien() persiste la métadonnée, listerDocumentsPourBien() la retrouve triée DESC", async () => {
-    const [bien] = await getDb().select({ id: biensTable.id }).from(biensTable).limit(1);
-    if (!bien) throw new Error("Aucun bien réel en base pour ce test d'intégration.");
+    // Bien créé dédié à ce test (plutôt qu'une ligne réelle arbitraire piochée sans tri) : évite
+    // une course avec d'autres suites d'intégration qui créent/suppriment leurs propres biens
+    // réels en parallèle.
+    const bien = await creerBien({
+      reference: "[test réel] DOC-BIEN-001",
+      titre: "Bien de test",
+      type: "appartement",
+      adresse: "1 rue du Test",
+      ville: "Testville",
+      codePostal: "00000",
+      surface: 50,
+      pieces: 2,
+      prix: 300000,
+      statutMandat: "actif",
+      dateMandat: "2026-01-01",
+      caracteristiques: [],
+      description: "",
+    });
+    idsBiensCrees.push(bien.id);
 
     const premier = await enregistrerDocumentBien({
       bienId: bien.id,

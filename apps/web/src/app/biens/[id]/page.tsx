@@ -4,12 +4,13 @@ import { ArrowLeft, Building2 } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
+import { getClientById, listerClients } from "@/lib/clientRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getActionsPourBien } from "@/lib/actionRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
+import { listerOffresPourBien } from "@/lib/offreRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
 import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
@@ -55,7 +56,11 @@ export default async function FicheBien({ params }: PageProps) {
   const notes = await listerNotesPourBien(bien.id);
   const comptesRendus = await listerComptesRendusPourBien(bien.id);
   const documents = await listerDocumentsPourBien(bien.id);
-  const acquereurIds = [...new Set(comptesRendus.map((cr) => cr.acquereurId))];
+  const offres = await listerOffresPourBien(bien.id);
+  const acquereursActifs = await listerClients();
+  const acquereurIds = [
+    ...new Set([...comptesRendus.map((cr) => cr.acquereurId), ...offres.map((o) => o.acquereurId)]),
+  ];
   const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
   const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
   const actionPrincipale = actionPrioritaire(actions);
@@ -220,6 +225,8 @@ export default async function FicheBien({ params }: PageProps) {
         notes={notes}
         comptesRendus={comptesRendus}
         documents={documents}
+        offres={offres}
+        acquereursActifs={acquereursActifs}
         acquereursParId={acquereursParId}
       />
     </div>

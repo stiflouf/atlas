@@ -242,6 +242,29 @@ Aucun statut stocké — dérivé en lecture depuis deux timestamps de jalons su
 un jalon efface rétroactivement l'événement correspondant, puisqu'il est recalculé en direct
 depuis la valeur courante (voir `docs/KNOWN_LIMITATIONS.md`).
 
+## Offres structurées
+
+**Fichiers** : `src/lib/offreRepository.ts`, `src/actions/offre.ts`. Détail de la décision :
+ADR-015.
+
+`montant`/`acquereurId`/`bienId`/`dateOffre` immuables après création — une nouvelle proposition
+(contre-offre, offre d'un autre acquéreur) est une nouvelle ligne. Seul `statut` est mutable,
+`UPDATE` en place (même patron que `actions.statut`).
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Créer une offre | Bien et acquéreur réels, existants, non archivés ; montant > 0 | `enregistrerOffre(...)` **puis** `marquerOffreEnCours(bienId)` dans la même action — un seul geste |
+| Créer une offre — refus | Bien/acquéreur introuvable, archivé, ou montant invalide | `throw` explicite (`ajouterOffreAction`) |
+| Changer le statut | Offre `en_cours`, bien et acquéreur non archivés | `en_cours` → `acceptee`/`refusee`/`retiree` uniquement — jamais l'inverse, jamais entre deux valeurs finales |
+| Changer le statut — refus | Offre introuvable, bien/acquéreur archivé, ou offre déjà dans un statut final | `throw` explicite (`changerStatutOffreAction`) |
+| Couplage avec le statut commercial | Toujours | Créer une offre pose `offreEnCoursLe` ; changer son statut **ne modifie jamais** `offreEnCoursLe`/`compromisSigneLe` — gestes commerciaux volontairement séparés (ADR-014 non touchée) |
+| Consultation | Toujours | `listerOffresPourBien()`/`listerOffresPourAcquereur()`/`getOffreById()` résolvent toujours, même sur un bien/acquéreur archivé |
+
+**Historique dérivé** : un seul événement par offre, à la création (`"Offre reçue — {montant}"`),
+**sans nommer l'acquéreur** (même convention que les visites — le détail vit dans l'onglet Offres).
+Aucun événement pour un changement de statut : pas de date de transition fiable disponible (pas de
+champ `statutModifieLe`, volontairement absent du modèle).
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

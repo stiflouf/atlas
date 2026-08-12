@@ -232,3 +232,31 @@ export const comptesRendusVisite = pgTable(
     ),
   ]
 );
+
+// Offre structurée sur un bien (ADR-015). bienId/acquereurId sont de vraies FK, même rationale
+// que comptes_rendus_visite. montant/acquereurId/bienId/dateOffre sont immuables après création :
+// une nouvelle proposition = une nouvelle ligne, jamais une édition. statut est le seul champ
+// mutable (UPDATE en place, comme actions.statut), transitions unidirectionnelles depuis
+// 'en_cours' uniquement — validées côté Server Action, pas en CHECK SQL. Couplage unidirectionnel
+// avec biens.offreEnCoursLe : créer une offre le pose, mais aucun changement de statut ne le
+// modifie (voir src/actions/offre.ts).
+export const offres = pgTable(
+  "offres",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id, { onDelete: "cascade" }),
+    acquereurId: uuid("acquereur_id")
+      .notNull()
+      .references(() => acquereurs.id, { onDelete: "cascade" }),
+    montant: integer("montant").notNull(),
+    dateOffre: date("date_offre").notNull(),
+    statut: text("statut").notNull().default("en_cours"),
+    dateValidite: date("date_validite"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("offres_statut_check", sql`${table.statut} IN ('en_cours','acceptee','refusee','retiree')`),
+  ]
+);

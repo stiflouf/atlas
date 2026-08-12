@@ -6,6 +6,7 @@ import type { ActionMetier } from "@/types/action";
 import type { NoteBien } from "@/types/noteBien";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { DocumentBien } from "@/types/documentBien";
+import type { Offre } from "@/types/offre";
 import BienTabs from "./BienTabs";
 
 function bienTest(surcharge: Partial<Bien> = {}): Bien {
@@ -43,7 +44,7 @@ function dossierTest(): DossierBien {
 const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Actions"];
 
 describe("BienTabs", () => {
-  it("n'affiche que Contexte, Notes, Visites, Documents et Actions pour un bien réel sans dossier", () => {
+  it("n'affiche que Contexte, Notes, Visites, Documents, Offres et Actions pour un bien réel sans dossier", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
@@ -51,6 +52,7 @@ describe("BienTabs", () => {
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}
+        offres={[] as Offre[]}
       />
     );
 
@@ -58,11 +60,12 @@ describe("BienTabs", () => {
     expect(html).toContain("Notes");
     expect(html).toContain("Visites");
     expect(html).toContain("Documents");
+    expect(html).toContain("Offres");
     expect(html).toContain("Actions");
     expect(html).not.toContain("Historique");
   });
 
-  it("conserve tous les onglets existants quand un dossier (mock) est fourni", () => {
+  it("conserve tous les onglets existants quand un dossier (mock) est fourni, sans l'onglet Offres (pas d'équivalent mock)", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
@@ -71,12 +74,14 @@ describe("BienTabs", () => {
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}
+        offres={[] as Offre[]}
       />
     );
 
     for (const onglet of TOUS_LES_ONGLETS) {
       expect(html).toContain(onglet);
     }
+    expect(html).not.toContain("Offres");
   });
 
   it("affiche l'onglet Historique pour un bien réel dès qu'un événement dérivé existe (creeLe ou actions)", () => {
@@ -101,6 +106,7 @@ describe("BienTabs", () => {
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}
+        offres={[] as Offre[]}
       />
     );
 
@@ -126,6 +132,7 @@ describe("BienTabs", () => {
         notes={[] as NoteBien[]}
         comptesRendus={comptesRendus}
         documents={[] as DocumentBien[]}
+        offres={[] as Offre[]}
       />
     );
 
@@ -140,6 +147,7 @@ describe("BienTabs", () => {
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}
+        offres={[] as Offre[]}
       />
     );
 
