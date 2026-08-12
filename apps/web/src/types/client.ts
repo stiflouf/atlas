@@ -26,4 +26,7 @@ export type ProfilAcquereur = {
   accessibiliteRequise?: boolean;
   necessiteParking?: boolean;
   necessiteExterieur?: boolean;
+  // Absent = actif. Présent = archivé (sorti des flux actifs, jamais supprimé) — voir
+  // ADR-012 et docs/BUSINESS_RULES.md.
+  archiveLe?: string;
 };

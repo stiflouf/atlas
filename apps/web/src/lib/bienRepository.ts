@@ -31,20 +31,34 @@ function ligneVersBien(ligne: LigneBien): Bien {
     parking: ligne.parking ?? undefined,
     exterieur: (ligne.exterieur as Exterieur | null) ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
+    archiveLe: ligne.archiveLe?.toISOString(),
   };
 }
 
 // Biens réels si au moins un existe, sinon les biens de démonstration — jamais un mélange : une
 // fois un premier bien réel créé, le pool de correspondance floue ne doit plus jamais inclure de
-// biens fictifs.
+// biens fictifs. La bascule elle-même compte TOUTES les lignes réelles (archivées comprises) —
+// seul le résultat retourné exclut les archivés (ADR-012) : un catalogue entièrement archivé ne
+// doit jamais retomber sur les mocks.
 export async function listerBiens(): Promise<Bien[]> {
   try {
     const lignes = await getDb().select().from(biensTable);
-    if (lignes.length > 0) return lignes.map(ligneVersBien);
+    if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersBien);
   } catch (erreur) {
     console.error("[biens] lecture Postgres indisponible, repli sur les mocks :", erreur);
   }
   return biensDemo;
+}
+
+// Réservé aux biens réels archivés — aucun repli mock (un bien mocké ne peut pas être archivé).
+export async function listerBiensArchives(): Promise<Bien[]> {
+  try {
+    const lignes = await getDb().select().from(biensTable);
+    return lignes.filter((l) => l.archiveLe).map(ligneVersBien);
+  } catch (erreur) {
+    console.error("[biens] lecture Postgres indisponible :", erreur);
+    return [];
+  }
 }
 
 // Suit le même état global que listerBiens() : si au moins un bien réel existe, le repli mock
@@ -127,6 +141,29 @@ export async function modifierBien(id: string, input: NouveauBien): Promise<Bien
       exterieur: input.exterieur ?? null,
       modifieLe: new Date(),
     })
+    .where(eq(biensTable.id, id))
+    .returning();
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
+
+// Archivage/désarchivage : jamais un DELETE, uniquement archiveLe qui bascule. N'affecte aucune
+// FK (notes_bien, comptes_rendus_visite) ni les colonnes text sans contrainte (actions,
+// memoire_contextuelle) — un UPDATE ne déclenche jamais ON DELETE CASCADE.
+export async function archiverBien(id: string): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(biensTable)
+    .set({ archiveLe: new Date() })
+    .where(eq(biensTable.id, id))
+    .returning();
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
+
+export async function desarchiverBien(id: string): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(biensTable)
+    .set({ archiveLe: null })
     .where(eq(biensTable.id, id))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;

@@ -78,6 +78,10 @@ export const biens = pgTable(
     exterieur: text("exterieur"),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
     modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
+    // NULL = actif, non-NULL = archivé à cet instant (ADR-012). Sorti des flux actifs (listes,
+    // matching) sans suppression physique — jamais touché par une édition (modifierBien ne le
+    // référence pas dans son SET).
+    archiveLe: timestamp("archive_le", { withTimezone: true }),
   },
   (table) => [
     check("biens_type_check", sql`${table.type} IN ('appartement','maison','studio','loft','local_commercial')`),
@@ -112,6 +116,8 @@ export const acquereurs = pgTable(
     necessiteExterieur: boolean("necessite_exterieur"),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
     modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
+    // Même principe que biens.archiveLe (ADR-012).
+    archiveLe: timestamp("archive_le", { withTimezone: true }),
   },
   (table) => [
     check(

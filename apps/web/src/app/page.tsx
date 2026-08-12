@@ -77,9 +77,11 @@ export default async function AujourdHui() {
   }));
 
   // Dérivé directement des actions réelles (ou mock démo) + des biens réels : plus de dépendance
-  // à data/dossier.ts pour cette section. Un bien introuvable (id mocké obsolète, etc.) est
-  // simplement ignoré plutôt que de faire échouer la page.
+  // à data/dossier.ts pour cette section. Un bien introuvable (id mocké obsolète, ou bien
+  // archivé — biens/clients ne contiennent déjà plus les archivés, ADR-012) est simplement
+  // ignoré plutôt que de faire échouer la page.
   const biensParId = new Map(biens.map((bien) => [bien.id, bien]));
+  const acquereursParId = new Map(clients.map((client) => [client.id, client]));
   const actionsActives = actions.filter((a) => a.statut === "a_faire");
 
   const actionsParBien = new Map<string, ActionMetier[]>();
@@ -98,9 +100,11 @@ export default async function AujourdHui() {
   }
   dossiersAttention.sort((a, b) => scoreAction(b.action, maintenant) - scoreAction(a.action, maintenant));
 
-  // Actions actives sans bien rattaché (générales ou liées uniquement à un acquéreur).
+  // Actions actives sans bien rattaché (générales ou liées uniquement à un acquéreur). Une
+  // action liée à un acquéreur archivé (introuvable dans acquereursParId, ADR-012) est exclue
+  // des flux actifs, comme les actions d'un bien archivé le sont déjà via biensParId ci-dessus.
   const autresActions = actionsActives
-    .filter((a) => !a.bienId)
+    .filter((a) => !a.bienId && (!a.acquereurId || acquereursParId.has(a.acquereurId)))
     .sort((a, b) => scoreAction(b, maintenant) - scoreAction(a, maintenant));
 
   return (

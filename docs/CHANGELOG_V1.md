@@ -87,6 +87,20 @@ préremplissage tri-état (`undefined` → "Inconnu", jamais "Non" par défaut) 
 `undefined` si l'id ne correspond à aucune ligne réelle, plutôt que de supposer une modification
 effective.
 
+## 12. Archivage contrôlé des biens et acquéreurs
+
+Sortie réversible d'un bien ou d'un acquéreur des flux actifs, sans suppression physique
+(ADR-012) : colonne `archive_le` (nullable) sur `biens`/`acquereurs`, `NULL` = actif. `listerBiens()`/
+`listerClients()` excluent les lignes archivées par défaut ; `listerBiensArchives()`/
+`listerClientsArchives()` (routes `/biens?archives=1`, `/clients?archives=1`) les affichent
+séparément. `getBienById()`/`getClientById()` continuent de résoudre une entité archivée, donc sa
+fiche, son historique, ses notes et ses comptes rendus restent consultables — seules les
+créations liées sont bloquées : `creerAction` refuse explicitement (erreur) toute association à
+une entité archivée, `ajouterNoteBienAction`/`enregistrerCompteRenduVisiteAction` refusent
+silencieusement côté serveur (l'UI empêche déjà le cas normal). Le moteur de matching exclut les
+archivés puisqu'il ne consomme que `listerBiens()`/`listerClients()`, sans code spécifique
+supplémentaire. Actions liées à un acquéreur archivé exclues de "Autres actions" à l'accueil.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

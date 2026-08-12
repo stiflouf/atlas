@@ -10,6 +10,7 @@ import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
 import { rendezVousDuJour } from "@/data/agenda";
+import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -83,6 +84,7 @@ export default async function FicheBien({ params }: PageProps) {
           <span className="text-[14px] text-[#64748b]">{bien.pieces} pièces</span>
           <Badge variant="accent">{bien.reference}</Badge>
           <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
+          {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
         </div>
 
         {/* État du dossier — visible immédiatement */}
@@ -111,19 +113,32 @@ export default async function FicheBien({ params }: PageProps) {
               Préparer une visite →
             </Link>
           )}
-          <Link
-            href={`/actions/nouveau?bienId=${bien.id}`}
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
-          >
-            + Ajouter une action
-          </Link>
-          {UUID_REGEX.test(bien.id) && (
+          {!bien.archiveLe && (
             <Link
-              href={`/biens/${bien.id}/modifier`}
+              href={`/actions/nouveau?bienId=${bien.id}`}
               className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
             >
-              Modifier
+              + Ajouter une action
             </Link>
+          )}
+          {UUID_REGEX.test(bien.id) && (
+            <>
+              <Link
+                href={`/biens/${bien.id}/modifier`}
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+              >
+                Modifier
+              </Link>
+              <form action={bien.archiveLe ? desarchiverBienAction : archiverBienAction}>
+                <input type="hidden" name="id" value={bien.id} />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748b] bg-white border border-[#e2e8f0] hover:border-[#dc2626] hover:text-[#dc2626] transition-colors px-3.5 py-2 rounded-lg"
+                >
+                  {bien.archiveLe ? "Désarchiver" : "Archiver"}
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>

@@ -15,11 +15,14 @@ identique :
 > en complément, même partiellement.
 
 ```ts
-// Patron exact, répété dans bienRepository.ts / clientRepository.ts / actionRepository.ts
+// Patron exact, répété dans bienRepository.ts / clientRepository.ts / actionRepository.ts.
+// Pour biens/acquereurs, un second axe orthogonal s'ajoute depuis ADR-012 : la bascule démo/réel
+// (length > 0, TOUTES lignes confondues) est indépendante du filtre actif/archivé appliqué au
+// résultat retourné — voir "Archivage" plus bas.
 export async function listerBiens(): Promise<Bien[]> {
   try {
     const lignes = await getDb().select().from(biensTable);
-    if (lignes.length > 0) return lignes.map(ligneVersBien);
+    if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersBien);
   } catch (erreur) {
     console.error("[biens] lecture Postgres indisponible, repli sur les mocks :", erreur);
   }
@@ -88,6 +91,24 @@ mocké en réponse, elle retourne simplement "rien trouvé". Exemple concret : `
 sur un id d'action mockée (`"act-001"`) est un no-op silencieux, pas une erreur — cliquer
 "Terminer" sur une action de démonstration ne fait rien d'observable, plutôt que de planter.
 
+## Archivage : un axe orthogonal à la bascule démo/réel
+
+Depuis ADR-012, `biens` et `acquereurs` portent une colonne `archive_le` (nullable). C'est un
+**concept exclusivement réel** — un bien/acquéreur mocké ne peut jamais être archivé (aucun champ
+équivalent dans `data/biens.ts`/`data/clients.ts`, et le CTA "Archiver" n'apparaît que sur une
+entité réelle, même garde `UUID_REGEX` que "Modifier").
+
+Deux filtres bien distincts s'appliquent donc en cascade sur `listerBiens()`/`listerClients()` :
+1. **Démo vs réel** (ce document) : y a-t-il *au moins une ligne réelle*, peu importe son statut
+   d'archivage ? Si oui, jamais de repli mock — même si cette unique ligne réelle est archivée.
+2. **Actif vs archivé** (ADR-012, `docs/BUSINESS_RULES.md#archivage`) : parmi les lignes réelles,
+   seules celles non archivées sont retournées par défaut.
+
+Concrètement : archiver le dernier bien réel actif ne fait **pas** réapparaître les mocks —
+`listerBiens()` retourne simplement `[]`, et le mode reste "réel" (`getBienById("bien-001")`
+continue de renvoyer `undefined`). C'est `listerBiensArchives()` (aucun repli mock non plus) qui
+permet de consulter ce bien via `/biens?archives=1`.
+
 ## Fonctionnalités encore mock-only
 
 Aucun équivalent réel n'existe à ce jour pour :
@@ -115,3 +136,4 @@ Aucun équivalent réel n'existe à ce jour pour :
   `docs/BUSINESS_RULES.md`
 - Limites connues liées au mode mock : `docs/KNOWN_LIMITATIONS.md`
 - Décision d'architecture sur les identifiants texte vs FK réelles : `docs/adr/010-identifiants-texte-vs-fk-reelles.md`
+- Décision d'architecture sur l'archivage : `docs/adr/012-archivage-timestamp-vs-statut.md`

@@ -8,7 +8,8 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
 const { biens: biensTable } = await import("@/db/schema");
-const { creerBien, modifierBien } = await import("./bienRepository");
+const { creerBien, modifierBien, listerBiens, listerBiensArchives, getBienById, archiverBien, desarchiverBien } =
+  await import("./bienRepository");
 
 const idsCrees: string[] = [];
 
@@ -75,5 +76,53 @@ describe("bienRepository (intégration Postgres)", () => {
 
     expect(modifie?.ascenseur).toBeUndefined();
     expect(modifie?.parking).toBeUndefined();
+  });
+
+  it("archiverBien()/desarchiverBien() retournent undefined pour un id non-UUID ou inexistant", async () => {
+    await expect(archiverBien("bien-001")).resolves.toBeUndefined();
+    await expect(archiverBien("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    await expect(desarchiverBien("bien-001")).resolves.toBeUndefined();
+  });
+
+  it("archiver un bien : posé archiveLe, exclu de listerBiens(), présent dans listerBiensArchives(), toujours résolu par getBienById()", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-001" }));
+    idsCrees.push(cree.id);
+    expect(cree.archiveLe).toBeUndefined();
+
+    const archive = await archiverBien(cree.id);
+    expect(archive?.archiveLe).toBeDefined();
+
+    const actifs = await listerBiens();
+    expect(actifs.some((b) => b.id === cree.id)).toBe(false);
+
+    const archives = await listerBiensArchives();
+    expect(archives.some((b) => b.id === cree.id)).toBe(true);
+
+    const parId = await getBienById(cree.id);
+    expect(parId).toBeDefined();
+    expect(parId?.archiveLe).toBeDefined();
+  });
+
+  it("désarchiver un bien : archiveLe redevient undefined, réapparaît dans listerBiens()", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-002" }));
+    idsCrees.push(cree.id);
+    await archiverBien(cree.id);
+
+    const desarchive = await desarchiverBien(cree.id);
+    expect(desarchive?.archiveLe).toBeUndefined();
+
+    const actifs = await listerBiens();
+    expect(actifs.some((b) => b.id === cree.id)).toBe(true);
+  });
+
+  it("le comptage de bascule démo->réel inclut les biens archivés (pas de repli mock)", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-003" }));
+    idsCrees.push(cree.id);
+    await archiverBien(cree.id);
+
+    // Même si CE bien est archivé, tant qu'au moins une ligne réelle existe (lui ou un autre),
+    // listerBiens() ne doit jamais retomber sur les mocks data/biens.ts (ids "bien-00x").
+    const actifs = await listerBiens();
+    expect(actifs.some((b) => b.id === "bien-001")).toBe(false);
   });
 });

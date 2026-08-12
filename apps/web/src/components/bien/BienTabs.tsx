@@ -141,22 +141,28 @@ export default function BienTabs({
 
       {active === "notes" && !dossier && (
         <div className="flex flex-col gap-4">
-          <form action={ajouterNoteBienAction} className="flex flex-col gap-2">
-            <input type="hidden" name="bienId" value={bien.id} />
-            <textarea
-              name="contenu"
-              rows={3}
-              required
-              placeholder="Ajouter une note..."
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-            />
-            <button
-              type="submit"
-              className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
-            >
-              Ajouter une note
-            </button>
-          </form>
+          {bien.archiveLe ? (
+            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+              Ce bien est archivé — impossible d'ajouter une nouvelle note.
+            </p>
+          ) : (
+            <form action={ajouterNoteBienAction} className="flex flex-col gap-2">
+              <input type="hidden" name="bienId" value={bien.id} />
+              <textarea
+                name="contenu"
+                rows={3}
+                required
+                placeholder="Ajouter une note..."
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              />
+              <button
+                type="submit"
+                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              >
+                Ajouter une note
+              </button>
+            </form>
+          )}
 
           {notes.length === 0 ? (
             <p className="text-[14px] text-[#94a3b8]">Aucune note pour l'instant.</p>

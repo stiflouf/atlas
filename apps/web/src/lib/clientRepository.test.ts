@@ -8,7 +8,15 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
 const { acquereurs: acquereursTable } = await import("@/db/schema");
-const { creerAcquereur, modifierAcquereur } = await import("./clientRepository");
+const {
+  creerAcquereur,
+  modifierAcquereur,
+  listerClients,
+  listerClientsArchives,
+  getClientById,
+  archiverAcquereur,
+  desarchiverAcquereur,
+} = await import("./clientRepository");
 
 const idsCrees: string[] = [];
 
@@ -82,5 +90,51 @@ describe("clientRepository (intégration Postgres)", () => {
     expect(modifie?.accessibiliteRequise).toBeUndefined();
     expect(modifie?.necessiteParking).toBeUndefined();
     expect(modifie?.necessiteExterieur).toBeUndefined();
+  });
+
+  it("archiverAcquereur()/desarchiverAcquereur() retournent undefined pour un id non-UUID ou inexistant", async () => {
+    await expect(archiverAcquereur("client-001")).resolves.toBeUndefined();
+    await expect(archiverAcquereur("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    await expect(desarchiverAcquereur("client-001")).resolves.toBeUndefined();
+  });
+
+  it("archiver un acquéreur : posé archiveLe, exclu de listerClients(), présent dans listerClientsArchives(), toujours résolu par getClientById()", async () => {
+    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive1" }));
+    idsCrees.push(cree.id);
+    expect(cree.archiveLe).toBeUndefined();
+
+    const archive = await archiverAcquereur(cree.id);
+    expect(archive?.archiveLe).toBeDefined();
+
+    const actifs = await listerClients();
+    expect(actifs.some((c) => c.id === cree.id)).toBe(false);
+
+    const archives = await listerClientsArchives();
+    expect(archives.some((c) => c.id === cree.id)).toBe(true);
+
+    const parId = await getClientById(cree.id);
+    expect(parId).toBeDefined();
+    expect(parId?.archiveLe).toBeDefined();
+  });
+
+  it("désarchiver un acquéreur : archiveLe redevient undefined, réapparaît dans listerClients()", async () => {
+    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive2" }));
+    idsCrees.push(cree.id);
+    await archiverAcquereur(cree.id);
+
+    const desarchive = await desarchiverAcquereur(cree.id);
+    expect(desarchive?.archiveLe).toBeUndefined();
+
+    const actifs = await listerClients();
+    expect(actifs.some((c) => c.id === cree.id)).toBe(true);
+  });
+
+  it("le comptage de bascule démo->réel inclut les acquéreurs archivés (pas de repli mock)", async () => {
+    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive3" }));
+    idsCrees.push(cree.id);
+    await archiverAcquereur(cree.id);
+
+    const actifs = await listerClients();
+    expect(actifs.some((c) => c.id === "client-001")).toBe(false);
   });
 });

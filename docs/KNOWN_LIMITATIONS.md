@@ -43,9 +43,14 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   figés après création) ni supprimées.
 - **Biens et acquéreurs** ont une page d'édition (`/biens/[id]/modifier`, `/clients/[id]/modifier`,
   réservée aux entités réelles — un bien/acquéreur mocké n'a pas de bouton "Modifier"), mais
-  **aucune suppression** n'existe pour l'un ni pour l'autre. `modifie_le` est rafraîchi
+  **aucune suppression physique** n'existe pour l'un ni pour l'autre. `modifie_le` est rafraîchi
   explicitement à chaque édition (`modifierBien()`/`modifierAcquereur()`, mêmes validations
-  serveur que la création — voir `docs/adr/007-repositories-server-components.md`).
+  serveur que la création — voir `docs/adr/007-repositories-server-components.md`). Depuis
+  ADR-012, un bien/acquéreur peut être **archivé** (`/biens?archives=1`, `/clients?archives=1`) —
+  une sortie réversible des flux actifs, toujours pas une suppression. Limites de ce mécanisme :
+  aucune règle d'archivage automatique (ex. archiver un mandat expiré depuis longtemps) n'existe,
+  l'archivage est toujours un geste manuel du conseiller ; aucun archivage groupé (un bien/
+  acquéreur à la fois).
 
 ## Limites du moteur de matching
 

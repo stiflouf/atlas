@@ -28,19 +28,32 @@ function ligneVersAcquereur(ligne: LigneAcquereur): ProfilAcquereur {
     accessibiliteRequise: ligne.accessibiliteRequise ?? undefined,
     necessiteParking: ligne.necessiteParking ?? undefined,
     necessiteExterieur: ligne.necessiteExterieur ?? undefined,
+    archiveLe: ligne.archiveLe?.toISOString(),
   };
 }
 
 // Acquéreurs réels si au moins un existe, sinon les acquéreurs de démonstration — jamais un
-// mélange, même principe que listerBiens().
+// mélange, même principe que listerBiens(). La bascule compte TOUTES les lignes réelles
+// (archivées comprises) — seul le résultat retourné exclut les archivés (ADR-012).
 export async function listerClients(): Promise<ProfilAcquereur[]> {
   try {
     const lignes = await getDb().select().from(acquereursTable);
-    if (lignes.length > 0) return lignes.map(ligneVersAcquereur);
+    if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersAcquereur);
   } catch (erreur) {
     console.error("[acquereurs] lecture Postgres indisponible, repli sur les mocks :", erreur);
   }
   return clientsDemo;
+}
+
+// Réservé aux acquéreurs réels archivés — aucun repli mock.
+export async function listerClientsArchives(): Promise<ProfilAcquereur[]> {
+  try {
+    const lignes = await getDb().select().from(acquereursTable);
+    return lignes.filter((l) => l.archiveLe).map(ligneVersAcquereur);
+  } catch (erreur) {
+    console.error("[acquereurs] lecture Postgres indisponible :", erreur);
+    return [];
+  }
 }
 
 // Même règle de repli que getBienById() : dataset réel non vide => lookup DB uniquement, même
@@ -114,6 +127,28 @@ export async function modifierAcquereur(id: string, input: NouvelAcquereur): Pro
       necessiteExterieur: input.necessiteExterieur ?? null,
       modifieLe: new Date(),
     })
+    .where(eq(acquereursTable.id, id))
+    .returning();
+  return ligne ? ligneVersAcquereur(ligne) : undefined;
+}
+
+// Archivage/désarchivage : jamais un DELETE, uniquement archiveLe qui bascule (voir
+// bienRepository.archiverBien pour le détail des garanties FK).
+export async function archiverAcquereur(id: string): Promise<ProfilAcquereur | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(acquereursTable)
+    .set({ archiveLe: new Date() })
+    .where(eq(acquereursTable.id, id))
+    .returning();
+  return ligne ? ligneVersAcquereur(ligne) : undefined;
+}
+
+export async function desarchiverAcquereur(id: string): Promise<ProfilAcquereur | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(acquereursTable)
+    .set({ archiveLe: null })
     .where(eq(acquereursTable.id, id))
     .returning();
   return ligne ? ligneVersAcquereur(ligne) : undefined;

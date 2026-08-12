@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0004`, vérifiées le 2026-08-11). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0005`, vérifiées le 2026-08-12). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -64,6 +64,7 @@ erDiagram
         text exterieur "nullable"
         timestamptz cree_le
         timestamptz modifie_le
+        timestamptz archive_le "nullable, ADR-012"
     }
     acquereurs {
         uuid id PK
@@ -84,6 +85,7 @@ erDiagram
         boolean necessite_exterieur "nullable"
         timestamptz cree_le
         timestamptz modifie_le
+        timestamptz archive_le "nullable, ADR-012"
     }
     actions {
         uuid id PK
@@ -184,6 +186,7 @@ optionnelles nullables sans défaut (ADR-009).
 | `ascenseur`, `parking` | boolean | **oui** | inconnu = NULL, jamais false |
 | `exterieur` | text | **oui** | `CHECK` si non NULL |
 | `cree_le` / `modifie_le` | timestamptz | non | `cree_le` alimente l'historique dérivé (`docs/BUSINESS_RULES.md`) |
+| `archive_le` | timestamptz | **oui** | `NULL` = actif, sinon date d'archivage — ADR-012, aucun défaut |
 
 **Contraintes `CHECK`** :
 - `type IN ('appartement','maison','studio','loft','local_commercial')`
@@ -192,6 +195,8 @@ optionnelles nullables sans défaut (ADR-009).
 
 Relation fonctionnelle : référencé par FK réelle depuis `notes_bien` et `comptes_rendus_visite` ;
 référencé par id texte (sans FK) depuis `actions` et `memoire_contextuelle` (ADR-010).
+`listerBiens()` exclut les lignes où `archive_le` est non NULL ; `getBienById()` les résout
+toujours — voir `docs/DEMO_VS_REAL.md`.
 
 ## `acquereurs`
 
@@ -211,8 +216,12 @@ que `biens`.
 | `surface_min` | real | **oui** | |
 | `accessibilite_requise`, `necessite_parking`, `necessite_exterieur` | boolean | **oui** | inconnu = NULL |
 | `cree_le` / `modifie_le` | timestamptz | non | |
+| `archive_le` | timestamptz | **oui** | `NULL` = actif, sinon date d'archivage — ADR-012, aucun défaut |
 
 **Contrainte `CHECK`** : `stade_projet IN ('decouverte','recherche_active','offre','compromis','acte')`.
+
+`listerClients()` exclut les lignes où `archive_le` est non NULL ; `getClientById()` les résout
+toujours — voir `docs/DEMO_VS_REAL.md`.
 
 Relation fonctionnelle : référencé par FK réelle depuis `comptes_rendus_visite` ; par id texte
 (sans FK) depuis `actions` et `memoire_contextuelle`.
@@ -289,6 +298,7 @@ couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`.
 | `0002_cultured_masked_marvel.sql` | `actions` |
 | `0003_black_risque.sql` | `notes_bien` |
 | `0004_needy_norrin_radd.sql` | `comptes_rendus_visite` |
+| `0005_happy_wolfsbane.sql` | `archive_le` sur `biens` et `acquereurs` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

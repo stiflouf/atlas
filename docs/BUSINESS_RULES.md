@@ -180,6 +180,26 @@ compte rendu n'apparaît dans l'historique — seulement le label court dérivé
   rappel textuel affiché dans la Mémoire du dossier ; créer une action à partir de cette
   information reste un geste manuel du conseiller (via "+ Ajouter une action").
 
+## Archivage
+
+**Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,
+`archiverAcquereur`/`desarchiverAcquereur`, `listerBiensArchives`/`listerClientsArchives`),
+`actions/archivageBien.ts`, `actions/archivageAcquereur.ts`. Détail de la décision : ADR-012.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Exclusion des listes actives | `archiveLe` non NULL | Absent de `listerBiens()`/`listerClients()` — donc du référentiel de matching, des `<select>` de création d'action, et (pour un bien) de "Dossiers nécessitant une action" sur l'accueil |
+| Exclusion des flux actifs pour une action liée à un acquéreur seul | `action.acquereurId` renseigné mais absent de `listerClients()` (acquéreur archivé) | Exclue de "Autres actions" sur l'accueil |
+| Consultation directe toujours possible | — | `getBienById()`/`getClientById()` résolvent une entité archivée sans condition — fiche, édition, notes/actions/comptes rendus/historique restent accessibles |
+| Cache de matching déjà persisté | Une décision `memoire_contextuelle` existe déjà pour ce rendez-vous | Inchangée — un rendez-vous déjà résolu vers un bien depuis archivé reste préparable (la priorité validation humaine/cache > référentiel s'applique avant toute lecture du référentiel filtré) |
+| Refus de création liée — note | `bien.archiveLe` non NULL | `ajouterNoteBienAction` n'insère rien (refus silencieux, formulaire déjà masqué côté UI) |
+| Refus de création liée — compte rendu | `bien.archiveLe` ou `acquereur.archiveLe` non NULL | `enregistrerCompteRenduVisiteAction` n'insère rien (refus silencieux, formulaire remplacé par un message côté UI) |
+| Refus de création liée — action | `bien.archiveLe` ou `acquereur.archiveLe` non NULL, si renseigné | `creerActionAction` lève une erreur explicite (`throw`, pas un refus silencieux — cohérent avec le `throw` déjà existant sur le titre manquant dans ce fichier) |
+| Restauration | Conseiller clique "Désarchiver" | `archiveLe` repassé à `NULL` — réapparaît immédiatement dans tous les flux actifs, aucune perte de données |
+
+Jamais de suppression physique : un archivage est un `UPDATE`, jamais un `DELETE` — les FK réelles
+(`notes_bien`, `comptes_rendus_visite`, `ON DELETE CASCADE`) ne se déclenchent donc jamais.
+
 ## Ce qui est volontairement déterministe et sans LLM
 
 Tous les moteurs ci-dessus, plus la sélection d'extraits Mérimée "à raconter"

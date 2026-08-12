@@ -26,4 +26,7 @@ export type Bien = {
   // Absent pour les biens mockés (data/biens.ts) : aucune notion de date de création pour des
   // données statiques. Présent pour tout bien réel (colonne DB non nulle).
   creeLe?: string;
+  // Absent = actif. Présent = archivé (sorti des flux actifs, jamais supprimé) — voir
+  // ADR-012 et docs/BUSINESS_RULES.md.
+  archiveLe?: string;
 };

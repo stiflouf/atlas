@@ -492,6 +492,16 @@ export default async function PreparerVisite({ params }: PageProps) {
           via le bouton "+ Ajouter une action" existant sur la fiche du bien. */}
       <section className="mb-8 border-t border-[#f1f5f9] pt-6">
         <SectionTitle>Compte rendu de la visite</SectionTitle>
+        {bien.archiveLe || acquereur.archiveLe ? (
+          <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+            {bien.archiveLe && acquereur.archiveLe
+              ? "Ce bien et cet acquéreur sont archivés"
+              : bien.archiveLe
+                ? "Ce bien est archivé"
+                : "Cet acquéreur est archivé"}{" "}
+            — impossible d'ajouter un nouveau compte rendu.
+          </p>
+        ) : (
         <form action={enregistrerCompteRenduVisiteAction} className="flex flex-col gap-4">
           <input type="hidden" name="bienId" value={bien.id} />
           <input type="hidden" name="acquereurId" value={acquereur.id} />
@@ -549,6 +559,7 @@ export default async function PreparerVisite({ params }: PageProps) {
             Enregistrer le compte rendu
           </button>
         </form>
+        )}
       </section>
 
       {/* Rappel du principe Atlas */}

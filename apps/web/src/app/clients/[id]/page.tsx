@@ -5,6 +5,7 @@ import Badge from "@/components/ui/Badge";
 import ActionItem from "@/components/aujourd-hui/ActionItem";
 import { getClientById } from "@/lib/clientRepository";
 import { getActionsPourAcquereur } from "@/lib/actionRepository";
+import { archiverAcquereurAction, desarchiverAcquereurAction } from "@/actions/archivageAcquereur";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,6 +19,10 @@ const stadeLabel: Record<string, string> = {
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -63,22 +68,36 @@ export default async function FicheClient({ params }: PageProps) {
             {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
           </span>
           <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>
+          {client.archiveLe && <Badge variant="muted">Archivé le {formatDate(client.archiveLe)}</Badge>}
         </div>
 
         <div className="flex flex-wrap gap-3 mt-4">
-          <Link
-            href={`/actions/nouveau?acquereurId=${client.id}`}
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
-          >
-            + Ajouter une action
-          </Link>
-          {UUID_REGEX.test(client.id) && (
+          {!client.archiveLe && (
             <Link
-              href={`/clients/${client.id}/modifier`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+              href={`/actions/nouveau?acquereurId=${client.id}`}
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
             >
-              Modifier
+              + Ajouter une action
             </Link>
+          )}
+          {UUID_REGEX.test(client.id) && (
+            <>
+              <Link
+                href={`/clients/${client.id}/modifier`}
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+              >
+                Modifier
+              </Link>
+              <form action={client.archiveLe ? desarchiverAcquereurAction : archiverAcquereurAction}>
+                <input type="hidden" name="id" value={client.id} />
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748b] bg-white border border-[#e2e8f0] hover:border-[#dc2626] hover:text-[#dc2626] transition-colors px-3.5 py-2 rounded-lg"
+                >
+                  {client.archiveLe ? "Désarchiver" : "Archiver"}
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>
