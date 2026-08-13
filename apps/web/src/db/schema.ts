@@ -592,6 +592,117 @@ export const regleFiscale = pgTable(
 // un compromis déjà 'realise' (seuls les nouveaux engagements prévisionnels sur un compromis encore
 // 'en_cours' sont bloqués côté Server Action) — le règlement financier d'une vente déjà conclue ne
 // s'arrête pas à l'archivage du dossier commercial (voir src/actions/remuneration.ts).
+// Opportunité de prise de mandat vendeur (ADR-027), en amont du cycle déjà modélisé par `biens`.
+// Représente en V1 une OPPORTUNITÉ avec un contact vendeur principal — jamais une personne
+// physique générique découplée de l'opportunité (un seul contact par opportunité, une seule
+// opportunité par bien potentiel : voir l'unicité sur bienId ci-dessous). Plusieurs propriétaires
+// sur un même bien, ou un même propriétaire avec plusieurs biens, nécessiteront une séparation
+// contact <-> opportunité dans une passe ultérieure, non construite ici.
+//
+// Statut jamais stocké : dérivé à la lecture des jalons ci-dessous, même principe que
+// biens.offreEnCoursLe/compromisSigneLe (ADR-014) — voir deriverStatutProspectVendeur,
+// src/types/prospectVendeur.ts. rdvEstimationPrevuLe (planifié) et rdvEstimationRealiseLe (tenu)
+// sont deux colonnes distinctes : seule la seconde fait avancer le statut, un rendez-vous
+// planifié dans le futur n'est jamais un jalon commercial franchi. Les deux portent l'heure
+// (timestamptz), utile aux futurs agenda/rappels/automatisations (ADR-028+).
+//
+// nom NOT NULL / prenom nullable : un lead peut n'être connu que par son nom, ou correspondre plus
+// tard à une SCI/indivision/succession — ADR-027 ne construit pas de modèle personne
+// physique/personne morale, cette seule nullabilité documente la limite. email/telephone tous
+// deux nullables, sans invariant croisé : un lead de prospection terrain peut être enregistré
+// avant même d'avoir une coordonnée de contact directe, Atlas n'invente jamais une donnée
+// manquante ni ne bloque la création pour ce motif.
+//
+// adresseBienPotentiel (précise) et secteurBienPotentiel (description approximative, "quartier
+// centre-ville") sont deux champs distincts, jamais confondus : seul adresseBienPotentiel peut
+// préremplir biens.adresse à la conversion (voir signerMandatProspectVendeur,
+// prospectVendeurRepository.ts) — un secteur flou ne devient jamais une adresse.
+//
+// dernierContactLe : mis à jour uniquement par une vraie interaction (ajouterNoteProspectVendeur
+// pour un type != 'note_interne', ou marquerRdvEstimationRealise) — jamais par un simple jalon de
+// pipeline (qualifieLe/estimationProposeeLe/mandatProposeLe/mandatSigneLe), indispensable pour que
+// de futures règles déterministes de relance (ADR-028+) mesurent un vrai silence vendeur.
+//
+// archiveLe (ADR-012) distinct de motifPerte/datePerte : perdu est un résultat commercial (entre
+// dans les statistiques de conversion), archiveLe est une gestion administrative de la fiche
+// (doublon, erreur de saisie) — jamais l'un pour l'autre. bienId : vraie FK (ADR-010, l'entité en
+// amont est garantie réelle au moment où elle est posée), UNIQUE — une opportunité par bien, et un
+// bien ne peut être le résultat que d'une seule conversion.
+export const prospectsVendeurs = pgTable(
+  "prospects_vendeurs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    nom: text("nom").notNull(),
+    prenom: text("prenom"),
+    email: text("email"),
+    telephone: text("telephone"),
+    origineLead: text("origine_lead"),
+    origineLeadDetail: text("origine_lead_detail"),
+    adresseBienPotentiel: text("adresse_bien_potentiel"),
+    secteurBienPotentiel: text("secteur_bien_potentiel"),
+    ville: text("ville"),
+    codePostal: text("code_postal"),
+    typeBien: text("type_bien"),
+    qualifieLe: timestamp("qualifie_le", { withTimezone: true }),
+    estimationProposeeCentimes: integer("estimation_proposee_centimes"),
+    estimationProposeeLe: date("estimation_proposee_le"),
+    rdvEstimationPrevuLe: timestamp("rdv_estimation_prevu_le", { withTimezone: true }),
+    rdvEstimationRealiseLe: timestamp("rdv_estimation_realise_le", { withTimezone: true }),
+    mandatProposeLe: timestamp("mandat_propose_le", { withTimezone: true }),
+    mandatSigneLe: timestamp("mandat_signe_le", { withTimezone: true }),
+    bienId: uuid("bien_id").references(() => biens.id).unique(),
+    motifPerte: text("motif_perte"),
+    datePerte: date("date_perte"),
+    prochaineAction: text("prochaine_action"),
+    prochaineActionLe: date("prochaine_action_le"),
+    dernierContactLe: timestamp("dernier_contact_le", { withTimezone: true }),
+    archiveLe: timestamp("archive_le", { withTimezone: true }),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "prospects_vendeurs_estimation_positive_check",
+      sql`${table.estimationProposeeCentimes} IS NULL OR ${table.estimationProposeeCentimes} > 0`
+    ),
+    check(
+      "prospects_vendeurs_origine_lead_check",
+      sql`${table.origineLead} IS NULL OR ${table.origineLead} IN ('recommandation','ancien_client','site_web','reseaux_sociaux','prospection_terrain','panneau','salon_evenement','apport_affaire','autre')`
+    ),
+    check(
+      "prospects_vendeurs_type_bien_check",
+      sql`${table.typeBien} IS NULL OR ${table.typeBien} IN ('appartement','maison','studio','loft','local_commercial')`
+    ),
+    check(
+      "prospects_vendeurs_motif_perte_check",
+      sql`${table.motifPerte} IS NULL OR ${table.motifPerte} IN ('projet_abandonne','choix_agence_concurrente','desaccord_estimation','injoignable','bien_vendu_autrement','delai_calendrier','autre')`
+    ),
+  ]
+);
+
+// Notes append-only sur un prospect vendeur (ADR-027), même patron que notes_bien (ADR-011) : FK
+// réelle, aucun modifieLe, aucun UPDATE jamais émis. `type` distingue une vraie interaction vendeur
+// d'une remarque interne — seules les valeurs != 'note_interne' font avancer
+// prospectsVendeurs.dernierContactLe (voir noteProspectVendeurRepository.ajouterNoteProspectVendeur).
+export const notesProspectVendeur = pgTable(
+  "notes_prospect_vendeur",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    prospectVendeurId: uuid("prospect_vendeur_id")
+      .notNull()
+      .references(() => prospectsVendeurs.id, { onDelete: "cascade" }),
+    type: text("type").notNull().default("note_interne"),
+    contenu: text("contenu").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "notes_prospect_vendeur_type_check",
+      sql`${table.type} IN ('appel','email','sms','rendez_vous','autre_interaction','note_interne')`
+    ),
+  ]
+);
+
 export const remuneration = pgTable(
   "remuneration",
   {

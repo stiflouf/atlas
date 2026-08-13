@@ -582,6 +582,39 @@ score jamais affiché à l'UI. **Volontairement exclu de cette V1** : alerte de 
 (les marges restent affichées en continu dans `/fiscal`, sans alerte proactive), listing individuel
 pour les compteurs agrégés, recommandation d'optimisation fiscale.
 
+## CRM vendeur / prise de mandat (ADR-027)
+
+**Fichiers** : `src/lib/{prospectVendeurRepository,noteProspectVendeurRepository,
+prospectVendeurFormulaire}.ts`, `src/actions/prospectVendeur.ts`,
+`src/app/prospects-vendeurs/**`. Une opportunité commerciale de prise de mandat sur un bien
+potentiel, avec un contact vendeur principal — en amont de `biens`, jamais un CRM contact
+générique (un seul contact par opportunité, une seule opportunité par bien).
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Statut dérivé | Jamais stocké | Cascade du jalon le plus avancé : `prospect < qualification < rendez_vous < estimation < mandat_propose < mandat_signe`, `perdu` prioritaire depuis n'importe quel état |
+| Rendez-vous prévu vs réalisé | `rdvEstimationPrevuLe` seul posé | Ne fait **jamais** avancer le statut — seul `rdvEstimationRealiseLe` (tenu) le fait |
+| Contact minimal | Création d'un prospect | `email`/`telephone` tous deux facultatifs, aucun invariant croisé — un lead de prospection terrain peut être créé sans coordonnée |
+| Adresse vs secteur | Saisie du bien potentiel | `adresseBienPotentiel` (précise) et `secteurBienPotentiel` (approximatif) restent deux champs distincts, jamais fusionnés |
+| Dernier contact | Note ajoutée ou jalon posé | Avance uniquement sur une vraie interaction (note de type ≠ `note_interne`, ou rendez-vous marqué réalisé) — jamais sur un simple jalon de pipeline |
+| Perte | `marquerProspectVendeurPerduAction` | `motifPerte`/`datePerte` posés atomiquement, vocabulaire dédié (`MotifPerteProspectVendeur`), refusé si le mandat est déjà signé |
+| Archivage | `archiverProspectVendeurAction` | Distinct de la perte (gestion administrative, ADR-012) — jamais compté dans le taux de conversion |
+| Conversion en bien | `signerMandatProspectVendeurAction` | Transaction atomique (création du bien + `mandatSigneLe`/`bienId`) ; tout champ obligatoire de `biens` encore vide (dont l'adresse si seul un secteur était connu) est rejeté explicitement — aucune valeur inventée |
+| Unicité de conversion | `bienId` | Contrainte `UNIQUE` — une opportunité par bien |
+| Prochaine action | `mettreAJourProchaineActionAction` | Deux champs simples (`prochaineAction`/`prochaineActionLe`), pas un moteur de tâches — `actions` n'est pas modifiée |
+
+**Dashboard minimal** (`chargerPipelineVendeur()`, `dashboardRepository.ts`, section "Pipeline
+vendeur" sur `/dashboard`) : compteurs par statut (prospects en cours, hors archivés), volume
+d'estimations en cours, délai moyen prospect → mandat signé, et
+`tauxConversionOpportunitesCloturees` = signés / (signés + perdus) **uniquement parmi les
+opportunités déjà clôturées** — libellé UI explicite ("parmi les opportunités clôturées"), les
+prospects encore actifs n'entrent jamais dans ce ratio.
+
+**Hors périmètre V1** (documenté explicitement, pas un oubli) : séparation contact ↔ opportunité
+(plusieurs propriétaires, un propriétaire multi-biens), relances automatiques, génération
+d'e-mails, campagnes, moteur de tâches générique (réservé à un futur ADR-028), intégration Google
+Calendar pour le rendez-vous d'estimation, révocation d'un mandat déjà signé.
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

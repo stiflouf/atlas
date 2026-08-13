@@ -322,6 +322,28 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   ailleurs que dans le code** — modifier l'ordre relatif de deux types nécessite d'éditer
   `POIDS_TYPE` directement, aucune configuration externe n'existe.
 
+## CRM vendeur (ADR-027)
+
+- **Un seul contact par opportunité, une seule opportunité par bien** : `prospects_vendeurs` ne
+  modélise pas de personne physique/personne morale séparée de l'opportunité — plusieurs
+  propriétaires sur un même bien (indivision) ou un même propriétaire avec plusieurs biens en
+  cours nécessiteront une séparation contact ↔ opportunité dans une passe ultérieure, non construite
+  ici. `bienId` porte une contrainte `UNIQUE` qui matérialise cette limite en base.
+- **`prochaineAction`/`prochaineActionLe` restent deux champs simples** : pas de file, pas de
+  statut, pas de récurrence, aucune modification de la table `actions` existante ni de
+  `actionPriority.ts`. Un futur ADR-028 tranchera le rattachement propre des tâches/relances aux
+  différents objets métier (bien, acquéreur, prospect vendeur).
+- **Aucune intégration Google Calendar pour le rendez-vous d'estimation** : `rdvEstimationPrevuLe`/
+  `rdvEstimationRealiseLe` restent de simples champs sur `prospects_vendeurs`, non reliés à
+  `memoireContextuelle` (dont `typeMetier` inclut déjà `'estimation'`, prêt pour une passe
+  ultérieure) ni à la logique de matching (`src/lib/matching.ts`).
+- **Aucune automatisation** : ni relance automatique, ni génération d'e-mail personnalisé, ni
+  campagne, ni post de communication à la signature — le modèle pose les signaux bruts
+  (`dernierContactLe`, `prochaineActionLe`) qu'une future passe pourra lire, rien n'est codé ici.
+- **Aucune révocation de mandat déjà signé** : une fois `mandatSigneLe`/`bienId` posés, le
+  prospect reste dans cet état terminal — pas de chemin pour "annuler" une signature déjà
+  enregistrée (le bien créé, lui, reste géré normalement via ses propres statuts).
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

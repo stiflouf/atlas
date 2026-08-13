@@ -54,6 +54,15 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   chargement de `/`. Aucune table `alerte`, aucun cron, aucun push/email, aucune route `/alertes`
   dédiée (la section vit en tête de `/`). Aucune alerte de proximité de seuil (uniquement des faits
   déjà dépassés/constatés/projetés), aucune recommandation d'optimisation fiscale.
+- **CRM vendeur (ADR-027) limité à une opportunité par bien, avec un seul contact** —
+  `prospects_vendeurs` ne modélise ni personne physique/personne morale distincte de l'opportunité,
+  ni indivision, ni propriétaire multi-biens (`bienId` porte une contrainte `UNIQUE`). Aucune
+  automatisation (relance, e-mail, campagne), aucune intégration Google Calendar pour le rendez-vous
+  d'estimation, aucune modification de la table `actions` ou de `actionPriority.ts` — `actions`
+  reste un domaine séparé tant qu'un futur ADR-028 (moteur de tâches) n'a pas tranché le
+  rattachement. Ne jamais supposer qu'un prospect vendeur peut être créé avec un statut choisi
+  directement : il est toujours dérivé (`deriverStatutProspectVendeur`) d'une cascade de jalons
+  datés, jamais stocké.
 
 ## Conventions impératives
 

@@ -364,6 +364,26 @@ alerte sur tout l'horizon N+1→N+5. Nouvelle section "Ce qui mérite mon attent
 5 alertes prioritaires au maximum, le reste derrière un `<details>` natif "Afficher les autres",
 aucune nouvelle route. Aucune alerte de proximité de seuil dans cette V1.
 
+## 27. CRM vendeur / prise de mandat
+
+Nouvelle entité `prospects_vendeurs` (ADR-027) : une opportunité commerciale de prise de mandat
+sur un bien potentiel, avec un contact vendeur principal, en amont du cycle déjà modélisé par
+`biens` — comble un vide total (aucune entité vendeur/propriétaire n'existait avant cette passe).
+Statut jamais stocké, dérivé d'une cascade de jalons (`prospect → qualification → rendez_vous →
+estimation → mandat_propose → mandat_signe`, `perdu` prioritaire depuis n'importe quel état) — un
+rendez-vous seulement planifié n'avance jamais le statut, seul un rendez-vous marqué réalisé le
+fait. Adresse précise et secteur approximatif restent deux champs distincts, jamais fusionnés :
+seule l'adresse précise peut préremplir le bien à la conversion. `dernierContactLe` n'avance que
+sur une vraie interaction (note typée, ou rendez-vous réalisé), jamais sur un simple jalon de
+pipeline interne — les notes elles-mêmes distinguent une interaction d'une remarque interne.
+Archivage (erreur de saisie, doublon) distinct de la perte commerciale, jamais mélangés dans les
+statistiques. La conversion en bien (`signerMandatProspectVendeurAction`) est une transaction
+atomique qui rejette explicitement toute valeur obligatoire manquante — aucune donnée fictive.
+Nouvelle section `/prospects-vendeurs` (liste + fiche + création + signature de mandat), et
+section "Pipeline vendeur" sur `/dashboard` avec un taux de conversion explicitement limité aux
+opportunités clôturées. Aucune modification de la table `actions` ni du moteur de tâches — réservé
+à un futur ADR-028.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

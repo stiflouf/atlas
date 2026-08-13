@@ -8,7 +8,14 @@ import {
   offreVisites as offreVisitesTable,
   remuneration as remunerationTable,
 } from "@/db/schema";
+import {
+  listerProspectsVendeurs,
+  listerProspectsVendeursPerdus,
+  listerProspectsVendeursConvertis,
+} from "@/lib/prospectVendeurRepository";
+import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import type { MotifPerte } from "@/types/motifPerte";
+import type { StatutProspectVendeur } from "@/types/prospectVendeur";
 
 // Agrégation entièrement côté SQL (COUNT/SUM/AVG/GROUP BY par Postgres) — ADR-018. La page ne
 // charge jamais les lignes métier pour recalculer en mémoire.
@@ -663,5 +670,71 @@ export async function listerPipelineDate(
   return {
     finaliseNonEncaisse: versItemPipelineDate(finaliseNonEncaisseBrut),
     compromisEnCours: versItemPipelineDate(compromisEnCoursBrut),
+  };
+}
+
+// ADR-027 — exception délibérée à la convention "agrégation entièrement côté SQL" du haut de ce
+// fichier : le statut d'un prospect vendeur n'est jamais une colonne stockée (dérivé à la lecture,
+// deriverStatutProspectVendeur), donc pas de GROUP BY possible dessus. Compose les fonctions déjà
+// exposées par prospectVendeurRepository (elles-mêmes lisent puis dérivent en mémoire) plutôt que
+// de dupliquer une seconde implémentation de la dérivation ici — volume attendu faible (produit
+// mono-conseiller).
+export type DashboardPipelineVendeur = {
+  nombreEnCours: number;
+  nombreParStatutEnCours: Record<Exclude<StatutProspectVendeur, "perdu" | "mandat_signe">, number>;
+  volumeEstimationsEnCoursCentimes: number | undefined;
+  nombreEstimationsEnCoursRenseignees: number;
+  nombreSignes: number;
+  nombrePerdus: number;
+  // Signés / (signés + perdus) — UNIQUEMENT parmi les opportunités déjà clôturées, jamais rapporté
+  // au total des prospects créés ni aux prospects encore actifs (voir dashboard/page.tsx pour le
+  // libellé UI qui l'explicite).
+  tauxConversionOpportunitesCloturees: number | undefined;
+  delaiMoyenProspectMandatSigneJours: number | undefined;
+};
+
+export async function chargerPipelineVendeur(): Promise<DashboardPipelineVendeur> {
+  const [enCours, perdus, convertis] = await Promise.all([
+    listerProspectsVendeurs(),
+    listerProspectsVendeursPerdus(),
+    listerProspectsVendeursConvertis(),
+  ]);
+
+  const nombreParStatutEnCours: DashboardPipelineVendeur["nombreParStatutEnCours"] = {
+    prospect: 0,
+    qualification: 0,
+    rendez_vous: 0,
+    estimation: 0,
+    mandat_propose: 0,
+  };
+  let volumeEstimationsEnCoursCentimes: number | undefined;
+  let nombreEstimationsEnCoursRenseignees = 0;
+  for (const prospect of enCours) {
+    const statut = deriverStatutProspectVendeur(prospect) as keyof typeof nombreParStatutEnCours;
+    nombreParStatutEnCours[statut] += 1;
+    if (prospect.estimationProposeeCentimes !== undefined) {
+      volumeEstimationsEnCoursCentimes = (volumeEstimationsEnCoursCentimes ?? 0) + prospect.estimationProposeeCentimes;
+      nombreEstimationsEnCoursRenseignees += 1;
+    }
+  }
+
+  const nombreSignes = convertis.length;
+  const nombrePerdus = perdus.length;
+  const nombreClotures = nombreSignes + nombrePerdus;
+
+  const delaisJours = convertis
+    .filter((p): p is typeof p & { mandatSigneLe: string } => p.mandatSigneLe !== undefined)
+    .map((p) => (new Date(p.mandatSigneLe).getTime() - new Date(p.creeLe).getTime()) / (1000 * 60 * 60 * 24));
+
+  return {
+    nombreEnCours: enCours.length,
+    nombreParStatutEnCours,
+    volumeEstimationsEnCoursCentimes,
+    nombreEstimationsEnCoursRenseignees,
+    nombreSignes,
+    nombrePerdus,
+    tauxConversionOpportunitesCloturees: nombreClotures > 0 ? nombreSignes / nombreClotures : undefined,
+    delaiMoyenProspectMandatSigneJours:
+      delaisJours.length > 0 ? delaisJours.reduce((somme, j) => somme + j, 0) / delaisJours.length : undefined,
   };
 }

@@ -758,6 +758,54 @@ résultat "officiel" si le statut vaut autre chose que `verifie_direct`. Amorcé
 cotisations, CFP, abattement micro-BNC, versement libératoire — barème ACRE volontairement absent,
 aucune valeur vérifiée pendant l'audit).
 
+## `prospects_vendeurs`
+
+**Rôle** : opportunité commerciale de prise de mandat sur un bien potentiel, avec un contact
+vendeur principal — en amont de `biens` (ADR-027). Statut jamais stocké, dérivé à la lecture d'une
+cascade de jalons (`deriverStatutProspectVendeur`, `src/types/prospectVendeur.ts`). Limites V1 :
+un seul contact par opportunité, une seule opportunité par bien (`bien_id` `UNIQUE`) — pas de
+modèle personne physique/personne morale ni de séparation contact ↔ opportunité.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `nom` | text | non | seul champ d'identité obligatoire |
+| `prenom` | text | **oui** | un lead peut n'être connu que par son nom |
+| `email` / `telephone` | text | **oui** | tous deux nullables, aucun invariant croisé |
+| `origine_lead` | text | **oui** | `CHECK` vocabulaire fermé (`OrigineLead`) ou `NULL` = non déterminée |
+| `origine_lead_detail` | text | **oui** | texte libre, ex. "Facebook", "SeLoger" |
+| `adresse_bien_potentiel` | text | **oui** | adresse **précise** uniquement |
+| `secteur_bien_potentiel` | text | **oui** | description approximative — jamais fusionnée avec l'adresse |
+| `ville` / `code_postal` | text | **oui** | alignés sur `biens` |
+| `type_bien` | text | **oui** | `CHECK` = vocabulaire `biens.type` |
+| `qualifie_le` | timestamptz | **oui** | jalon technique |
+| `estimation_proposee_centimes` | integer | **oui** | `CHECK > 0` ; posé atomiquement avec la ligne suivante |
+| `estimation_proposee_le` | date | **oui** | |
+| `rdv_estimation_prevu_le` | timestamptz | **oui** | planifié — ne fait jamais avancer le statut |
+| `rdv_estimation_realise_le` | timestamptz | **oui** | tenu — fait avancer le statut vers `rendez_vous` |
+| `mandat_propose_le` / `mandat_signe_le` | timestamptz | **oui** | jalons |
+| `bien_id` | uuid (FK → `biens.id`, `UNIQUE`) | **oui** | posé atomiquement avec `mandat_signe_le` |
+| `motif_perte` | text | **oui** | `CHECK` vocabulaire dédié (`MotifPerteProspectVendeur`, distinct de `MotifPerte`) |
+| `date_perte` | date | **oui** | posée atomiquement avec `motif_perte` |
+| `prochaine_action` / `prochaine_action_le` | text / date | **oui** | champs simples, pas un moteur de tâches |
+| `dernier_contact_le` | timestamptz | **oui** | uniquement de vraies interactions, jamais un jalon de pipeline seul |
+| `archive_le` | timestamptz | **oui** | gestion administrative (ADR-012), distincte de `motif_perte` |
+| `cree_le` / `modifie_le` | timestamptz | non | |
+
+## `notes_prospect_vendeur`
+
+**Rôle** : notes append-only sur un prospect vendeur, même patron que `notes_bien` (ADR-011). Le
+champ `type` distingue une vraie interaction vendeur d'une remarque interne — seul
+`type != 'note_interne'` avance `prospects_vendeurs.dernier_contact_le`.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `type` | text | non | `CHECK IN ('appel','email','sms','rendez_vous','autre_interaction','note_interne')`, default `'note_interne'` |
+| `contenu` | text | non | |
+| `cree_le` | timestamptz | non | append-only, aucun `modifie_le` |
+
 ## Moteur fiscal (`src/lib/fiscal/`)
 
 **Rôle** : premier moteur de calcul fiscal, borné à l'année civile en cours (ADR-024). Ne crée

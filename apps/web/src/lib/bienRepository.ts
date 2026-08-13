@@ -87,9 +87,12 @@ export async function getBienById(id: string): Promise<Bien | undefined> {
 export type NouveauBien = Omit<Bien, "id">;
 
 // Insertion pure : la validation métier (surface > 0, prix >= 0, etc.) est de la responsabilité
-// de l'appelant (Server Action), pas de ce repository.
-export async function creerBien(input: NouveauBien): Promise<Bien> {
-  const [ligne] = await getDb()
+// de l'appelant (Server Action), pas de ce repository. `executeur` optionnel (même principe que
+// marquerOffreEnCours, ADR-019) : permet d'appeler cette fonction à l'intérieur d'une transaction
+// ouverte ailleurs — voir prospectVendeurRepository.signerMandatProspectVendeur (ADR-027), qui
+// crée le bien et pose le jalon de conversion dans une seule transaction atomique.
+export async function creerBien(input: NouveauBien, executeur: Executeur = getDb()): Promise<Bien> {
+  const [ligne] = await executeur
     .insert(biensTable)
     .values({
       reference: input.reference,

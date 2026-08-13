@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Building2, Users, LayoutDashboard, Landmark } from "lucide-react";
+import { Home, Building2, Users, LayoutDashboard, Landmark, UserSearch } from "lucide-react";
 
 const items = [
   { label: "Aujourd'hui", href: "/", icon: Home },
   { label: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
   { label: "Biens", href: "/biens", icon: Building2 },
   { label: "Clients", href: "/clients", icon: Users },
+  { label: "Prospects vendeurs", href: "/prospects-vendeurs", icon: UserSearch },
   { label: "Fiscal", href: "/fiscal", icon: Landmark },
 ];
 

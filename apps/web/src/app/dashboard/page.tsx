@@ -8,6 +8,7 @@ import {
   chargerPertes,
   chargerRemuneration,
   chargerProjectionAnnuelle,
+  chargerPipelineVendeur,
   type MontantParMois,
   type MontantCentimesParMois,
   type MontantCentimesParMoisAnnuel,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/dashboardRepository";
 import { LABEL_MOTIF_PERTE } from "@/types/motifPerte";
 import { formatMontantCentimes } from "@/types/remuneration";
+import { LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, le tableau de bord figerait au moment du build.
@@ -157,7 +159,7 @@ function ParMotifListe({ items }: { items: PerteParMotif[] }) {
 }
 
 export default async function DashboardPage() {
-  const [resultats, pipeline, activite, delais, pertes, remuneration, projection] = await Promise.all([
+  const [resultats, pipeline, activite, delais, pertes, remuneration, projection, pipelineVendeur] = await Promise.all([
     chargerResultats(),
     chargerPipeline(),
     chargerActivite(),
@@ -165,6 +167,7 @@ export default async function DashboardPage() {
     chargerPertes(),
     chargerRemuneration(),
     chargerProjectionAnnuelle(),
+    chargerPipelineVendeur(),
   ]);
 
   return (
@@ -289,6 +292,48 @@ export default async function DashboardPage() {
             Basé sur la date d'acte prévue des compromis en cours — non garantie, sujette à décalage ou annulation.
           </p>
           <ParMoisListe items={pipeline.pipelinePrevisionnelParMois} />
+        </Card>
+      </section>
+
+      <section className="mb-8">
+        <SectionTitle>Pipeline vendeur</SectionTitle>
+        <Card className="p-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6">
+            <MetricCard label="Prospects en cours" valeur={pipelineVendeur.nombreEnCours.toString()} />
+            <MetricCard
+              label="Estimations en cours"
+              valeur={formatMontantCentimesOuInconnu(pipelineVendeur.volumeEstimationsEnCoursCentimes)}
+              reserve={`${pipelineVendeur.nombreEstimationsEnCoursRenseignees}/${pipelineVendeur.nombreEnCours} prospects en cours disposent d'une estimation renseignée.`}
+            />
+            <MetricCard
+              label="Taux de conversion (parmi les opportunités clôturées)"
+              valeur={formatPourcentage(pipelineVendeur.tauxConversionOpportunitesCloturees)}
+              reserve={`${pipelineVendeur.nombreSignes} signé(s) sur ${pipelineVendeur.nombreSignes + pipelineVendeur.nombrePerdus} opportunité(s) clôturée(s) (signées + perdues). Les prospects encore en cours n'entrent jamais dans ce ratio.`}
+            />
+            <MetricCard
+              label="Délai moyen prospect → mandat signé"
+              valeur={formatJours(pipelineVendeur.delaiMoyenProspectMandatSigneJours)}
+            />
+          </div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+            Répartition des prospects en cours par statut
+          </p>
+          {pipelineVendeur.nombreEnCours === 0 ? (
+            <p className="text-[13px] text-[#94a3b8]">Aucun prospect en cours pour l'instant.</p>
+          ) : (
+            <ul className="flex flex-col gap-1.5">
+              {Object.entries(pipelineVendeur.nombreParStatutEnCours)
+                .filter(([, nombre]) => nombre > 0)
+                .map(([statut, nombre]) => (
+                  <li key={statut} className="flex items-center justify-between text-[13px]">
+                    <span className="text-[#64748b]">
+                      {LABEL_STATUT_PROSPECT_VENDEUR[statut as keyof typeof LABEL_STATUT_PROSPECT_VENDEUR]}
+                    </span>
+                    <span className="font-medium text-[#0f172a]">{nombre}</span>
+                  </li>
+                ))}
+            </ul>
+          )}
         </Card>
       </section>
 
