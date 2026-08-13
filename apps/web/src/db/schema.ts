@@ -351,6 +351,226 @@ export const compromis = pgTable(
   ]
 );
 
+// Racine du dossier fiscal (ADR-023). Mono-dossier aujourd'hui, même patron que connexions_google
+// (ADR-006) : une seule ligne id='default', créée à la demande par le repository (jamais en
+// migration/seed). profil_fiscal/historique_amorcage/rfr_foyer référencent cette table plutôt que
+// d'exister isolément : le jour où Atlas gère plusieurs conseillers, un futur rattachement
+// conseiller -> dossier_fiscal (1:1 ou N:1) sera additif — aucune de ces trois tables n'a besoin
+// d'être retouchée, seul dossier_fiscal gagnera une colonne conseillerId.
+export const dossierFiscal = pgTable("dossier_fiscal", {
+  id: text("id").primaryKey().default("default"),
+  creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Profil fiscal du conseiller (ADR-023) : instantané complet historisé, jamais un historique
+// champ par champ. Les paramètres sont interdépendants (l'option débits n'a de sens qu'avec un
+// régime TVA donné) — un instantané garantit qu'à toute date lue, la combinaison reste cohérente.
+// Append-only : une correction, même rétroactive, s'écrit toujours comme une nouvelle ligne,
+// jamais une édition en place.
+//
+// Résolution "profil à la date D" (chargerProfilFiscalADate) : la ligne la plus récente dont
+// date_debut_validite <= D. Aucune contrainte n'impose date_debut_validite postérieure à la
+// dernière ligne existante — Atlas doit permettre de renseigner rétroactivement un changement de
+// situation découvert après coup. En cas d'égalité exacte de date_debut_validite entre plusieurs
+// lignes du même dossier (une correction saisie le même jour métier qu'un instantané déjà
+// existant), la ligne la plus récemment créée (cree_le) fait foi pour la lecture — aucune ligne
+// n'est jamais supprimée, seul l'ordre de résolution départage l'égalité.
+//
+// regime_comptable concerne exclusivement la lecture des recettes BNC (pertinent seulement si
+// regime_fiscal = 'declaration_controlee' ; le micro-BNC est en comptabilité de caisse par
+// construction légale). Il n'intervient dans aucune détermination du CA de référence TVA — cette
+// dernière dépend de regime_tva et de option_debits, jamais de regime_comptable (voir ADR-023).
+//
+// 'inconnu' est une vraie valeur stockée, distincte de l'absence de ligne (ADR-009 : NULL
+// différent de false, généralisé ici à "non renseigné"). Absence de ligne = jamais interrogé ;
+// 'inconnu' = interrogé, réponse "je ne sais pas" — Atlas n'en déduit jamais un régime par défaut.
+// Les CHECK ci-dessous valident uniquement le vocabulaire de chaque colonne ; les règles croisées
+// (regime_comptable pertinent seulement en déclaration contrôlée, option_debits pertinent
+// seulement hors franchise, cohérence acre_date_debut/acre_date_fin avec acre_actif) sont
+// entièrement portées par la Server Action (src/actions/profilFiscal.ts), même séparation que
+// motif_perte/motif_annulation.
+export const profilFiscal = pgTable(
+  "profil_fiscal",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dossierFiscalId: text("dossier_fiscal_id")
+      .notNull()
+      .references(() => dossierFiscal.id, { onDelete: "cascade" }),
+    dateDebutValidite: date("date_debut_validite").notNull(),
+    natureActivite: text("nature_activite").notNull().default("agent_commercial_immobilier"),
+    dateDebutActivite: date("date_debut_activite").notNull(),
+    regimeFiscal: text("regime_fiscal").notNull(),
+    regimeComptable: text("regime_comptable"),
+    regimeTva: text("regime_tva").notNull(),
+    optionDebits: boolean("option_debits"),
+    periodiciteUrssaf: text("periodicite_urssaf").notNull(),
+    optionVersementLiberatoire: boolean("option_versement_liberatoire"),
+    acreActif: boolean("acre_actif"),
+    acreDateDebut: date("acre_date_debut"),
+    acreDateFin: date("acre_date_fin"),
+    affiliationRetraite: text("affiliation_retraite").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "profil_fiscal_nature_activite_check",
+      sql`${table.natureActivite} IN ('agent_commercial_immobilier')`
+    ),
+    check(
+      "profil_fiscal_regime_fiscal_check",
+      sql`${table.regimeFiscal} IN ('micro_bnc','declaration_controlee','inconnu')`
+    ),
+    check(
+      "profil_fiscal_regime_comptable_check",
+      sql`${table.regimeComptable} IS NULL OR ${table.regimeComptable} IN ('caisse','engagement','inconnu')`
+    ),
+    check(
+      "profil_fiscal_regime_tva_check",
+      sql`${table.regimeTva} IN ('franchise','redevable_reel_simplifie','redevable_reel_normal','inconnu')`
+    ),
+    check(
+      "profil_fiscal_periodicite_urssaf_check",
+      sql`${table.periodiciteUrssaf} IN ('mensuelle','trimestrielle','inconnu')`
+    ),
+    check(
+      "profil_fiscal_affiliation_retraite_check",
+      sql`${table.affiliationRetraite} IN ('ssi_regime_general','cipav','inconnu')`
+    ),
+  ]
+);
+
+// Agrégat annuel d'amorçage (ADR-023, point 2/3) : recettes encaissées avant l'usage d'Atlas.
+// Corrigible (upsert par (dossier_fiscal_id, annee)) — contrairement à profil_fiscal, ce n'est pas
+// un fait historisé mais une estimation d'amorçage.
+//
+// date_fin_couverture porte l'invariant anti-double-comptage : montant_encaisse_centimes ne
+// couvre que les encaissements jusqu'à cette date incluse. Tout fait Atlas utilisé en complément
+// (remuneration.dateEncaissementReelle) doit être strictement postérieur à date_fin_couverture —
+// jamais additionné à l'aveugle. Pour une année révolue avant l'usage d'Atlas, la Server Action
+// pose automatiquement date_fin_couverture au 31 décembre de l'année (couverture totale, aucun
+// fait Atlas ne peut de toute façon exister avant qu'Atlas n'existe) ; seule l'année en cours au
+// moment de la saisie expose réellement le champ à l'utilisateur.
+//
+// Absence de ligne pour une année = couverture antérieure inconnue, jamais assimilée à un CA de 0
+// (point 3) : si Atlas ne possède que les encaissements depuis septembre, la somme de ces
+// encaissements ne doit jamais être présentée comme le CA annuel complet sans confirmation
+// explicite de la période janvier-août. Une ligne avec montant_encaisse_centimes = 0 est un zéro
+// confirmé explicitement par le conseiller, distinct de cette absence. Voir
+// historiqueAmorcageRepository.chargerCouvertureAnnee pour le contrat de lecture correspondant
+// (préparé ici pour le futur résolveur d'ADR-024).
+export const historiqueAmorcage = pgTable(
+  "historique_amorcage",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dossierFiscalId: text("dossier_fiscal_id")
+      .notNull()
+      .references(() => dossierFiscal.id, { onDelete: "cascade" }),
+    annee: integer("annee").notNull(),
+    montantEncaisseCentimes: integer("montant_encaisse_centimes").notNull(),
+    dateFinCouverture: date("date_fin_couverture").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }),
+  },
+  (table) => [
+    unique("historique_amorcage_dossier_annee_unique").on(table.dossierFiscalId, table.annee),
+    check("historique_amorcage_montant_positif_check", sql`${table.montantEncaisseCentimes} >= 0`),
+    check(
+      "historique_amorcage_date_fin_couverture_annee_check",
+      sql`extract(year from ${table.dateFinCouverture}) = ${table.annee}`
+    ),
+  ]
+);
+
+// RFR du foyer par année (ADR-023, point 3) : entièrement séparé de historique_amorcage — le RFR
+// est une donnée du foyer fiscal, pas de l'activité, et ne sert qu'au contrôle optionnel
+// d'éligibilité au versement libératoire. Table entièrement optionnelle : zéro ligne n'empêche
+// jamais profil_fiscal.optionVersementLiberatoire = true — un conseiller peut avoir activé le VFL
+// sans vouloir qu'Atlas surveille sa future éligibilité.
+//
+// nombre_parts_centiemes : entier exact (1,5 part = 150), jamais un flottant — voir
+// remuneration.montantRemunerationConseillerCentimes pour le même principe appliqué à l'argent.
+// Le rapport RFR/part utilisé pour comparer au seuil légal est dérivé au moment du calcul (futur
+// ADR-024), jamais saisi ni stocké : l'utilisateur donne le RFR du foyer et le nombre de parts
+// tels quels, Atlas divise.
+export const rfrFoyer = pgTable(
+  "rfr_foyer",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    dossierFiscalId: text("dossier_fiscal_id")
+      .notNull()
+      .references(() => dossierFiscal.id, { onDelete: "cascade" }),
+    anneeRfr: integer("annee_rfr").notNull(),
+    rfrFoyerCentimes: integer("rfr_foyer_centimes").notNull(),
+    nombrePartsCentiemes: integer("nombre_parts_centiemes").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }),
+  },
+  (table) => [
+    unique("rfr_foyer_dossier_annee_unique").on(table.dossierFiscalId, table.anneeRfr),
+    check("rfr_foyer_montant_positif_check", sql`${table.rfrFoyerCentimes} >= 0`),
+    check("rfr_foyer_parts_positif_check", sql`${table.nombrePartsCentiemes} > 0`),
+  ]
+);
+
+// Référentiel légal (ADR-023, point 4) : uniquement des paramètres légaux datés (taux, seuils,
+// abattements, durées) — jamais un algorithme. Les mécanismes (deux années consécutives
+// micro-BNC, prorata temporis, franchissement de seuil TVA, barème ACRE) vivent en code, versionnés
+// et testés séparément, chacun documentant en commentaire les `code` ci-dessous qu'il consomme.
+// Aucun taux légal ne doit exister ailleurs que dans cette table.
+//
+// Aucune donnée monétaire ou fiscale en flottant (point 4) : valeur est un entier exact, dont
+// l'unité fixe la représentation — 'centimes' pour un montant, 'points_base' pour un taux
+// (25,6 % = 2560 points de base, 1 % = 100 points de base), 'jours' pour une durée. Jamais de
+// conversion flottante côté JS.
+//
+// Convention temporelle (point 5) : intervalle semi-ouvert [date_debut_validite,
+// date_fin_validite[ — date_fin_validite exclue (la règle cesse de s'appliquer exactement ce
+// jour-là), NULL = pas de fin connue. Pour un même (code, categorie_activite), deux règles ne
+// doivent jamais se chevaucher : la validation est portée par
+// referentielFiscalRepository.insererRegleFiscale (pas de CHECK SQL inter-lignes), appelée par le
+// seul chemin d'écriture existant (script/seed) — aucune Server Action utilisateur n'écrit dans ce
+// référentiel.
+//
+// statut_verification trace le niveau de confiance établi lors de l'audit source par source :
+// 'verifie_direct' (lecture directe du texte officiel), 'recoupement' (plusieurs sources
+// secondaires convergentes, non lu directement), 'a_confirmer' (source encore incertaine ou
+// divergente). Une règle != 'verifie_direct' ne doit jamais alimenter un résultat présenté comme
+// officiel (appliqué par le futur moteur de calcul, ADR-024) — le champ est toujours retourné par
+// resoudreRegle, jamais masqué.
+export const regleFiscale = pgTable(
+  "regle_fiscale",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull(),
+    categorieActivite: text("categorie_activite").notNull(),
+    valeur: integer("valeur").notNull(),
+    unite: text("unite").notNull(),
+    dateDebutValidite: date("date_debut_validite").notNull(),
+    dateFinValidite: date("date_fin_validite"),
+    sourceLibelle: text("source_libelle").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    datePublicationSource: date("date_publication_source"),
+    statutVerification: text("statut_verification").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("regle_fiscale_code_categorie_debut_unique").on(
+      table.code,
+      table.categorieActivite,
+      table.dateDebutValidite
+    ),
+    check("regle_fiscale_unite_check", sql`${table.unite} IN ('centimes','points_base','jours')`),
+    check(
+      "regle_fiscale_statut_verification_check",
+      sql`${table.statutVerification} IN ('verifie_direct','recoupement','a_confirmer')`
+    ),
+    check(
+      "regle_fiscale_periode_check",
+      sql`${table.dateFinValidite} IS NULL OR ${table.dateFinValidite} > ${table.dateDebutValidite}`
+    ),
+  ]
+);
+
 // Rémunération du conseiller sur un compromis (ADR-021), 1:1 strict — compromisId UNIQUE, une seule
 // ligne pour toute la durée de vie d'un compromis, jamais de paiement partiel/plusieurs versements
 // en V1 (une future table encaissements introduirait cela sans rupture). ON DELETE CASCADE comme

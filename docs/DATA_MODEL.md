@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0013`, vérifiées le 2026-08-12). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0015`, vérifiées le 2026-08-13). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -23,6 +23,9 @@ erDiagram
     acquereurs ||--o{ compromis : "acquereur_id (FK)"
     offres |o--o{ compromis : "offre_id (FK, nullable)"
     compromis ||--o| remuneration : "compromis_id (FK, unique)"
+    dossier_fiscal ||--o{ profil_fiscal : "dossier_fiscal_id (FK)"
+    dossier_fiscal ||--o{ historique_amorcage : "dossier_fiscal_id (FK)"
+    dossier_fiscal ||--o{ rfr_foyer : "dossier_fiscal_id (FK)"
     acquereurs ||--o{ comptes_rendus_visite : "acquereur_id (FK)"
     biens ||..o{ actions : "bien_id (text, sans FK)"
     acquereurs ||..o{ actions : "acquereur_id (text, sans FK)"
@@ -167,6 +170,60 @@ erDiagram
         date date_encaissement_reelle "nullable, ADR-021, constatée, figée une fois posée"
         timestamptz cree_le
         timestamptz modifie_le "nullable"
+    }
+    dossier_fiscal {
+        text id PK "toujours 'default', ADR-023"
+        timestamptz cree_le
+    }
+    profil_fiscal {
+        uuid id PK
+        text dossier_fiscal_id FK
+        date date_debut_validite "append-only, pas d'ordre imposé"
+        text nature_activite
+        date date_debut_activite
+        text regime_fiscal "'inconnu' possible"
+        text regime_comptable "nullable, découplé de la TVA"
+        text regime_tva "'inconnu' possible"
+        boolean option_debits "nullable"
+        text periodicite_urssaf "'inconnu' possible"
+        boolean option_versement_liberatoire "nullable"
+        boolean acre_actif "nullable"
+        date acre_date_debut "nullable"
+        date acre_date_fin "nullable"
+        text affiliation_retraite "'inconnu' possible"
+        timestamptz cree_le
+    }
+    historique_amorcage {
+        uuid id PK
+        text dossier_fiscal_id FK
+        integer annee
+        integer montant_encaisse_centimes "absence de ligne = inconnu, jamais 0"
+        date date_fin_couverture "anti-double-comptage"
+        timestamptz cree_le
+        timestamptz modifie_le "nullable"
+    }
+    rfr_foyer {
+        uuid id PK
+        text dossier_fiscal_id FK
+        integer annee_rfr
+        integer rfr_foyer_centimes
+        integer nombre_parts_centiemes "entier exact, 1,5 part = 150"
+        timestamptz cree_le
+        timestamptz modifie_le "nullable"
+    }
+    regle_fiscale {
+        uuid id PK
+        text code
+        text categorie_activite
+        integer valeur "entier exact, unite fixe la représentation"
+        text unite "centimes / points_base / jours"
+        date date_debut_validite "intervalle [début, fin["
+        date date_fin_validite "nullable, exclue"
+        text source_libelle
+        text source_url
+        date date_publication_source "nullable"
+        text statut_verification
+        timestamptz cree_le
     }
 ```
 
@@ -556,6 +613,147 @@ métriques écartées ; ADR-019 pour `offre_visites` et les métriques visite �
 motifs/dates de perte et la famille "Pertes commerciales" ; ADR-021 pour la rémunération ; ADR-022
 pour la projection annuelle.
 
+## `dossier_fiscal`
+
+**Rôle** : racine du domaine fiscal (ADR-023). Mono-dossier aujourd'hui — table à une seule ligne
+(`id = 'default'`), même patron que `connexions_google` (ADR-006) — créée à la demande par
+`obtenirDossierFiscalDefaut()`, jamais en migration/seed. `profil_fiscal`, `historique_amorcage` et
+`rfr_foyer` référencent cette table plutôt que d'exister isolément : le futur rattachement
+conseiller → dossier fiscal sera additif (une colonne sur `dossier_fiscal` seule), sans retoucher
+ces trois tables ni leurs contraintes `UNIQUE(dossier_fiscal_id, ...)`.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | text (PK) | non | `DEFAULT 'default'` |
+| `cree_le` | timestamptz | non | |
+
+## `profil_fiscal`
+
+**Rôle** : instantané complet du régime fiscal/social du conseiller, historisé, append-only —
+jamais un historique champ par champ (les paramètres sont interdépendants : l'option débits n'a de
+sens qu'avec un régime TVA donné). Voir ADR-023.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `dossier_fiscal_id` | text (FK → `dossier_fiscal.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `date_debut_validite` | date | non | aucune contrainte d'ordre — correction rétroactive admise |
+| `nature_activite` | text | non | `CHECK IN ('agent_commercial_immobilier')`, `DEFAULT` idem |
+| `date_debut_activite` | date | non | |
+| `regime_fiscal` | text | non | `CHECK IN ('micro_bnc','declaration_controlee','inconnu')` |
+| `regime_comptable` | text | **oui** | `CHECK NULL OR IN ('caisse','engagement','inconnu')` ; découplé de la TVA |
+| `regime_tva` | text | non | `CHECK IN ('franchise','redevable_reel_simplifie','redevable_reel_normal','inconnu')` |
+| `option_debits` | boolean | **oui** | pertinent seulement hors franchise (règle applicative) |
+| `periodicite_urssaf` | text | non | `CHECK IN ('mensuelle','trimestrielle','inconnu')` |
+| `option_versement_liberatoire` | boolean | **oui** | |
+| `acre_actif` | boolean | **oui** | |
+| `acre_date_debut` / `acre_date_fin` | date | **oui** | cohérence avec `acre_actif` portée par la Server Action |
+| `affiliation_retraite` | text | non | `CHECK IN ('ssi_regime_general','cipav','inconnu')` |
+| `cree_le` | timestamptz | non | |
+
+`'inconnu'` est une vraie valeur stockée pour chaque champ à choix contraint, distincte de
+l'absence de ligne (généralisation d'ADR-009) : absence = jamais interrogé, `'inconnu'` = interrogé,
+réponse "je ne sais pas" — jamais un régime déduit par défaut. Les `CHECK` ne valident que le
+vocabulaire de chaque colonne ; les règles croisées (`regimeComptable` pertinent seulement en
+déclaration contrôlée, `optionDebits` pertinent seulement hors franchise, cohérence des dates ACRE)
+sont entièrement portées par `src/actions/profilFiscal.ts`, même séparation que
+`motifPerte`/`motifAnnulation` (ADR-020).
+
+**Résolution "profil à la date D"** (`chargerProfilFiscalADate`, `profilFiscalRepository.ts`) : la
+ligne la plus récente dont `date_debut_validite <= D`, triée par `date_debut_validite DESC,
+cree_le DESC`. En cas d'égalité exacte de `date_debut_validite` entre plusieurs lignes, la plus
+récemment créée fait foi — aucune ligne n'est jamais supprimée ni modifiée.
+
+## `historique_amorcage`
+
+**Rôle** : agrégat annuel des recettes encaissées avant l'usage d'Atlas. Corrigible (upsert par
+`(dossier_fiscal_id, annee)`) — contrairement à `profil_fiscal`, ce n'est pas un fait historisé mais
+une estimation d'amorçage. Voir ADR-023.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `dossier_fiscal_id` | text (FK → `dossier_fiscal.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `annee` | integer | non | |
+| `montant_encaisse_centimes` | integer | non | `CHECK >= 0` ; entier, jamais un flottant |
+| `date_fin_couverture` | date | non | `CHECK` : même année que `annee` ; borne anti-double-comptage |
+| `cree_le` | timestamptz | non | |
+| `modifie_le` | timestamptz | **oui** | posé par l'upsert |
+
+**Contrainte `UNIQUE`** : `(dossier_fiscal_id, annee)`.
+
+**Absence de ligne pour une année = couverture antérieure inconnue, jamais un CA de 0** : si Atlas
+ne possède que les encaissements depuis septembre, leur somme ne doit jamais être présentée comme
+le CA annuel complet sans confirmation explicite de la période janvier-août. Contrat de lecture
+typé pour le futur résolveur (ADR-024), `chargerCouvertureAnnee` (`historiqueAmorcageRepository.ts`) :
+
+```ts
+type CouvertureAnnuelle =
+  | { annee: number; connu: true; montantEncaisseCentimes: number; dateFinCouverture: string }
+  | { annee: number; connu: false };
+```
+
+`date_fin_couverture` porte l'invariant anti-double-comptage : un fait Atlas utilisé en complément
+(`remuneration.dateEncaissementReelle`) ne doit être additionné que s'il est strictement postérieur
+à `date_fin_couverture`, jamais à l'aveugle.
+
+## `rfr_foyer`
+
+**Rôle** : revenu fiscal de référence du foyer par année, entièrement séparé de
+`historique_amorcage` — donnée du foyer, pas de l'activité, utile uniquement au contrôle optionnel
+d'éligibilité au versement libératoire. Table entièrement optionnelle : zéro ligne n'empêche jamais
+`profil_fiscal.optionVersementLiberatoire = true`. Voir ADR-023.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `dossier_fiscal_id` | text (FK → `dossier_fiscal.id`, `ON DELETE CASCADE`) | non | vraie FK |
+| `annee_rfr` | integer | non | |
+| `rfr_foyer_centimes` | integer | non | `CHECK >= 0` |
+| `nombre_parts_centiemes` | integer | non | `CHECK > 0` ; entier exact, 1,5 part = `150`, jamais un flottant |
+| `cree_le` | timestamptz | non | |
+| `modifie_le` | timestamptz | **oui** | posé par l'upsert |
+
+**Contrainte `UNIQUE`** : `(dossier_fiscal_id, annee_rfr)`. Corrigible (upsert), même rationale que
+`historique_amorcage`. Le rapport RFR/part utilisé pour un futur contrôle de seuil légal est dérivé
+au moment du calcul (ADR-024), jamais saisi ni stocké.
+
+## `regle_fiscale`
+
+**Rôle** : référentiel légal — uniquement des paramètres datés (taux, seuils, abattements, durées),
+jamais un algorithme. Les mécanismes (deux années consécutives micro-BNC, prorata temporis,
+franchissement de seuil TVA, barème ACRE) vivront en code, versionnés et testés séparément, dans
+ADR-024. Voir ADR-023.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `code` | text | non | ex. `plafond_micro_bnc`, `seuil_tva_base` |
+| `categorie_activite` | text | non | `'agent_commercial_immobilier'` en V1 |
+| `valeur` | integer | non | entier exact, `unite` fixe la représentation |
+| `unite` | text | non | `CHECK IN ('centimes','points_base','jours')` |
+| `date_debut_validite` | date | non | borne incluse |
+| `date_fin_validite` | date | **oui** | borne exclue, `NULL` = pas de fin connue |
+| `source_libelle` / `source_url` | text | non | |
+| `date_publication_source` | date | **oui** | |
+| `statut_verification` | text | non | `CHECK IN ('verifie_direct','recoupement','a_confirmer')` |
+| `cree_le` | timestamptz | non | |
+
+**Contrainte `UNIQUE`** : `(code, categorie_activite, date_debut_validite)`. **Contrainte `CHECK`** :
+`date_fin_validite IS NULL OR date_fin_validite > date_debut_validite`.
+
+Convention temporelle : intervalle semi-ouvert `[date_debut_validite, date_fin_validite[` — fin
+exclue. Pour un même `(code, categorie_activite)`, deux règles ne se chevauchent jamais : validation
+portée par `referentielFiscalRepository.insererRegleFiscale` (rejet explicite par exception, pas de
+`CHECK` SQL inter-lignes — seul chemin d'écriture est un script de seed, jamais une Server Action
+utilisateur). `resoudreRegle(code, categorieActivite, date)` retourne la règle applicable à la date
+D ou `undefined` (jamais une valeur par défaut ni une extrapolation) ; `statutVerification` est
+toujours retourné avec la règle, jamais filtré — au futur moteur de calcul (ADR-024) de refuser un
+résultat "officiel" si le statut vaut autre chose que `verifie_direct`. Amorcé en
+`0015_seed_referentiel_fiscal_2026.sql` (plafond micro-BNC, seuils de franchise TVA, taux de
+cotisations, CFP, abattement micro-BNC, versement libératoire — barème ACRE volontairement absent,
+aucune valeur vérifiée pendant l'audit).
+
 ## Migrations
 
 | Fichier | Tables introduites |
@@ -574,6 +772,8 @@ pour la projection annuelle.
 | `0011_friendly_captain_flint.sql` | `offre_visites` |
 | `0012_furry_cassandra_nova.sql` | `date_decision`/`motif_perte` sur `offres`, `date_annulation`/`motif_annulation` sur `compromis` |
 | `0013_thin_warbird.sql` | `remuneration` |
+| `0014_lame_deadpool.sql` | `dossier_fiscal`, `profil_fiscal`, `historique_amorcage`, `rfr_foyer`, `regle_fiscale` |
+| `0015_seed_referentiel_fiscal_2026.sql` | seed `regle_fiscale` (aucune nouvelle table) |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

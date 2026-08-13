@@ -273,6 +273,30 @@ inconnu) et "des dates connues mais hors fenêtre" (un vrai zéro mesuré) — l
 reste corrigible jusqu'à l'encaissement, la mesurer serait trompeuse sans historique des
 corrections). Aucun changement de schéma, aucune fiscalité.
 
+## 23. Fondations fiscales
+
+Audit fiscal préalable (champ légal, sources BOFiP/URSSAF, statuts de vérification par règle) suivi
+d'une passe de modélisation dédiée : cinq nouvelles tables (`dossier_fiscal`, `profil_fiscal`,
+`historique_amorcage`, `rfr_foyer`, `regle_fiscale`, ADR-023). Racine `dossier_fiscal` mono-dossier
+(même patron que `connexions_google`, ADR-006) à laquelle se rattachent les trois autres tables du
+domaine, pour que le futur rattachement conseiller reste additif. `profil_fiscal` reprend le patron
+instantané complet historisé déjà établi par `remuneration` (append-only, jamais un historique
+champ par champ) mais sans contrainte d'ordre sur `dateDebutValidite` — une correction rétroactive
+d'un changement de situation découvert après coup est explicitement admise, résolue par
+`dateDebutValidite DESC, creeLe DESC`. `historique_amorcage` généralise `NULL ≠ false` (ADR-009) à
+un agrégat annuel : absence de ligne = couverture antérieure inconnue, jamais un CA de zéro,
+contrat typé (`CouvertureAnnuelle`) préparé pour le futur résolveur d'ADR-024, avec
+`dateFinCouverture` portant l'invariant anti-double-comptage. `rfr_foyer`, entièrement optionnel,
+introduit `nombrePartsCentiemes` (entier exact, 1,5 part = `150`) — même principe "jamais de
+flottant sur une donnée fiscale" appliqué à `regle_fiscale.valeur` (`centimes`/`points_base`/
+`jours`). `regle_fiscale` porte uniquement des paramètres légaux datés, jamais un algorithme,
+convention temporelle `[début, fin[`, chevauchement rejeté explicitement par le repository plutôt
+qu'un `CHECK` SQL inter-lignes ; amorcé en migration avec les valeurs 2026 (plafond micro-BNC,
+seuils de franchise TVA, taux de cotisations, CFP, abattement micro-BNC, versement libératoire),
+chacune tracée par un statut de confiance (`verifie_direct`/`recoupement`/`a_confirmer`). Nouvelle
+page `/fiscal` ("Ma situation fiscale") : collecte de faits uniquement, aucune estimation ni aucun
+calcul affiché — réservés à ADR-024 (moteur année courante) et ADR-025 (projections N+1 à N+5).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

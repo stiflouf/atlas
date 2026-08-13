@@ -39,6 +39,10 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   part avant de vérifier.
 - **`packages/`** (packages partagés du monorepo, annoncés par ADR-001) — n'existe pas, aucun code
   n'y vit.
+- **Aucun calcul ni estimation fiscale** — ADR-023 construit uniquement la collecte (profil,
+  amorçage, RFR, référentiel légal), page `/fiscal`. `regle_fiscale` est seedée mais n'est
+  consommée par aucun moteur de calcul dans le code actuel : ne jamais supposer qu'un montant
+  d'impôt, de cotisation ou de TVA est déjà calculé quelque part — réservé à ADR-024/ADR-025.
 
 ## Conventions impératives
 

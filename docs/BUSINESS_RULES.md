@@ -401,10 +401,13 @@ ci-dessous.
 | Projection annuelle | Encaissement(s) attendu(s) dépassé(s) | `sum(...)` + `count(*)` sur `remuneration` ⨝ `compromis` `realise`, `date_encaissement_reelle IS NULL`, `date_encaissement_prevue IS NOT NULL` et `< aujourd'hui`, biens archivés inclus (ADR-022) | **Jamais** le mot "retard" ; nombre de ventes concernées + couverture des dates prévues affichés ; même distinction `undefined`/`0` que ci-dessus |
 | Projection annuelle | Ventilation janvier → décembre (prévisionnel / finalisé non encaissé / encaissé) | `generate_series` (spine 12 mois) `LEFT JOIN` trois agrégats par `date_encaissement_prevue` (prévisionnel, finalisé non encaissé) ou `date_encaissement_reelle` (encaissé), `coalesce(...,0)` | Toujours 12 mois, zero-remplis ; un `0 €` signifie "aucune ligne datée ce mois-là", pas une couverture exhaustive — réserve rappelle les compteurs de couverture |
 
-**Explicitement écarté** (donnée non instrumentée) : chiffre d'affaires, fiscalité, et toute notion
-comptable/juridique de rémunération "acquise" — `remuneration` (ADR-021) instrumente les montants
-saisis mais ne tranche aucune de ces questions, volontairement reportées à une passe dédiée — voir
-ADR-018, ADR-021 et `docs/KNOWN_LIMITATIONS.md`. Le taux
+**Explicitement écarté** (donnée non instrumentée dans le dashboard) : chiffre d'affaires,
+fiscalité, et toute notion comptable/juridique de rémunération "acquise" — `remuneration`
+(ADR-021) instrumente les montants saisis mais ne tranche aucune de ces questions. Les fondations
+de collecte fiscale existent désormais (`dossier_fiscal`/`profil_fiscal`/`historique_amorcage`/
+`rfr_foyer`/`regle_fiscale`, ADR-023, voir section dédiée ci-dessous) mais aucun calcul ni
+estimation n'en est encore dérivé nulle part dans l'application, dashboard compris — reporté à
+ADR-024/ADR-025. Voir ADR-018, ADR-021, ADR-023 et `docs/KNOWN_LIMITATIONS.md`. Le taux
 et le délai visite → offre, écartés dans ADR-018 faute de lien matérialisé, sont désormais
 disponibles via le lien explicite `offre_visites` (ADR-019) — avec la réserve que seules les
 visites explicitement liées après la mise en place de ce lien sont comptées (aucun rattrapage
@@ -416,6 +419,50 @@ des corrections n'existe.
 
 Pas de graphiques, pas de filtre temporel en V1 (y compris pour la projection annuelle, ADR-022 :
 année civile fixe, pas de sélecteur) — les séries "par mois" s'affichent en liste simple.
+
+## Fondations fiscales
+
+**Fichiers** : `src/lib/dossierFiscalRepository.ts`, `profilFiscalRepository.ts`,
+`historiqueAmorcageRepository.ts`, `rfrFoyerRepository.ts`, `referentielFiscalRepository.ts`,
+`src/actions/profilFiscal.ts`/`historiqueAmorcage.ts`/`rfrFoyer.ts`, page `/fiscal`. Détail de la
+décision : ADR-023. **Aucune estimation ni aucun calcul fiscal n'existe dans cette passe** —
+uniquement la collecte de faits, réservés à ADR-024 (moteur année courante) et ADR-025
+(projections N+1 à N+5).
+
+**Mono-dossier** : `dossier_fiscal` est une table à une seule ligne (`id = 'default'`), créée à la
+demande par `obtenirDossierFiscalDefaut()`. `profil_fiscal`/`historique_amorcage`/`rfr_foyer` s'y
+rattachent tous via `dossier_fiscal_id`, avec `UNIQUE(dossier_fiscal_id, annee)` /
+`UNIQUE(dossier_fiscal_id, annee_rfr)` — le futur rattachement conseiller → dossier fiscal sera
+additif, sans retoucher ces trois tables.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Profil fiscal — enregistrer | Toujours (formulaire `/fiscal`) | `enregistrerProfilFiscal(...)` — **toujours une insertion**, jamais une édition, y compris pour une correction rétroactive |
+| Profil fiscal — résolution à une date D | Toujours | `chargerProfilFiscalADate(D)` : ligne la plus récente dont `dateDebutValidite <= D`, triée `dateDebutValidite DESC, creeLe DESC` |
+| Profil fiscal — égalité de date | Deux lignes avec la même `dateDebutValidite` | La plus récemment créée (`creeLe`) fait foi ; aucune ligne jamais supprimée ni modifiée |
+| Amorçage — enregistrer/corriger une année | Toujours (formulaire `/fiscal`) | `enregistrerHistoriqueAmorcage(...)` — upsert par `(dossierFiscalId, annee)`, remplace la ligne existante |
+| Amorçage — lecture de couverture | Année demandée sans ligne | `chargerCouvertureAnnee` retourne `{ connu: false }` — **jamais** `{ montant: 0 }` |
+| Amorçage — lecture de couverture | Année demandée avec ligne, y compris `montant = 0` | `{ connu: true, montantEncaisseCentimes, dateFinCouverture }` — zéro explicitement confirmé |
+| RFR foyer — enregistrer/corriger une année | Toujours (formulaire `/fiscal`, entièrement optionnel) | `enregistrerRfrFoyer(...)` — upsert par `(dossierFiscalId, anneeRfr)` |
+| Référentiel légal — insérer une règle | Script de seed uniquement, jamais une Server Action utilisateur | `insererRegleFiscale(...)` — rejette (`throw`) tout chevauchement `[début, fin[` avec une règle existante du même `(code, categorieActivite)` |
+| Référentiel légal — résoudre une règle à une date D | Toujours | `resoudreRegle(code, categorieActivite, D)` retourne la règle applicable ou `undefined` (jamais une valeur par défaut ni une extrapolation) ; `statutVerification` toujours inclus, jamais filtré |
+
+**`inconnu` comme vraie valeur** (généralisation d'ADR-009) : chaque champ à choix contraint de
+`profil_fiscal` (`regimeFiscal`, `regimeComptable`, `regimeTva`, `periodiciteUrssaf`,
+`affiliationRetraite`) admet `'inconnu'`, distinct de l'absence de ligne — Atlas n'en déduit jamais
+un régime par défaut. `regimeComptable` est totalement découplé de la TVA : il concerne uniquement
+la lecture des recettes BNC en déclaration contrôlée, jamais la détermination du CA de référence
+TVA (`regimeTva`/`optionDebits` seuls).
+
+**Aucune donnée monétaire ou fiscale en flottant** : `montantEncaisseCentimes`/`rfrFoyerCentimes`
+en centimes entiers, `nombrePartsCentiemes` en centièmes entiers (1,5 part = `150`),
+`regleFiscale.valeur` en entier dont `unite` fixe la représentation (`centimes`/`points_base`/
+`jours`, ex. 25,6 % = `2560` points de base) — aucune conversion flottante côté JS.
+
+**Onboarding "Ma situation fiscale"** (`/fiscal`) : trois formulaires (profil, amorçage, RFR)
+au-dessus d'un résumé du profil actuel et d'un historique par année pour amorçage/RFR. Le
+référentiel légal n'y est ni affiché ni consommé — la page ne fait que collecter des faits, jamais
+les combiner.
 
 ## Archivage
 

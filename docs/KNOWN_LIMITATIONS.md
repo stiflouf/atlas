@@ -239,6 +239,33 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   depuis le dashboard — cohérent avec l'absence de filtre temporel déjà actée en V1 (ADR-018), mais
   une limitation réelle pour qui voudrait comparer plusieurs années.
 
+## Fondations fiscales (ADR-023)
+
+- **Aucun calcul fiscal, aucune estimation** : `regle_fiscale` est seedée mais n'est ni affichée ni
+  consommée par aucune page ni aucun repository de cette passe. Un conseiller qui remplit les trois
+  formulaires de `/fiscal` ne voit apparaître aucun montant d'impôt, de cotisation ou de TVA
+  calculé — uniquement un rappel de ce qu'il a saisi. Réservé à ADR-024/ADR-025.
+- **Barème ACRE absent du référentiel** : `profil_fiscal.acreActif`/`acreDateDebut`/`acreDateFin`
+  sont collectés, mais aucune règle `regle_fiscale` correspondante n'a été seedée — aucune valeur
+  n'a pu être vérifiée pendant l'audit préalable. Un futur moteur de calcul qui aurait besoin du
+  taux ACRE trouvera `resoudreRegle` retourner `undefined`, jamais une valeur inventée.
+- **Taux CFP marqué `a_confirmer`** : sources secondaires divergentes pendant l'audit (0,1 % / 0,2 %
+  / 0,25 %), retenu à 0,2 % mais non vérifié directement sur une source officielle — à revérifier
+  sur `autoentrepreneur.urssaf.fr` avant tout calcul présenté comme officiel.
+- **Seuil RFR d'éligibilité au versement libératoire marqué `a_confirmer`** : aucune page BOFiP
+  précise retrouvée pendant l'audit pour cette valeur (contrairement aux seuils de franchise TVA,
+  vérifiés directement).
+- **Aucune validation croisée d'incohérence de profil** : le formulaire laisse saisir, par exemple,
+  `regimeComptable` renseigné avec un `regimeFiscal = 'micro_bnc'` (où il n'a aucun sens) sans
+  avertissement — les règles croisées documentées dans `docs/DATA_MODEL.md` sont portées par
+  `src/actions/profilFiscal.ts` mais restent partielles en V1.
+- **Mono-dossier, pas de rattachement conseiller** : `dossier_fiscal` est une table à une seule
+  ligne (`id = 'default'`), cohérent avec l'absence de multi-utilisateur déjà actée (ADR-006) — voir
+  "Pas de multi-utilisateur" ci-dessous.
+- **Historique de `profil_fiscal` non exposé en V1** : `chargerHistoriqueProfilFiscal()` existe
+  dans le repository mais aucune page ne l'affiche — seul le profil actuel (`chargerProfilFiscalActuel`)
+  est visible sur `/fiscal`. Un futur écran d'audit pourrait l'exposer sans changement de schéma.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —
