@@ -87,16 +87,23 @@ describe("calculerFranchiseTva — correction obligatoire n° 3 (franchise uniqu
       affiliationRetraite: "ssi_regime_general",
     });
     await enregistrerHistoriqueAmorcage(DOSSIER_FRANCHISE, 2026, 0, "2026-01-01");
+    // Mesure avant/après plutôt qu'une égalité absolue sur caReferenceConnuCentimes/marges :
+    // remuneration n'est pas cloisonnée par dossier fiscal (mono-dossier V1, ADR-023) —
+    // resoudreAssietteAnnuelle() somme TOUS les encaissements réels de l'année, y compris ceux
+    // d'autres dossiers/fixtures. seuilBase/seuilMajore, eux, viennent uniquement du référentiel
+    // seedé (regle_fiscale) — jamais affectés par l'assiette — restent en égalité absolue.
+    const avant = await calculerFranchiseTva(DOSSIER_FRANCHISE, 2026);
     await creerEncaissement(DOSSIER_FRANCHISE, "001", 1000000, "2026-03-01"); // 10 000 €
 
     const resultat = await calculerFranchiseTva(DOSSIER_FRANCHISE, 2026);
+    expect(avant.statut).toBe("calcule");
     expect(resultat.statut).toBe("calcule");
-    if (resultat.statut === "calcule") {
-      expect(resultat.valeur.caReferenceConnuCentimes).toBe(1000000);
+    if (resultat.statut === "calcule" && avant.statut === "calcule") {
+      expect(resultat.valeur.caReferenceConnuCentimes - avant.valeur.caReferenceConnuCentimes).toBe(1000000);
       expect(resultat.valeur.seuilBaseCentimes).toBe(3750000);
       expect(resultat.valeur.seuilMajoreCentimes).toBe(4125000);
-      expect(resultat.valeur.margeAvantSeuilBaseCentimes).toBe(2750000);
-      expect(resultat.valeur.margeAvantSeuilMajoreCentimes).toBe(3125000);
+      expect(avant.valeur.margeAvantSeuilBaseCentimes - resultat.valeur.margeAvantSeuilBaseCentimes).toBe(1000000);
+      expect(avant.valeur.margeAvantSeuilMajoreCentimes - resultat.valeur.margeAvantSeuilMajoreCentimes).toBe(1000000);
     }
   });
 

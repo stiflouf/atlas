@@ -89,11 +89,20 @@ describe("calculerVersementLiberatoire — actif seulement si le profil l'indiqu
       optionVersementLiberatoire: true,
     });
     await enregistrerHistoriqueAmorcage(DOSSIER_ACTIF, 2026, 0, "2026-01-01");
+    // Mesure avant/après plutôt qu'une égalité absolue : remuneration n'est pas cloisonnée par
+    // dossier fiscal (mono-dossier V1, ADR-023) — resoudreAssietteAnnuelle() somme TOUS les
+    // encaissements réels de l'année, y compris ceux d'autres dossiers/fixtures. Un delta reste
+    // exact quelle que soit la donnée déjà présente en base pour 2026 (chaque tranche est arrondie
+    // indépendamment, appliquerTauxPointsBase, donc additive).
+    const avant = await calculerVersementLiberatoire(DOSSIER_ACTIF, 2026);
     await creerEncaissement(DOSSIER_ACTIF, "001", 1000000, "2026-03-01");
 
     const resultat = await calculerVersementLiberatoire(DOSSIER_ACTIF, 2026);
+    expect(avant.statut).toBe("calcule");
     expect(resultat.statut).toBe("calcule");
-    if (resultat.statut === "calcule") expect(resultat.valeur).toBe(22000); // 10 000 € x 2,2 %
+    if (resultat.statut === "calcule" && avant.statut === "calcule") {
+      expect(resultat.valeur - avant.valeur).toBe(22000); // 10 000 € x 2,2 %
+    }
   });
 
   it("reste à 0 quand le profil ne l'indique pas actif — même avec un RFR très favorable", async () => {

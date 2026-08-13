@@ -89,12 +89,19 @@ describe("calculerCotisationsSociales — correction obligatoire n° 2 (garde de
       affiliationRetraite: "ssi_regime_general",
     });
     await enregistrerHistoriqueAmorcageComplet(DOSSIER_MICRO_GENERAL, 2026);
+    // Mesure avant/après plutôt qu'une égalité absolue : remuneration n'est pas cloisonnée par
+    // dossier fiscal (mono-dossier V1, ADR-023) — resoudreAssietteAnnuelle() somme TOUS les
+    // encaissements réels de l'année, y compris ceux d'autres dossiers/fixtures. Un delta reste
+    // exact quelle que soit la donnée déjà présente en base pour 2026 (chaque tranche est arrondie
+    // indépendamment, appliquerTauxPointsBase, donc additive).
+    const avant = await calculerCotisationsSociales(DOSSIER_MICRO_GENERAL, 2026);
     await creerEncaissement(DOSSIER_MICRO_GENERAL, "001", 1000000, "2026-03-01");
 
     const resultat = await calculerCotisationsSociales(DOSSIER_MICRO_GENERAL, 2026);
+    expect(avant.statut).toBe("calcule");
     expect(resultat.statut).toBe("calcule");
-    if (resultat.statut === "calcule") {
-      expect(resultat.valeur).toBe(256000); // 10 000 € x 25,6 %
+    if (resultat.statut === "calcule" && avant.statut === "calcule") {
+      expect(resultat.valeur - avant.valeur).toBe(256000); // 10 000 € x 25,6 %
       expect(resultat.provenance[0].code).toBe("taux_cotisations_bnc_general");
     }
   });
