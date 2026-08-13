@@ -107,14 +107,14 @@ export default async function FiscalPage({ searchParams }: PageProps) {
         </section>
       )}
 
-      <section className="mb-10">
+      <section id="profil" className="mb-10">
         <h2 className="text-[15px] font-semibold text-[#0f172a] mb-3">
           {profilActuel ? "Enregistrer un changement de situation" : "Renseigner ma situation"}
         </h2>
         <ProfilFiscalFormulaire profilActuel={profilActuel} action={enregistrerProfilFiscalAction} />
       </section>
 
-      <section className="mb-10 border-t border-[#f1f5f9] pt-6">
+      <section id="amorcage" className="mb-10 border-t border-[#f1f5f9] pt-6">
         <h2 className="text-[15px] font-semibold text-[#0f172a] mb-1">Recettes des années précédentes</h2>
         <p className="text-[12px] text-[#94a3b8] mb-3">
           Optionnel — utile pour situer votre chiffre d&apos;affaires par rapport aux seuils légaux dès
@@ -138,7 +138,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
         <HistoriqueAmorcageFormulaire action={enregistrerHistoriqueAmorcageAction} />
       </section>
 
-      <section className="border-t border-[#f1f5f9] pt-6">
+      <section id="rfr" className="border-t border-[#f1f5f9] pt-6">
         <h2 className="text-[15px] font-semibold text-[#0f172a] mb-1">Revenu fiscal de référence du foyer</h2>
         <p className="text-[12px] text-[#94a3b8] mb-3">
           Optionnel — utile seulement si vous voulez qu&apos;Atlas surveille votre éligibilité au

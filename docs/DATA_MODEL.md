@@ -788,6 +788,27 @@ aucune table — consomme exclusivement `dossier_fiscal`/`profil_fiscal`/`histor
 - `libellesRaisons.ts` — traduit chaque raison d'indisponibilité en phrase française, consommé par
   `/fiscal` (`VueAnneeResume`/`ExplicationCalcul`).
 
+## Moteur d'alertes (`src/lib/alertes/`)
+
+**Rôle** : moteur d'alertes déterministes du copilote (ADR-026). Ne crée aucune table, aucune
+persistance — dérive à chaque lecture un ensemble priorisé d'`AlerteCopilote`
+(`src/types/alerte.ts`) exclusivement à partir des résultats déjà exposés par le moteur fiscal
+ci-dessus (ADR-024/025) et par `dashboardRepository.chargerRemuneration()`/
+`chargerProjectionAnnuelle()` (ADR-022).
+
+- `contexte.ts` — `chargerContexteAlertes` : seul point du dossier qui touche des repositories,
+  assemble `ContexteAlertes` en réutilisant les fonctions déjà exposées, aucune nouvelle requête.
+- `reglesDonnees.ts`/`reglesCommercial.ts`/`reglesFiscal.ts`/`reglesProjection.ts` — règles pures
+  `{ id, evaluer }` (même patron que `pointsForts`/`pointsAttention`), aucune requête, aucune
+  interprétation LLM.
+- `deduplication.ts` — déduplication par cause racine (type + code), jamais par texte : un profil
+  fiscal absent supprime les alertes fiscales dépendantes (jamais les commerciales), une couverture
+  insuffisante peut absorber le run-rate insuffisant (jamais les règles futures hypothétiques).
+- `priorite.ts` — score = poids du niveau (dominant) + poids fixe par type + tie-break sur
+  l'identifiant déterministe de l'alerte, même principe que `actionPriority.ts`. Aucun score n'est
+  jamais exposé à l'UI.
+- `moteur.ts` — `produireAlertes` : compose règles → déduplication → priorité.
+
 ## Migrations
 
 | Fichier | Tables introduites |

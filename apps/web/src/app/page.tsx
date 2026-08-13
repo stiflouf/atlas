@@ -2,6 +2,7 @@ import Link from "next/link";
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
 import ActionItem from "@/components/aujourd-hui/ActionItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
+import AlerteCard from "@/components/alertes/AlerteCard";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
@@ -14,6 +15,12 @@ import { actionPrioritaire, raisonAction, scoreAction } from "@/lib/actionPriori
 import { getAgendaSemaine } from "@/lib/google/agendaSource";
 import { construireContexte } from "@/lib/matching";
 import { resoudreContextesPersistes } from "@/lib/contexteRepository";
+import { chargerContexteAlertes } from "@/lib/alertes/contexte";
+import { produireAlertes } from "@/lib/alertes/moteur";
+
+// Alertes affichées directement — au-delà, "Afficher les autres" les développe localement (ADR-026,
+// pas de nouvelle route /alertes). Le plan vise "3 à 5" : 5 est le plafond, moins s'il y en a moins.
+const NB_ALERTES_PRIORITAIRES = 5;
 
 // Sans cookie (Sprint 4 a retiré le cookie de tokens Google), plus aucune API Next "dynamique"
 // n'est appelée ici — une requête Postgres ne suffit pas à elle seule à empêcher la génération
@@ -51,7 +58,15 @@ export default async function AujourdHui() {
   // getAgendaSemaine() garantit déjà une fenêtre de 7 jours : pas besoin de la recalculer ici.
   const rdvAVenir = rendezVousAVenir(rendezVous, aujourdHuiISO);
 
-  const [biens, clients, actions] = await Promise.all([listerBiens(), listerClients(), listerActions()]);
+  const [biens, clients, actions, contexteAlertes] = await Promise.all([
+    listerBiens(),
+    listerClients(),
+    listerActions(),
+    chargerContexteAlertes(),
+  ]);
+  const alertes = produireAlertes(contexteAlertes);
+  const alertesPrioritaires = alertes.slice(0, NB_ALERTES_PRIORITAIRES);
+  const autresAlertes = alertes.slice(NB_ALERTES_PRIORITAIRES);
 
   // Les rendez-vous Google passent par la mémoire persistée (validation humaine > cache >
   // moteur, cf. ADR-006) ; les mocks n'en ont pas besoin, leur contexte est déjà explicite.
@@ -126,6 +141,30 @@ export default async function AujourdHui() {
           + Nouvelle action
         </Link>
       </div>
+
+      {/* Ce qui mérite mon attention (ADR-026) — dérivé à la lecture, jamais persisté. */}
+      {alertesPrioritaires.length > 0 && (
+        <section className="mb-8">
+          <SectionTitle>Ce qui mérite mon attention</SectionTitle>
+          <div className="flex flex-col gap-2">
+            {alertesPrioritaires.map((alerte) => (
+              <AlerteCard key={alerte.id} alerte={alerte} />
+            ))}
+          </div>
+          {autresAlertes.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-[13px] text-[#4338ca] font-medium cursor-pointer">
+                Afficher les autres ({autresAlertes.length})
+              </summary>
+              <div className="flex flex-col gap-2 mt-2">
+                {autresAlertes.map((alerte) => (
+                  <AlerteCard key={alerte.id} alerte={alerte} />
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
+      )}
 
       {/* Rendez-vous */}
       <section className="mb-8">

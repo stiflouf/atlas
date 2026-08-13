@@ -302,6 +302,26 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   `chargerProjectionAnnuelle()` devront être revus pour filtrer par dossier (aucun des deux ne le
   fait actuellement).
 
+## Moteur d'alertes du copilote (ADR-026)
+
+- **Aucune alerte de proximité de seuil** : les marges avant seuil micro-BNC/TVA restent affichées
+  factuellement en continu dans `/fiscal` (`franchiseTva.margeAvantSeuilBaseCentimes`/
+  `margeAvantSeuilMajoreCentimes`), mais aucune alerte proactive ne se déclenche en approchant d'un
+  seuil — décision produit assumée, un seuil produit explicite (ex. "80 % du plafond") reste à
+  décider avant toute passe ultérieure.
+- **A4/A5 (rémunérations et dates manquantes) restent des compteurs agrégés** : dérivés des mêmes
+  compteurs déjà exposés par `chargerRemuneration()`/`chargerProjectionAnnuelle()`, sans nouvelle
+  requête ni listing dossier par dossier — l'action associée pointe vers la vue `/dashboard`
+  existante, jamais vers une liste filtrée de dossiers précis.
+- **Aucune persistance, aucune notification** : chaque alerte est recalculée à chaque chargement de
+  `/`, jamais stockée ni historisée ; aucun cron, aucun push, aucun email. Une alerte disparaît dès
+  que sa cause disparaît, sans trace de son ancienne existence.
+- **Aucune recommandation d'optimisation fiscale** : le moteur expose des faits (constatés ou
+  projetés), jamais une suggestion d'action fiscale (ex. décaler un encaissement, changer de régime).
+- **Le poids par type d'alerte (`priorite.ts`) est une convention produit interne non documentée
+  ailleurs que dans le code** — modifier l'ordre relatif de deux types nécessite d'éditer
+  `POIDS_TYPE` directement, aucune configuration externe n'existe.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

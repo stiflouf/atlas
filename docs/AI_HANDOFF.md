@@ -49,6 +49,11 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   jamais les hypothèses utilisateur. Aucune TVA collectée/déductible, aucune déclaration automatique.
   Ne jamais supposer qu'un de ces calculs couvre un profil hors de ce périmètre sans vérifier
   `ResultatFiscal.statut`/`ResultatFiscalProjete.statut`.
+- **Aucune persistance ni notification pour les alertes du copilote (ADR-026)** — `src/lib/alertes/*`
+  dérive tout à la lecture depuis les résultats déjà exposés par ADR-022→025, recalculé à chaque
+  chargement de `/`. Aucune table `alerte`, aucun cron, aucun push/email, aucune route `/alertes`
+  dédiée (la section vit en tête de `/`). Aucune alerte de proximité de seuil (uniquement des faits
+  déjà dépassés/constatés/projetés), aucune recommandation d'optimisation fiscale.
 
 ## Conventions impératives
 

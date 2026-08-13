@@ -550,6 +550,38 @@ consequencesFiscalesProjetees}.ts`, section "Projection {N+1}–{N+5}" de `/fisc
 de `ResultatFiscal<T>` (ADR-024), provenance élargie (`ProvenanceRegleProjection`) pour porter la
 distinction officielle/hypothèse, toujours visible dans `ExplicationCalculProjection.tsx`.
 
+## Moteur d'alertes déterministes du copilote (ADR-026)
+
+**Fichiers** : `src/lib/alertes/{contexte,reglesDonnees,reglesCommercial,reglesFiscal,
+reglesProjection,deduplication,priorite,moteur}.ts`, section "Ce qui mérite mon attention" en tête
+de `/` (`src/components/alertes/AlerteCard.tsx`). Dérive à la lecture, sans aucune persistance, un
+ensemble priorisé d'alertes à partir des résultats déjà exposés par ADR-022→025 — aucun nouveau
+repository, aucune requête Drizzle dans les règles elles-mêmes.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Profil fiscal absent | `chargerProfilFiscalActuel()` renvoie `undefined` | Alerte `action_requise`, cause racine — supprime en déduplication toute alerte fiscale dépendante, jamais les alertes commerciales |
+| Champ réellement inconnu | `regimeFiscal`/`regimeTva`/`affiliationRetraite` = `'inconnu'` | Alerte `action_requise` par champ, action vers `/fiscal#profil` |
+| Régime connu mais non couvert | Régime réellement renseigné mais hors périmètre V1 (ex. déclaration contrôlée) | Alerte `information`/`attention`, **jamais** une action de changer de régime réel |
+| Assiette incomplète | `AssietteAnnuelle.couverture === "partielle"` (jamais l'absence brute d'une ligne `historique_amorcage`) | Alerte `action_requise`, action vers `/fiscal#amorcage` — peut absorber "run-rate insuffisant" en déduplication |
+| Rémunérations/dates manquantes | Compteurs agrégés existants (`chargerRemuneration()`/`chargerProjectionAnnuelle()`) | Alerte `attention` agrégée — V1 sans listing dossier par dossier |
+| Règle légale absente | `RaisonIndisponibilite.type === "regle_absente"` rencontrée (ACRE inclus) | Alerte `attention` dédupliquée par code, jamais une action utilisateur |
+| Run-rate insuffisant | 1 à 5 mois garantis (0 = absence légitime, pas une anomalie ; 6+ = déjà fiable) | Alerte `information` |
+| Encaissement attendu dépassé | `nombreEncaissementsAttendusDepasses > 0` | Alerte `attention`, vocabulaire neutre imposé (jamais "retard"/"incident"/"anomalie") |
+| Dépassement micro-BNC constaté | `microBnc.anneeCourante.statut === "connue" && depasse` | Alerte `attention`, jamais un verdict de sortie du régime |
+| Deux années consécutives dépassées | Année courante et année précédente, connues, dépassent toutes deux | Alerte `attention`, combinaison de faits déjà calculés |
+| VFL actif, RFR non vérifiable | `vflActif(profil)` et `verifierEligibiliteRfr()` indisponible pour `rfr_absent` | Alerte `attention`, action vers `/fiscal#rfr` — le calcul du VFL lui-même n'est jamais remis en cause |
+| Dépassement projeté | Micro-BNC ou seuil TVA dépassé dans un scénario N+1→N+5 | Alerte `information` par année, pipeline et tendance statistique jamais additionnés |
+| Règles futures hypothétiques | Au moins une `origine: "hypothese_reconduction"` sur l'horizon projeté | Une seule alerte globale N+1→N+5, jamais une par règle et par année |
+
+**Déduplication** : par cause racine (type + code), jamais par comparaison de texte — un filet de
+sécurité déduplique en dernier recours par identifiant déterministe puis par libellé strictement
+identique. **Priorité** : score = poids fixe du niveau (toujours dominant) + poids fixe par type
+d'alerte + tie-break sur l'identifiant déterministe — même principe que `actionPriority.ts`, aucun
+score jamais affiché à l'UI. **Volontairement exclu de cette V1** : alerte de proximité de seuil
+(les marges restent affichées en continu dans `/fiscal`, sans alerte proactive), listing individuel
+pour les compteurs agrégés, recommandation d'optimisation fiscale.
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

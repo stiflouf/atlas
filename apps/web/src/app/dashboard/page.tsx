@@ -195,7 +195,7 @@ export default async function DashboardPage() {
         </Card>
       </section>
 
-      <section className="mb-8">
+      <section id="remuneration" className="mb-8">
         <SectionTitle>Rémunération</SectionTitle>
         <Card className="p-5">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-5 mb-6">
@@ -222,7 +222,7 @@ export default async function DashboardPage() {
         </Card>
       </section>
 
-      <section className="mb-8">
+      <section id="projection" className="mb-8">
         <SectionTitle>Projection {projection.annee}</SectionTitle>
         <Card className="p-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5 mb-6">

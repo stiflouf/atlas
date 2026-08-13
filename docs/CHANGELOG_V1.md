@@ -347,6 +347,23 @@ plutôt qu'une répartition devinée. Les hypothèses utilisateur ne sont jamais
 la query string d'un formulaire GET, valables uniquement pour la requête courante). Nouvelle section
 "Projection {N+1}–{N+5}" sur `/fiscal`, une carte par année.
 
+## 26. Moteur d'alertes déterministes du copilote
+
+Moteur d'alertes (ADR-026) qui dérive, à la lecture et sans aucune persistance, un ensemble
+priorisé d'alertes à partir des résultats déjà exposés par ADR-022→025 — même patron que
+`pointsForts`/`pointsAttention` (règles pures `{ id, evaluer }`) et `actionPriority.ts` (priorité
+par score). Distingue systématiquement un champ réellement inconnu (action possible) d'un régime
+réellement renseigné mais non couvert par le moteur V1 (jamais une action de changer sa situation
+réelle). L'alerte "assiette incomplète" se fonde sur `AssietteAnnuelle.couverture`, jamais sur
+l'absence brute d'une ligne `historique_amorcage`. Déduplication par cause racine (type + code) :
+un profil fiscal absent supprime toute alerte fiscale dépendante sans supprimer les alertes
+commerciales indépendantes ; une couverture insuffisante peut absorber l'alerte de run-rate
+insuffisant pour la même cause, jamais l'alerte de règles futures hypothétiques (cause
+indépendante) ; les règles futures reconduites à titre d'hypothèse sont regroupées en une seule
+alerte sur tout l'horizon N+1→N+5. Nouvelle section "Ce qui mérite mon attention" en tête de `/` :
+5 alertes prioritaires au maximum, le reste derrière un `<details>` natif "Afficher les autres",
+aucune nouvelle route. Aucune alerte de proximité de seuil dans cette V1.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,
