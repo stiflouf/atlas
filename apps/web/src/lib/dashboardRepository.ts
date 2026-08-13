@@ -450,6 +450,15 @@ export type DashboardProjectionAnnuelle = {
   nombreFinaliseNonEncaisseAvecDatePrevue: number;
   nombreFinaliseNonEncaisseRenseignees: number;
 
+  // ADR-024 (moteur fiscal année courante) : sum(montant) où compromis.statut = 'realise',
+  // date_encaissement_reelle IS NULL, date_encaissement_prevue entre aujourd'hui et le 31/12 de
+  // l'année en cours — symétrique de encaissementsAttendusDepassesCentimes (même sous-population,
+  // fenêtre inverse : "à venir" plutôt que "dépassée"). Même mapping undefined/0 : aucune date
+  // prévue connue dans cette sous-population ⇒ undefined ; des dates connues mais aucune dans la
+  // fenêtre ⇒ 0 mesuré.
+  finaliseNonEncaisseRestantCentimes: number | undefined;
+  nombreFinaliseNonEncaisseRestant: number; // sous-population avec date prévue dans la fenêtre restante
+
   ventilationMensuelle: MontantCentimesParMoisAnnuel[]; // toujours 12 entrées, zero-remplies
 };
 
@@ -484,6 +493,19 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
       nombreAvecDatePrevue: sql<number>`count(*) filter (where ${remunerationTable.dateEncaissementPrevue} is not null)::int`,
       nombreDepasses: sql<number>`count(*) filter (where ${remunerationTable.dateEncaissementPrevue} is not null and ${remunerationTable.dateEncaissementPrevue} < current_date)::int`,
       sommeDepassee: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes}) filter (where ${remunerationTable.dateEncaissementPrevue} is not null and ${remunerationTable.dateEncaissementPrevue} < current_date)::int`,
+    })
+    .from(compromisTable)
+    .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(and(eq(compromisTable.statut, "realise"), isNull(remunerationTable.dateEncaissementReelle)));
+
+  // ADR-024 : même sous-population que `depasse` (realise, non encaissée), fenêtre inverse —
+  // date_encaissement_prevue entre aujourd'hui et le 31/12, jamais fusionnée avec `depasse`
+  // (mutuellement exclusives : une date prévue ne peut pas être à la fois < aujourd'hui et dans la
+  // fenêtre restante).
+  const [restant] = await getDb()
+    .select({
+      nombreAvecDatePrevue: sql<number>`count(*) filter (where ${remunerationTable.dateEncaissementPrevue} is not null)::int`,
+      sommeFenetre: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes}) filter (where ${remunerationTable.dateEncaissementPrevue} >= current_date and ${remunerationTable.dateEncaissementPrevue} <= date_trunc('year', current_date) + interval '1 year' - interval '1 day')::int`,
     })
     .from(compromisTable)
     .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
@@ -568,6 +590,8 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
     previsionnel.nombreAvecDatePrevue === 0 ? undefined : (previsionnel.sommeFenetre ?? 0);
   const encaissementsAttendusDepassesCentimes =
     depasse.nombreAvecDatePrevue === 0 ? undefined : (depasse.sommeDepassee ?? 0);
+  const finaliseNonEncaisseRestantCentimes =
+    restant.nombreAvecDatePrevue === 0 ? undefined : (restant.sommeFenetre ?? 0);
 
   return {
     annee: ventilationBrute[0]?.annee ?? new Date().getFullYear(),
@@ -578,6 +602,8 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
     nombreEncaissementsAttendusDepasses: depasse.nombreDepasses,
     nombreFinaliseNonEncaisseAvecDatePrevue: depasse.nombreAvecDatePrevue,
     nombreFinaliseNonEncaisseRenseignees: depasse.nombreRenseignees,
+    finaliseNonEncaisseRestantCentimes,
+    nombreFinaliseNonEncaisseRestant: restant.nombreAvecDatePrevue,
     ventilationMensuelle,
   };
 }

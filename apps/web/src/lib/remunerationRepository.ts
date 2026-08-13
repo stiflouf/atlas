@@ -1,7 +1,12 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, between, eq, isNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { compromis as compromisTable, remuneration as remunerationTable } from "@/db/schema";
 import type { ChampsCorrectionRemuneration, NouvelleRemuneration, Remuneration } from "@/types/remuneration";
+
+// ADR-024. Un encaissement réel, daté, pour le moteur fiscal — jamais une agrégation : chaque
+// encaissement doit pouvoir être rattaché individuellement à la règle légale applicable à sa date
+// (un taux qui change en cours d'année ne s'applique jamais rétroactivement à tout le CA).
+export type EncaissementAnnee = { montantCentimes: number; dateEncaissementReelle: string };
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,6 +40,30 @@ export async function listerRemunerationsPourBien(bienId: string): Promise<Remun
     console.error("[remuneration] lecture Postgres indisponible :", erreur);
     return [];
   }
+}
+
+// ADR-024. Encaissements réels de l'année, toutes fiches confondues, biens archivés inclus (même
+// règle que le reste du suivi financier historique, ADR-021 : l'archivage ne clôt jamais le suivi
+// d'une vente déjà conclue). Filtré sur compromis.statut = 'realise' par cohérence avec
+// dashboardRepository.chargerProjectionAnnuelle() — dateEncaissementReelle n'est en pratique jamais
+// posée hors de ce statut (transition atomique dédiée), cette jointure est une garde défensive.
+export async function listerEncaissementsAnnee(annee: number): Promise<EncaissementAnnee[]> {
+  const lignes = await getDb()
+    .select({
+      montantCentimes: remunerationTable.montantRemunerationConseillerCentimes,
+      dateEncaissementReelle: remunerationTable.dateEncaissementReelle,
+    })
+    .from(remunerationTable)
+    .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        between(remunerationTable.dateEncaissementReelle, `${annee}-01-01`, `${annee}-12-31`)
+      )
+    );
+  return lignes
+    .filter((l): l is { montantCentimes: number; dateEncaissementReelle: string } => l.dateEncaissementReelle !== null)
+    .sort((a, b) => a.dateEncaissementReelle.localeCompare(b.dateEncaissementReelle));
 }
 
 // Résolution principale (1:1), non filtrée par archivage — nécessaire pour que les Server Actions

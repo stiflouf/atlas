@@ -2,6 +2,12 @@ import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
 import { chargerProfilFiscalActuel } from "@/lib/profilFiscalRepository";
 import { chargerHistoriqueAmorcage } from "@/lib/historiqueAmorcageRepository";
 import { chargerRfrFoyer } from "@/lib/rfrFoyerRepository";
+import { calculerCotisationsSociales } from "@/lib/fiscal/cotisationsSociales";
+import { calculerCfp } from "@/lib/fiscal/cfp";
+import { calculerVersementLiberatoire, verifierEligibiliteRfr } from "@/lib/fiscal/versementLiberatoire";
+import { calculerMicroBnc } from "@/lib/fiscal/microBnc";
+import { calculerFranchiseTva } from "@/lib/fiscal/franchiseTva";
+import { calculerProjectionFinAnnee } from "@/lib/fiscal/projectionFinAnnee";
 import { enregistrerProfilFiscalAction } from "@/actions/profilFiscal";
 import { enregistrerHistoriqueAmorcageAction } from "@/actions/historiqueAmorcage";
 import { enregistrerRfrFoyerAction } from "@/actions/rfrFoyer";
@@ -9,16 +15,17 @@ import ProfilFiscalFormulaire from "@/components/fiscal/ProfilFiscalFormulaire";
 import ProfilFiscalResume from "@/components/fiscal/ProfilFiscalResume";
 import HistoriqueAmorcageFormulaire from "@/components/fiscal/HistoriqueAmorcageFormulaire";
 import RfrFoyerFormulaire from "@/components/fiscal/RfrFoyerFormulaire";
+import VueAnneeResume from "@/components/fiscal/VueAnneeResume";
 import { formatMontantCentimes } from "@/types/remuneration";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, la page figerait au moment du build.
 export const dynamic = "force-dynamic";
 
-// ADR-023 : fondations fiscales seulement — aucune estimation, aucun calcul, seulement la saisie
-// du profil, de l'historique d'amorçage et du RFR optionnel. Le référentiel légal (regle_fiscale)
-// n'est ni affiché ni consommé ici : cette page ne fait que collecter des faits, jamais les
-// combiner (ADR-024).
+// ADR-023 (fondations : profil, amorçage, RFR) + ADR-024 (moteur fiscal année courante, "Vue
+// {année}" ci-dessous). Le référentiel légal (regle_fiscale) n'est jamais affiché brut — uniquement
+// via les moteurs fiscal/* et leur provenance (ExplicationCalcul). Aucune projection N+1 à N+5, ni
+// TVA collectée/déductible, ni déclaration automatique : hors périmètre, réservé à ADR-025+.
 export default async function FiscalPage() {
   const dossierFiscalId = await obtenirDossierFiscalDefaut();
   const [profilActuel, historique, rfr] = await Promise.all([
@@ -26,6 +33,18 @@ export default async function FiscalPage() {
     chargerHistoriqueAmorcage(dossierFiscalId),
     chargerRfrFoyer(dossierFiscalId),
   ]);
+  const anneeCourante = new Date().getFullYear();
+  const [cotisations, cfp, vfl, eligibiliteRfr, microBnc, franchiseTva, projection] = profilActuel
+    ? await Promise.all([
+        calculerCotisationsSociales(dossierFiscalId, anneeCourante),
+        calculerCfp(dossierFiscalId, anneeCourante),
+        calculerVersementLiberatoire(dossierFiscalId, anneeCourante),
+        verifierEligibiliteRfr(dossierFiscalId, anneeCourante),
+        calculerMicroBnc(dossierFiscalId, anneeCourante),
+        calculerFranchiseTva(dossierFiscalId, anneeCourante),
+        calculerProjectionFinAnnee(dossierFiscalId, anneeCourante),
+      ])
+    : [];
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -34,12 +53,27 @@ export default async function FiscalPage() {
       </h1>
       <p className="text-[13px] text-[#64748b] mb-6">
         Ces informations permettent à Atlas de situer vos encaissements par rapport aux règles
-        fiscales et sociales applicables. Aucune estimation n&apos;est encore calculée à ce stade.
+        fiscales et sociales applicables.
       </p>
 
       {profilActuel && (
         <section className="mb-8">
           <ProfilFiscalResume profil={profilActuel} />
+        </section>
+      )}
+
+      {profilActuel && cotisations && cfp && vfl && eligibiliteRfr && microBnc && franchiseTva && projection && (
+        <section className="mb-10 border-t border-[#f1f5f9] pt-6">
+          <VueAnneeResume
+            annee={anneeCourante}
+            cotisations={cotisations}
+            cfp={cfp}
+            vfl={vfl}
+            eligibiliteRfr={eligibiliteRfr}
+            microBnc={microBnc}
+            franchiseTva={franchiseTva}
+            projection={projection}
+          />
         </section>
       )}
 

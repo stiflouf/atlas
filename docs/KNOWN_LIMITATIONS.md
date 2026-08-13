@@ -241,20 +241,8 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Fondations fiscales (ADR-023)
 
-- **Aucun calcul fiscal, aucune estimation** : `regle_fiscale` est seedée mais n'est ni affichée ni
-  consommée par aucune page ni aucun repository de cette passe. Un conseiller qui remplit les trois
-  formulaires de `/fiscal` ne voit apparaître aucun montant d'impôt, de cotisation ou de TVA
-  calculé — uniquement un rappel de ce qu'il a saisi. Réservé à ADR-024/ADR-025.
-- **Barème ACRE absent du référentiel** : `profil_fiscal.acreActif`/`acreDateDebut`/`acreDateFin`
-  sont collectés, mais aucune règle `regle_fiscale` correspondante n'a été seedée — aucune valeur
-  n'a pu être vérifiée pendant l'audit préalable. Un futur moteur de calcul qui aurait besoin du
-  taux ACRE trouvera `resoudreRegle` retourner `undefined`, jamais une valeur inventée.
-- **Taux CFP marqué `a_confirmer`** : sources secondaires divergentes pendant l'audit (0,1 % / 0,2 %
-  / 0,25 %), retenu à 0,2 % mais non vérifié directement sur une source officielle — à revérifier
-  sur `autoentrepreneur.urssaf.fr` avant tout calcul présenté comme officiel.
-- **Seuil RFR d'éligibilité au versement libératoire marqué `a_confirmer`** : aucune page BOFiP
-  précise retrouvée pendant l'audit pour cette valeur (contrairement aux seuils de franchise TVA,
-  vérifiés directement).
+- **Le référentiel `regle_fiscale` a été seedé sans être ni affiché ni consommé** dans cette passe —
+  corrigé par ADR-024, voir la section dédiée ci-dessous pour les limites du moteur de calcul.
 - **Aucune validation croisée d'incohérence de profil** : le formulaire laisse saisir, par exemple,
   `regimeComptable` renseigné avec un `regimeFiscal = 'micro_bnc'` (où il n'a aucun sens) sans
   avertissement — les règles croisées documentées dans `docs/DATA_MODEL.md` sont portées par
@@ -265,6 +253,41 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Historique de `profil_fiscal` non exposé en V1** : `chargerHistoriqueProfilFiscal()` existe
   dans le repository mais aucune page ne l'affiche — seul le profil actuel (`chargerProfilFiscalActuel`)
   est visible sur `/fiscal`. Un futur écran d'audit pourrait l'exposer sans changement de schéma.
+
+## Moteur fiscal — année courante (ADR-024)
+
+- **Cotisations sociales limitées au régime général** : seul `affiliationRetraite =
+  'ssi_regime_general'` a un code de taux dans le référentiel (`taux_cotisations_bnc_general`) — un
+  profil `cipav` retourne systématiquement `regime_non_couvert`, jamais une approximation. Ajouter
+  la Cipav nécessite un nouveau code de référentiel, pas seulement un changement de code applicatif.
+- **Déclaration contrôlée entièrement hors périmètre du moteur social/CFP/VFL** : ces trois calculs
+  ne fonctionnent que pour `regimeFiscal = 'micro_bnc'` — un profil en déclaration contrôlée voit
+  ces trois lignes marquées "Indisponible", sans aucune estimation de repli.
+- **ACRE non calculé** : aucun barème dans le référentiel (limite ADR-023 non résolue par ADR-024).
+  Une tranche tombant dans une période ACRE active retourne `regle_absente` plutôt que le taux
+  plein — le montant de cotisations affiché peut donc être `"Indisponible"`/`"partiel"` pour un
+  conseiller bénéficiaire de l'ACRE, jusqu'à ce que le référentiel soit complété.
+- **TVA redevable entièrement hors périmètre** : `calculerFranchiseTva` ne fonctionne que pour
+  `regimeTva = 'franchise'` — `montantRemunerationConseillerCentimes` n'a aucune sémantique HT/TTC
+  modélisée, un profil redevable retourne toujours `"Indisponible"`. Aucune couche TVA/facturation
+  n'existe dans le code.
+- **Granularité de l'amorçage** : `historique_amorcage` est un montant unique par année, sans date
+  journalière. Si un changement de taux légal tombe à l'intérieur de la période qu'il couvre, la
+  tranche correspondante devient `amorcage_non_ventilable` (ni calculée, ni devinée) — limite
+  structurelle du modèle de données ADR-023, pas un bug du moteur.
+- **Micro-BNC : aucun verdict de sortie de régime** : le moteur expose des faits (recettes connues
+  vs plafond, par année, avec leur couverture) mais ne calcule jamais le mécanisme légal complet des
+  deux années consécutives de dépassement ni ses conséquences (bascule de régime, rétroactivité) —
+  réservé à une passe ultérieure quand ce mécanisme aura été audité spécifiquement.
+- **`chargerProjectionAnnuelle()` reste ancrée sur `CURRENT_DATE`** : `calculerProjectionFinAnnee`
+  n'a donc de sens que pour l'année civile en cours, jamais une année passée ou future — cohérent
+  avec le périmètre V1 (aucune projection N+1 à N+5 avant ADR-025), mais un appel avec une autre
+  année que l'année courante donnerait des blocs "restant" incohérents avec le bloc "encaissé".
+- **`remuneration` n'est pas cloisonnée par dossier fiscal** : cohérent avec le mono-dossier V1
+  (ADR-023) — tous les encaissements Atlas appartiennent implicitement à l'unique dossier `'default'`
+  aujourd'hui. Le jour où `dossier_fiscal` cesse d'être mono-ligne, `listerEncaissementsAnnee` et
+  `chargerProjectionAnnuelle()` devront être revus pour filtrer par dossier (aucun des deux ne le
+  fait actuellement).
 
 ## Limites du moteur de matching
 

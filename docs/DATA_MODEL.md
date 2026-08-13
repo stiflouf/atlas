@@ -607,11 +607,15 @@ ajoute la vue "année en cours" — encaissé depuis janvier, prévisionnel rest
 dépassé(s)" (jamais "retard"), ventilation mensuelle zero-remplie par `generate_series` (deuxième et
 dernier usage de SQL brut du fichier, avec `chargerActivite()`). Compteurs de couverture à un
 troisième niveau (a en plus une `dateEncaissementPrevue`), composés dans `dashboard/page.tsx` avec
-les deux premiers niveaux déjà fournis par `chargerRemuneration()`, jamais dupliqués. Voir
-`docs/BUSINESS_RULES.md` pour le détail des métriques et ADR-018 pour la règle d'archivage et les
-métriques écartées ; ADR-019 pour `offre_visites` et les métriques visite → offre ; ADR-020 pour les
-motifs/dates de perte et la famille "Pertes commerciales" ; ADR-021 pour la rémunération ; ADR-022
-pour la projection annuelle.
+les deux premiers niveaux déjà fournis par `chargerRemuneration()`, jamais dupliqués.
+`finaliseNonEncaisseRestantCentimes`/`nombreFinaliseNonEncaisseRestant` (ADR-024) complètent cette
+même fonction : symétrique de `encaissementsAttendusDepassesCentimes`, fenêtre inversée (date prévue
+entre aujourd'hui et le 31/12 plutôt que dépassée) — consommé par le moteur fiscal
+(`src/lib/fiscal/projectionFinAnnee.ts`) sans dupliquer la requête SQL. Voir `docs/BUSINESS_RULES.md`
+pour le détail des métriques et ADR-018 pour la règle d'archivage et les métriques écartées ;
+ADR-019 pour `offre_visites` et les métriques visite → offre ; ADR-020 pour les motifs/dates de
+perte et la famille "Pertes commerciales" ; ADR-021 pour la rémunération ; ADR-022 pour la
+projection annuelle ; ADR-024 pour son usage par le moteur fiscal.
 
 ## `dossier_fiscal`
 
@@ -753,6 +757,36 @@ résultat "officiel" si le statut vaut autre chose que `verifie_direct`. Amorcé
 `0015_seed_referentiel_fiscal_2026.sql` (plafond micro-BNC, seuils de franchise TVA, taux de
 cotisations, CFP, abattement micro-BNC, versement libératoire — barème ACRE volontairement absent,
 aucune valeur vérifiée pendant l'audit).
+
+## Moteur fiscal (`src/lib/fiscal/`)
+
+**Rôle** : premier moteur de calcul fiscal, borné à l'année civile en cours (ADR-024). Ne crée
+aucune table — consomme exclusivement `dossier_fiscal`/`profil_fiscal`/`historique_amorcage`/
+`rfr_foyer`/`regle_fiscale` (ADR-023), `remuneration` (ADR-021, via la nouvelle
+`remunerationRepository.listerEncaissementsAnnee`) et `dashboardRepository.chargerProjectionAnnuelle()`
+(ADR-022).
+
+- `assietteAnnuelle.ts` — `resoudreAssietteAnnuelle`/`calculerAssietteAnnuelle` : construit
+  l'assiette annuelle fiable (montant connu, origines tracées, état de couverture, périodes non
+  garanties exhaustives). Jamais de déduction d'un début de couverture depuis le seul fait qu'un
+  encaissement Atlas existe.
+- `resolutionTranche.ts` — `resoudreTrancheAvecTaux`/`construireResultatFiscal` : rattache chaque
+  tranche datée de l'assiette à la règle légale applicable à sa date exacte (jamais un taux moyen),
+  et agrège les résolutions en `ResultatFiscal<T>` (`src/types/resultatFiscal.ts` — jamais un
+  `number` nu, toujours `statut` + `provenance`/`raisons`).
+- `arithmetiqueFiscale.ts` — arithmétique entière/`BigInt` exclusive (taux en points de base,
+  prorata en jours), aucune division JS `number` sur une donnée monétaire ou fiscale.
+- `cotisationsSociales.ts`/`cfp.ts`/`versementLiberatoire.ts` — moteurs sociaux micro, gardés
+  strictement au régime/à l'affiliation réellement couverts par le référentiel seedé (jamais une
+  approximation pour un régime non couvert) ; le versement libératoire n'est jamais dérivé du RFR
+  (`verifierEligibiliteRfr`, contrôle informatif séparé).
+- `microBnc.ts`/`franchiseTva.ts` — plafond/seuils vs recettes connues ; le franchise TVA ne
+  fonctionne que pour `regimeTva = 'franchise'` (aucune sémantique HT/TTC modélisée pour les autres
+  régimes).
+- `projectionFinAnnee.ts` — trois blocs jamais fusionnés silencieusement (encaissé réel / finalisé
+  non encaissé restant / compromis en cours restant).
+- `libellesRaisons.ts` — traduit chaque raison d'indisponibilité en phrase française, consommé par
+  `/fiscal` (`VueAnneeResume`/`ExplicationCalcul`).
 
 ## Migrations
 

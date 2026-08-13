@@ -401,13 +401,15 @@ ci-dessous.
 | Projection annuelle | Encaissement(s) attendu(s) dépassé(s) | `sum(...)` + `count(*)` sur `remuneration` ⨝ `compromis` `realise`, `date_encaissement_reelle IS NULL`, `date_encaissement_prevue IS NOT NULL` et `< aujourd'hui`, biens archivés inclus (ADR-022) | **Jamais** le mot "retard" ; nombre de ventes concernées + couverture des dates prévues affichés ; même distinction `undefined`/`0` que ci-dessus |
 | Projection annuelle | Ventilation janvier → décembre (prévisionnel / finalisé non encaissé / encaissé) | `generate_series` (spine 12 mois) `LEFT JOIN` trois agrégats par `date_encaissement_prevue` (prévisionnel, finalisé non encaissé) ou `date_encaissement_reelle` (encaissé), `coalesce(...,0)` | Toujours 12 mois, zero-remplis ; un `0 €` signifie "aucune ligne datée ce mois-là", pas une couverture exhaustive — réserve rappelle les compteurs de couverture |
 
-**Explicitement écarté** (donnée non instrumentée dans le dashboard) : chiffre d'affaires,
+**Explicitement écarté** (donnée non instrumentée dans le dashboard lui-même) : chiffre d'affaires,
 fiscalité, et toute notion comptable/juridique de rémunération "acquise" — `remuneration`
-(ADR-021) instrumente les montants saisis mais ne tranche aucune de ces questions. Les fondations
-de collecte fiscale existent désormais (`dossier_fiscal`/`profil_fiscal`/`historique_amorcage`/
-`rfr_foyer`/`regle_fiscale`, ADR-023, voir section dédiée ci-dessous) mais aucun calcul ni
-estimation n'en est encore dérivé nulle part dans l'application, dashboard compris — reporté à
-ADR-024/ADR-025. Voir ADR-018, ADR-021, ADR-023 et `docs/KNOWN_LIMITATIONS.md`. Le taux
+(ADR-021) instrumente les montants saisis mais ne tranche aucune de ces questions. Le moteur fiscal
+année courante (ADR-024, voir section dédiée ci-dessous) calcule désormais cotisations/CFP/VFL et
+seuils micro-BNC/TVA à partir des fondations de collecte (ADR-023), mais reste entièrement séparé
+du dashboard commercial — aucune de ces métriques n'apparaît sur `/dashboard`, uniquement sur
+`/fiscal`. Projections N+1 à N+5, scénarios, TVA collectée/déductible et déclaration automatique
+restent hors périmètre, réservés à ADR-025+. Voir ADR-018, ADR-021, ADR-023, ADR-024 et
+`docs/KNOWN_LIMITATIONS.md`. Le taux
 et le délai visite → offre, écartés dans ADR-018 faute de lien matérialisé, sont désormais
 disponibles via le lien explicite `offre_visites` (ADR-019) — avec la réserve que seules les
 visites explicitement liées après la mise en place de ce lien sont comptées (aucun rattrapage
@@ -460,9 +462,68 @@ en centimes entiers, `nombrePartsCentiemes` en centièmes entiers (1,5 part = `1
 `jours`, ex. 25,6 % = `2560` points de base) — aucune conversion flottante côté JS.
 
 **Onboarding "Ma situation fiscale"** (`/fiscal`) : trois formulaires (profil, amorçage, RFR)
-au-dessus d'un résumé du profil actuel et d'un historique par année pour amorçage/RFR. Le
-référentiel légal n'y est ni affiché ni consommé — la page ne fait que collecter des faits, jamais
-les combiner.
+au-dessus d'un résumé du profil actuel et d'un historique par année pour amorçage/RFR. En ADR-023,
+le référentiel légal n'y était ni affiché ni consommé — la page ne faisait que collecter des faits.
+Depuis ADR-024, la page affiche en plus la section "Vue {année}" qui consomme le référentiel via le
+moteur fiscal (voir section suivante) ; les formulaires de collecte restent inchangés.
+
+## Moteur fiscal — année courante (ADR-024)
+
+**Fichiers** : `src/lib/fiscal/*`, section "Vue {année}" de `/fiscal`
+(`src/components/fiscal/VueAnneeResume.tsx`). Premier moteur de calcul, borné à l'année civile en
+cours — aucune projection N+1 à N+5 (ADR-025), aucune TVA collectée/déductible, aucune déclaration
+automatique.
+
+**Assiette annuelle** (`resoudreAssietteAnnuelle`) : jamais de déduction d'un début de couverture
+depuis le seul fait qu'un premier encaissement Atlas existe. Sans ligne `historique_amorcage`
+explicite pour l'année, tous les encaissements Atlas connus entrent dans `montantConnuCentimes`
+mais `couverture` reste `"partielle"` et `periodesInconnues` couvre toute la période visible, même
+la portion où des montants sont déjà connus — `PeriodeInconnue` signifie "exhaustivité non
+garantie", pas "aucune donnée".
+
+**Rattachement au taux applicable, tranche par tranche** (`resoudreTrancheAvecTaux`) : chaque
+encaissement est résolu à sa propre date ; un changement de taux en cours d'année ne s'applique
+jamais rétroactivement à tout le CA. Une tranche d'amorçage (un intervalle, pas une date) dont le
+taux ou le régime change entre son début et sa fin est marquée `amorcage_non_ventilable` plutôt que
+devinée.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Cotisations sociales | `regimeFiscal = 'micro_bnc'` **et** `affiliationRetraite = 'ssi_regime_general'` | Taux `taux_cotisations_bnc_general` appliqué tranche par tranche |
+| Cotisations sociales — refus | Tout autre régime/affiliation (déclaration contrôlée, Cipav) | `regime_non_couvert` — jamais une approximation |
+| Cotisations sociales — ACRE | ACRE actif à la date de la tranche | `regle_absente` (aucun barème ACRE dans le référentiel, ADR-023) — jamais le taux plein appliqué par défaut |
+| CFP | `regimeFiscal = 'micro_bnc'` | Taux `taux_cfp_liberal_non_reglemente` (statut `a_confirmer` conservé dans la provenance, calculé quand même) |
+| Versement libératoire | `regimeFiscal = 'micro_bnc'` **et** `optionVersementLiberatoire = true` à la date de la tranche | Taux `taux_versement_liberatoire_bnc` appliqué |
+| Versement libératoire — jamais dérivé du RFR | RFR favorable mais option désactivée | Reste à 0 — le RFR n'active jamais l'option tout seul |
+| Éligibilité RFR (`verifierEligibiliteRfr`) | Ligne `rfr_foyer` pour l'année N-2 présente | Contrôle informatif séparé, comparaison par produit en croix (jamais de division/arrondi) |
+| Franchise TVA | `regimeTva = 'franchise'` | Marges avant seuil de base/majoré calculées |
+| Franchise TVA — refus | `regimeTva` redevable ou inconnu | `regime_tva_non_supporte` — `montantRemunerationConseillerCentimes` n'a aucune sémantique HT/TTC modélisée, aucune couche TVA créée |
+| Micro-BNC | Toujours (si `regimeFiscal = 'micro_bnc'`) | Recettes connues vs plafond plein ; statut N-1/N-2 seulement si leur couverture est complète, sinon indéterminé — jamais de verdict "sortie du micro" |
+| Micro-BNC — année de création | `dateDebutActivite` dans l'année calculée | Plafond proratisé exposé comme valeur de référence du mécanisme légal des années de référence, jamais comme seuil de sortie immédiate ; `depasse` compare toujours au plafond plein |
+
+**Arithmétique** (`arithmetiqueFiscale.ts`) : taux en points de base et prorata en jours calculés
+exclusivement en `BigInt`, arrondi "moitié vers le haut" documenté et testé aux bornes — jamais
+`Math.round(a * b / c)`, qui produirait un flottant JS intermédiaire.
+
+**Contrat de résultat** (`ResultatFiscal<T>`, `src/types/resultatFiscal.ts`) : jamais un `number` nu.
+`"calcule"` seulement si aucune raison n'existe, y compris l'incomplétude de l'assiette elle-même —
+jamais `"calcule"` sur une couverture partielle même si toutes les tranches connues résolvent un
+taux. `"indisponible"` seulement si aucune tranche n'a pu être résolue. Un `statutVerification`
+`a_confirmer`/`recoupement` n'empêche jamais `"calcule"` : la provenance le porte, à l'UI de le
+signaler.
+
+**Projection fin d'année** (`calculerProjectionFinAnnee`) : trois blocs jamais fusionnés
+silencieusement — encaissé réel (assiette annuelle), ventes finalisées non encaissées avec date
+prévue restant dans l'année (`finaliseNonEncaisseRestantCentimes`, nouveau champ symétrique de
+`encaissementsAttendusDepassesCentimes` sur `chargerProjectionAnnuelle`), compromis `en_cours` avec
+date prévue restant dans l'année (réutilise `previsionnelRestantCentimes`, ADR-022). La somme des
+trois n'est calculée que si les deux blocs "restant" sont tous deux connus ; une rémunération sans
+date prévue n'est placée dans aucun bloc.
+
+**UX "Vue {année}"** : cinq blocs — ce que j'ai encaissé, ce que je devrais provisionner, où j'en
+suis par rapport aux seuils, ce qui pourrait encore arriver cette année, ce qu'Atlas ne sait pas
+encore calculer et pourquoi. `ExplicationCalcul` affiche assiette + provenance sous chaque montant
+calculé ; `libellesRaisons.ts` traduit chaque raison en phrase française sans jargon.
 
 ## Archivage
 

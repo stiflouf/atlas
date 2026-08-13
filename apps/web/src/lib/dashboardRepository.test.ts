@@ -1080,6 +1080,84 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
     });
   });
 
+  describe("finaliseNonEncaisseRestantCentimes — fenêtre symétrique de encaissementsAttendusDepassesCentimes (ADR-024)", () => {
+    it("inclut une vente finalisée non encaissée avec une date prévue restant dans l'année (delta montant et nombre)", async () => {
+      const avant = await chargerProjectionAnnuelle();
+      const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-001");
+      const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
+      idsCompromisCrees.push(c.id);
+      await marquerCompromisRealise(c.id, hier);
+      const r = await enregistrerRemuneration({
+        compromisId: c.id,
+        montantRemunerationConseillerCentimes: 230000,
+        dateEncaissementPrevue: demain,
+      });
+      idsRemunerationCrees.push(r.id);
+
+      const apres = await chargerProjectionAnnuelle();
+
+      expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant + 1);
+      expect(apres.finaliseNonEncaisseRestantCentimes).toBe((avant.finaliseNonEncaisseRestantCentimes ?? 0) + 230000);
+    });
+
+    it("une date prévue déjà dépassée (hier) est comptée dans la couverture mais jamais ajoutée à la fenêtre restante — connu, mais 0 mesuré sur cette fenêtre", async () => {
+      const avant = await chargerProjectionAnnuelle();
+      const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-002");
+      const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
+      idsCompromisCrees.push(c.id);
+      await marquerCompromisRealise(c.id, hier);
+      const r = await enregistrerRemuneration({
+        compromisId: c.id,
+        montantRemunerationConseillerCentimes: 240000,
+        dateEncaissementPrevue: hier,
+      });
+      idsRemunerationCrees.push(r.id);
+
+      const apres = await chargerProjectionAnnuelle();
+
+      // Comptée dans le dénominateur de couverture (date connue)...
+      expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant + 1);
+      // ...mais jamais ajoutée à la somme de la fenêtre restante — un vrai 0 mesuré sur cette
+      // fenêtre, toujours un number défini, jamais undefined tant qu'au moins une date est connue
+      // quelque part (mapping ADR-022 appliqué à ADR-024).
+      expect(typeof apres.finaliseNonEncaisseRestantCentimes).toBe("number");
+      expect(apres.finaliseNonEncaisseRestantCentimes).toBe(avant.finaliseNonEncaisseRestantCentimes ?? 0);
+    });
+
+    it("une vente finalisée non encaissée sans date prévue ne compte ni dans le nombre ni dans le montant — inconnu, jamais confondu avec un 0", async () => {
+      const avant = await chargerProjectionAnnuelle();
+      const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-003");
+      const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
+      idsCompromisCrees.push(c.id);
+      await marquerCompromisRealise(c.id, hier);
+      const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 250000 });
+      idsRemunerationCrees.push(r.id);
+
+      const apres = await chargerProjectionAnnuelle();
+
+      expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant);
+      expect(apres.finaliseNonEncaisseRestantCentimes).toBe(avant.finaliseNonEncaisseRestantCentimes ?? 0);
+    });
+
+    it("un compromis en_cours (prévisionnel) n'alimente jamais finaliseNonEncaisseRestantCentimes — mutuellement exclusif", async () => {
+      const avant = await chargerProjectionAnnuelle();
+      const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-004");
+      const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
+      idsCompromisCrees.push(c.id);
+      const r = await enregistrerRemuneration({
+        compromisId: c.id,
+        montantRemunerationConseillerCentimes: 260000,
+        dateEncaissementPrevue: demain,
+      });
+      idsRemunerationCrees.push(r.id);
+
+      const apres = await chargerProjectionAnnuelle();
+
+      expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant);
+      expect(apres.finaliseNonEncaisseRestantCentimes).toBe(avant.finaliseNonEncaisseRestantCentimes ?? 0);
+    });
+  });
+
   describe("ventilationMensuelle — dateEncaissementPrevue pour prévisionnel/finalisé, dateEncaissementReelle pour encaissé", () => {
     it("ventile une rémunération finalisée non encaissée par dateEncaissementPrevue (pas dateEncaissementReelle)", async () => {
       const moisCible = `${anneeCourante}-03`;

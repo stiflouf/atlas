@@ -297,6 +297,34 @@ chacune tracée par un statut de confiance (`verifie_direct`/`recoupement`/`a_co
 page `/fiscal` ("Ma situation fiscale") : collecte de faits uniquement, aucune estimation ni aucun
 calcul affiché — réservés à ADR-024 (moteur année courante) et ADR-025 (projections N+1 à N+5).
 
+## 24. Moteur fiscal, année civile courante
+
+Premier moteur de calcul fiscal (ADR-024), borné à l'année en cours, construit exclusivement à
+partir des fondations ADR-023 et des faits `remuneration`/`chargerProjectionAnnuelle` (ADR-021/022)
+— aucune nouvelle table. `resoudreAssietteAnnuelle` corrige un piège identifié en revue
+architecturale : en l'absence de ligne `historique_amorcage`, tous les encaissements Atlas connus
+comptent quand même dans le montant connu, mais la couverture reste "partielle" et la période
+"inconnue" couvre toute l'année visible — jamais une déduction d'un début de couverture depuis le
+seul fait qu'un premier encaissement existe. Chaque encaissement est rattaché à la règle légale
+applicable à sa date exacte (`resoudreTrancheAvecTaux`), jamais un taux moyen appliqué au total ;
+une tranche d'amorçage chevauchant un changement de taux devient explicitement non ventilable.
+Cotisations sociales/CFP/versement libératoire gardés strictement au régime micro-BNC réellement
+couvert par le référentiel (jamais un taux appliqué à une déclaration contrôlée ou à la Cipav,
+`regime_non_couvert` sinon) ; l'ACRE, absente du référentiel, retourne `regle_absente` plutôt que le
+taux plein. Franchise TVA limitée à `regimeTva = 'franchise'` — aucune sémantique HT/TTC modélisée
+pour un profil redevable, aucune couche TVA/facturation créée. Micro-BNC : jamais de verdict de
+"sortie du régime", uniquement des faits datés et leur couverture ; le plafond proratisé d'une année
+de création est présenté comme une valeur de référence pour le mécanisme légal des années de
+référence, jamais un seuil de sortie immédiate. Arithmétique entière/`BigInt` exclusive (taux en
+points de base, prorata en jours) — `Math.round(a * b / c)` banni, remplacé par un arrondi "moitié
+vers le haut" testé aux bornes. Contrat `ResultatFiscal<T>` générique (jamais un `number` nu) :
+"calcule" seulement si aucune raison n'existe, y compris l'incomplétude de l'assiette elle-même.
+Projection fin d'année en trois blocs jamais fusionnés (encaissé réel / finalisé non encaissé
+restant, nouveau champ symétrique sur `chargerProjectionAnnuelle` / compromis en cours restant,
+réutilisé d'ADR-022 sans duplication). Nouvelle section "Vue {année}" sur `/fiscal` : cinq blocs
+(encaissé, à provisionner, seuils, à venir, ce qu'Atlas ne sait pas calculer et pourquoi), avec
+explication assiette + provenance sous chaque montant.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,
