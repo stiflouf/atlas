@@ -1,5 +1,5 @@
 import type { Bien } from "@/types/bien";
-import type { ActionMetier } from "@/types/action";
+import { deriverStatutTache, type Tache } from "@/types/tache";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { Offre } from "@/types/offre";
 import type { Compromis } from "@/types/compromis";
@@ -21,7 +21,7 @@ export type EvenementHistorique = { date: string; texte: string };
 // future-fetch n'est disponible ici (les comptes rendus, eux, sont réellement passés).
 export function deriverHistoriqueBien(
   bien: Bien,
-  actions: ActionMetier[],
+  taches: Tache[],
   comptesRendus: CompteRenduVisite[] = [],
   offres: Offre[] = [],
   compromis: Compromis[] = [],
@@ -43,10 +43,14 @@ export function deriverHistoriqueBien(
     evenements.push({ date: bien.compromisSigneLe, texte: "Compromis signé" });
   }
 
-  for (const action of actions) {
-    evenements.push({ date: action.creeLe, texte: `Action créée : ${action.titre}` });
-    if (action.statut === "termine" && action.termineLe) {
-      evenements.push({ date: action.termineLe, texte: `Action terminée : ${action.titre}` });
+  for (const tache of taches) {
+    evenements.push({ date: tache.creeLe, texte: `Tâche créée : ${tache.titre}` });
+    const statut = deriverStatutTache(tache);
+    if (statut === "terminee" && tache.termineeLe) {
+      evenements.push({ date: tache.termineeLe, texte: `Tâche terminée : ${tache.titre}` });
+    }
+    if (statut === "annulee" && tache.annuleeLe) {
+      evenements.push({ date: tache.annuleeLe, texte: `Tâche annulée : ${tache.titre}` });
     }
   }
 

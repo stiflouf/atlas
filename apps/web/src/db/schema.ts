@@ -133,33 +133,6 @@ export const acquereurs = pgTable(
   ]
 );
 
-// Actions métier réelles (relances, tâches, suivi de dossier). bienId/acquereurId restent des
-// colonnes text nullables sans FK, même principe que memoireContextuelle : une action peut
-// concerner un bien ou un acquéreur encore mocké (id non-UUID) tant que la bascule démo->réel
-// n'est pas complète pour ce catalogue-là, et peut aussi ne concerner ni l'un ni l'autre
-// (tâche générale).
-export const actions = pgTable(
-  "actions",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    titre: text("titre").notNull(),
-    contexte: text("contexte"),
-    type: text("type").notNull().default("autre"),
-    statut: text("statut").notNull().default("a_faire"),
-    priorite: text("priorite").notNull().default("normale"),
-    echeance: date("echeance"),
-    bienId: text("bien_id"),
-    acquereurId: text("acquereur_id"),
-    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
-    termineLe: timestamp("termine_le", { withTimezone: true }),
-  },
-  (table) => [
-    check("actions_type_check", sql`${table.type} IN ('appel','email','message','document','relance','autre')`),
-    check("actions_statut_check", sql`${table.statut} IN ('a_faire','termine')`),
-    check("actions_priorite_check", sql`${table.priorite} IN ('haute','normale','basse')`),
-  ]
-);
-
 // Notes libres sur un bien réel. Contrairement à actions/memoireContextuelle, bienId est une
 // vraie FK : une note ne peut être créée que depuis la fiche d'un bien déjà réel (pas de
 // formulaire équivalent sur un bien mocké), donc pas de cas mixte id-mock/id-réel à accommoder.
@@ -623,6 +596,11 @@ export const regleFiscale = pgTable(
 // pipeline (qualifieLe/estimationProposeeLe/mandatProposeLe/mandatSigneLe), indispensable pour que
 // de futures règles déterministes de relance (ADR-028+) mesurent un vrai silence vendeur.
 //
+// prochaineAction/prochaineActionLe (champs simples, ADR-027 point 7) ont été retirés par ADR-028 :
+// le rattachement propre bien/acquéreur/prospect vendeur des tâches est désormais porté par la
+// table `taches` (prospectVendeurId). Migration immédiate lors de l'introduction de `taches`,
+// aucune période de compatibilité, aucun champ de repli conservé ici.
+//
 // archiveLe (ADR-012) distinct de motifPerte/datePerte : perdu est un résultat commercial (entre
 // dans les statistiques de conversion), archiveLe est une gestion administrative de la fiche
 // (doublon, erreur de saisie) — jamais l'un pour l'autre. bienId : vraie FK (ADR-010, l'entité en
@@ -653,8 +631,6 @@ export const prospectsVendeurs = pgTable(
     bienId: uuid("bien_id").references(() => biens.id).unique(),
     motifPerte: text("motif_perte"),
     datePerte: date("date_perte"),
-    prochaineAction: text("prochaine_action"),
-    prochaineActionLe: date("prochaine_action_le"),
     dernierContactLe: timestamp("dernier_contact_le", { withTimezone: true }),
     archiveLe: timestamp("archive_le", { withTimezone: true }),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
@@ -726,6 +702,73 @@ export const remuneration = pgTable(
     check(
       "remuneration_montant_honoraires_positif_check",
       sql`${table.montantHonorairesTotalCentimes} IS NULL OR ${table.montantHonorairesTotalCentimes} > 0`
+    ),
+  ]
+);
+
+// Tâches métier réelles (ADR-028, remplace l'ancienne table `actions` — jamais une compatibilité
+// double-écriture, migration immédiate). Cibles dédiées, jamais un couple objetType/objetId
+// polymorphe sans FK : l'intégrité référentielle prime sur la généricité — sept FK nullables, une
+// par domaine réellement supporté aujourd'hui. Toutes ON DELETE CASCADE : aucune suppression
+// n'existe pour aucune de ces sept entités dans le codebase, mais une tâche n'a aucun sens
+// indépendamment de sa cible si celle-ci venait à disparaître (même rationale que
+// compromis.bienId/remuneration.compromisId). Une tâche sans rattachement (tâche générale) reste
+// explicitement autorisée : la contrainte ci-dessous impose "au plus une", jamais "exactement une".
+// Au niveau TypeScript/UI, `CibleTache` (src/types/tache.ts) expose une union {type,id} dérivée de
+// ces sept colonnes pour conserver une API générique sans renoncer à l'intégrité en base.
+//
+// statut jamais stocké : dérivé de termineeLe/annuleeLe à la lecture (deriverStatutTache,
+// src/types/tache.ts), même principe que biens.offreEnCoursLe/compromisSigneLe (ADR-014). Les deux
+// colonnes sont mutuellement exclusives par construction applicative (jamais une contrainte SQL,
+// portée par la Server Action — même séparation qu'offres.statut/compromis.statut).
+//
+// origine ('manuelle'/'automatique') + origineCode (identifiant machine STABLE destiné à de
+// futures règles automatiques — jamais du texte d'affichage, contrairement à `contexte`) préparent
+// une génération automatique de tâches (relances, ADR-029+) sans en implémenter la moindre règle
+// ici : aucune tâche 'automatique' n'est créée par le code actuel. Une future passe
+// d'automatisation devra traiter l'idempotence/déduplication des tâches qu'elle génère (ne pas
+// recréer une relance déjà ouverte pour la même cause) — non implémenté ici puisqu'aucune règle
+// automatique n'existe encore : `origineCode` est le champ prévu pour cela le moment venu, pas un
+// mécanisme construit par avance.
+export const taches = pgTable(
+  "taches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    titre: text("titre").notNull(),
+    contexte: text("contexte"),
+    type: text("type").notNull().default("autre"),
+    priorite: text("priorite").notNull().default("normale"),
+    echeance: date("echeance"),
+    origine: text("origine").notNull().default("manuelle"),
+    origineCode: text("origine_code"),
+    bienId: uuid("bien_id").references(() => biens.id, { onDelete: "cascade" }),
+    acquereurId: uuid("acquereur_id").references(() => acquereurs.id, { onDelete: "cascade" }),
+    prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id, { onDelete: "cascade" }),
+    visiteId: uuid("visite_id").references(() => comptesRendusVisite.id, { onDelete: "cascade" }),
+    offreId: uuid("offre_id").references(() => offres.id, { onDelete: "cascade" }),
+    compromisId: uuid("compromis_id").references(() => compromis.id, { onDelete: "cascade" }),
+    remunerationId: uuid("remuneration_id").references(() => remuneration.id, { onDelete: "cascade" }),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    termineeLe: timestamp("terminee_le", { withTimezone: true }),
+    annuleeLe: timestamp("annulee_le", { withTimezone: true }),
+  },
+  (table) => [
+    check("taches_type_check", sql`${table.type} IN ('appel','email','message','document','relance','autre')`),
+    check("taches_priorite_check", sql`${table.priorite} IN ('haute','normale','basse')`),
+    check("taches_origine_check", sql`${table.origine} IN ('manuelle','automatique')`),
+    // Au plus une cible : somme des sept indicatrices de présence <= 1 — jamais "exactement 1"
+    // (une tâche générale sans rattachement reste valide), jamais "au moins 1".
+    check(
+      "taches_une_seule_cible_check",
+      sql`(
+        (case when ${table.bienId} is not null then 1 else 0 end) +
+        (case when ${table.acquereurId} is not null then 1 else 0 end) +
+        (case when ${table.prospectVendeurId} is not null then 1 else 0 end) +
+        (case when ${table.visiteId} is not null then 1 else 0 end) +
+        (case when ${table.offreId} is not null then 1 else 0 end) +
+        (case when ${table.compromisId} is not null then 1 else 0 end) +
+        (case when ${table.remunerationId} is not null then 1 else 0 end)
+      ) <= 1`
     ),
   ]
 );

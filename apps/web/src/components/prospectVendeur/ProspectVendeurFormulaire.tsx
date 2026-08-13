@@ -124,29 +124,6 @@ export default function ProspectVendeurFormulaire({
         </div>
       </div>
 
-      <div className="border-t border-[#f1f5f9] pt-4 mt-2">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>Prochaine action</label>
-            <input
-              name="prochaineAction"
-              defaultValue={prospect?.prochaineAction ?? ""}
-              className={inputCls}
-              placeholder="ex. Rappeler pour confirmer le RDV"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Échéance</label>
-            <input
-              name="prochaineActionLe"
-              type="date"
-              defaultValue={prospect?.prochaineActionLe ?? ""}
-              className={inputCls}
-            />
-          </div>
-        </div>
-      </div>
-
       <button
         type="submit"
         className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"

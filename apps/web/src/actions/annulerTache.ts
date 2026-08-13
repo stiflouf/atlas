@@ -1,15 +1,15 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { terminerAction } from "@/lib/actionRepository";
+import { annulerTache } from "@/lib/tacheRepository";
 
-export async function terminerActionAction(formData: FormData): Promise<void> {
+export async function annulerTacheAction(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) {
-    throw new Error("Identifiant d'action manquant.");
+    throw new Error("Identifiant de tâche manquant.");
   }
 
-  await terminerAction(id);
+  await annulerTache(id);
 
   const redirectTo = String(formData.get("redirectTo") ?? "/");
   redirect(redirectTo.startsWith("/") ? redirectTo : "/");

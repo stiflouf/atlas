@@ -1,28 +1,36 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { creerActionAction } from "@/actions/creerAction";
+import { creerTacheAction } from "@/actions/creerTache";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
+import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
 
 const inputCls =
   "w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]";
 const labelCls = "text-[12px] font-medium text-[#64748b] mb-1 block";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
-// flag, les select bien/acquéreur figeraient la liste au moment du build.
+// flag, les select bien/acquéreur/prospect vendeur figeraient la liste au moment du build.
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams: Promise<{ bienId?: string; acquereurId?: string }> };
+type PageProps = { searchParams: Promise<{ bienId?: string; acquereurId?: string; prospectVendeurId?: string }> };
 
-export default async function NouvelleActionPage({ searchParams }: PageProps) {
+export default async function NouvelleTachePage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const [biens, clients] = await Promise.all([listerBiens(), listerClients()]);
+  const [biens, clients, prospects] = await Promise.all([
+    listerBiens(),
+    listerClients(),
+    listerProspectsVendeurs(),
+  ]);
 
-  // Préremplissage depuis une fiche bien/client (?bienId=/?acquereurId=) : uniquement si l'id
-  // correspond réellement à une entrée chargée, sinon le select reste simplement sur "Aucun" —
-  // pas d'erreur pour un id obsolète ou mal formé.
+  // Préremplissage depuis une fiche (?bienId=/?acquereurId=/?prospectVendeurId=) : uniquement si
+  // l'id correspond réellement à une entrée chargée, sinon le select reste sur "Aucun" — pas
+  // d'erreur pour un id obsolète ou mal formé.
   const bienIdPreselectionne = biens.some((b) => b.id === params.bienId) ? params.bienId : "";
   const acquereurIdPreselectionne = clients.some((c) => c.id === params.acquereurId) ? params.acquereurId : "";
+  const prospectVendeurIdPreselectionne = prospects.some((p) => p.id === params.prospectVendeurId)
+    ? params.prospectVendeurId
+    : "";
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -35,10 +43,10 @@ export default async function NouvelleActionPage({ searchParams }: PageProps) {
       </Link>
 
       <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-6">
-        Nouvelle action
+        Nouvelle tâche
       </h1>
 
-      <form action={creerActionAction} className="flex flex-col gap-4">
+      <form action={creerTacheAction} className="flex flex-col gap-4">
         <div>
           <label className={labelCls}>Titre *</label>
           <input
@@ -78,15 +86,15 @@ export default async function NouvelleActionPage({ searchParams }: PageProps) {
 
         <div>
           <label className={labelCls}>Échéance</label>
-          <input name="echeance" type="date" className={inputCls} />
+          <input name="echeance" type="date" className={inputCls} placeholder="Sans échéance" />
         </div>
 
         <div className="border-t border-[#f1f5f9] pt-4 mt-2">
           <p className="text-[12px] text-[#94a3b8] mb-3">
-            Une action peut concerner un bien, un acquéreur, les deux, ou ni l'un ni l'autre
-            pour une tâche générale.
+            Une tâche peut être rattachée à un bien, un acquéreur ou un prospect vendeur — une seule
+            cible à la fois — ou à aucun des trois pour une tâche générale.
           </p>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className={labelCls}>Bien</label>
               <select name="bienId" defaultValue={bienIdPreselectionne} className={inputCls}>
@@ -109,6 +117,18 @@ export default async function NouvelleActionPage({ searchParams }: PageProps) {
                 ))}
               </select>
             </div>
+            <div>
+              <label className={labelCls}>Prospect vendeur</label>
+              <select name="prospectVendeurId" defaultValue={prospectVendeurIdPreselectionne} className={inputCls}>
+                <option value="">Aucun</option>
+                {prospects.map((prospect) => (
+                  <option key={prospect.id} value={prospect.id}>
+                    {prospect.prenom ? `${prospect.prenom} ` : ""}
+                    {prospect.nom}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -116,7 +136,7 @@ export default async function NouvelleActionPage({ searchParams }: PageProps) {
           type="submit"
           className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
         >
-          Créer l'action
+          Créer la tâche
         </button>
       </form>
     </div>

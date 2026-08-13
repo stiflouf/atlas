@@ -31,8 +31,6 @@ async function creerProspectDeTest(suffixe: string) {
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-    prochaineAction: undefined,
-    prochaineActionLe: undefined,
   });
   idsProspectsCrees.push(prospect.id);
   return prospect;

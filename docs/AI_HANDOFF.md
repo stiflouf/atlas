@@ -10,9 +10,10 @@ valeurs.
 ## État actuel du projet
 
 Produit mono-conseiller en construction active, 100% TypeScript/Next.js (`apps/web`), PostgreSQL
-via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-11 : biens, acquéreurs,
-actions, notes de bien, comptes rendus de visite, mémoire de matching Google Calendar, historique
-dérivé du bien. Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
+via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-13 : biens, acquéreurs,
+prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), notes de bien, comptes
+rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien. Détail complet :
+`docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
 
@@ -30,7 +31,7 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
 - **Aucun multi-utilisateur, aucune session, aucune authentification conseiller** — produit
   mono-conseiller assumé (ADR-006). `connexions_google` est une table à une seule ligne
   (`id = 'default'`). Le nom affiché dans `Sidebar.tsx` est codé en dur.
-- **Jamais de mélange mocks/données réelles** — chaque catalogue (biens, acquéreurs, actions)
+- **Jamais de mélange mocks/données réelles** — chaque catalogue (biens, acquéreurs, tâches)
   bascule intégralement sur Postgres dès qu'une ligne réelle existe pour lui ; ne jamais écrire de
   code qui suppose qu'un mock et une donnée réelle puissent coexister dans une même liste
   retournée à l'UI. Détail : `docs/DEMO_VS_REAL.md`.
@@ -58,11 +59,19 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   `prospects_vendeurs` ne modélise ni personne physique/personne morale distincte de l'opportunité,
   ni indivision, ni propriétaire multi-biens (`bienId` porte une contrainte `UNIQUE`). Aucune
   automatisation (relance, e-mail, campagne), aucune intégration Google Calendar pour le rendez-vous
-  d'estimation, aucune modification de la table `actions` ou de `actionPriority.ts` — `actions`
-  reste un domaine séparé tant qu'un futur ADR-028 (moteur de tâches) n'a pas tranché le
-  rattachement. Ne jamais supposer qu'un prospect vendeur peut être créé avec un statut choisi
+  d'estimation. Ne jamais supposer qu'un prospect vendeur peut être créé avec un statut choisi
   directement : il est toujours dérivé (`deriverStatutProspectVendeur`) d'une cascade de jalons
   datés, jamais stocké.
+- **Moteur de tâches (ADR-028) sans automatisation ni idempotence** — `taches` remplace l'ancienne
+  table `actions` : sept FK dédiées nullables (`bienId`/`acquereurId`/`prospectVendeurId`/
+  `visiteId`/`offreId`/`compromisId`/`remunerationId`), au plus une renseignée (`CHECK` en base),
+  jamais un couple `objetType`/`objetId` polymorphe. `origine`/`origineCode` préparent une future
+  génération automatique de tâches (aucune règle actuelle n'en crée) — ne jamais supposer qu'un
+  mécanisme de déduplication/idempotence existe déjà pour cette future automatisation, il n'est pas
+  construit. `StatutTache` inclut `'en_attente'`, **réservé et jamais dérivé** aujourd'hui — ne pas
+  le confondre avec l'absence d'échéance ("Sans échéance" en UI). Terminer une tâche liée à un
+  prospect vendeur n'enregistre une vraie interaction (ADR-027) que si le conseiller coche
+  explicitement la case prévue — jamais automatique, jamais pour les autres cibles.
 
 ## Conventions impératives
 
@@ -100,7 +109,7 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/matching/index.ts` | Point d'entrée du moteur de matching rendez-vous → bien/acquéreur |
 | `src/lib/contexteRepository.ts` | Mémoire persistée du matching (validation humaine > cache > moteur) |
 | `src/lib/google/agendaSource.ts` | `getAgendaSemaine()` — bascule Google Calendar / mocks |
-| `src/lib/actionPriority.ts` | Moteur de priorité des actions, réutilisé partout |
+| `src/lib/tachePriority.ts` | Moteur de priorité des tâches, réutilisé partout |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
@@ -132,8 +141,9 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
 - Un cookie navigateur pour un secret Google (abandonné au profit du chiffrement en base, ADR-006).
 - Une case à cocher HTML brute pour un booléen optionnel métier (toujours un sélecteur à 3 états —
   voir ADR-009).
-- Une table générique "événements" polymorphe pour unifier notes/actions/comptes rendus — écarté
-  explicitement à plusieurs reprises (ADR-006, ADR-011) au profit d'une table dédiée par concept.
+- Une table générique "événements" polymorphe pour unifier notes/tâches/comptes rendus, ou un
+  couple `objetType`/`objetId` sans FK pour `taches` — écarté explicitement à plusieurs reprises
+  (ADR-006, ADR-011, ADR-028) au profit d'une table dédiée par concept / de FK nullables dédiées.
 - Un résumé ou une extraction automatique depuis un champ de texte libre, même "juste pour
   l'affichage" (ADR-008).
 

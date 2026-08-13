@@ -2,12 +2,12 @@
 
 Ce document explique précisément quand Atlas utilise des données mockées, quand il bascule sur
 PostgreSQL, et pourquoi les deux ne sont **jamais** mélangés. Comportement vérifié directement
-dans `src/lib/bienRepository.ts`, `clientRepository.ts`, `actionRepository.ts`,
+dans `src/lib/bienRepository.ts`, `clientRepository.ts`, `tacheRepository.ts`,
 `noteBienRepository.ts`, `compteRenduVisiteRepository.ts`, `google/agendaSource.ts`.
 
 ## Le principe : bascule stricte, jamais de fusion
 
-Pour chaque catalogue qui a un équivalent mock (biens, acquéreurs, actions), la règle est
+Pour chaque catalogue qui a un équivalent mock (biens, acquéreurs, tâches), la règle est
 identique :
 
 > S'il existe **au moins une** ligne réelle dans la table Postgres correspondante, la fonction de
@@ -15,7 +15,7 @@ identique :
 > en complément, même partiellement.
 
 ```ts
-// Patron exact, répété dans bienRepository.ts / clientRepository.ts / actionRepository.ts.
+// Patron exact, répété dans bienRepository.ts / clientRepository.ts / tacheRepository.ts.
 // Pour biens/acquereurs, un second axe orthogonal s'ajoute depuis ADR-012 : la bascule démo/réel
 // (length > 0, TOUTES lignes confondues) est indépendante du filtre actif/archivé appliqué au
 // résultat retourné — voir "Archivage" plus bas.
@@ -46,8 +46,12 @@ uniquement par le contenu de sa propre table :
 |---|---|---|
 | Biens | `listerBiens()` / `getBienById()` | ≥ 1 ligne dans `biens` |
 | Acquéreurs | `listerClients()` / `getClientById()` | ≥ 1 ligne dans `acquereurs` |
-| Actions | `listerActions()` | ≥ 1 ligne dans `actions` |
+| Tâches | `listerTaches()` | ≥ 1 ligne dans `taches` |
 | Agenda (Google Calendar) | `getAgendaSemaine()` | Une connexion existe dans `connexions_google` **et** l'appel à l'API Google réussit (axe totalement indépendant des trois précédents) |
+
+`getTachesPourProspectVendeur()` fait exception à ce patron : un prospect vendeur n'a **aucun**
+équivalent mock (ADR-027), donc cette fonction interroge directement Postgres (id non-UUID →
+tableau vide), sans jamais passer par `listerTaches()` ni son repli mock.
 
 Il est donc parfaitement normal, en cours de développement ou de démonstration, d'avoir des biens
 réels alors que les acquéreurs sont encore mockés, ou l'inverse.
@@ -72,11 +76,11 @@ Dès l'instant où le **premier** bien réel est créé (`creerBienAction`, via 
   biens réels : un rendez-vous dont le lieu correspond à un ancien bien mocké ne matchera plus
   rien.
 
-Le même raisonnement s'applique indépendamment aux acquéreurs et aux actions.
+Le même raisonnement s'applique indépendamment aux acquéreurs et aux tâches.
 
 ## Comportement des identifiants mockés
 
-Les ids mockés sont des chaînes arbitraires (`"bien-001"`, `"client-003"`, `"act-002"`), jamais
+Les ids mockés sont des chaînes arbitraires (`"bien-001"`, `"client-003"`, `"tache-002"`), jamais
 des UUID. Toute fonction de repository qui accepte un id en paramètre pour une requête filtrée
 commence par une garde :
 
@@ -87,9 +91,9 @@ if (!UUID_REGEX.test(id)) return [];  // ou undefined, selon la fonction
 
 Cette garde évite une erreur de cast Postgres (`invalid input syntax for type uuid`) si un id
 mocké est passé à une requête sur une colonne `uuid` — elle ne réintroduit **jamais** de contenu
-mocké en réponse, elle retourne simplement "rien trouvé". Exemple concret : `terminerAction()`
-sur un id d'action mockée (`"act-001"`) est un no-op silencieux, pas une erreur — cliquer
-"Terminer" sur une action de démonstration ne fait rien d'observable, plutôt que de planter.
+mocké en réponse, elle retourne simplement "rien trouvé". Exemple concret : `terminerTache()`
+sur un id de tâche mockée (`"tache-001"`) est un no-op silencieux, pas une erreur — cliquer
+"Terminer" sur une tâche de démonstration ne fait rien d'observable, plutôt que de planter.
 
 ## Archivage : un axe orthogonal à la bascule démo/réel
 

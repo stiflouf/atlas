@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0015`, vérifiées le 2026-08-13). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0017`, vérifiées le 2026-08-13). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -27,8 +27,13 @@ erDiagram
     dossier_fiscal ||--o{ historique_amorcage : "dossier_fiscal_id (FK)"
     dossier_fiscal ||--o{ rfr_foyer : "dossier_fiscal_id (FK)"
     acquereurs ||--o{ comptes_rendus_visite : "acquereur_id (FK)"
-    biens ||..o{ actions : "bien_id (text, sans FK)"
-    acquereurs ||..o{ actions : "acquereur_id (text, sans FK)"
+    biens |o--o{ taches : "bien_id (FK, nullable)"
+    acquereurs |o--o{ taches : "acquereur_id (FK, nullable)"
+    prospects_vendeurs |o--o{ taches : "prospect_vendeur_id (FK, nullable)"
+    comptes_rendus_visite |o--o{ taches : "visite_id (FK, nullable)"
+    offres |o--o{ taches : "offre_id (FK, nullable)"
+    compromis |o--o{ taches : "compromis_id (FK, nullable)"
+    remuneration |o--o{ taches : "remuneration_id (FK, nullable)"
     biens ||..o{ memoire_contextuelle : "bien_id (text, sans FK)"
     acquereurs ||..o{ memoire_contextuelle : "client_id (text, sans FK)"
 
@@ -99,18 +104,25 @@ erDiagram
         timestamptz modifie_le
         timestamptz archive_le "nullable, ADR-012"
     }
-    actions {
+    taches {
         uuid id PK
         text titre
         text contexte "nullable"
         text type
-        text statut
         text priorite
         date echeance "nullable"
-        text bien_id "nullable, pas de FK"
-        text acquereur_id "nullable, pas de FK"
+        text origine
+        text origine_code "nullable"
+        uuid bien_id FK "nullable, au plus une cible (CHECK)"
+        uuid acquereur_id FK "nullable"
+        uuid prospect_vendeur_id FK "nullable"
+        uuid visite_id FK "nullable"
+        uuid offre_id FK "nullable"
+        uuid compromis_id FK "nullable"
+        uuid remuneration_id FK "nullable"
         timestamptz cree_le
-        timestamptz termine_le "nullable"
+        timestamptz terminee_le "nullable"
+        timestamptz annulee_le "nullable"
     }
     notes_bien {
         uuid id PK
@@ -304,8 +316,8 @@ optionnelles nullables sans défaut (ADR-009).
 - `statut_mandat IN ('actif','suspendu','expire')`
 - `exterieur IS NULL OR exterieur IN ('aucun','balcon','terrasse','jardin')`
 
-Relation fonctionnelle : référencé par FK réelle depuis `notes_bien` et `comptes_rendus_visite` ;
-référencé par id texte (sans FK) depuis `actions` et `memoire_contextuelle` (ADR-010).
+Relation fonctionnelle : référencé par FK réelle depuis `notes_bien`, `comptes_rendus_visite` et
+`taches` (ADR-028) ; référencé par id texte (sans FK) depuis `memoire_contextuelle` (ADR-010).
 `listerBiens()` exclut les lignes où `archive_le` est non NULL ; `getBienById()` les résout
 toujours — voir `docs/DEMO_VS_REAL.md`. `offre_en_cours_le`/`compromis_signe_le` ne filtrent rien :
 aucun statut commercial stocké, dérivé en lecture par `deriverStatutCommercial()`
@@ -336,14 +348,15 @@ que `biens`.
 `listerClients()` exclut les lignes où `archive_le` est non NULL ; `getClientById()` les résout
 toujours — voir `docs/DEMO_VS_REAL.md`.
 
-Relation fonctionnelle : référencé par FK réelle depuis `comptes_rendus_visite` ; par id texte
-(sans FK) depuis `actions` et `memoire_contextuelle`.
+Relation fonctionnelle : référencé par FK réelle depuis `comptes_rendus_visite` et `taches`
+(ADR-028) ; par id texte (sans FK) depuis `memoire_contextuelle`.
 
-## `actions`
+## `taches`
 
-**Rôle** : actions métier réelles (relances, tâches, suivi de dossier) — remplace les anciens
-mocks séparés "relances"/"tâches à préparer". Peut concerner un bien, un acquéreur, les deux, ou
-aucun des deux (tâche générale).
+**Rôle** : moteur de tâches générique (ADR-028) — remplace l'ancienne table `actions`. Contrairement
+à `actions`, l'intégrité référentielle est réelle : sept colonnes FK nullables dédiées (une par
+cible réellement supportée), jamais un couple `objetType`/`objetId` polymorphe (voir ADR-010, qui ne
+couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (tâche générale).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
@@ -351,20 +364,41 @@ aucun des deux (tâche générale).
 | `titre` | text | non | |
 | `contexte` | text | oui | |
 | `type` | text | non | défaut `"autre"`, `CHECK` |
-| `statut` | text | non | défaut `"a_faire"`, `CHECK` |
 | `priorite` | text | non | défaut `"normale"`, `CHECK` |
-| `echeance` | date | oui | |
-| `bien_id` / `acquereur_id` | text | oui | **pas de FK** — voir ADR-010 |
+| `echeance` | date | oui | absence affichée "Sans échéance", jamais confondue avec `en_attente` |
+| `origine` | text | non | défaut `"manuelle"`, `CHECK IN ('manuelle','automatique')` — `'automatique'` réservé, aucun code actuel ne l'utilise |
+| `origine_code` | text | oui | identifiant machine stable pour de futures règles automatiques — jamais du texte d'affichage |
+| `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | oui | |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE CASCADE`) | oui | |
+| `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, `ON DELETE CASCADE`) | oui | |
+| `visite_id` | uuid (FK → `comptes_rendus_visite.id`, `ON DELETE CASCADE`) | oui | |
+| `offre_id` | uuid (FK → `offres.id`, `ON DELETE CASCADE`) | oui | |
+| `compromis_id` | uuid (FK → `compromis.id`, `ON DELETE CASCADE`) | oui | |
+| `remuneration_id` | uuid (FK → `remuneration.id`, `ON DELETE CASCADE`) | oui | |
 | `cree_le` | timestamptz | non | |
-| `termine_le` | timestamptz | oui | posé atomiquement avec `statut="termine"` par `terminerAction()` |
+| `terminee_le` | timestamptz | oui | posée atomiquement (gel concurrent) par `terminerTache()` |
+| `annulee_le` | timestamptz | oui | posée atomiquement (gel concurrent) par `annulerTache()`, mutuellement exclusive avec `terminee_le` |
 
 **Contraintes `CHECK`** :
 - `type IN ('appel','email','message','document','relance','autre')`
-- `statut IN ('a_faire','termine')`
 - `priorite IN ('haute','normale','basse')`
+- `origine IN ('manuelle','automatique')`
+- `taches_une_seule_cible_check` — somme des sept indicatrices de présence (`bien_id` non NULL, etc.)
+  `<= 1` : au plus une cible à la fois, jamais "exactement une" (une tâche générale reste valide),
+  jamais "au moins une".
 
-Relation fonctionnelle : priorisée par `lib/actionPriority.ts` (voir `docs/BUSINESS_RULES.md`) ;
-alimente l'historique dérivé du bien (`lib/historiqueBien.ts`) via `creee_le`/`termine_le`.
+Statut jamais stocké : dérivé de `terminee_le`/`annulee_le` à la lecture (`deriverStatutTache`,
+`src/types/tache.ts`), même principe que `biens.offre_en_cours_le`/`compromis_signe_le` (ADR-014).
+`StatutTache` inclut une valeur `'en_attente'` **réservée**, jamais dérivée aujourd'hui — préparée
+pour une future vraie notion métier d'attente (client/notaire/document), à ne pas confondre avec
+l'absence d'échéance.
+
+Relation fonctionnelle : priorisée par `lib/tachePriority.ts` (voir `docs/BUSINESS_RULES.md`) ;
+alimente l'historique dérivé du bien (`lib/historiqueBien.ts`) via `cree_le`/`terminee_le`/
+`annulee_le`. Terminer une tâche rattachée à un `prospect_vendeur_id` peut optionnellement
+enregistrer dans le même geste une vraie interaction via le mécanisme ADR-027
+(`notes_prospect_vendeur` + `dernier_contact_le`) — jamais automatique, jamais pour les autres
+cibles.
 
 ## `notes_bien`
 
@@ -787,7 +821,6 @@ modèle personne physique/personne morale ni de séparation contact ↔ opportun
 | `bien_id` | uuid (FK → `biens.id`, `UNIQUE`) | **oui** | posé atomiquement avec `mandat_signe_le` |
 | `motif_perte` | text | **oui** | `CHECK` vocabulaire dédié (`MotifPerteProspectVendeur`, distinct de `MotifPerte`) |
 | `date_perte` | date | **oui** | posée atomiquement avec `motif_perte` |
-| `prochaine_action` / `prochaine_action_le` | text / date | **oui** | champs simples, pas un moteur de tâches |
 | `dernier_contact_le` | timestamptz | **oui** | uniquement de vraies interactions, jamais un jalon de pipeline seul |
 | `archive_le` | timestamptz | **oui** | gestion administrative (ADR-012), distincte de `motif_perte` |
 | `cree_le` / `modifie_le` | timestamptz | non | |
@@ -853,7 +886,7 @@ ci-dessus (ADR-024/025) et par `dashboardRepository.chargerRemuneration()`/
   fiscal absent supprime les alertes fiscales dépendantes (jamais les commerciales), une couverture
   insuffisante peut absorber le run-rate insuffisant (jamais les règles futures hypothétiques).
 - `priorite.ts` — score = poids du niveau (dominant) + poids fixe par type + tie-break sur
-  l'identifiant déterministe de l'alerte, même principe que `actionPriority.ts`. Aucun score n'est
+  l'identifiant déterministe de l'alerte, même principe que `tachePriority.ts`. Aucun score n'est
   jamais exposé à l'UI.
 - `moteur.ts` — `produireAlertes` : compose règles → déduplication → priorité.
 
@@ -877,6 +910,8 @@ ci-dessus (ADR-024/025) et par `dashboardRepository.chargerRemuneration()`/
 | `0013_thin_warbird.sql` | `remuneration` |
 | `0014_lame_deadpool.sql` | `dossier_fiscal`, `profil_fiscal`, `historique_amorcage`, `rfr_foyer`, `regle_fiscale` |
 | `0015_seed_referentiel_fiscal_2026.sql` | seed `regle_fiscale` (aucune nouvelle table) |
+| `0016_cute_doorman.sql` | `prospects_vendeurs`, `notes_prospect_vendeur` |
+| `0017_sudden_surge.sql` | `taches` (remplace `actions`, supprimée) ; migration des données `actions`→`taches` et `prospects_vendeurs.prochaine_action*`→`taches` ; `DROP TABLE actions` ; `DROP COLUMN` des deux anciens champs simples sur `prospects_vendeurs` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

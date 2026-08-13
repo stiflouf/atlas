@@ -9,7 +9,7 @@ import { getPreparationPourBienEtClient } from "@/data/preparations";
 import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
-import { getActionsPourBien, getActionsPourAcquereur } from "@/lib/actionRepository";
+import { getTachesPourBien, getTachesPourAcquereur } from "@/lib/tacheRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import {
@@ -118,17 +118,17 @@ export default async function PreparerVisite({ params }: PageProps) {
   if (!bien || !acquereur) notFound();
 
   // Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (comptes
-  // rendus, notes, actions), jamais interprété ni résumé. N'alimente ni pointsAttention ni
+  // rendus, notes, tâches), jamais interprété ni résumé. N'alimente ni pointsAttention ni
   // pointsForts.
-  const [actionsDuBien, actionsDeLAcquereur, notesDuBien, comptesRendusDuBien] = await Promise.all([
-    getActionsPourBien(bien.id),
-    getActionsPourAcquereur(acquereur.id),
+  const [tachesDuBien, tachesDeLAcquereur, notesDuBien, comptesRendusDuBien] = await Promise.all([
+    getTachesPourBien(bien.id),
+    getTachesPourAcquereur(acquereur.id),
     listerNotesPourBien(bien.id),
     listerComptesRendusPourBien(bien.id),
   ]);
   const notesRecentes = notesDuBien.slice(0, 3);
-  const actionsEnCours = selectionnerActionsEnCours(actionsDuBien, actionsDeLAcquereur);
-  const historiqueRecent = selectionnerHistoriqueRecent(actionsDuBien);
+  const tachesEnCours = selectionnerActionsEnCours(tachesDuBien, tachesDeLAcquereur);
+  const historiqueRecent = selectionnerHistoriqueRecent(tachesDuBien);
   const comptesRendusRecents = selectionnerComptesRendusRecents(comptesRendusDuBien, acquereur.id);
   const dateVisiteParDefaut = rdv.date ?? formatDateISO(new Date());
 
@@ -288,7 +288,7 @@ export default async function PreparerVisite({ params }: PageProps) {
           depuis cette section (le formulaire d'enregistrement est plus bas, séparé). */}
       {(comptesRendusRecents.length > 0 ||
         notesRecentes.length > 0 ||
-        actionsEnCours.length > 0 ||
+        tachesEnCours.length > 0 ||
         historiqueRecent.length > 0) && (
         <section className="mb-8">
           <SectionTitle>Mémoire du dossier</SectionTitle>
@@ -359,22 +359,22 @@ export default async function PreparerVisite({ params }: PageProps) {
             </div>
           )}
 
-          {actionsEnCours.length > 0 && (
+          {tachesEnCours.length > 0 && (
             <div className="mb-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
-                Actions en cours
+                Tâches en cours
               </p>
               <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9]">
-                {actionsEnCours.map((action) => (
-                  <div key={action.id} className="py-3">
+                {tachesEnCours.map((tache) => (
+                  <div key={tache.id} className="py-3">
                     <div className="flex items-center gap-2">
-                      <Badge variant={action.origine === "bien" ? "accent" : "default"}>
-                        {action.origine === "bien" ? "Bien" : "Acquéreur"}
+                      <Badge variant={tache.provenance === "bien" ? "accent" : "default"}>
+                        {tache.provenance === "bien" ? "Bien" : "Acquéreur"}
                       </Badge>
-                      <p className="text-[14px] text-[#0f172a]">{action.titre}</p>
+                      <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
                     </div>
-                    {action.contexte && (
-                      <p className="text-[13px] text-[#94a3b8] mt-0.5">{action.contexte}</p>
+                    {tache.contexte && (
+                      <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>
                     )}
                   </div>
                 ))}
@@ -487,9 +487,9 @@ export default async function PreparerVisite({ params }: PageProps) {
         elementsARaconter={elementsARaconter}
       />
 
-      {/* Compte rendu après la visite — jamais de génération automatique d'action ; la
-          "prochaine étape" reste un texte libre, à transformer manuellement en action si besoin
-          via le bouton "+ Ajouter une action" existant sur la fiche du bien. */}
+      {/* Compte rendu après la visite — jamais de génération automatique de tâche ; la
+          "prochaine étape" reste un texte libre, à transformer manuellement en tâche si besoin
+          via le bouton "+ Ajouter une tâche" existant sur la fiche du bien. */}
       <section className="mb-8 border-t border-[#f1f5f9] pt-6">
         <SectionTitle>Compte rendu de la visite</SectionTitle>
         {bien.archiveLe || acquereur.archiveLe ? (

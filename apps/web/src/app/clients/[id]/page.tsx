@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, User } from "lucide-react";
 import Badge from "@/components/ui/Badge";
-import ActionItem from "@/components/aujourd-hui/ActionItem";
+import TacheItem from "@/components/aujourd-hui/TacheItem";
 import { getClientById } from "@/lib/clientRepository";
-import { getActionsPourAcquereur } from "@/lib/actionRepository";
+import { getTachesPourAcquereur } from "@/lib/tacheRepository";
+import { deriverStatutTache } from "@/types/tache";
 import { archiverAcquereurAction, desarchiverAcquereurAction } from "@/actions/archivageAcquereur";
 import { listerOffresPourAcquereur } from "@/lib/offreRepository";
 import { listerCompromisPourAcquereur } from "@/lib/compromisRepository";
@@ -33,15 +34,15 @@ function formatDate(iso: string): string {
 type PageProps = { params: Promise<{ id: string }> };
 
 // Fiche volontairement minimale — pas de tabs, pas de dossier ni d'historique (hors périmètre) :
-// juste l'identité, le CTA de création d'action, et les actions déjà liées à cet acquéreur.
+// juste l'identité, le CTA de création de tâche, et les tâches déjà liées à cet acquéreur.
 export default async function FicheClient({ params }: PageProps) {
   const { id } = await params;
   const client = await getClientById(id);
   if (!client) notFound();
 
-  const actions = await getActionsPourAcquereur(client.id);
-  const actionsAFaire = actions.filter((a) => a.statut === "a_faire");
-  const actionsTerminees = actions.filter((a) => a.statut === "termine");
+  const taches = await getTachesPourAcquereur(client.id);
+  const tachesAFaire = taches.filter((t) => deriverStatutTache(t) === "a_faire");
+  const tachesTerminees = taches.filter((t) => deriverStatutTache(t) === "terminee");
 
   const offres = (await listerOffresPourAcquereur(client.id)).sort((a, b) =>
     a.dateOffre < b.dateOffre ? 1 : -1
@@ -89,10 +90,10 @@ export default async function FicheClient({ params }: PageProps) {
         <div className="flex flex-wrap gap-3 mt-4">
           {!client.archiveLe && (
             <Link
-              href={`/actions/nouveau?acquereurId=${client.id}`}
+              href={`/taches/nouveau?acquereurId=${client.id}`}
               className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
             >
-              + Ajouter une action
+              + Ajouter une tâche
             </Link>
           )}
           {UUID_REGEX.test(client.id) && (
@@ -168,28 +169,28 @@ export default async function FicheClient({ params }: PageProps) {
       </section>
 
       <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Actions</p>
-        {actionsAFaire.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">Aucune action en cours.</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Tâches</p>
+        {tachesAFaire.length === 0 ? (
+          <p className="text-[14px] text-[#94a3b8]">Aucune tâche en cours.</p>
         ) : (
           <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] px-4 divide-y divide-[#f1f5f9]">
-            {actionsAFaire.map((action) => (
-              <ActionItem key={action.id} action={action} redirectTo={`/clients/${client.id}`} />
+            {tachesAFaire.map((tache) => (
+              <TacheItem key={tache.id} tache={tache} redirectTo={`/clients/${client.id}`} />
             ))}
           </div>
         )}
       </section>
 
-      {actionsTerminees.length > 0 && (
+      {tachesTerminees.length > 0 && (
         <section>
           <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Terminées</p>
           <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
-            {actionsTerminees.map((action) => (
-              <div key={action.id} className="flex items-start gap-3 py-3">
+            {tachesTerminees.map((tache) => (
+              <div key={tache.id} className="flex items-start gap-3 py-3">
                 <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-[#f1f5f9] border-[#e2e8f0]" />
                 <div>
-                  <p className="text-[14px] text-[#0f172a]">{action.titre}</p>
-                  {action.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{action.contexte}</p>}
+                  <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
+                  {tache.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>}
                 </div>
               </div>
             ))}

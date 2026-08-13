@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
-import type { ActionMetier } from "@/types/action";
+import type { Tache } from "@/types/tache";
 import type { NoteBien } from "@/types/noteBien";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { DocumentBien } from "@/types/documentBien";
@@ -42,14 +42,14 @@ function dossierTest(): DossierBien {
   };
 }
 
-const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Actions"];
+const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Tâches"];
 
 describe("BienTabs", () => {
-  it("n'affiche que Contexte, Notes, Visites, Documents, Offres, Compromis et Actions pour un bien réel sans dossier", () => {
+  it("n'affiche que Contexte, Notes, Visites, Documents, Offres, Compromis et Tâches pour un bien réel sans dossier", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
-        actions={[] as ActionMetier[]}
+        taches={[] as Tache[]}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}
@@ -64,7 +64,7 @@ describe("BienTabs", () => {
     expect(html).toContain("Documents");
     expect(html).toContain("Offres");
     expect(html).toContain("Compromis");
-    expect(html).toContain("Actions");
+    expect(html).toContain("Tâches");
     expect(html).not.toContain("Historique");
   });
 
@@ -73,7 +73,7 @@ describe("BienTabs", () => {
       <BienTabs
         bien={bienTest()}
         dossier={dossierTest()}
-        actions={[] as ActionMetier[]}
+        taches={[] as Tache[]}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}
@@ -89,25 +89,25 @@ describe("BienTabs", () => {
     expect(html).not.toContain("Compromis");
   });
 
-  it("affiche l'onglet Historique pour un bien réel dès qu'un événement dérivé existe (creeLe ou actions)", () => {
+  it("affiche l'onglet Historique pour un bien réel dès qu'un événement dérivé existe (creeLe ou tâches)", () => {
     // Le contenu de l'onglet (texte des événements) n'est visible qu'après un clic (état client
     // "active"), non exécuté par renderToStaticMarkup : la génération des textes eux-mêmes est
     // couverte par lib/historiqueBien.test.ts. Ici on vérifie seulement que l'onglet apparaît.
-    const actions: ActionMetier[] = [
+    const taches: Tache[] = [
       {
-        id: "action-1",
+        id: "tache-1",
         titre: "Envoyer les diagnostics",
-        statut: "termine",
         priorite: "normale",
         type: "document",
+        origine: "manuelle",
         creeLe: "2026-08-01T10:00:00.000Z",
-        termineLe: "2026-08-05T14:00:00.000Z",
+        termineeLe: "2026-08-05T14:00:00.000Z",
       },
     ];
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest({ creeLe: "2026-01-01T09:00:00.000Z" })}
-        actions={actions}
+        taches={taches}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}
@@ -119,7 +119,7 @@ describe("BienTabs", () => {
     expect(html).toContain("Historique");
   });
 
-  it("affiche l'onglet Historique pour un bien réel dès qu'un compte rendu de visite existe, sans creeLe ni action", () => {
+  it("affiche l'onglet Historique pour un bien réel dès qu'un compte rendu de visite existe, sans creeLe ni tâche", () => {
     const comptesRendus: CompteRenduVisite[] = [
       {
         id: "cr-1",
@@ -134,7 +134,7 @@ describe("BienTabs", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest({ creeLe: undefined })}
-        actions={[] as ActionMetier[]}
+        taches={[] as Tache[]}
         notes={[] as NoteBien[]}
         comptesRendus={comptesRendus}
         documents={[] as DocumentBien[]}
@@ -150,7 +150,7 @@ describe("BienTabs", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
-        actions={[] as ActionMetier[]}
+        taches={[] as Tache[]}
         notes={[] as NoteBien[]}
         comptesRendus={[] as CompteRenduVisite[]}
         documents={[] as DocumentBien[]}

@@ -1,17 +1,18 @@
 import Link from "next/link";
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
-import ActionItem from "@/components/aujourd-hui/ActionItem";
+import TacheItem from "@/components/aujourd-hui/TacheItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
 import AlerteCard from "@/components/alertes/AlerteCard";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
-import { listerActions } from "@/lib/actionRepository";
+import { listerTaches } from "@/lib/tacheRepository";
+import { listerProspectsVendeursArchives } from "@/lib/prospectVendeurRepository";
 import type { Bien } from "@/types/bien";
-import type { ActionMetier } from "@/types/action";
+import { deriverStatutTache, type Tache } from "@/types/tache";
 import { formatDateISO, formatDateRelative, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
 import { rendezVousAVenir, statutRendezVous } from "@/lib/rendezVous";
-import { actionPrioritaire, raisonAction, scoreAction } from "@/lib/actionPriority";
+import { tachePrioritaire, raisonTache, scoreTache } from "@/lib/tachePriority";
 import { getAgendaSemaine } from "@/lib/google/agendaSource";
 import { construireContexte } from "@/lib/matching";
 import { resoudreContextesPersistes } from "@/lib/contexteRepository";
@@ -58,10 +59,11 @@ export default async function AujourdHui() {
   // getAgendaSemaine() garantit déjà une fenêtre de 7 jours : pas besoin de la recalculer ici.
   const rdvAVenir = rendezVousAVenir(rendezVous, aujourdHuiISO);
 
-  const [biens, clients, actions, contexteAlertes] = await Promise.all([
+  const [biens, clients, taches, prospectsVendeursArchives, contexteAlertes] = await Promise.all([
     listerBiens(),
     listerClients(),
-    listerActions(),
+    listerTaches(),
+    listerProspectsVendeursArchives(),
     chargerContexteAlertes(),
   ]);
   const alertes = produireAlertes(contexteAlertes);
@@ -91,36 +93,44 @@ export default async function AujourdHui() {
     dateLabel: formatDateRelative(rdv.date as string, aujourdHuiISO),
   }));
 
-  // Dérivé directement des actions réelles (ou mock démo) + des biens réels : plus de dépendance
+  // Dérivé directement des tâches réelles (ou mock démo) + des biens réels : plus de dépendance
   // à data/dossier.ts pour cette section. Un bien introuvable (id mocké obsolète, ou bien
   // archivé — biens/clients ne contiennent déjà plus les archivés, ADR-012) est simplement
-  // ignoré plutôt que de faire échouer la page.
+  // ignoré plutôt que de faire échouer la page. Une tâche 'terminee' OU 'annulee' (ADR-028) est
+  // exclue des flux actifs — seule 'a_faire' compte ici.
   const biensParId = new Map(biens.map((bien) => [bien.id, bien]));
   const acquereursParId = new Map(clients.map((client) => [client.id, client]));
-  const actionsActives = actions.filter((a) => a.statut === "a_faire");
+  const prospectsVendeursArchivesIds = new Set(prospectsVendeursArchives.map((p) => p.id));
+  const tachesActives = taches.filter((t) => deriverStatutTache(t) === "a_faire");
 
-  const actionsParBien = new Map<string, ActionMetier[]>();
-  for (const action of actionsActives) {
-    if (!action.bienId) continue;
-    const liste = actionsParBien.get(action.bienId) ?? [];
-    liste.push(action);
-    actionsParBien.set(action.bienId, liste);
+  const tachesParBien = new Map<string, Tache[]>();
+  for (const tache of tachesActives) {
+    if (!tache.bienId) continue;
+    const liste = tachesParBien.get(tache.bienId) ?? [];
+    liste.push(tache);
+    tachesParBien.set(tache.bienId, liste);
   }
 
-  const dossiersAttention: { bien: Bien; action: ActionMetier }[] = [];
-  for (const [bienId, actionsDuBien] of actionsParBien) {
+  const dossiersAttention: { bien: Bien; tache: Tache }[] = [];
+  for (const [bienId, tachesDuBien] of tachesParBien) {
     const bien = biensParId.get(bienId);
-    const action = actionPrioritaire(actionsDuBien, maintenant);
-    if (bien && action) dossiersAttention.push({ bien, action });
+    const tache = tachePrioritaire(tachesDuBien, maintenant);
+    if (bien && tache) dossiersAttention.push({ bien, tache });
   }
-  dossiersAttention.sort((a, b) => scoreAction(b.action, maintenant) - scoreAction(a.action, maintenant));
+  dossiersAttention.sort((a, b) => scoreTache(b.tache, maintenant) - scoreTache(a.tache, maintenant));
 
-  // Actions actives sans bien rattaché (générales ou liées uniquement à un acquéreur). Une
-  // action liée à un acquéreur archivé (introuvable dans acquereursParId, ADR-012) est exclue
-  // des flux actifs, comme les actions d'un bien archivé le sont déjà via biensParId ci-dessus.
-  const autresActions = actionsActives
-    .filter((a) => !a.bienId && (!a.acquereurId || acquereursParId.has(a.acquereurId)))
-    .sort((a, b) => scoreAction(b, maintenant) - scoreAction(a, maintenant));
+  // Tâches actives sans bien rattaché (générales, ou liées uniquement à un acquéreur/prospect
+  // vendeur). Une tâche liée à un acquéreur archivé (introuvable dans acquereursParId, ADR-012)
+  // ou à un prospect vendeur archivé (ADR-027) est exclue des flux actifs, comme les tâches d'un
+  // bien archivé le sont déjà via biensParId ci-dessus.
+  const autresTaches = tachesActives
+    .filter(
+      (t) =>
+        !t.bienId &&
+        (!t.acquereurId || acquereursParId.has(t.acquereurId)) &&
+        (!t.prospectVendeurId || !prospectsVendeursArchivesIds.has(t.prospectVendeurId))
+    )
+    .sort((a, b) => scoreTache(b, maintenant) - scoreTache(a, maintenant));
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -135,10 +145,10 @@ export default async function AujourdHui() {
           </p>
         </div>
         <Link
-          href="/actions/nouveau"
+          href="/taches/nouveau"
           className="shrink-0 mt-1 text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
         >
-          + Nouvelle action
+          + Nouvelle tâche
         </Link>
       </div>
 
@@ -229,28 +239,28 @@ export default async function AujourdHui() {
         </section>
       )}
 
-      {/* Dossiers nécessitant une action */}
+      {/* Dossiers nécessitant une tâche */}
       {dossiersAttention.length > 0 && (
         <section className="mb-8">
           <SectionTitle>Dossiers nécessitant une action</SectionTitle>
           <div className="flex flex-col gap-2">
-            {dossiersAttention.map(({ bien, action }) => (
-              <DossierActionCard key={bien.id} bien={bien} raison={raisonAction(action)} />
+            {dossiersAttention.map(({ bien, tache }) => (
+              <DossierActionCard key={bien.id} bien={bien} raison={raisonTache(tache)} />
             ))}
           </div>
         </section>
       )}
 
-      {/* Autres actions (sans bien rattaché) */}
-      {autresActions.length > 0 && (
+      {/* Autres tâches (sans bien rattaché) */}
+      {autresTaches.length > 0 && (
         <section>
           <SectionTitle>
-            {autresActions.length} autre{autresActions.length > 1 ? "s" : ""} action
-            {autresActions.length > 1 ? "s" : ""}
+            {autresTaches.length} autre{autresTaches.length > 1 ? "s" : ""} tâche
+            {autresTaches.length > 1 ? "s" : ""}
           </SectionTitle>
           <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] px-4 divide-y divide-[#f1f5f9]">
-            {autresActions.map((action) => (
-              <ActionItem key={action.id} action={action} />
+            {autresTaches.map((tache) => (
+              <TacheItem key={tache.id} tache={tache} />
             ))}
           </div>
         </section>

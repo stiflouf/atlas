@@ -97,55 +97,76 @@ flowchart TD
 Détail complet de cette bascule (pourquoi elle est stricte, ce qui devient inaccessible côté
 mocks) : `docs/DEMO_VS_REAL.md`.
 
-## 3. Création d'une action → priorisation → terminaison
+## 3. Création d'une tâche → priorisation → terminaison (ADR-028)
 
 ```mermaid
 flowchart TD
-    A["/actions/nouveau
+    A["/taches/nouveau
     (éventuellement préempli
-    ?bienId=... ou ?acquereurId=...)"] --> B["creerActionAction
-    actions/creerAction.ts"]
-    B --> C["creerAction()
-    lib/actionRepository.ts"]
-    C --> D[("INSERT actions
-    statut = a_faire")]
-    D --> E{"bien_id / acquereur_id
-    renseigné ?"}
+    ?bienId=... / ?acquereurId=...
+    / ?prospectVendeurId=...)"] --> B["creerTacheAction
+    actions/creerTache.ts"]
+    B --> C["creerTache()
+    lib/tacheRepository.ts"]
+    C --> D[("INSERT taches
+    au plus une FK cible renseignée
+    (CHECK taches_une_seule_cible_check)")]
+    D --> E{"Cible renseignée ?"}
     E -- bien_id --> F["Accueil : section
     'Dossiers nécessitant une action'
-    (regroupées par bien, actionPrioritaire)"]
-    E -- acquereur_id ou aucun --> G["Accueil : section
-    'Autres actions'
-    (triées par scoreAction)"]
+    (regroupées par bien, tachePrioritaire)"]
+    E -- acquereur_id / prospect_vendeur_id / aucune --> G["Accueil : section
+    'Autres tâches'
+    (triées par scoreTache)"]
     E -- bien_id --> H["Fiche bien (/biens/[id])
-    onglet Actions"]
+    onglet Tâches"]
+    E -- acquereur_id --> H2["Fiche client (/clients/[id])"]
+    E -- prospect_vendeur_id --> H3["Fiche prospect vendeur
+    (/prospects-vendeurs/[id])"]
     F --> I["Conseiller clique
     'Terminer'"]
     G --> I
     H --> I
-    I --> J["terminerActionAction
-    actions/terminerAction.ts"]
-    J --> K["terminerAction()
-    UPDATE statut=termine,
-    termine_le=now() — même écriture SQL"]
-    K --> L["Disparaît des listes actives
-    (scoreAction = -Infinity)"]
+    H2 --> I
+    H3 --> I
+    I --> J["terminerTacheAction
+    actions/terminerTache.ts"]
+    J --> K["terminerTache()
+    UPDATE terminee_le=now()
+    (gel concurrent : WHERE terminee_le
+    IS NULL AND annulee_le IS NULL)"]
+    K --> K2{"prospect_vendeur_id renseigné
+    ET case 'interaction' cochée ?"}
+    K2 -- oui --> K3["ajouterNoteProspectVendeur()
+    (ADR-027, opt-in explicite,
+    écriture séquentielle distincte)"]
+    K2 -- non --> L
+    K3 --> L["Disparaît des listes actives
+    (scoreTache = -Infinity)"]
     L --> M["Apparaît dans l'historique dérivé
     du bien si bien_id renseigné"]
 ```
 
 ### Détail étape par étape
 
-1. **Création** — `/actions/nouveau` peut être atteint directement, ou préempli depuis la fiche
-   bien/acquéreur (`?bienId=`/`?acquereurId=`) via un lien "+ Ajouter une action" — le conseiller
-   reste libre de modifier l'association avant de soumettre.
-2. **Association** — une action peut concerner un bien, un acquéreur, les deux, ou aucun des
-   deux ; jamais de génération automatique depuis un compte rendu de visite ou une note.
-3. **Priorisation** — `actionPriority.ts` (`docs/BUSINESS_RULES.md#priorité-des-actions`) trie
-   toutes les vues (accueil, fiche bien, Mémoire du dossier) avec le même moteur.
-4. **Terminaison** — `terminerAction()` pose `statut` et `termine_le` dans la **même** requête SQL
-   (jamais deux écritures séparées, pour ne jamais avoir une action "terminée" sans date ou
-   l'inverse). Un id non-UUID (action mockée) est silencieusement ignoré plutôt que de provoquer
-   une erreur de cast Postgres.
-5. **Historique** — une action terminée liée à un bien apparaît dans l'historique dérivé
-   (`"Action terminée : {titre}"`), aux côtés des comptes rendus de visite du même bien.
+1. **Création** — `/taches/nouveau` peut être atteint directement, ou préempli depuis une fiche
+   bien/acquéreur/prospect vendeur (`?bienId=`/`?acquereurId=`/`?prospectVendeurId=`) via un lien
+   "+ Ajouter une tâche" — le conseiller reste libre de modifier l'association avant de soumettre.
+2. **Association** — une tâche concerne au plus une cible parmi bien, acquéreur, prospect vendeur,
+   visite, offre, compromis, rémunération (sept FK dédiées, `CHECK` en base) — ou aucune ; jamais
+   de génération automatique depuis un compte rendu de visite ou une note.
+3. **Priorisation** — `tachePriority.ts` (`docs/BUSINESS_RULES.md#tâches-adr-028`) trie toutes les
+   vues (accueil, fiches, Mémoire du dossier) avec le même moteur.
+4. **Terminaison** — `terminerTache()` pose `terminee_le` par une écriture atomique protégée
+   (`WHERE terminee_le IS NULL AND annulee_le IS NULL`) — un second appel concurrent ne touche
+   aucune ligne et retourne `undefined`, jamais un écrasement silencieux. Un id non-UUID (tâche
+   mockée) est silencieusement ignoré plutôt que de provoquer une erreur de cast Postgres.
+   Terminer une tâche **ne signifie jamais** silencieusement "contact réalisé" : pour une tâche
+   rattachée à un prospect vendeur, `terminerTacheAction` peut *optionnellement*, dans le même
+   geste, enregistrer une vraie interaction (mécanisme ADR-027) si le conseiller coche
+   explicitement la case prévue à cet effet — jamais automatique, jamais pour les autres cibles.
+5. **Annulation** — `annulerTache()` (`annulerTacheAction`) pose `annulee_le` avec le même patron
+   de gel concurrent, mutuellement exclusif avec `terminee_le`.
+6. **Historique** — une tâche terminée ou annulée liée à un bien apparaît dans l'historique dérivé
+   (`"Tâche terminée : {titre}"` / `"Tâche annulée : {titre}"`), aux côtés des comptes rendus de
+   visite du même bien.

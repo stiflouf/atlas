@@ -42,7 +42,7 @@ une direction, pas un composant déployé.
 src/
 ├── app/            Pages (Server Components) et routes API — App Router
 │   ├── api/auth/google/   3 route handlers OAuth (login, callback, logout)
-│   ├── biens/, clients/, actions/, visites/   pages par domaine
+│   ├── biens/, clients/, taches/, visites/, prospects-vendeurs/   pages par domaine
 │   └── page.tsx    Accueil ("Aujourd'hui")
 ├── actions/        Server Actions ("use server") — minces, voir ADR-007
 ├── lib/            Logique applicative : repositories (IO Postgres), moteurs de règles
@@ -84,7 +84,7 @@ même page, qui refait `listerNotesPourBien()` et affiche la note immédiatement
 ## Mocks ↔ données réelles — règle fondamentale
 
 **Un mock et une donnée réelle ne sont jamais mélangés dans une même liste retournée à l'UI.**
-Chaque repository qui a un équivalent mock (`listerBiens`, `listerClients`, `listerActions`)
+Chaque repository qui a un équivalent mock (`listerBiens`, `listerClients`, `listerTaches`)
 applique la même règle : s'il existe au moins une ligne réelle en base pour ce catalogue, **toutes**
 les lignes mockées sont ignorées pour ce catalogue — jamais une fusion. Le détail complet (quand
 la bascule se déclenche, ce qui reste mock-only) est dans `docs/DEMO_VS_REAL.md`.
@@ -124,7 +124,7 @@ l'acquéreur sont résolus avec suffisamment de confiance :
 - enrichissements géographiques réels (transports, écoles, commerces, patrimoine, marché — voir
   ci-dessous), uniquement si le géocodage de l'adresse est jugé fiable ;
 - la **mémoire du dossier** : comptes rendus de visite précédents avec ce même acquéreur sur ce
-  même bien, notes récentes du bien, actions ouvertes (bien + acquéreur fusionnées), historique
+  même bien, notes récentes du bien, tâches ouvertes (bien + acquéreur fusionnées), historique
   récent — uniquement des faits déjà enregistrés par le conseiller, jamais résumés ;
 - un formulaire de compte rendu après la visite, qui alimente à son tour l'historique du bien.
 

@@ -37,8 +37,8 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Notes** (`notes_bien`) et **comptes rendus de visite** (`comptes_rendus_visite`) sont
   append-only par choix (ADR-011) : aucune Server Action de modification ou de suppression.
   Corriger une erreur de saisie nécessite une intervention directe en base.
-- **Actions** peuvent être créées et terminées, mais pas éditées (titre, priorité, échéance
-  figés après création) ni supprimées.
+- **Tâches** (ADR-028) peuvent être créées, terminées ou annulées, mais pas éditées (titre,
+  priorité, échéance, cible figés après création) ni supprimées.
 - **Biens et acquéreurs** ont une page d'édition (`/biens/[id]/modifier`, `/clients/[id]/modifier`,
   réservée aux entités réelles — un bien/acquéreur mocké n'a pas de bouton "Modifier"), mais
   **aucune suppression physique** n'existe pour l'un ni pour l'autre. `modifie_le` est rafraîchi
@@ -74,13 +74,13 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 ## Statut commercial du bien
 
 - **Historique dérivé non append-only pour "Offre en cours"/"Compromis signé"** (ADR-014),
-  contrairement à toutes les autres sources de l'historique dérivé (bien créé, actions, visites).
+  contrairement à toutes les autres sources de l'historique dérivé (bien créé, tâches, visites).
   Ces deux événements sont recalculés en direct depuis `offreEnCoursLe`/`compromisSigneLe` :
   **annuler un jalon efface rétroactivement l'événement correspondant de l'historique affiché**,
   comme s'il n'avait jamais existé — pas de journal immuable des transitions passées. Conséquence
   assumée du choix "timestamps de jalons plutôt qu'un enum" pour rester minimal (voir ADR-014).
 - **Aucune donnée réelle ne permet de dériver automatiquement ces jalons** (aucune notion d'offre
-  ou de compromis structurée dans `comptes_rendus_visite`/`actions`) — geste manuel du conseiller
+  ou de compromis structurée dans `comptes_rendus_visite`/`taches`) — geste manuel du conseiller
   exclusivement, jamais automatisé.
 - **Pas de "dernière activité" réelle** pour le bandeau "État du dossier" d'un bien réel,
   contrairement au mock (`dossier.derniereActivite`, valeur statique) — seul le badge de statut
@@ -329,20 +329,38 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   propriétaires sur un même bien (indivision) ou un même propriétaire avec plusieurs biens en
   cours nécessiteront une séparation contact ↔ opportunité dans une passe ultérieure, non construite
   ici. `bienId` porte une contrainte `UNIQUE` qui matérialise cette limite en base.
-- **`prochaineAction`/`prochaineActionLe` restent deux champs simples** : pas de file, pas de
-  statut, pas de récurrence, aucune modification de la table `actions` existante ni de
-  `actionPriority.ts`. Un futur ADR-028 tranchera le rattachement propre des tâches/relances aux
-  différents objets métier (bien, acquéreur, prospect vendeur).
 - **Aucune intégration Google Calendar pour le rendez-vous d'estimation** : `rdvEstimationPrevuLe`/
   `rdvEstimationRealiseLe` restent de simples champs sur `prospects_vendeurs`, non reliés à
   `memoireContextuelle` (dont `typeMetier` inclut déjà `'estimation'`, prêt pour une passe
   ultérieure) ni à la logique de matching (`src/lib/matching.ts`).
 - **Aucune automatisation** : ni relance automatique, ni génération d'e-mail personnalisé, ni
   campagne, ni post de communication à la signature — le modèle pose les signaux bruts
-  (`dernierContactLe`, `prochaineActionLe`) qu'une future passe pourra lire, rien n'est codé ici.
+  (`dernierContactLe`, tâches liées via `prospectVendeurId`, ADR-028) qu'une future passe pourra
+  lire, rien n'est codé ici.
 - **Aucune révocation de mandat déjà signé** : une fois `mandatSigneLe`/`bienId` posés, le
   prospect reste dans cet état terminal — pas de chemin pour "annuler" une signature déjà
   enregistrée (le bien créé, lui, reste géré normalement via ses propres statuts).
+
+## Tâches (ADR-028)
+
+- **Aucune génération automatique de tâche aujourd'hui** : `origine`/`origineCode` (identifiant
+  machine stable) préparent une future automatisation (relances, ADR-029+) mais aucune règle
+  actuelle ne crée de tâche `'automatique'` — toute tâche existante est `'manuelle'`.
+- **Idempotence/déduplication non implémentées** : une future passe d'automatisation générant des
+  tâches (ex. une relance après N jours de silence) devra explicitement gérer la déduplication (ne
+  pas recréer une tâche déjà ouverte pour la même cause) — `origineCode` est le champ prévu pour
+  retrouver une tâche déjà générée, mais aucun mécanisme de vérification n'existe encore.
+- **`en_attente` (`StatutTache`) est réservé et inutilisé** : prévu pour une future vraie notion
+  métier d'attente (client/notaire/document) — `deriverStatutTache()` ne le dérive jamais
+  aujourd'hui, une tâche ouverte sans échéance reste `a_faire`.
+- **Terminer une tâche liée à un prospect vendeur n'enregistre une interaction que si le
+  conseiller le demande explicitement** (case à cocher opt-in, `terminerTacheAction`) — omettre de
+  cocher ne signale jamais un contact réalisé, y compris pour une tâche de type `appel`/`relance`.
+  Aucun mécanisme équivalent n'existe pour les tâches liées à un bien, un acquéreur, une visite,
+  une offre, un compromis ou une rémunération — ces domaines n'ont pas encore de journal
+  d'interactions structuré.
+- **Aucune récurrence** : une tâche ne se recrée jamais automatiquement après avoir été terminée
+  ou annulée.
 
 ## Limites du moteur de matching
 
@@ -379,7 +397,7 @@ Produit mono-conseiller assumé (ADR-006) : aucune table utilisateur, aucune ses
 notion de "qui a fait quoi". `connexions_google` et le nom affiché dans `Sidebar.tsx`
 ("Steven Gausset", codé en dur) le confirment. Introduire un second conseiller nécessiterait une
 refonte de plusieurs tables (au minimum `connexions_google`, `memoire_contextuelle`, et
-potentiellement `actions`/`notes_bien`/`comptes_rendus_visite` pour savoir qui a écrit quoi).
+potentiellement `taches`/`notes_bien`/`comptes_rendus_visite` pour savoir qui a écrit quoi).
 
 ## Dette technique identifiée dans le code
 
@@ -388,15 +406,15 @@ potentiellement `actions`/`notes_bien`/`comptes_rendus_visite` pour savoir qui a
   bien corse n'est traité (commentaire explicite dans le code).
 - **API DVF (`lib/marche/dvfClient.ts`)** hébergée en préprod par le Cerema (`apidf-preprod.cerema.fr`)
   — testée fiable en usage réel mais sans garantie de disponibilité annoncée par le fournisseur.
-- **Aucune pagination** sur les listes actuelles (biens, acquéreurs, actions, notes, comptes
+- **Aucune pagination** sur les listes actuelles (biens, acquéreurs, tâches, notes, comptes
   rendus) — chaque liste est chargée intégralement. Non problématique au volume de données actuel.
-- **`NavItems.tsx`** (navigation principale) ne référence ni `/actions/nouveau` ni
+- **`NavItems.tsx`** (navigation principale) ne référence ni `/taches/nouveau` ni
   `/visites/[id]/preparer` — accès uniquement contextuel (liens depuis une fiche ou l'accueil),
   cohérent avec leur usage mais à garder en tête si un futur audit UX cherche ces routes dans le
   menu.
 - **Tests** : mélange de tests purs (aucune dépendance externe) et de tests d'intégration qui
   exigent un Postgres local démarré et migré (`compteRenduVisiteRepository.test.ts`,
-  `noteBienRepository.test.ts`, `actionRepository.test.ts`, `bienRepository.test.ts`,
+  `noteBienRepository.test.ts`, `tacheRepository.test.ts`, `bienRepository.test.ts`,
   `clientRepository.test.ts`) — aucune configuration de CI n'a été trouvée dans le repo pour les
   exécuter automatiquement. **À confirmer** si une CI existe hors
   du repo (GitHub Actions, etc.).

@@ -30,12 +30,6 @@ export function parseProspectVendeurFormData(formData: FormData): NouveauProspec
     throw new Error("Type de bien invalide.");
   }
 
-  const prochaineAction = parseTexteOptionnel(formData.get("prochaineAction"));
-  const prochaineActionLe = parseTexteOptionnel(formData.get("prochaineActionLe"));
-  if (prochaineActionLe !== undefined && prochaineAction === undefined) {
-    throw new Error("Une échéance de prochaine action suppose un libellé de prochaine action.");
-  }
-
   return {
     nom,
     prenom: parseTexteOptionnel(formData.get("prenom")),
@@ -48,8 +42,6 @@ export function parseProspectVendeurFormData(formData: FormData): NouveauProspec
     ville: parseTexteOptionnel(formData.get("ville")),
     codePostal: parseTexteOptionnel(formData.get("codePostal")),
     typeBien: typeBienBrut as TypeBien | undefined,
-    prochaineAction,
-    prochaineActionLe,
   };
 }
 

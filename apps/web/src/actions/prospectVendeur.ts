@@ -14,7 +14,6 @@ import {
   marquerProspectVendeurPerdu,
   archiverProspectVendeur,
   desarchiverProspectVendeur,
-  mettreAJourProchaineActionProspectVendeur,
 } from "@/lib/prospectVendeurRepository";
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { parseProspectVendeurFormData, parseSignatureMandatFormData } from "@/lib/prospectVendeurFormulaire";
@@ -184,17 +183,3 @@ export async function ajouterNoteProspectVendeurAction(formData: FormData): Prom
   redirect(`/prospects-vendeurs/${id}`);
 }
 
-export async function mettreAJourProchaineActionAction(formData: FormData): Promise<void> {
-  const id = String(formData.get("id") ?? "");
-  if (!id) notFound();
-
-  const prochaineAction = parseDateOptionnelle(formData.get("prochaineAction"));
-  const prochaineActionLe = parseDateOptionnelle(formData.get("prochaineActionLe"));
-  if (prochaineActionLe !== undefined && prochaineAction === undefined) {
-    throw new Error("Une échéance de prochaine action suppose un libellé de prochaine action.");
-  }
-
-  const prospect = await mettreAJourProchaineActionProspectVendeur(id, prochaineAction, prochaineActionLe);
-  if (!prospect) notFound();
-  redirect(`/prospects-vendeurs/${id}`);
-}

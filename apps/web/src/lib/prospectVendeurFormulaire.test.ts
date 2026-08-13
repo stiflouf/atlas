@@ -41,12 +41,6 @@ describe("parseProspectVendeurFormData", () => {
     expect(resultat.adresseBienPotentiel).toBe("12 rue de la Paix");
     expect(resultat.secteurBienPotentiel).toBe("Quartier centre-ville");
   });
-
-  it("rejette une échéance de prochaine action sans libellé", () => {
-    expect(() => parseProspectVendeurFormData(formData({ nom: "Dupont", prochaineActionLe: "2026-09-01" }))).toThrow(
-      "suppose un libellé"
-    );
-  });
 });
 
 describe("parseSignatureMandatFormData — correction n° 6, aucune valeur inventée", () => {

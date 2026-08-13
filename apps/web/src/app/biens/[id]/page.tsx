@@ -6,7 +6,7 @@ import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
-import { getActionsPourBien } from "@/lib/actionRepository";
+import { getTachesPourBien } from "@/lib/tacheRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
@@ -14,7 +14,7 @@ import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerLiensPourBien } from "@/lib/offreVisiteRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerRemunerationsPourBien } from "@/lib/remunerationRepository";
-import { actionPrioritaire, raisonAction } from "@/lib/actionPriority";
+import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { rendezVousDuJour } from "@/data/agenda";
 import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
 import {
@@ -56,7 +56,7 @@ export default async function FicheBien({ params }: PageProps) {
   if (!bien) notFound();
 
   const dossier = getDossierByBienId(bien.id);
-  const actions = await getActionsPourBien(bien.id);
+  const taches = await getTachesPourBien(bien.id);
   const notes = await listerNotesPourBien(bien.id);
   const comptesRendus = await listerComptesRendusPourBien(bien.id);
   const documents = await listerDocumentsPourBien(bien.id);
@@ -74,7 +74,7 @@ export default async function FicheBien({ params }: PageProps) {
   ];
   const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
   const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
-  const actionPrincipale = actionPrioritaire(actions);
+  const tachePrincipale = tachePrioritaire(taches);
   const statutCommercial = deriverStatutCommercial(bien, compromis);
   const prochaineVisite = rendezVousDuJour.find(
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
@@ -136,8 +136,8 @@ export default async function FicheBien({ params }: PageProps) {
                 Dernière activité le {formatDate(dossier.derniereActivite)}
               </span>
             </div>
-            {actionPrincipale && (
-              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonAction(actionPrincipale)}</p>
+            {tachePrincipale && (
+              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
             )}
           </div>
         ) : (
@@ -147,8 +147,8 @@ export default async function FicheBien({ params }: PageProps) {
                 {LABEL_STATUT_COMMERCIAL[statutCommercial]}
               </Badge>
             </div>
-            {actionPrincipale && (
-              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonAction(actionPrincipale)}</p>
+            {tachePrincipale && (
+              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
             )}
             {UUID_REGEX.test(bien.id) && !bien.archiveLe && (
               <div className="flex flex-wrap gap-3 mt-3">
@@ -200,10 +200,10 @@ export default async function FicheBien({ params }: PageProps) {
           )}
           {!bien.archiveLe && (
             <Link
-              href={`/actions/nouveau?bienId=${bien.id}`}
+              href={`/taches/nouveau?bienId=${bien.id}`}
               className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
             >
-              + Ajouter une action
+              + Ajouter une tâche
             </Link>
           )}
           {UUID_REGEX.test(bien.id) && (
@@ -228,12 +228,12 @@ export default async function FicheBien({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Onglets — Contexte, Notes, Visites, Documents et Actions sont tous réels (voir BienTabs,
+      {/* Onglets — Contexte, Notes, Visites, Documents et Tâches sont tous réels (voir BienTabs,
           aucun DossierBien artificiel fabriqué ici). */}
       <BienTabs
         bien={bien}
         dossier={dossier}
-        actions={actions}
+        taches={taches}
         notes={notes}
         comptesRendus={comptesRendus}
         documents={documents}

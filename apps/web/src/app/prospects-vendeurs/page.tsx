@@ -9,9 +9,12 @@ import {
   listerProspectsVendeursConvertis,
   listerProspectsVendeursArchives,
 } from "@/lib/prospectVendeurRepository";
+import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
+import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { deriverStatutProspectVendeur, LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
 import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
+import type { Tache } from "@/types/tache";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx).
 export const dynamic = "force-dynamic";
@@ -29,12 +32,18 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// Échéances dépassées et proches en premier (tri ascendant simple), aucune échéance en dernier.
-function comparerParEcheance(a: ProspectVendeur, b: ProspectVendeur): number {
-  if (!a.prochaineActionLe && !b.prochaineActionLe) return 0;
-  if (!a.prochaineActionLe) return 1;
-  if (!b.prochaineActionLe) return -1;
-  return a.prochaineActionLe < b.prochaineActionLe ? -1 : a.prochaineActionLe > b.prochaineActionLe ? 1 : 0;
+// Échéances dépassées et proches en premier (tri ascendant simple), aucune échéance en dernier —
+// basé sur l'échéance de la tâche la plus prioritaire de chaque prospect (ADR-028, remplace
+// l'ancien champ simple prochaineActionLe).
+function comparerParEcheance(tachesParProspect: Map<string, Tache[]>) {
+  return (a: ProspectVendeur, b: ProspectVendeur): number => {
+    const echeanceA = tachePrioritaire(tachesParProspect.get(a.id) ?? [])?.echeance;
+    const echeanceB = tachePrioritaire(tachesParProspect.get(b.id) ?? [])?.echeance;
+    if (!echeanceA && !echeanceB) return 0;
+    if (!echeanceA) return 1;
+    if (!echeanceB) return -1;
+    return echeanceA < echeanceB ? -1 : echeanceA > echeanceB ? 1 : 0;
+  };
 }
 
 type PageProps = { searchParams: Promise<{ vue?: string }> };
@@ -51,7 +60,10 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
         ? listerProspectsVendeursArchives()
         : listerProspectsVendeurs());
 
-  if (vue === "en_cours") prospects.sort(comparerParEcheance);
+  const listesTaches = await Promise.all(prospects.map((p) => getTachesPourProspectVendeur(p.id)));
+  const tachesParProspect = new Map<string, Tache[]>(prospects.map((p, i) => [p.id, listesTaches[i]]));
+
+  if (vue === "en_cours") prospects.sort(comparerParEcheance(tachesParProspect));
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -105,6 +117,7 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
             {prospects.map((prospect) => {
               const statut = deriverStatutProspectVendeur(prospect);
               const localisation = prospect.ville ?? prospect.secteurBienPotentiel ?? prospect.adresseBienPotentiel;
+              const tachePrincipale = tachePrioritaire(tachesParProspect.get(prospect.id) ?? []);
               return (
                 <Link key={prospect.id} href={`/prospects-vendeurs/${prospect.id}`}>
                   <Card className="hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow duration-150">
@@ -122,10 +135,10 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
                           {prospect.origineLead && <Badge variant="muted">{LABEL_ORIGINE_LEAD[prospect.origineLead]}</Badge>}
                           {localisation && <span className="text-[13px] text-[#64748b]">{localisation}</span>}
                         </div>
-                        {prospect.prochaineAction && (
+                        {tachePrincipale && (
                           <p className="text-[12px] text-[#94a3b8] mt-1.5">
-                            {prospect.prochaineAction}
-                            {prospect.prochaineActionLe && ` — ${formatDate(prospect.prochaineActionLe)}`}
+                            {raisonTache(tachePrincipale)}
+                            {tachePrincipale.echeance && ` — ${formatDate(tachePrincipale.echeance)}`}
                           </p>
                         )}
                       </div>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
-import type { ActionMetier } from "@/types/action";
+import { LABEL_ECHEANCE_ABSENTE, deriverStatutTache, type Tache } from "@/types/tache";
 import type { NoteBien } from "@/types/noteBien";
 import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
@@ -18,7 +18,8 @@ import {
   type Remuneration,
 } from "@/types/remuneration";
 import { rendezVousDuJour } from "@/data/agenda";
-import { terminerActionAction } from "@/actions/terminerAction";
+import { terminerTacheAction } from "@/actions/terminerTache";
+import { annulerTacheAction } from "@/actions/annulerTache";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
 import { ajouterDocumentBienAction } from "@/actions/ajouterDocumentBien";
 import { ajouterOffreAction, changerStatutOffreAction } from "@/actions/offre";
@@ -52,7 +53,7 @@ function formatPrix(montant: number): string {
   );
 }
 
-type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "offres" | "compromis" | "actions";
+type Tab = "contexte" | "historique" | "notes" | "visites" | "documents" | "offres" | "compromis" | "taches";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -61,7 +62,7 @@ function formatDate(iso: string): string {
 export default function BienTabs({
   bien,
   dossier,
-  actions,
+  taches,
   notes,
   comptesRendus,
   documents,
@@ -74,7 +75,7 @@ export default function BienTabs({
 }: {
   bien: Bien;
   dossier?: DossierBien;
-  actions: ActionMetier[];
+  taches: Tache[];
   notes: NoteBien[];
   comptesRendus: CompteRenduVisite[];
   documents: DocumentBien[];
@@ -100,15 +101,15 @@ export default function BienTabs({
     remunerationParCompromis.set(r.compromisId, r);
   }
 
-  // Contexte, Actions, Notes, Visites et Documents reposent tous sur des données réelles (bien,
-  // actionRepository, noteBienRepository, compteRenduVisiteRepository, documentBienRepository),
+  // Contexte, Tâches, Notes, Visites et Documents reposent tous sur des données réelles (bien,
+  // tacheRepository, noteBienRepository, compteRenduVisiteRepository, documentBienRepository),
   // toujours disponibles — Notes, Visites et Documents restent affichés même vides, c'est
   // justement là que le conseiller ajoute sa première entrée. Historique, lui, est dérivé de
-  // faits réels (bien.creeLe, action.creeLe/termineLe, comptes rendus de visite) quand aucun
+  // faits réels (bien.creeLe, tache.creeLe/termineeLe, comptes rendus de visite) quand aucun
   // dossier mock n'existe.
   const evenementsHistorique: EvenementHistorique[] = dossier
     ? dossier.historique
-    : deriverHistoriqueBien(bien, actions, comptesRendus, offres, compromis, remunerations);
+    : deriverHistoriqueBien(bien, taches, comptesRendus, offres, compromis, remunerations);
 
   const TABS: { id: Tab; label: string }[] = [
     { id: "contexte", label: "Contexte" },
@@ -120,7 +121,7 @@ export default function BienTabs({
     // uniquement.
     ...(!dossier ? ([{ id: "offres", label: "Offres" }] as const) : []),
     ...(!dossier ? ([{ id: "compromis", label: "Compromis" }] as const) : []),
-    { id: "actions", label: "Actions" },
+    { id: "taches", label: "Tâches" },
   ];
 
   const visitesAVenir = rendezVousDuJour.filter((rdv) => rdv.bien?.id === bien.id);
@@ -948,32 +949,51 @@ export default function BienTabs({
         </div>
       )}
 
-      {active === "actions" && (
+      {active === "taches" && (
         <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
-          {actions.length === 0 ? (
-            <p className="text-[14px] text-[#94a3b8] py-3">Aucune action en cours sur ce dossier.</p>
+          {taches.length === 0 ? (
+            <p className="text-[14px] text-[#94a3b8] py-3">Aucune tâche en cours sur ce dossier.</p>
           ) : (
-            actions.map((action) => (
-              <div key={action.id} className="flex items-start gap-3 py-3">
-                {action.statut === "termine" ? (
-                  <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-[#f1f5f9] border-[#e2e8f0]" />
-                ) : (
-                  <form action={terminerActionAction} className="mt-0.5 shrink-0">
-                    <input type="hidden" name="id" value={action.id} />
-                    <input type="hidden" name="redirectTo" value={`/biens/${bien.id}`} />
-                    <button
-                      type="submit"
-                      aria-label="Marquer comme terminée"
-                      className="w-4 h-4 rounded border border-[#e2e8f0] hover:border-[#4338ca] hover:bg-[#eef2ff] transition-colors"
-                    />
-                  </form>
-                )}
-                <div>
-                  <p className="text-[14px] text-[#0f172a]">{action.titre}</p>
-                  {action.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{action.contexte}</p>}
+            taches.map((tache) => {
+              const statut = deriverStatutTache(tache);
+              return (
+                <div key={tache.id} className="flex items-start gap-3 py-3">
+                  {statut !== "a_faire" ? (
+                    <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-[#f1f5f9] border-[#e2e8f0]" />
+                  ) : (
+                    <form action={terminerTacheAction} className="mt-0.5 shrink-0">
+                      <input type="hidden" name="id" value={tache.id} />
+                      <input type="hidden" name="redirectTo" value={`/biens/${bien.id}`} />
+                      <button
+                        type="submit"
+                        aria-label="Marquer comme terminée"
+                        className="w-4 h-4 rounded border border-[#e2e8f0] hover:border-[#4338ca] hover:bg-[#eef2ff] transition-colors"
+                      />
+                    </form>
+                  )}
+                  <div className="flex-1">
+                    <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
+                    {tache.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>}
+                    <p className="text-[11px] text-[#94a3b8] mt-0.5">
+                      {statut === "annulee"
+                        ? "Annulée"
+                        : tache.echeance
+                          ? `Échéance : ${formatDate(tache.echeance)}`
+                          : LABEL_ECHEANCE_ABSENTE}
+                    </p>
+                    {statut === "a_faire" && (
+                      <form action={annulerTacheAction} className="mt-1">
+                        <input type="hidden" name="id" value={tache.id} />
+                        <input type="hidden" name="redirectTo" value={`/biens/${bien.id}`} />
+                        <button type="submit" className="text-[11px] text-[#94a3b8] hover:text-[#dc2626] transition-colors">
+                          Annuler
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

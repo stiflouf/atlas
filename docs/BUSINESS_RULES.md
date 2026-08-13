@@ -124,18 +124,28 @@ critère explicitement demandé n'est jamais un "point fort", juste une conformi
 | Bonus parking | `bien.parking === true` **et** `acquereur.necessiteParking !== true` (non demandé) | Bien (parking) — atout non demandé |
 | Bonus extérieur | `bien.exterieur` défini et ≠ `"aucun"`, **et** `acquereur.necessiteExterieur !== true` | Bien (extérieur) — atout non demandé |
 
-## Priorité des actions
+## Tâches (ADR-028)
 
-**Fichier** : `src/lib/actionPriority.ts` (`scoreAction`). Utilisée pour trier les actions sur
+**Fichier** : `src/lib/tachePriority.ts` (`scoreTache`). Utilisée pour trier les tâches sur
 l'accueil, la fiche bien, et la "Mémoire du dossier" de la préparation de visite — un seul moteur,
-jamais réimplémenté ailleurs.
+jamais réimplémenté ailleurs. Remplace l'ancien `src/lib/actionPriority.ts`.
 
 - Poids de base par priorité déclarée : `haute: 30`, `normale: 20`, `basse: 10`.
 - `+50` si l'échéance est dépassée (en retard).
 - `+15` si l'échéance est dans 2 jours ou moins (imminente, non encore dépassée).
-- Une action `statut === "termine"` obtient un score de `-Infinity` (toujours exclue des listes
-  triées, jamais de suppression physique nécessaire pour la faire disparaître).
-- À score égal, l'action créée le plus tôt (`creeLe` le plus ancien) passe devant.
+- Une tâche `terminee` **ou** `annulee` (statut dérivé, `deriverStatutTache`) obtient un score de
+  `-Infinity` (toujours exclue des listes triées, jamais de suppression physique nécessaire pour la
+  faire disparaître).
+- À score égal, la tâche créée le plus tôt (`creeLe` le plus ancien) passe devant.
+
+Une tâche est rattachée à **au plus une** cible parmi bien/acquéreur/prospect vendeur/visite/
+offre/compromis/rémunération (sept FK dédiées, `CHECK` en base — jamais un couple `objetType`/
+`objetId` polymorphe, voir ADR-028) — ou à aucune (tâche générale). Terminer une tâche ne signifie
+**jamais** silencieusement "contact réalisé" : pour une tâche rattachée à un prospect vendeur,
+l'enregistrement d'une vraie interaction (mécanisme ADR-027) reste **opt-in**, une soumission
+explicite distincte de la simple terminaison. `en_attente` (`StatutTache`) est réservé à une future
+vraie notion métier d'attente — jamais dérivé aujourd'hui ; l'absence d'échéance s'affiche "Sans
+échéance", jamais "En attente".
 
 ## Mémoire du dossier (page de préparation de visite)
 
@@ -144,8 +154,8 @@ indépendamment — jamais de dépendance implicite à l'ordre déjà fourni par
 
 | Fonction | Entrée | Règle | Maximum |
 |---|---|---|---|
-| `selectionnerActionsEnCours` | Actions du bien + actions de l'acquéreur | Fusionne les deux listes (statut `a_faire` uniquement), tague chaque action `origine: "bien" \| "acquereur"`, trie par `scoreAction` décroissant | 5 |
-| `selectionnerHistoriqueRecent` | Actions du bien | Ne retient que les actions **terminées** (jamais les créations, déjà visibles dans "Actions en cours" pour les actions encore ouvertes), triées par `termineLe` décroissant | 3 |
+| `selectionnerActionsEnCours` | Tâches du bien + tâches de l'acquéreur | Fusionne les deux listes (statut `a_faire` uniquement), tague chaque tâche `provenance: "bien" \| "acquereur"` (distinct de `Tache.origine`, manuelle/automatique) sans le stocker, trie par `scoreTache` décroissant | 5 |
+| `selectionnerHistoriqueRecent` | Tâches du bien | Ne retient que les tâches **terminées** (jamais les créations, ni les annulées, déjà visibles dans "Tâches en cours" pour les tâches encore ouvertes), triées par `termineeLe` décroissant | 3 |
 | `selectionnerComptesRendusRecents` | Comptes rendus du bien + id de l'acquéreur concerné | Filtre sur `acquereurId` exact (jamais les comptes rendus d'un autre acquéreur sur le même bien), trie par `dateVisite` décroissant | 3 |
 
 Rien de cette section n'alimente `produirePointsAttention`/`produirePointsForts` : c'est une
@@ -160,8 +170,9 @@ l'historique manuscrit du mock est affiché tel quel, jamais mélangé au dériv
 | Source | Condition | Texte produit |
 |---|---|---|
 | `bien.creeLe` | Toujours, si présent | `"Bien créé"` |
-| Chaque action du bien | Toujours | `"Action créée : {titre}"` |
-| Chaque action terminée du bien | `statut === "termine"` et `termineLe` défini | `"Action terminée : {titre}"` |
+| Chaque tâche du bien | Toujours | `"Tâche créée : {titre}"` |
+| Chaque tâche terminée du bien | Statut dérivé `terminee` et `termineeLe` défini | `"Tâche terminée : {titre}"` |
+| Chaque tâche annulée du bien | Statut dérivé `annulee` et `annuleeLe` défini | `"Tâche annulée : {titre}"` |
 | Chaque compte rendu de visite du bien | Toujours (tous acquéreurs confondus, contrairement à la Mémoire du dossier) | `"Visite effectuée — {label intérêt}"` |
 
 Tri final par date décroissante sur l'ensemble combiné. **Jamais** le texte libre `retour` d'un
@@ -176,9 +187,9 @@ compte rendu n'apparaît dans l'historique — seulement le label court dérivé
   (`interesse | a_reflechir | pas_interesse | inconnu`) — toute autre valeur est un refus
   d'insertion silencieux (pas d'exception, simple redirection sans écriture).
 - `retour` (texte libre) est requis, `trim()` non vide, sinon refus d'insertion.
-- `prochaineEtape` (texte libre, optionnel) **ne crée jamais d'action automatiquement** — c'est un
-  rappel textuel affiché dans la Mémoire du dossier ; créer une action à partir de cette
-  information reste un geste manuel du conseiller (via "+ Ajouter une action").
+- `prochaineEtape` (texte libre, optionnel) **ne crée jamais de tâche automatiquement** — c'est un
+  rappel textuel affiché dans la Mémoire du dossier ; créer une tâche à partir de cette
+  information reste un geste manuel du conseiller (via "+ Ajouter une tâche").
 
 ## Onglet Visites → Effectuées de la fiche bien
 
@@ -251,7 +262,7 @@ ADR-015.
 
 `montant`/`acquereurId`/`bienId`/`dateOffre` immuables après création — une nouvelle proposition
 (contre-offre, offre d'un autre acquéreur) est une nouvelle ligne. Seul `statut` est mutable,
-`UPDATE` en place (même patron que `actions.statut`).
+`UPDATE` en place.
 
 | Règle | Condition | Résultat |
 |---|---|---|
@@ -577,7 +588,7 @@ repository, aucune requête Drizzle dans les règles elles-mêmes.
 **Déduplication** : par cause racine (type + code), jamais par comparaison de texte — un filet de
 sécurité déduplique en dernier recours par identifiant déterministe puis par libellé strictement
 identique. **Priorité** : score = poids fixe du niveau (toujours dominant) + poids fixe par type
-d'alerte + tie-break sur l'identifiant déterministe — même principe que `actionPriority.ts`, aucun
+d'alerte + tie-break sur l'identifiant déterministe — même principe que `tachePriority.ts`, aucun
 score jamais affiché à l'UI. **Volontairement exclu de cette V1** : alerte de proximité de seuil
 (les marges restent affichées en continu dans `/fiscal`, sans alerte proactive), listing individuel
 pour les compteurs agrégés, recommandation d'optimisation fiscale.
@@ -601,7 +612,7 @@ générique (un seul contact par opportunité, une seule opportunité par bien).
 | Archivage | `archiverProspectVendeurAction` | Distinct de la perte (gestion administrative, ADR-012) — jamais compté dans le taux de conversion |
 | Conversion en bien | `signerMandatProspectVendeurAction` | Transaction atomique (création du bien + `mandatSigneLe`/`bienId`) ; tout champ obligatoire de `biens` encore vide (dont l'adresse si seul un secteur était connu) est rejeté explicitement — aucune valeur inventée |
 | Unicité de conversion | `bienId` | Contrainte `UNIQUE` — une opportunité par bien |
-| Prochaine action | `mettreAJourProchaineActionAction` | Deux champs simples (`prochaineAction`/`prochaineActionLe`), pas un moteur de tâches — `actions` n'est pas modifiée |
+| Prochaine action | Tâche rattachée via `prospectVendeurId` (ADR-028) | Les anciens champs simples `prochaineAction`/`prochaineActionLe` ont été migrés en tâches puis supprimés — voir section "Tâches (ADR-028)" ci-dessus |
 
 **Dashboard minimal** (`chargerPipelineVendeur()`, `dashboardRepository.ts`, section "Pipeline
 vendeur" sur `/dashboard`) : compteurs par statut (prospects en cours, hors archivés), volume
@@ -612,8 +623,9 @@ prospects encore actifs n'entrent jamais dans ce ratio.
 
 **Hors périmètre V1** (documenté explicitement, pas un oubli) : séparation contact ↔ opportunité
 (plusieurs propriétaires, un propriétaire multi-biens), relances automatiques, génération
-d'e-mails, campagnes, moteur de tâches générique (réservé à un futur ADR-028), intégration Google
-Calendar pour le rendez-vous d'estimation, révocation d'un mandat déjà signé.
+d'e-mails, campagnes, automatisation de la génération de tâches (réservée à un futur ADR-029+,
+`Tache.origine === 'automatique'` préparé mais inutilisé), intégration Google Calendar pour le
+rendez-vous d'estimation, révocation d'un mandat déjà signé.
 
 ## Archivage
 
@@ -623,13 +635,13 @@ Calendar pour le rendez-vous d'estimation, révocation d'un mandat déjà signé
 
 | Règle | Condition | Résultat |
 |---|---|---|
-| Exclusion des listes actives | `archiveLe` non NULL | Absent de `listerBiens()`/`listerClients()` — donc du référentiel de matching, des `<select>` de création d'action, et (pour un bien) de "Dossiers nécessitant une action" sur l'accueil |
-| Exclusion des flux actifs pour une action liée à un acquéreur seul | `action.acquereurId` renseigné mais absent de `listerClients()` (acquéreur archivé) | Exclue de "Autres actions" sur l'accueil |
-| Consultation directe toujours possible | — | `getBienById()`/`getClientById()` résolvent une entité archivée sans condition — fiche, édition, notes/actions/comptes rendus/historique restent accessibles |
+| Exclusion des listes actives | `archiveLe` non NULL | Absent de `listerBiens()`/`listerClients()` — donc du référentiel de matching, des `<select>` de création de tâche, et (pour un bien) de "Dossiers nécessitant une action" sur l'accueil |
+| Exclusion des flux actifs pour une tâche liée à un acquéreur ou un prospect vendeur seul | `tache.acquereurId`/`tache.prospectVendeurId` renseigné mais l'entité correspondante est archivée | Exclue de "Autres tâches" sur l'accueil |
+| Consultation directe toujours possible | — | `getBienById()`/`getClientById()` résolvent une entité archivée sans condition — fiche, édition, notes/tâches/comptes rendus/historique restent accessibles |
 | Cache de matching déjà persisté | Une décision `memoire_contextuelle` existe déjà pour ce rendez-vous | Inchangée — un rendez-vous déjà résolu vers un bien depuis archivé reste préparable (la priorité validation humaine/cache > référentiel s'applique avant toute lecture du référentiel filtré) |
 | Refus de création liée — note | `bien.archiveLe` non NULL | `ajouterNoteBienAction` n'insère rien (refus silencieux, formulaire déjà masqué côté UI) |
 | Refus de création liée — compte rendu | `bien.archiveLe` ou `acquereur.archiveLe` non NULL | `enregistrerCompteRenduVisiteAction` n'insère rien (refus silencieux, formulaire remplacé par un message côté UI) |
-| Refus de création liée — action | `bien.archiveLe` ou `acquereur.archiveLe` non NULL, si renseigné | `creerActionAction` lève une erreur explicite (`throw`, pas un refus silencieux — cohérent avec le `throw` déjà existant sur le titre manquant dans ce fichier) |
+| Refus de création liée — tâche | `bien.archiveLe`, `acquereur.archiveLe` ou `prospectVendeur.archiveLe` non NULL, si la cible correspondante est renseignée | `creerTacheAction` lève une erreur explicite (`throw`, pas un refus silencieux — cohérent avec le `throw` déjà existant sur le titre manquant dans ce fichier) |
 | Restauration | Conseiller clique "Désarchiver" | `archiveLe` repassé à `NULL` — réapparaît immédiatement dans tous les flux actifs, aucune perte de données |
 
 Jamais de suppression physique : un archivage est un `UPDATE`, jamais un `DELETE` — les FK réelles

@@ -52,13 +52,11 @@ export type ProspectVendeur = {
   bienId?: string;
   motifPerte?: MotifPerteProspectVendeur;
   datePerte?: string;
-  // Champ simple, jamais un moteur de tâches (réservé à un futur ADR-028 si le besoin se
-  // confirme) — édité directement, sans file, sans statut, sans récurrence.
-  prochaineAction?: string;
-  prochaineActionLe?: string;
   // Mis à jour uniquement par une vraie interaction (note de type != 'note_interne', ou rendez-
   // vous marqué réalisé) — jamais par un simple jalon de pipeline. Indispensable pour de futures
-  // règles déterministes de relance (ADR-028+) qui mesureraient un vrai silence vendeur.
+  // règles déterministes de relance (ADR-029+) qui mesureraient un vrai silence vendeur — les
+  // tâches liées à ce prospect (table `taches`, prospectVendeurId, ADR-028) peuvent optionnellement
+  // journaliser une telle interaction à leur clôture, jamais automatiquement.
   dernierContactLe?: string;
   // Gestion administrative de la fiche (doublon, erreur de saisie) — distincte de motifPerte/
   // datePerte (résultat commercial). Voir ADR-012.
@@ -68,7 +66,9 @@ export type ProspectVendeur = {
 };
 
 // Champs saisissables à la création — tous les jalons, l'issue commerciale, la conversion et
-// l'archivage sont posés ensuite par leur propre Server Action, jamais à la création.
+// l'archivage sont posés ensuite par leur propre Server Action, jamais à la création. Depuis
+// ADR-028, la prochaine action se crée comme une tâche (table `taches`, prospectVendeurId) plutôt
+// qu'un champ de ce formulaire.
 export type NouveauProspectVendeur = Pick<
   ProspectVendeur,
   | "nom"
@@ -82,8 +82,6 @@ export type NouveauProspectVendeur = Pick<
   | "ville"
   | "codePostal"
   | "typeBien"
-  | "prochaineAction"
-  | "prochaineActionLe"
 >;
 
 // Dérivé, jamais stocké (même principe que deriverStatutCommercial, ADR-014) : le jalon le plus

@@ -384,6 +384,36 @@ section "Pipeline vendeur" sur `/dashboard` avec un taux de conversion explicite
 opportunités clôturées. Aucune modification de la table `actions` ni du moteur de tâches — réservé
 à un futur ADR-028.
 
+## 28. Moteur de tâches générique
+
+Table `actions` renommée `taches` (ADR-028) et entièrement repensée : sept colonnes FK nullables
+dédiées (`bienId`, `acquereurId`, `prospectVendeurId`, `visiteId`, `offreId`, `compromisId`,
+`remunerationId`) avec un `CHECK` garantissant qu'au plus une cible est renseignée, plutôt qu'un
+couple `objetType`/`objetId` polymorphe sans intégrité référentielle — une union TypeScript
+`CibleTache {type,id}` reste exposée comme API générique au-dessus. Statut jamais stocké, dérivé de
+`termineeLe`/`annuleeLe` (`deriverStatutTache`) ; `StatutTache` conserve une valeur `'en_attente'`
+réservée, jamais dérivée aujourd'hui, pour une future vraie notion métier d'attente. L'absence
+d'échéance s'affiche "Sans échéance" (jamais "En attente", qui aurait laissé croire à cette notion
+inexistante). `origine` (`'manuelle'`/`'automatique'`) et `origineCode` (identifiant machine stable,
+jamais du texte d'affichage) préparent une future génération automatique de tâches sans en
+implémenter la moindre règle — l'idempotence/déduplication de cette future automatisation est
+documentée comme non construite, volontairement.
+
+Terminer une tâche ne signifie jamais silencieusement "contact réalisé" : pour une tâche rattachée
+à un prospect vendeur, l'enregistrement d'une vraie interaction reste **optionnel**, une case à
+cocher explicite dans le même geste qui réutilise le mécanisme ADR-027
+(`notes_prospect_vendeur`/`dernierContactLe`) — aucun mécanisme équivalent pour les autres cibles,
+qui n'ont pas encore de journal d'interactions structuré.
+
+Migration sans heuristique : audit préalable des lignes `actions` portant simultanément `bienId` et
+`acquereurId` (aucune trouvée → migration directe, sinon la migration se serait arrêtée pour un
+traitement explicite) ; migration immédiate des anciens champs simples
+`prospectsVendeurs.prochaineAction`/`prochaineActionLe` en tâches réelles, colonnes supprimées dans
+la même migration — aucune période de compatibilité, aucun dual-write. Nouvelle route
+`/taches/nouveau` (cible bien/acquéreur/prospect vendeur/aucune), section "Tâches" sur les fiches
+bien/acquéreur/prospect vendeur, `/prospects-vendeurs` (liste) et `/` (accueil) désormais dérivés
+des tâches réelles plutôt que des anciens champs simples.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

@@ -39,8 +39,6 @@ function ligneVersProspectVendeur(ligne: LigneProspectVendeur): ProspectVendeur 
     bienId: ligne.bienId ?? undefined,
     motifPerte: (ligne.motifPerte as MotifPerteProspectVendeur | null) ?? undefined,
     datePerte: ligne.datePerte ?? undefined,
-    prochaineAction: ligne.prochaineAction ?? undefined,
-    prochaineActionLe: ligne.prochaineActionLe ?? undefined,
     dernierContactLe: ligne.dernierContactLe?.toISOString(),
     archiveLe: ligne.archiveLe?.toISOString(),
     creeLe: ligne.creeLe.toISOString(),
@@ -105,8 +103,6 @@ export async function creerProspectVendeur(input: NouveauProspectVendeur): Promi
       ville: input.ville ?? null,
       codePostal: input.codePostal ?? null,
       typeBien: input.typeBien ?? null,
-      prochaineAction: input.prochaineAction ?? null,
-      prochaineActionLe: input.prochaineActionLe ?? null,
     })
     .returning();
   return ligneVersProspectVendeur(ligne);
@@ -131,8 +127,6 @@ export async function modifierProspectVendeur(
       ville: input.ville ?? null,
       codePostal: input.codePostal ?? null,
       typeBien: input.typeBien ?? null,
-      prochaineAction: input.prochaineAction ?? null,
-      prochaineActionLe: input.prochaineActionLe ?? null,
       modifieLe: new Date(),
     })
     .where(eq(prospectsVendeursTable.id, id))
@@ -275,17 +269,3 @@ export async function desarchiverProspectVendeur(id: string): Promise<ProspectVe
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
 
-// Champ simple (ADR-027, correction n° 7) — pas de moteur de tâches, une seule UPDATE directe.
-export async function mettreAJourProchaineActionProspectVendeur(
-  id: string,
-  prochaineAction: string | undefined,
-  prochaineActionLe: string | undefined
-): Promise<ProspectVendeur | undefined> {
-  if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
-    .update(prospectsVendeursTable)
-    .set({ prochaineAction: prochaineAction ?? null, prochaineActionLe: prochaineActionLe ?? null, modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
-    .returning();
-  return ligne ? ligneVersProspectVendeur(ligne) : undefined;
-}

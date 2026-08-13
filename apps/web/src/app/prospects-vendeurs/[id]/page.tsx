@@ -4,10 +4,12 @@ import { ArrowLeft, User } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import { listerNotesProspectVendeur } from "@/lib/noteProspectVendeurRepository";
+import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
 import { deriverStatutProspectVendeur, LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
 import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
 import { MOTIFS_PERTE_PROSPECT_VENDEUR, LABEL_MOTIF_PERTE_PROSPECT_VENDEUR } from "@/types/motifPerteProspectVendeur";
-import { TYPES_NOTE_PROSPECT_VENDEUR, LABEL_TYPE_NOTE_PROSPECT_VENDEUR } from "@/types/noteProspectVendeur";
+import { TYPES_NOTE_PROSPECT_VENDEUR, LABEL_TYPE_NOTE_PROSPECT_VENDEUR, TYPES_NOTE_INTERACTION } from "@/types/noteProspectVendeur";
+import { deriverStatutTache, LABEL_ECHEANCE_ABSENTE, LABEL_TYPE_TACHE } from "@/types/tache";
 import { formatMontantCentimes } from "@/types/remuneration";
 import {
   archiverProspectVendeurAction,
@@ -19,8 +21,10 @@ import {
   proposerMandatProspectVendeurAction,
   marquerProspectVendeurPerduAction,
   ajouterNoteProspectVendeurAction,
-  mettreAJourProchaineActionAction,
 } from "@/actions/prospectVendeur";
+import { creerTacheAction } from "@/actions/creerTache";
+import { terminerTacheAction } from "@/actions/terminerTache";
+import { annulerTacheAction } from "@/actions/annulerTache";
 
 const inputCls =
   "w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]";
@@ -49,6 +53,8 @@ export default async function FicheProspectVendeur({ params }: PageProps) {
   if (!prospect) notFound();
 
   const notes = await listerNotesProspectVendeur(prospect.id);
+  const taches = await getTachesPourProspectVendeur(prospect.id);
+  const tachesOuvertes = taches.filter((t) => deriverStatutTache(t) === "a_faire");
   const statut = deriverStatutProspectVendeur(prospect);
   const enCours = statut !== "perdu" && statut !== "mandat_signe";
   const localisation = [prospect.adresseBienPotentiel ?? prospect.secteurBienPotentiel, prospect.ville, prospect.codePostal]
@@ -273,30 +279,97 @@ export default async function FicheProspectVendeur({ params }: PageProps) {
         )
       )}
 
-      {/* Prochaine action */}
+      {/* Tâches (ADR-028 — remplace l'ancien champ simple prochaineAction/prochaineActionLe,
+          migré vers `taches` lors de l'introduction de cette table). */}
       <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Prochaine action</p>
-        <div className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-          {prospect.prochaineAction && (
-            <p className="text-[14px] text-[#0f172a] mb-3">
-              {prospect.prochaineAction}
-              {prospect.prochaineActionLe && ` — ${formatDate(prospect.prochaineActionLe)}`}
-            </p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Tâches</p>
+        <div className="flex flex-col gap-2 mb-3">
+          {tachesOuvertes.length === 0 ? (
+            <p className="text-[14px] text-[#94a3b8]">Aucune tâche en cours.</p>
+          ) : (
+            tachesOuvertes.map((tache) => (
+              <div key={tache.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_TYPE_TACHE[tache.type]}</span>
+                  <span className="text-[11px] text-[#94a3b8]">·</span>
+                  <span className="text-[11px] text-[#94a3b8]">
+                    {tache.echeance ? formatDate(tache.echeance) : LABEL_ECHEANCE_ABSENTE}
+                  </span>
+                </div>
+                <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
+                {tache.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>}
+
+                <details className="mt-3 pt-3 border-t border-[#f1f5f9]">
+                  <summary className="text-[12px] font-medium text-[#4338ca] cursor-pointer">
+                    Terminer cette tâche
+                  </summary>
+                  <form action={terminerTacheAction} className="flex flex-col gap-3 mt-3">
+                    <input type="hidden" name="id" value={tache.id} />
+                    <input type="hidden" name="redirectTo" value={`/prospects-vendeurs/${prospect.id}`} />
+                    <label className="flex items-center gap-2 text-[12px] text-[#64748b]">
+                      <input type="checkbox" name="enregistrerInteraction" />
+                      Enregistrer aussi une interaction avec ce vendeur
+                    </label>
+                    <select name="typeInteraction" defaultValue="" className={inputCls}>
+                      <option value="" disabled>
+                        Type d&apos;interaction
+                      </option>
+                      {TYPES_NOTE_INTERACTION.map((t) => (
+                        <option key={t} value={t}>
+                          {LABEL_TYPE_NOTE_PROSPECT_VENDEUR[t]}
+                        </option>
+                      ))}
+                    </select>
+                    <textarea
+                      name="contenuInteraction"
+                      rows={2}
+                      placeholder="Contenu de l'interaction (uniquement si la case ci-dessus est cochée)"
+                      className={inputCls}
+                    />
+                    <button type="submit" className={`self-start ${boutonCls}`}>
+                      Marquer terminée
+                    </button>
+                  </form>
+                </details>
+                <form action={annulerTacheAction} className="mt-2">
+                  <input type="hidden" name="id" value={tache.id} />
+                  <input type="hidden" name="redirectTo" value={`/prospects-vendeurs/${prospect.id}`} />
+                  <button type="submit" className="text-[12px] text-[#94a3b8] hover:text-[#dc2626] transition-colors">
+                    Annuler la tâche
+                  </button>
+                </form>
+              </div>
+            ))
           )}
-          <form action={mettreAJourProchaineActionAction} className="flex flex-col gap-3">
-            <input type="hidden" name="id" value={prospect.id} />
-            <input
-              name="prochaineAction"
-              defaultValue={prospect.prochaineAction ?? ""}
-              placeholder="ex. Rappeler pour confirmer le RDV"
-              className={inputCls}
-            />
-            <input name="prochaineActionLe" type="date" defaultValue={prospect.prochaineActionLe ?? ""} className={inputCls} />
-            <button type="submit" className={`self-start ${boutonSecondaireCls}`}>
-              Mettre à jour
+        </div>
+
+        <details className="bg-white rounded-lg border border-[#f1f5f9] p-3">
+          <summary className="text-[13px] font-medium text-[#0f172a] cursor-pointer">Ajouter une tâche</summary>
+          <form action={creerTacheAction} className="flex flex-col gap-3 mt-3">
+            <input type="hidden" name="prospectVendeurId" value={prospect.id} />
+            <input type="hidden" name="redirectTo" value={`/prospects-vendeurs/${prospect.id}`} />
+            <input name="titre" required placeholder="ex. Rappeler pour confirmer le RDV" className={inputCls} />
+            <div className="grid grid-cols-2 gap-3">
+              <select name="type" defaultValue="autre" className={inputCls}>
+                <option value="appel">Appel</option>
+                <option value="email">Email</option>
+                <option value="message">Message</option>
+                <option value="document">Document</option>
+                <option value="relance">Relance</option>
+                <option value="autre">Autre</option>
+              </select>
+              <select name="priorite" defaultValue="normale" className={inputCls}>
+                <option value="haute">Haute</option>
+                <option value="normale">Normale</option>
+                <option value="basse">Basse</option>
+              </select>
+            </div>
+            <input name="echeance" type="date" className={inputCls} />
+            <button type="submit" className={`self-start ${boutonCls}`}>
+              Ajouter
             </button>
           </form>
-        </div>
+        </details>
       </section>
 
       {/* Notes */}

@@ -1,6 +1,6 @@
 import type { AlerteCopilote, NiveauAlerte, TypeAlerte } from "@/types/alerte";
 
-// Même principe que actionPriority.ts : score = niveau (dominant) + poids fixe documenté par type
+// Même principe que tachePriority.ts : score = niveau (dominant) + poids fixe documenté par type
 // (convention produit interne, jamais un score affiché à l'UI) + id comme tie-break stable.
 const POIDS_NIVEAU: Record<NiveauAlerte, number> = {
   action_requise: 300,
