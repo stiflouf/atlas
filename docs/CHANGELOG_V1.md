@@ -295,7 +295,8 @@ qu'un `CHECK` SQL inter-lignes ; amorcé en migration avec les valeurs 2026 (pla
 seuils de franchise TVA, taux de cotisations, CFP, abattement micro-BNC, versement libératoire),
 chacune tracée par un statut de confiance (`verifie_direct`/`recoupement`/`a_confirmer`). Nouvelle
 page `/fiscal` ("Ma situation fiscale") : collecte de faits uniquement, aucune estimation ni aucun
-calcul affiché — réservés à ADR-024 (moteur année courante) et ADR-025 (projections N+1 à N+5).
+calcul affiché — construits ensuite par ADR-024 (moteur année courante) et ADR-025 (projections
+N+1 à N+5).
 
 ## 24. Moteur fiscal, année civile courante
 
@@ -324,6 +325,27 @@ restant, nouveau champ symétrique sur `chargerProjectionAnnuelle` / compromis e
 réutilisé d'ADR-022 sans duplication). Nouvelle section "Vue {année}" sur `/fiscal` : cinq blocs
 (encaissé, à provisionner, seuils, à venir, ce qu'Atlas ne sait pas calculer et pourquoi), avec
 explication assiette + provenance sous chaque montant.
+
+## 25. Projection fiscale pluriannuelle (N+1 à N+5)
+
+Extension du moteur fiscal (ADR-025) à un horizon N+1 → N+5, à partir du pipeline commercial daté et
+d'une tendance statistique (run-rate) dérivée des encaissements réels — toujours sans nouvelle
+table. Pipeline daté et tendance statistique restent deux blocs strictement séparés, jamais
+additionnés (aucun champ agrégé sur `ProjectionAnneeFiscale`) : Atlas n'a aucun historique de
+snapshots permettant d'estimer leur recouvrement. Le run-rate se calcule sur une série mensuelle
+zero-remplie (un mois sans vente compte comme 0), avec un seuil produit de 6 mois calendaires
+entièrement garantis par `historique_amorcage` — jamais une moyenne sur les seuls mois ayant une
+vente. `resoudreRegleProjection` distingue, pour une date future, une règle explicitement bornée et
+publiée ("officielle") d'une simple reconduction hypothétique de la dernière règle connue
+("hypothese_reconduction", jamais matérialisée en base) — `dateFinValidite = NULL` ne prouve jamais
+qu'une règle est officiellement connue pour une année lointaine. Chaque tranche (mois de run-rate ou
+élément de pipeline) est résolue à sa propre date, pour qu'un changement de taux/régime en cours
+d'année projetée s'applique mois par mois, jamais un dernier taux connu multiplié par le total
+annuel — même contrainte pour une hypothèse utilisateur (montant annuel unique) : si le profil ou
+une règle change en cours d'année, chaque composante retourne explicitement `ventilation_requise`
+plutôt qu'une répartition devinée. Les hypothèses utilisateur ne sont jamais persistées (lues depuis
+la query string d'un formulaire GET, valables uniquement pour la requête courante). Nouvelle section
+"Projection {N+1}–{N+5}" sur `/fiscal`, une carte par année.
 
 ---
 

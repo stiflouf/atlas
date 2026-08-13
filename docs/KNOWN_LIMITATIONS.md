@@ -280,9 +280,22 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   deux années consécutives de dépassement ni ses conséquences (bascule de régime, rétroactivité) —
   réservé à une passe ultérieure quand ce mécanisme aura été audité spécifiquement.
 - **`chargerProjectionAnnuelle()` reste ancrée sur `CURRENT_DATE`** : `calculerProjectionFinAnnee`
-  n'a donc de sens que pour l'année civile en cours, jamais une année passée ou future — cohérent
-  avec le périmètre V1 (aucune projection N+1 à N+5 avant ADR-025), mais un appel avec une autre
-  année que l'année courante donnerait des blocs "restant" incohérents avec le bloc "encaissé".
+  n'a donc de sens que pour l'année civile en cours, jamais une année passée ou future — un appel
+  avec une autre année que l'année courante donnerait des blocs "restant" incohérents avec le bloc
+  "encaissé". La projection N+1 à N+5 (ADR-025) est un moteur séparé (`calculerProjectionPluriannuelle`),
+  qui ne réutilise pas `calculerProjectionFinAnnee`.
+- **Projection pluriannuelle (ADR-025) : run-rate mono-dossier, jamais additionné au pipeline** :
+  `evaluerRunRate` est calculé une seule fois pour tout l'horizon N+1→N+5 (même profondeur
+  historique appliquée à chaque année projetée), et reste strictement séparé du pipeline daté dans
+  l'UI et dans le type `ProjectionAnneeFiscale` — aucun total combiné n'est jamais exposé. Aucune
+  saisonnalité (ventilation mensuelle plate). Le badge "règle officielle" (par opposition à
+  "hypothèse de reconduction") n'est aujourd'hui observable dans l'UI que pour les codes exposés
+  avec détail de provenance (cotisations/CFP/VFL) — tous seedés sans `dateFinValidite` en V1, donc
+  toujours "hypothèse de reconduction" pour une année future tant qu'aucune version bornée n'est
+  publiée. Le seul code réellement borné (`plafond_micro_bnc`) n'a pas de détail de provenance
+  affiché dans `ProjectionPluriannuelle.tsx`, même choix d'UI que `VueAnneeResume.tsx` (ADR-024).
+  Aucune hypothèse utilisateur n'est persistée (paramètres de simulation valables uniquement pour la
+  requête courante).
 - **`remuneration` n'est pas cloisonnée par dossier fiscal** : cohérent avec le mono-dossier V1
   (ADR-023) — tous les encaissements Atlas appartiennent implicitement à l'unique dossier `'default'`
   aujourd'hui. Le jour où `dossier_fiscal` cesse d'être mono-ligne, `listerEncaissementsAnnee` et

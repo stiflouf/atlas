@@ -1,4 +1,4 @@
-import { and, between, eq, isNull } from "drizzle-orm";
+import { and, between, eq, gte, isNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { compromis as compromisTable, remuneration as remunerationTable } from "@/db/schema";
 import type { ChampsCorrectionRemuneration, NouvelleRemuneration, Remuneration } from "@/types/remuneration";
@@ -61,6 +61,23 @@ export async function listerEncaissementsAnnee(annee: number): Promise<Encaissem
         between(remunerationTable.dateEncaissementReelle, `${annee}-01-01`, `${annee}-12-31`)
       )
     );
+  return lignes
+    .filter((l): l is { montantCentimes: number; dateEncaissementReelle: string } => l.dateEncaissementReelle !== null)
+    .sort((a, b) => a.dateEncaissementReelle.localeCompare(b.dateEncaissementReelle));
+}
+
+// ADR-025 (historique mensuel pour le run-rate). Encaissements réels depuis une date, sans borne de
+// fin — contrairement à listerEncaissementsAnnee, jamais limité à une seule année civile : le calcul
+// de profondeur historique (chargerHistoriqueMensuel) doit pouvoir remonter sur plusieurs années.
+export async function listerEncaissementsDepuis(dateDebut: string): Promise<EncaissementAnnee[]> {
+  const lignes = await getDb()
+    .select({
+      montantCentimes: remunerationTable.montantRemunerationConseillerCentimes,
+      dateEncaissementReelle: remunerationTable.dateEncaissementReelle,
+    })
+    .from(remunerationTable)
+    .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(and(eq(compromisTable.statut, "realise"), gte(remunerationTable.dateEncaissementReelle, dateDebut)));
   return lignes
     .filter((l): l is { montantCentimes: number; dateEncaissementReelle: string } => l.dateEncaissementReelle !== null)
     .sort((a, b) => a.dateEncaissementReelle.localeCompare(b.dateEncaissementReelle));

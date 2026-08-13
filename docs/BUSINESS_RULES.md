@@ -407,8 +407,9 @@ fiscalité, et toute notion comptable/juridique de rémunération "acquise" — 
 année courante (ADR-024, voir section dédiée ci-dessous) calcule désormais cotisations/CFP/VFL et
 seuils micro-BNC/TVA à partir des fondations de collecte (ADR-023), mais reste entièrement séparé
 du dashboard commercial — aucune de ces métriques n'apparaît sur `/dashboard`, uniquement sur
-`/fiscal`. Projections N+1 à N+5, scénarios, TVA collectée/déductible et déclaration automatique
-restent hors périmètre, réservés à ADR-025+. Voir ADR-018, ADR-021, ADR-023, ADR-024 et
+`/fiscal`. Projection pluriannuelle N+1 à N+5 disponible depuis ADR-025 (voir section dédiée
+ci-dessous) ; scénarios nommés, TVA collectée/déductible et déclaration automatique restent hors
+périmètre. Voir ADR-018, ADR-021, ADR-023, ADR-024, ADR-025 et
 `docs/KNOWN_LIMITATIONS.md`. Le taux
 et le délai visite → offre, écartés dans ADR-018 faute de lien matérialisé, sont désormais
 disponibles via le lien explicite `offre_visites` (ADR-019) — avec la réserve que seules les
@@ -428,8 +429,8 @@ année civile fixe, pas de sélecteur) — les séries "par mois" s'affichent en
 `historiqueAmorcageRepository.ts`, `rfrFoyerRepository.ts`, `referentielFiscalRepository.ts`,
 `src/actions/profilFiscal.ts`/`historiqueAmorcage.ts`/`rfrFoyer.ts`, page `/fiscal`. Détail de la
 décision : ADR-023. **Aucune estimation ni aucun calcul fiscal n'existe dans cette passe** —
-uniquement la collecte de faits, réservés à ADR-024 (moteur année courante) et ADR-025
-(projections N+1 à N+5).
+uniquement la collecte de faits ; le calcul est construit par ADR-024 (moteur année courante) et
+ADR-025 (projection pluriannuelle N+1 à N+5).
 
 **Mono-dossier** : `dossier_fiscal` est une table à une seule ligne (`id = 'default'`), créée à la
 demande par `obtenirDossierFiscalDefaut()`. `profil_fiscal`/`historique_amorcage`/`rfr_foyer` s'y
@@ -471,8 +472,8 @@ moteur fiscal (voir section suivante) ; les formulaires de collecte restent inch
 
 **Fichiers** : `src/lib/fiscal/*`, section "Vue {année}" de `/fiscal`
 (`src/components/fiscal/VueAnneeResume.tsx`). Premier moteur de calcul, borné à l'année civile en
-cours — aucune projection N+1 à N+5 (ADR-025), aucune TVA collectée/déductible, aucune déclaration
-automatique.
+cours — la projection N+1 à N+5 est un moteur séparé (ADR-025, voir section suivante). Aucune TVA
+collectée/déductible, aucune déclaration automatique.
 
 **Assiette annuelle** (`resoudreAssietteAnnuelle`) : jamais de déduction d'un début de couverture
 depuis le seul fait qu'un premier encaissement Atlas existe. Sans ligne `historique_amorcage`
@@ -524,6 +525,30 @@ date prévue n'est placée dans aucun bloc.
 suis par rapport aux seuils, ce qui pourrait encore arriver cette année, ce qu'Atlas ne sait pas
 encore calculer et pourquoi. `ExplicationCalcul` affiche assiette + provenance sous chaque montant
 calculé ; `libellesRaisons.ts` traduit chaque raison en phrase française sans jargon.
+
+## Projection fiscale pluriannuelle — N+1 à N+5 (ADR-025)
+
+**Fichiers** : `src/lib/fiscal/{runRate,historiqueMensuel,resolutionRegleProjection,
+resolutionTrancheProjetee,projectionAnnuelle,projectionPluriannuelle,
+consequencesFiscalesProjetees}.ts`, section "Projection {N+1}–{N+5}" de `/fiscal`
+(`src/components/fiscal/ProjectionPluriannuelle.tsx`).
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Pipeline vs tendance statistique | Toujours | Deux blocs strictement séparés, jamais additionnés — aucun champ agrégé n'existe sur `ProjectionAnneeFiscale` |
+| Run-rate — seuil de fiabilité | Moins de 6 mois calendaires entièrement garantis (frontière `historique_amorcage` au dernier jour d'un mois) | `montantCentimes: undefined` — jamais un run-rate calculé sur un historique trop court ou une frontière partielle |
+| Run-rate — moyenne | 6 mois garantis ou plus | Moyenne sur **tous** les mois garantis, série zero-remplie (un mois sans vente compte comme 0, jamais exclu du dénominateur) |
+| Règle légale pour une date future — officielle | `dateFinValidite` explicitement connue et postérieure à la date demandée | `origine: "officielle"` |
+| Règle légale pour une date future — hypothèse | Règle ouverte (`dateFinValidite = NULL`) ou dernière règle jamais publiée | `origine: "hypothese_reconduction"` — jamais matérialisée en base |
+| Règle légale pour une date future — indisponible | Aucune règle historique pour ce code | `origine: "indisponible"` |
+| Changement de règle en cours d'année projetée | Toujours | Chaque tranche (mois de run-rate ou élément de pipeline) résolue à sa propre date — jamais un dernier taux connu appliqué au total annuel |
+| Hypothèse utilisateur — ventilable | Profil **et** chaque règle applicable identiques du 1er janvier au 31 décembre de l'année | Montant annuel taxé directement |
+| Hypothèse utilisateur — non ventilable | Profil ou une règle change en cours d'année | `ventilation_requise` sur chaque composante — jamais une répartition devinée |
+| Hypothèse utilisateur — persistance | Toujours | Lue depuis la query string du formulaire GET, jamais écrite en base, valable uniquement pour la requête courante |
+
+**Contrat de résultat** (`ResultatFiscalProjete<T>`, `src/types/projectionFiscale.ts`) : sur-ensemble
+de `ResultatFiscal<T>` (ADR-024), provenance élargie (`ProvenanceRegleProjection`) pour porter la
+distinction officielle/hypothèse, toujours visible dans `ExplicationCalculProjection.tsx`.
 
 ## Archivage
 

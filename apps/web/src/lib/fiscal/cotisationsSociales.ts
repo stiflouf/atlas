@@ -10,11 +10,13 @@ import type { TrancheAssiette } from "@/lib/fiscal/assietteAnnuelle";
 import type { ProfilFiscal } from "@/types/profilFiscal";
 import type { ResultatFiscal } from "@/types/resultatFiscal";
 
-const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
+// Exportés (ADR-025) pour être réutilisés tels quels par le moteur de projection pluriannuelle —
+// même garde de régime, jamais une seconde implémentation de la règle.
+export const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
 // Nom de code documentaire uniquement : aucune ligne regle_fiscale ne porte ce code aujourd'hui
 // (ADR-023 : barème ACRE volontairement non seedé, aucune valeur vérifiée pendant l'audit). Utilisé
 // pour que la raison "regle_absente" pointe vers un identifiant stable plutôt qu'un texte libre.
-const CODE_TAUX_ACRE = "taux_acre_micro_entrepreneur";
+export const CODE_TAUX_ACRE = "taux_acre_micro_entrepreneur";
 
 // ADR-024, correction obligatoire n° 2 : seul le régime micro-BNC est couvert par le taux de
 // cotisations sociales micro-entrepreneur seedé (`taux_cotisations_bnc_general`) — jamais appliqué
@@ -24,13 +26,13 @@ const CODE_TAUX_ACRE = "taux_acre_micro_entrepreneur";
 // aujourd'hui — la Cipav retourne `undefined` (aucun code correspondant n'existe dans le
 // référentiel seedé), ce qui se traduit par `regime_non_couvert` plutôt que par une approximation
 // via le taux du régime général.
-const resoudreCode: ResoudreCode = (profil) => {
+export const resoudreCode: ResoudreCode = (profil) => {
   if (profil.regimeFiscal !== "micro_bnc") return undefined;
   if (profil.affiliationRetraite === "ssi_regime_general") return "taux_cotisations_bnc_general";
   return undefined; // cipav / inconnu : aucun code couvert en V1
 };
 
-function estAcreActif(profil: ProfilFiscal, date: string): boolean {
+export function estAcreActif(profil: ProfilFiscal, date: string): boolean {
   if (!profil.acreActif) return false;
   if (profil.acreDateDebut && date < profil.acreDateDebut) return false;
   if (profil.acreDateFin && date > profil.acreDateFin) return false;

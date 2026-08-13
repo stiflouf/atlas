@@ -7,7 +7,7 @@ function aujourdHuiIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function lendemain(dateIso: string): string {
+export function lendemain(dateIso: string): string {
   const [annee, mois, jour] = dateIso.split("-").map(Number);
   return new Date(Date.UTC(annee, mois - 1, jour + 1)).toISOString().slice(0, 10);
 }

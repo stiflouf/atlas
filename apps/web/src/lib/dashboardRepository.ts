@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, between, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import {
   biens as biensTable,
@@ -605,5 +605,63 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
     finaliseNonEncaisseRestantCentimes,
     nombreFinaliseNonEncaisseRestant: restant.nombreAvecDatePrevue,
     ventilationMensuelle,
+  };
+}
+
+export type ItemPipelineDate = { montantCentimes: number; datePrevue: string };
+
+// ADR-025 (projection pluriannuelle). Pipeline daté, non agrégé, sur une fenêtre d'années
+// arbitraire — contrairement à chargerProjectionAnnuelle ci-dessus (ADR-022/024), jamais limité à
+// l'année civile en cours. Mêmes filtres exacts (statut, archivage) mais chaque élément retourné
+// individuellement daté, pour que le moteur fiscal rattache chacun à la règle applicable à SA date
+// plutôt qu'à un total agrégé traité au dernier taux connu.
+export async function listerPipelineDate(
+  anneeDebut: number,
+  anneeFin: number
+): Promise<{ finaliseNonEncaisse: ItemPipelineDate[]; compromisEnCours: ItemPipelineDate[] }> {
+  const debut = `${anneeDebut}-01-01`;
+  const fin = `${anneeFin}-12-31`;
+
+  const finaliseNonEncaisseBrut = await getDb()
+    .select({
+      montantCentimes: remunerationTable.montantRemunerationConseillerCentimes,
+      datePrevue: remunerationTable.dateEncaissementPrevue,
+    })
+    .from(remunerationTable)
+    .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        isNull(remunerationTable.dateEncaissementReelle),
+        isNotNull(remunerationTable.dateEncaissementPrevue),
+        between(remunerationTable.dateEncaissementPrevue, debut, fin)
+      )
+    );
+
+  const compromisEnCoursBrut = await getDb()
+    .select({
+      montantCentimes: remunerationTable.montantRemunerationConseillerCentimes,
+      datePrevue: remunerationTable.dateEncaissementPrevue,
+    })
+    .from(remunerationTable)
+    .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "en_cours"),
+        isNull(biensTable.archiveLe),
+        isNotNull(remunerationTable.dateEncaissementPrevue),
+        between(remunerationTable.dateEncaissementPrevue, debut, fin)
+      )
+    );
+
+  const versItemPipelineDate = (lignes: { montantCentimes: number; datePrevue: string | null }[]): ItemPipelineDate[] =>
+    lignes
+      .filter((l): l is { montantCentimes: number; datePrevue: string } => l.datePrevue !== null)
+      .map((l) => ({ montantCentimes: l.montantCentimes, datePrevue: l.datePrevue }));
+
+  return {
+    finaliseNonEncaisse: versItemPipelineDate(finaliseNonEncaisseBrut),
+    compromisEnCours: versItemPipelineDate(compromisEnCoursBrut),
   };
 }

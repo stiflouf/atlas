@@ -5,9 +5,10 @@ import { provenanceDe } from "@/lib/fiscal/resolutionTranche";
 import type { AssietteAnnuelle } from "@/types/assietteFiscale";
 import type { ProvenanceRegle, RaisonIndisponibilite } from "@/types/resultatFiscal";
 
-const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
-const CODE_SEUIL_BASE = "seuil_tva_base";
-const CODE_SEUIL_MAJORE = "seuil_tva_majore";
+// Exportés (ADR-025) pour être réutilisés tels quels par le moteur de projection pluriannuelle.
+export const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
+export const CODE_SEUIL_BASE = "seuil_tva_base";
+export const CODE_SEUIL_MAJORE = "seuil_tva_majore";
 
 export type ValeurFranchiseTva = {
   caReferenceConnuCentimes: number;

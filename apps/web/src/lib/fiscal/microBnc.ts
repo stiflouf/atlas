@@ -6,8 +6,9 @@ import { provenanceDe } from "@/lib/fiscal/resolutionTranche";
 import type { AssietteAnnuelle } from "@/types/assietteFiscale";
 import type { ProvenanceRegle, RaisonIndisponibilite } from "@/types/resultatFiscal";
 
-const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
-const CODE_PLAFOND = "plafond_micro_bnc";
+// Exportés (ADR-025) pour être réutilisés tels quels par le moteur de projection pluriannuelle.
+export const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
+export const CODE_PLAFOND = "plafond_micro_bnc";
 
 export type DonneesAnneeMicroBnc =
   | { statut: "connue"; assiette: AssietteAnnuelle; depasse: boolean }

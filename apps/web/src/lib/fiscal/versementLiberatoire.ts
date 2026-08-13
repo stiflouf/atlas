@@ -8,14 +8,15 @@ import type { TrancheAssiette } from "@/lib/fiscal/assietteAnnuelle";
 import type { ProfilFiscal } from "@/types/profilFiscal";
 import type { ProvenanceRegle, RaisonIndisponibilite, ResultatFiscal } from "@/types/resultatFiscal";
 
-const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
-const CODE_TAUX_VFL = "taux_versement_liberatoire_bnc";
+// Exportés (ADR-025) pour être réutilisés tels quels par le moteur de projection pluriannuelle.
+export const CATEGORIE_ACTIVITE = "agent_commercial_immobilier";
+export const CODE_TAUX_VFL = "taux_versement_liberatoire_bnc";
 const CODE_SEUIL_RFR = "seuil_rfr_versement_liberatoire_par_part";
 
 // ADR-024, correction obligatoire n° 2/3 : le VFL n'est appliqué que si le profil l'indique
 // explicitement actif à la date de la tranche — jamais déduit du RFR, jamais appliqué à un régime
 // hors micro-BNC (le VFL n'existe pas légalement en déclaration contrôlée).
-function vflActif(profil: ProfilFiscal): boolean {
+export function vflActif(profil: ProfilFiscal): boolean {
   return profil.regimeFiscal === "micro_bnc" && profil.optionVersementLiberatoire === true;
 }
 

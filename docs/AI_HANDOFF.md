@@ -39,14 +39,16 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   part avant de vérifier.
 - **`packages/`** (packages partagés du monorepo, annoncés par ADR-001) — n'existe pas, aucun code
   n'y vit.
-- **Calcul fiscal limité à l'année courante, et seulement pour le micro-BNC régime général** —
-  ADR-024 (`src/lib/fiscal/*`) calcule cotisations/CFP/versement libératoire/plafond micro-BNC/
-  franchise TVA, mais uniquement pour `regimeFiscal = 'micro_bnc'` (jamais déclaration contrôlée),
-  `affiliationRetraite = 'ssi_regime_general'` pour les cotisations (jamais Cipav), et
-  `regimeTva = 'franchise'` pour la TVA. Aucune période ACRE n'est calculée (barème absent du
-  référentiel, ADR-023). Aucune projection N+1 à N+5, aucune TVA collectée/déductible, aucune
-  déclaration automatique — réservé à ADR-025+. Ne jamais supposer qu'un de ces calculs couvre un
-  profil hors de ce périmètre sans vérifier `ResultatFiscal.statut`.
+- **Calcul fiscal limité au même périmètre de régime que ADR-024, étendu à N+1→N+5 par ADR-025** —
+  `src/lib/fiscal/*` calcule cotisations/CFP/versement libératoire/plafond micro-BNC/franchise TVA
+  pour l'année courante (ADR-024) et pour l'horizon N+1 à N+5 (ADR-025), mais uniquement pour
+  `regimeFiscal = 'micro_bnc'` (jamais déclaration contrôlée), `affiliationRetraite =
+  'ssi_regime_general'` pour les cotisations (jamais Cipav), et `regimeTva = 'franchise'` pour la
+  TVA. Aucune période ACRE n'est calculée (barème absent du référentiel, ADR-023). La projection
+  ADR-025 sépare toujours pipeline daté et tendance statistique (jamais additionnés) et ne persiste
+  jamais les hypothèses utilisateur. Aucune TVA collectée/déductible, aucune déclaration automatique.
+  Ne jamais supposer qu'un de ces calculs couvre un profil hors de ce périmètre sans vérifier
+  `ResultatFiscal.statut`/`ResultatFiscalProjete.statut`.
 
 ## Conventions impératives
 

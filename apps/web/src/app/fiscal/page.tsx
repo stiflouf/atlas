@@ -8,6 +8,7 @@ import { calculerVersementLiberatoire, verifierEligibiliteRfr } from "@/lib/fisc
 import { calculerMicroBnc } from "@/lib/fiscal/microBnc";
 import { calculerFranchiseTva } from "@/lib/fiscal/franchiseTva";
 import { calculerProjectionFinAnnee } from "@/lib/fiscal/projectionFinAnnee";
+import { calculerProjectionPluriannuelle, HORIZON_PROJECTION_ANNEES } from "@/lib/fiscal/projectionPluriannuelle";
 import { enregistrerProfilFiscalAction } from "@/actions/profilFiscal";
 import { enregistrerHistoriqueAmorcageAction } from "@/actions/historiqueAmorcage";
 import { enregistrerRfrFoyerAction } from "@/actions/rfrFoyer";
@@ -16,17 +17,21 @@ import ProfilFiscalResume from "@/components/fiscal/ProfilFiscalResume";
 import HistoriqueAmorcageFormulaire from "@/components/fiscal/HistoriqueAmorcageFormulaire";
 import RfrFoyerFormulaire from "@/components/fiscal/RfrFoyerFormulaire";
 import VueAnneeResume from "@/components/fiscal/VueAnneeResume";
-import { formatMontantCentimes } from "@/types/remuneration";
+import ProjectionPluriannuelle from "@/components/fiscal/ProjectionPluriannuelle";
+import { formatMontantCentimes, parseMontantCentimes } from "@/types/remuneration";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, la page figerait au moment du build.
 export const dynamic = "force-dynamic";
 
+type PageProps = { searchParams: Promise<Record<string, string | string[] | undefined>> };
+
 // ADR-023 (fondations : profil, amorçage, RFR) + ADR-024 (moteur fiscal année courante, "Vue
-// {année}" ci-dessous). Le référentiel légal (regle_fiscale) n'est jamais affiché brut — uniquement
-// via les moteurs fiscal/* et leur provenance (ExplicationCalcul). Aucune projection N+1 à N+5, ni
-// TVA collectée/déductible, ni déclaration automatique : hors périmètre, réservé à ADR-025+.
-export default async function FiscalPage() {
+// {année}") + ADR-025 (projection pluriannuelle N+1 à N+5, ci-dessous). Le référentiel légal
+// (regle_fiscale) n'est jamais affiché brut — uniquement via les moteurs fiscal/* et leur
+// provenance (ExplicationCalcul/ExplicationCalculProjection).
+export default async function FiscalPage({ searchParams }: PageProps) {
+  const params = await searchParams;
   const dossierFiscalId = await obtenirDossierFiscalDefaut();
   const [profilActuel, historique, rfr] = await Promise.all([
     chargerProfilFiscalActuel(dossierFiscalId),
@@ -45,6 +50,18 @@ export default async function FiscalPage() {
         calculerProjectionFinAnnee(dossierFiscalId, anneeCourante),
       ])
     : [];
+
+  // Hypothèses utilisateur ADR-025 : lues depuis la query string d'un formulaire GET natif,
+  // jamais persistées (correction n° 5) — valables uniquement pour cette requête.
+  const hypotheses: Record<number, number> = {};
+  for (let annee = anneeCourante + 1; annee <= anneeCourante + HORIZON_PROJECTION_ANNEES; annee++) {
+    const brut = params[`hypothese_${annee}`];
+    const valeur = typeof brut === "string" ? parseMontantCentimes(brut) : undefined;
+    if (valeur !== undefined) hypotheses[annee] = valeur;
+  }
+  const projectionsPluriannuelles = profilActuel
+    ? await calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, HORIZON_PROJECTION_ANNEES, hypotheses)
+    : undefined;
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -74,6 +91,19 @@ export default async function FiscalPage() {
             franchiseTva={franchiseTva}
             projection={projection}
           />
+        </section>
+      )}
+
+      {profilActuel && projectionsPluriannuelles && (
+        <section className="mb-10 border-t border-[#f1f5f9] pt-6">
+          <h2 className="text-[15px] font-semibold text-[#0f172a] mb-1">
+            Projection {anneeCourante + 1}–{anneeCourante + HORIZON_PROJECTION_ANNEES}
+          </h2>
+          <p className="text-[12px] text-[#94a3b8] mb-3">
+            Aucun changement de régime ci-dessous n&apos;est une certitude juridique — uniquement des
+            projections à partir de votre pipeline commercial et de votre rythme d&apos;activité passé.
+          </p>
+          <ProjectionPluriannuelle projections={projectionsPluriannuelles} />
         </section>
       )}
 
