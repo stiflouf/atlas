@@ -660,6 +660,27 @@ Contrôle documentaire pré-transmission et export ZIP — entièrement dérivé
 **Hors périmètre V1** : envoi email/notaire, OCR/LLM, création automatique de tâches, PDF serveur,
 authentification, journalisation d'audit persistante.
 
+## Communications / emails assistés (ADR-031)
+
+**Fichiers** : `src/lib/communications/*.ts`, `src/components/communications/
+BrouillonEmailFormulaire.tsx`, `src/app/communications/nouveau/page.tsx`. Brouillons éphémères,
+aucune table.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Résolution de destinataire depuis une tâche | Toujours | Suit uniquement les FK/relations métier déjà réelles (`deriverCibleTache`) — jamais `titre`/`contexte` |
+| Plusieurs destinataires structurellement possibles | Toujours | Choix humain explicite requis — jamais tranché arbitrairement côté serveur |
+| Aucun destinataire déterminable structurellement | Toujours | Mode contenu seul, « Email impossible : adresse non renseignée » |
+| Destinataire depuis un constat de checklist | Document sans rattachement personne non ambigu | Repli sur les candidats du bien — jamais une correspondance type de document → personne inventée |
+| Contenu du brouillon | Toujours | Uniquement des faits structurés déjà en base ; un fait absent est omis, jamais un espace réservé |
+| Contenu sensible d'un document | Toujours | Jamais intégré — seul le nom du type de pièce est mentionné |
+| Couche de reformulation LLM | — | Hors périmètre ADR-031, aucune dépendance introduite |
+| Envoi | Toujours | `mailto:` uniquement, reconstruit depuis le texte édité — jamais depuis le brouillon initial |
+| Lien mailto trop long | `> ~1800 caractères` | Masqué, la copie reste le seul moyen proposé |
+| Interaction post-envoi | Toujours | Jamais journalisée automatiquement (aucune confirmation d'envoi vérifiable avec `mailto:`) |
+| Constat documentaire choisi | Toujours | Ne crée jamais de tâche automatiquement |
+| Contact notaire | — | Non modélisé — `message_notaire` toujours en contenu seul, aucun champ `biens.notaireEmail` ajouté |
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

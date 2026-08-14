@@ -140,6 +140,32 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Pas de découpage par famille/lot** : un seul ZIP par génération, pas de pack partiel
   pré-configuré (ex. "uniquement les pièces copropriété").
 
+## Communications / emails assistés (ADR-031)
+
+- **Aucun envoi réel** : `mailto:` ouvre le client mail du conseiller, hors du contrôle d'Atlas —
+  aucune confirmation d'envoi vérifiable, donc **aucune interaction n'est journalisée
+  automatiquement** (ni `notesProspectVendeur`/`dernierContactLe`, ni ailleurs). Le conseiller doit
+  ajouter lui-même une note s'il souhaite tracer l'échange.
+- **Aucun journal d'interaction structuré pour `acquereurs`/`comptesRendusVisite`** — un email
+  préparé pour un acquéreur n'est jamais écrit nulle part (ni dans `acquereurs.notes`, champ libre
+  non typé, ni dans `taches`).
+- **Aucun contact notaire structuré** : `message_notaire` est toujours en contenu seul, aucun
+  destinataire n'est jamais résolu — `biens.notaireEmail` a été explicitement écarté (arbitrage
+  ADR-031), une future modélisation notaire devra vivre au niveau transaction/parties.
+- **Brouillon entièrement éphémère** : aucune sauvegarde, un rafraîchissement de page perd les
+  modifications en cours — aucune fonctionnalité "reprendre plus tard" en V1.
+- **Changer de ton régénère tout le texte** depuis les données du dossier — toute modification
+  manuelle déjà faite est remplacée, jamais fusionnée.
+- **Lien `mailto:` limité en longueur** (~1800 caractères) — au-delà, seule la copie du texte est
+  proposée ; pas de troncature automatique du corps.
+- **Résolution "tâche → rémunération" non câblée** : `remunerationRepository` n'expose aucun lookup
+  par id de rémunération, une tâche rattachée à une rémunération retourne toujours 0 candidat.
+- **Couche LLM de reformulation entièrement hors périmètre** : aucune dépendance, aucune clé API,
+  aucun fournisseur choisi — la couche 1 (templates) reste seule en V1.
+- **Envoi Gmail réel (ADR-031-bis) non construit** : la seule intégration Google du projet reste
+  Calendar en lecture seule (`calendar.events.readonly`) — aucun scope d'envoi n'a jamais été
+  demandé au consentement.
+
 ## Statut commercial du bien
 
 - **Historique dérivé non append-only pour "Offre en cours"/"Compromis signé"** (ADR-014),

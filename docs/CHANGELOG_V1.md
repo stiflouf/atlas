@@ -517,6 +517,40 @@ Aucun email, aucun OCR/LLM, aucune tâche automatique, aucune journalisation d'a
 L'absence d'authentification (ADR-006) reste une limite héritée non résolue, documentée comme
 bloquante avant toute exposition à un tiers.
 
+## 31. Emails et relances assistées
+
+Brouillons d'email éphémères — aucune table, aucune persistance. Cinq couches strictement séparées
+(intention/faits/brouillon/validation humaine/envoi).
+
+**Résolution de destinataire depuis toute la surface des tâches**, pas seulement
+prospect-vendeur/acquéreur direct : `resoudreContexteCommunicationDepuisTache` suit les FK/relations
+métier déjà réelles (tâche → visite/offre/compromis → acquéreur ; tâche → bien → contact vendeur
+principal + acquéreur du compromis pertinent) — jamais `titre`/`contexte` (texte libre). Zéro, un ou
+plusieurs destinataires possibles ; un choix humain explicite est présenté dès qu'il y en a
+plusieurs, jamais tranché arbitrairement. Un constat documentaire (checklist ADR-029) ne
+présélectionne un destinataire que si le document porte lui-même un rattachement personne non
+ambigu — sinon repli sur les candidats du bien, aucune correspondance type de document → personne
+inventée.
+
+**Deux couches de contenu, une seule construite** : templates déterministes (8 intentions × 4 tons,
+`genererBrouillonEmail`), zéro donnée inventée, zéro contenu sensible de document intégré (seul le
+nom du type de pièce est mentionné). La couche de reformulation LLM est entièrement hors périmètre
+— serait la première intégration LLM réelle d'Atlas, différée à une passe dédiée.
+
+**`mailto:` avec repli copie systématique** : seul mécanisme d'envoi V1, reconstruit à chaque rendu
+depuis le texte actuellement édité par le conseiller (jamais depuis le brouillon initial), masqué
+au-delà d'une longueur pratique au profit d'un bouton "Copier le message" toujours disponible —
+aucun bouton "Envoyer" nulle part. Aucune interaction n'est journalisée automatiquement (`mailto:`
+ne permet aucune confirmation d'envoi vérifiable côté serveur) ; aucune tâche automatique ; aucun
+document joint (limitation structurelle de `mailto:`).
+
+**Notaire : contenu seul, `biens.notaireEmail` volontairement non ajouté** — aucun contact notaire
+structuré n'existe, une future modélisation devra vivre au niveau transaction/parties avec support
+multi-contacts, pas un champ scalaire unique sur `biens`.
+
+Points d'entrée : tâches (`TacheItem`, `BienTabs`, fiche prospect vendeur), constats de checklist
+(onglet Documents de `BienTabs`), pack notaire (message notaire).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

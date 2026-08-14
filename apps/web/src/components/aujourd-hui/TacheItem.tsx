@@ -1,5 +1,6 @@
+import Link from "next/link";
 import { terminerTacheAction } from "@/actions/terminerTache";
-import { LABEL_ECHEANCE_ABSENTE, type Tache } from "@/types/tache";
+import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, type Tache } from "@/types/tache";
 
 // "Sans échéance" (ADR-028) — jamais "En attente" : une tâche ouverte sans échéance n'est pas une
 // tâche "en attente" au sens métier (réservé à une future notion d'attente client/notaire/document,
@@ -40,6 +41,14 @@ export default function TacheItem({
             LABEL_ECHEANCE_ABSENTE
           )}
         </p>
+        {deriverCibleTache(tache) && (
+          <Link
+            href={`/communications/nouveau?tacheId=${tache.id}`}
+            className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mt-1 inline-block"
+          >
+            Préparer un email
+          </Link>
+        )}
       </div>
     </div>
   );

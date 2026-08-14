@@ -59,9 +59,15 @@ export default async function PageDossierNotaire({ params }: PageProps) {
       </Link>
 
       <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-1">Dossier notaire</h1>
-      <p className="text-[14px] text-[#64748b] mb-6">
+      <p className="text-[14px] text-[#64748b] mb-3">
         {bien.titre} — {bien.adresse}, {bien.codePostal} {bien.ville}
       </p>
+      <Link
+        href={`/communications/nouveau?bienId=${bien.id}&notaire=1`}
+        className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mb-6 inline-block"
+      >
+        Préparer un message pour le notaire →
+      </Link>
 
       <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 mb-6">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-1">

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
-import { LABEL_ECHEANCE_ABSENTE, deriverStatutTache, type Tache } from "@/types/tache";
+import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, deriverStatutTache, type Tache } from "@/types/tache";
 import type { NoteBien } from "@/types/noteBien";
 import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
@@ -406,10 +406,20 @@ export default function BienTabs({
                     <p className="text-[12px] font-medium text-[#64748b] mb-1">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
                     <div className="flex flex-col gap-0.5">
                       {exigencesFamille.map((e) => (
-                        <div key={e.code} className="flex items-center justify-between text-[13px]">
+                        <div key={e.code} className="flex items-center justify-between gap-2 text-[13px]">
                           <span className="text-[#0f172a]">{e.label}</span>
-                          <span className={`font-medium ${COULEUR_ETAT_CONTROLE[e.etat]}`}>
-                            {LABEL_ETAT_CONTROLE_EXIGENCE[e.etat]}
+                          <span className="flex items-center gap-2 shrink-0">
+                            {(e.etat === "manquant" || e.etat === "a_verifier" || e.etat === "perime") && (
+                              <Link
+                                href={`/communications/nouveau?bienId=${bien.id}&exigenceCode=${e.code}`}
+                                className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                              >
+                                Préparer un email
+                              </Link>
+                            )}
+                            <span className={`font-medium ${COULEUR_ETAT_CONTROLE[e.etat]}`}>
+                              {LABEL_ETAT_CONTROLE_EXIGENCE[e.etat]}
+                            </span>
                           </span>
                         </div>
                       ))}
@@ -1300,15 +1310,25 @@ export default function BienTabs({
                           ? `Échéance : ${formatDate(tache.echeance)}`
                           : LABEL_ECHEANCE_ABSENTE}
                     </p>
-                    {statut === "a_faire" && (
-                      <form action={annulerTacheAction} className="mt-1">
-                        <input type="hidden" name="id" value={tache.id} />
-                        <input type="hidden" name="redirectTo" value={`/biens/${bien.id}`} />
-                        <button type="submit" className="text-[11px] text-[#94a3b8] hover:text-[#dc2626] transition-colors">
-                          Annuler
-                        </button>
-                      </form>
-                    )}
+                    <div className="flex items-center gap-3 mt-1">
+                      {deriverCibleTache(tache) && (
+                        <Link
+                          href={`/communications/nouveau?tacheId=${tache.id}`}
+                          className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                        >
+                          Préparer un email
+                        </Link>
+                      )}
+                      {statut === "a_faire" && (
+                        <form action={annulerTacheAction}>
+                          <input type="hidden" name="id" value={tache.id} />
+                          <input type="hidden" name="redirectTo" value={`/biens/${bien.id}`} />
+                          <button type="submit" className="text-[11px] text-[#94a3b8] hover:text-[#dc2626] transition-colors">
+                            Annuler
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   </div>
                 </div>
               );

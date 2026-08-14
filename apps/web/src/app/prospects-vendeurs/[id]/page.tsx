@@ -298,6 +298,12 @@ export default async function FicheProspectVendeur({ params }: PageProps) {
                 </div>
                 <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
                 {tache.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>}
+                <Link
+                  href={`/communications/nouveau?tacheId=${tache.id}`}
+                  className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mt-1 inline-block"
+                >
+                  Préparer un email
+                </Link>
 
                 <details className="mt-3 pt-3 border-t border-[#f1f5f9]">
                   <summary className="text-[12px] font-medium text-[#4338ca] cursor-pointer">

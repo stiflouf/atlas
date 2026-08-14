@@ -943,6 +943,31 @@ ne réimplémente aucune règle de présence/validité documentaire.
 - `/biens/[id]/pack-notaire` : page de lecture, formulaire HTML natif (pas de JavaScript
   nécessaire) pour la sélection manuelle éphémère.
 
+## Communications (`src/lib/communications/`, ADR-031)
+
+**Rôle** : brouillons d'email assistés (relances/suivis), entièrement éphémères — aucune table,
+aucun brouillon persisté. Cinq couches séparées (intention/faits/brouillon/validation/envoi).
+
+- `resoudreContexteCommunicationDepuisTache(tache)` : suit uniquement les FK/relations métier de la
+  tâche (ADR-028 — prospectVendeur/acquereur direct, visite/offre/compromis via leur acquéreur,
+  bien via le contact vendeur principal ADR-027 + l'acquéreur du compromis pertinent) — jamais
+  `titre`/`contexte` (texte libre). Retourne 0/1/plusieurs `DestinataireCandidat` ; un choix humain
+  est requis dès qu'il y en a plusieurs, jamais tranché côté serveur.
+- `resoudreDestinatairesDepuisDocument(document, bienId)` (dans `destinataireCommunication.ts`) :
+  présélectionne un destinataire uniquement si le document porte lui-même un rattachement
+  structuré non ambigu ; sinon repli sur `resoudreDestinatairesDepuisBien`. Aucune correspondance
+  `typeDocument → personne` codée.
+- `genererBrouillonEmail(intention, faits, ton, destinataireEmail?)` : templates déterministes
+  (8 intentions × 4 tons), zéro LLM, zéro donnée inventée — un fait absent est omis du texte.
+- `construireLienMailto` : seul mécanisme d'envoi V1 (`encodeURIComponent`, jamais
+  `URLSearchParams`) — reconstruit à chaque rendu depuis le texte édité par le conseiller. Toujours
+  doublé d'un bouton "Copier le message", jamais un bouton "Envoyer".
+- `/communications/nouveau` (page, trois origines via `searchParams` : `tacheId`, ou
+  `bienId`+`exigenceCode`, ou `bienId`+`notaire=1`) : orchestre résolution + génération, présente le
+  choix humain si plusieurs destinataires sont possibles.
+- Aucun contact notaire structuré n'existe : `message_notaire` a toujours 0 candidat (contenu
+  seul) — `biens.notaireEmail` volontairement non ajouté (arbitrage ADR-031).
+
 ## Migrations
 
 | Fichier | Tables introduites |

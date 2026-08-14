@@ -169,6 +169,18 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
   (ADR-030) comme référence de la démarche attendue.
 - Un `console.log` présenté comme une piste d'audit — ce n'est pas une traçabilité, une vraie
   journalisation reste une évolution future explicite (ADR-030).
+- Un destinataire d'email deviné depuis `titre`/`contexte` d'une tâche ou depuis un type de
+  document — la résolution suit uniquement des FK/relations métier réelles, jamais un texte libre
+  ni une correspondance type → personne codée en dur (ADR-031).
+- Une interaction (`notesProspectVendeur`/`dernierContactLe`) marquée automatiquement après la
+  génération d'un brouillon d'email — `mailto:` ne permet aucune confirmation d'envoi vérifiable,
+  seul un futur envoi Gmail réel (ADR-031-bis) rendrait cette automatisation légitime.
+- `biens.notaireEmail` ou tout champ scalaire unique pour un contact notaire — écarté
+  explicitement (ADR-031), une future modélisation devra supporter plusieurs contacts au niveau
+  transaction/parties.
+- Une couche LLM introduite "en même temps" qu'un moteur de contenu déterministe — ADR-004 exige
+  Human-in-the-Loop et une sortie structurée typée ; un LLM ne reçoit jamais que du texte déjà
+  entièrement déterminé par la couche 1, jamais les faits bruts.
 
 ## Procédure obligatoire avant toute modification
 
