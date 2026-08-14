@@ -205,9 +205,12 @@ export async function retirerOffre(id: string): Promise<Bien | undefined> {
   return ligne ? ligneVersBien(ligne) : undefined;
 }
 
-export async function marquerCompromisSigne(id: string): Promise<Bien | undefined> {
+// `executeur` optionnel (ADR-032) : permet de poser ce jalon dans la même transaction que
+// `compromisRepository.enregistrerCompromis` et l'émission de l'événement `compromis_signe`
+// (voir `ajouterCompromisAction`, désormais transactionnel).
+export async function marquerCompromisSigne(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(biensTable)
     .set({ compromisSigneLe: new Date() })
     .where(eq(biensTable.id, id))

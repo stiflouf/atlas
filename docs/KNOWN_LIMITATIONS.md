@@ -188,6 +188,40 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   production hors mode test peut nécessiter une vérification par Google, indépendamment de ce
   code, à traiter comme un prérequis opérationnel avant toute mise en production réelle.
 
+## Automatisations déterministes événement → action interne (ADR-032)
+
+- **Seulement 4 règles, 4 événements** — `visite_realisee`, `rdv_estimation_realise`,
+  `mandat_signe`, `compromis_signe`. Aucun événement structuré n'existe encore pour un constat de
+  checklist documentaire (ADR-029), une offre, ou une perte de mandat/compromis — étendre le
+  catalogue est additif (ajouter un type d'événement + une règle), mais rien n'existe aujourd'hui
+  au-delà de ces 4 cas.
+- **Aucun scheduler, aucune échéance artificielle** — toute règle du type "aucun contact depuis N
+  jours" nécessiterait un mécanisme temporel qui n'existe pas dans Atlas (ADR-005, aucun worker) ;
+  explicitement hors périmètre, pas seulement non prioritaire.
+- **Seule action possible : `creer_tache`** — aucune action externe à conséquence (email, SMS,
+  transmission notaire, modification d'offre/compromis, archivage, suppression) n'est câblable sans
+  une nouvelle ADR ; le type `ChampsTacheAutomatique` est structurellement monomorphe, l'étendre
+  nécessiterait de changer ce type lui-même.
+- **Aucun retry automatique** — une exécution `echouee`, ou une exécution `a_traiter` laissée par un
+  crash entre le COMMIT métier et le traitement synchrone qui suit, reste dans cet état
+  indéfiniment tant qu'aucune reprise manuelle n'est déclenchée. La page `/automatisations` rend
+  l'état visible, ne le résout jamais elle-même.
+- **Suppression d'une entité source bloquée tant qu'un événement la référence** — conséquence
+  directe et assumée de l'append-only de `evenements_metier` (`NO ACTION`, ADR-032 correction n°5) :
+  un compte rendu de visite, un prospect vendeur ou un compromis ayant déclenché un événement ne
+  peut plus être supprimé physiquement. Aucun mécanisme n'existe pour "détacher" un événement d'une
+  entité avant sa suppression — non construit, la suppression physique de ces entités n'existe déjà
+  pas ailleurs dans Atlas (archivage seulement, ADR-012).
+- **Fenêtre de course résiduelle sur `rdv_estimation_realise`** — la détection de "transition
+  réelle" (date absente → renseignée) est calculée dans la Server Action, avant l'ouverture de la
+  transaction, pas via une garde `WHERE ... IS NULL` dans le repository (qui casserait la correction
+  légitime de cette date) : deux requêtes concurrentes sur le même prospect pourraient toutes deux
+  se croire "la première" transition. L'index unique partiel sur `evenements_metier` reste le filet
+  de sécurité qui empêche malgré tout un doublon d'événement.
+- **Aucune modification ni annulation d'une exécution déjà résolue** — une fois `reussie` ou
+  `echouee`, une ligne `executions_automatisation` est figée ; corriger une tâche produite par
+  erreur se fait au niveau de la tâche elle-même (ADR-028), jamais en rejouant l'exécution.
+
 ## Statut commercial du bien
 
 - **Historique dérivé non append-only pour "Offre en cours"/"Compromis signé"** (ADR-014),

@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { comptesRendusVisite as comptesRendusVisiteTable } from "@/db/schema";
 import type { CompteRenduVisite, Interet } from "@/types/compteRenduVisite";
 
@@ -50,8 +50,13 @@ export async function getCompteRenduVisiteById(id: string): Promise<CompteRenduV
 // l'appelant (server action) — insertion pure ici, même principe que les autres repositories.
 export type NouveauCompteRendu = Omit<CompteRenduVisite, "id" | "creeLe">;
 
-export async function enregistrerCompteRenduVisite(input: NouveauCompteRendu): Promise<CompteRenduVisite> {
-  const [ligne] = await getDb()
+// `executeur` optionnel (ADR-032) : permet d'émettre l'événement métier `visite_realisee` dans la
+// même transaction que cet enregistrement.
+export async function enregistrerCompteRenduVisite(
+  input: NouveauCompteRendu,
+  executeur: Executeur = getDb()
+): Promise<CompteRenduVisite> {
+  const [ligne] = await executeur
     .insert(comptesRendusVisiteTable)
     .values({
       bienId: input.bienId,

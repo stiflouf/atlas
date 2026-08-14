@@ -702,6 +702,38 @@ aucune table.
 | Révocation Google | Toujours | Globale (Calendar + Gmail si les deux sont accordés) — libellé UI honnête, jamais partiel |
 | Fallback mailto/copie | Toujours | Conservé dans tous les états, y compris Gmail disponible |
 
+## Automatisations déterministes événement → action interne (ADR-032)
+
+**Fichiers** : `src/lib/automatisations/*.ts`, `src/actions/automatisations.ts`,
+`src/app/automatisations/page.tsx`. Distinct des alertes ADR-026 (jugement dérivé, jamais une
+action) et des tâches ADR-028 (l'action produite elle-même, sans son propre mécanisme de
+déclenchement avant cet ADR). Séparation stricte ÉVÉNEMENT (`evenements_metier`) / RÈGLE (code
+TypeScript) / EXÉCUTION (`executions_automatisation`) / ACTION PRODUITE (`taches`).
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Émission d'un événement | Toujours | Dans la **même transaction** que la mutation métier qui le déclenche — jamais un trou entre mutation et événement |
+| Double submit de la mutation métier | Événement déjà enregistré (index unique partiel) | `ON CONFLICT DO NOTHING`, aucun second événement, aucune exécution préparée une seconde fois |
+| Activation d'une règle | Lue au moment de l'émission de l'événement | Figée dans la transaction métier — une activation ultérieure ne traite jamais rétroactivement un événement déjà survenu |
+| Nouvelle règle ajoutée au catalogue | Toujours | Démarre inactive (seed `active = false`) — jamais active du seul fait d'un déploiement |
+| Traitement d'une exécution `a_traiter` | Toujours | Synchrone, juste après le COMMIT de la transaction métier — jamais dans la transaction elle-même, jamais un worker |
+| Création de la tâche + succès de l'exécution | Toujours | Une seule transaction (verrouillage `FOR UPDATE` + `creerTache` + pose `tacheId`/`reussieLe`) — jamais deux écritures séparées |
+| Échec de la construction/création de la tâche | Toujours | Transaction annulée dans son ensemble (aucune tâche orpheline), `echoueeLe` + message technique court posés séparément, hors de la transaction avortée |
+| Exécution déjà résolue (`reussie`/`echouee`) | Nouveau passage sur la même ligne | No-op — jamais une seconde tâche |
+| Suppression d'une entité source (compte rendu, prospect vendeur, compromis) | Un événement la référence encore | Refusée par Postgres (`NO ACTION`) — jamais un effacement silencieux de la trace d'audit |
+| Action automatique produite | Toujours | `creer_tache` uniquement — `envoyer_email`/`envoyer_sms`/`transmettre_pack_notaire`/`modifier_offre`/`modifier_compromis`/`archiver`/`supprimer` n'existent dans aucune règle |
+| Règle décidant de ne rien produire | `construireTache()` retourne `undefined` | Exécution marquée `reussie` sans `tacheId` — un résultat honnête, pas un échec |
+| Provenance d'une tâche automatique | `tache.origine = 'automatique'` | Affichée ("Créée automatiquement — Règle : {nom}") sur toutes les listes de tâches |
+
+**Les 4 règles V1** (`src/lib/automatisations/catalogueRegles.ts`) : `suivi_apres_visite`
+(→ `visite_realisee`), `suivi_apres_rdv_estimation` (→ `rdv_estimation_realise`),
+`preparation_apres_mandat` (→ `mandat_signe`), `preparation_dossier_notaire_apres_compromis`
+(→ `compromis_signe`). Chacune produit au plus une tâche, jamais d'échéance artificielle.
+
+**Hors périmètre V1** : toute action externe à conséquence, scheduler/échéances artificielles,
+règles fondées sur un constat de checklist documentaire (ADR-029), retry automatique, constructeur
+de règles no-code, modification/annulation d'une exécution déjà résolue.
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

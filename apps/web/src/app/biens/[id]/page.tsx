@@ -15,6 +15,7 @@ import { listerLiensPourBien } from "@/lib/offreVisiteRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerRemunerationsPourBien } from "@/lib/remunerationRepository";
 import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
+import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
 import { calculerChecklistDossier } from "@/lib/documents/checklistDossier";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { rendezVousDuJour } from "@/data/agenda";
@@ -256,6 +257,7 @@ export default async function FicheBien({ params }: PageProps) {
         compromisActuel={compromisActuel}
         prospectVendeurOrigine={prospectVendeurOrigine}
         checklist={checklist}
+        labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
       />
     </div>
   );

@@ -10,6 +10,8 @@ import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
 import { MOTIFS_PERTE_PROSPECT_VENDEUR, LABEL_MOTIF_PERTE_PROSPECT_VENDEUR } from "@/types/motifPerteProspectVendeur";
 import { TYPES_NOTE_PROSPECT_VENDEUR, LABEL_TYPE_NOTE_PROSPECT_VENDEUR, TYPES_NOTE_INTERACTION } from "@/types/noteProspectVendeur";
 import { deriverStatutTache, LABEL_ECHEANCE_ABSENTE, LABEL_TYPE_TACHE } from "@/types/tache";
+import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
+import type { CodeRegleAutomatisation } from "@/types/automatisation";
 import { formatMontantCentimes } from "@/types/remuneration";
 import {
   archiverProspectVendeurAction,
@@ -298,6 +300,14 @@ export default async function FicheProspectVendeur({ params }: PageProps) {
                 </div>
                 <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
                 {tache.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>}
+                {tache.origine === "automatique" && (
+                  <p className="text-[11px] text-[#94a3b8] mt-0.5">
+                    Créée automatiquement — Règle :{" "}
+                    {tache.origineCode && LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
+                      ? LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
+                      : "inconnue"}
+                  </p>
+                )}
                 <Link
                   href={`/communications/nouveau?tacheId=${tache.id}`}
                   className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mt-1 inline-block"

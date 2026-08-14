@@ -10,10 +10,11 @@ valeurs.
 ## État actuel du projet
 
 Produit mono-conseiller en construction active, 100% TypeScript/Next.js (`apps/web`), PostgreSQL
-via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-13 : biens, acquéreurs,
+via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-14 : biens, acquéreurs,
 prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), notes de bien, comptes
-rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien. Détail complet :
-`docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
+rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien, moteur
+d'automatisations événement → tâche (ADR-032). Détail complet : `docs/ARCHITECTURE.md`,
+chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
 
@@ -72,6 +73,14 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   le confondre avec l'absence d'échéance ("Sans échéance" en UI). Terminer une tâche liée à un
   prospect vendeur n'enregistre une vraie interaction (ADR-027) que si le conseiller coche
   explicitement la case prévue — jamais automatique, jamais pour les autres cibles.
+- **Automatisations (ADR-032) limitées à 4 règles fixes, une seule action possible** — `creer_tache`
+  uniquement ; `envoyer_email`, `envoyer_sms`, `transmettre_pack_notaire`, `modifier_offre`,
+  `modifier_compromis`, `archiver`, `supprimer` ne sont câblables par aucune règle actuelle. Aucun
+  scheduler, aucune échéance artificielle (type "aucun contact depuis 7 jours"), aucune règle
+  fondée sur un constat de checklist documentaire (ADR-029), aucun retry automatique d'une
+  exécution `echouee`/`a_traiter`. Les 4 règles démarrent **inactives** au seed — ne jamais supposer
+  qu'une règle listée dans le catalogue est effectivement active sans vérifier
+  `configurations_automatisation`.
 
 ## Conventions impératives
 
@@ -191,6 +200,20 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
   `envois_email` porte trois timestamps terminaux distincts, jamais deux fondus en un.
 - Le corps complet d'un email envoyé stocké une seconde fois dans `envois_email` — seul un
   `contenuHash` (SHA-256) de diagnostic y est conservé, jamais le texte.
+- Un champ `actionType: string` générique (ou équivalent) sur une règle d'automatisation pour
+  "préparer" une future action externe — le type `ChampsTacheAutomatique` (ADR-032) est
+  délibérément monomorphe, c'est la frontière de sécurité qui empêche `creer_tache` de glisser vers
+  `envoyer_email` sans une nouvelle ADR explicite.
+- Un `ON DELETE CASCADE` depuis `comptes_rendus_visite`/`prospects_vendeurs`/`compromis` vers
+  `evenements_metier`, ou depuis `executions_automatisation.evenementId` — écarté explicitement
+  (ADR-032 correction n°5) : la table est un audit append-only, une cascade effacerait
+  silencieusement la trace qu'un événement a eu lieu.
+- Une préparation d'exécution (`executions_automatisation`) créée **après** le COMMIT de la
+  transaction métier plutôt que dans la même transaction que l'événement — réintroduirait
+  exactement le trou crash qu'ADR-032 (correction n°2) a fermé.
+- Une réévaluation de l'activation d'une règle au moment du traitement plutôt qu'à l'émission de
+  l'événement — figée une fois pour toutes dans la transaction métier (ADR-032 correction n°3),
+  jamais un effet rétroactif d'une activation tardive.
 
 ## Procédure obligatoire avant toute modification
 

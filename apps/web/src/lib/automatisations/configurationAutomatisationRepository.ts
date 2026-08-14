@@ -1,0 +1,38 @@
+import { getDb } from "@/db/client";
+import { configurationsAutomatisation } from "@/db/schema";
+import { CODES_REGLE_AUTOMATISATION } from "@/types/automatisation";
+import type { ConfigurationAutomatisation, CodeRegleAutomatisation } from "@/types/automatisation";
+
+function ligneVersConfiguration(ligne: typeof configurationsAutomatisation.$inferSelect): ConfigurationAutomatisation {
+  return {
+    regleCode: ligne.regleCode as CodeRegleAutomatisation,
+    active: ligne.active,
+    modifieLe: ligne.modifieLe.toISOString(),
+  };
+}
+
+// Une ligne par règle du catalogue (seedées inactives, ADR-032) — absence de ligne traitée comme
+// inactive par l'appelant (jamais supposée active).
+export async function listerConfigurationsAutomatisation(): Promise<ConfigurationAutomatisation[]> {
+  const lignes = await getDb().select().from(configurationsAutomatisation);
+  const parCode = new Map(lignes.map((l) => [l.regleCode, ligneVersConfiguration(l)]));
+  return CODES_REGLE_AUTOMATISATION.map(
+    (code) => parCode.get(code) ?? { regleCode: code, active: false, modifieLe: new Date(0).toISOString() }
+  );
+}
+
+// Bascule explicite (ADR-032, point 7) — jamais un état implicite. `onConflictDoUpdate` : la ligne
+// existe déjà pour les 4 règles V1 (seedées), mais reste robuste si une future règle n'a encore
+// aucune ligne.
+export async function definirActivationAutomatisation(
+  regleCode: CodeRegleAutomatisation,
+  active: boolean
+): Promise<void> {
+  await getDb()
+    .insert(configurationsAutomatisation)
+    .values({ regleCode, active })
+    .onConflictDoUpdate({
+      target: configurationsAutomatisation.regleCode,
+      set: { active, modifieLe: new Date() },
+    });
+}

@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { compromis as compromisTable } from "@/db/schema";
 import type { Compromis, StatutCompromis } from "@/types/compromis";
 import type { MotifPerte } from "@/types/motifPerte";
@@ -76,8 +76,11 @@ export async function getCompromisById(id: string): Promise<Compromis | undefine
 // repositories.
 export type NouveauCompromis = Omit<Compromis, "id" | "statut" | "creeLe">;
 
-export async function enregistrerCompromis(input: NouveauCompromis): Promise<Compromis> {
-  const [ligne] = await getDb()
+// `executeur` optionnel (ADR-032) : permet d'émettre l'événement métier `compromis_signe` et de
+// poser `biens.compromisSigneLe` dans la même transaction que cet enregistrement — corrige au
+// passage l'absence d'atomicité entre les deux écritures dans `ajouterCompromisAction`.
+export async function enregistrerCompromis(input: NouveauCompromis, executeur: Executeur = getDb()): Promise<Compromis> {
+  const [ligne] = await executeur
     .insert(compromisTable)
     .values({
       bienId: input.bienId,

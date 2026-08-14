@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { getDb } from "@/db/client";
 import { getBienById, marquerCompromisSigne } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { getOffreById } from "@/lib/offreRepository";
@@ -11,6 +12,8 @@ import {
   marquerCompromisRealise,
   listerCompromisPourBien,
 } from "@/lib/compromisRepository";
+import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
+import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { StatutCompromis } from "@/types/compromis";
 import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
 
@@ -39,6 +42,11 @@ function parseOffreIdOptionnel(valeur: FormDataEntryValue | null): string | unde
 // en_cours pour ce bien (garde d'unicité applicative, ADR-016), ou si l'offre liée ne correspond
 // pas au bien/acquéreur/statut attendu. Couplage : pose compromisSigneLe sur le bien dans la
 // même action, un seul geste conseiller.
+//
+// Transaction unique englobant l'enregistrement du compromis, la pose de compromisSigneLe et
+// l'émission de l'événement `compromis_signe` (ADR-032, correction validée) : corrige une absence
+// d'atomicité préexistante entre les deux premières écritures (auparavant deux appels séquentiels
+// non transactionnels) en même temps qu'elle y accroche le moteur d'automatisations.
 export async function ajouterCompromisAction(formData: FormData): Promise<void> {
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
@@ -69,8 +77,16 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
     if (offre.statut !== "acceptee") throw new Error("Cette offre n'est pas acceptée.");
   }
 
-  await enregistrerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe });
-  await marquerCompromisSigne(bienId);
+  const idsExecutionsATraiter = await getDb().transaction(async (tx) => {
+    const compromis = await enregistrerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe }, tx);
+    await marquerCompromisSigne(bienId, tx);
+    const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
+      { typeEvenement: "compromis_signe", compromisId: compromis.id },
+      tx
+    );
+    return idsExecutionsATraiter;
+  });
+  await traiterExecutionsEnAttente(idsExecutionsATraiter);
 
   redirect(`/biens/${bienId}`);
 }

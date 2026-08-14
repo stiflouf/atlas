@@ -8,6 +8,7 @@ import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { DocumentBien } from "@/types/documentBien";
 import type { Offre } from "@/types/offre";
 import type { Compromis } from "@/types/compromis";
+import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
 import BienTabs from "./BienTabs";
 
 function bienTest(surcharge: Partial<Bien> = {}): Bien {
@@ -55,6 +56,7 @@ describe("BienTabs", () => {
         documents={[] as DocumentBien[]}
         offres={[] as Offre[]}
         compromis={[] as Compromis[]}
+        labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
       />
     );
 
@@ -79,6 +81,7 @@ describe("BienTabs", () => {
         documents={[] as DocumentBien[]}
         offres={[] as Offre[]}
         compromis={[] as Compromis[]}
+        labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
       />
     );
 
@@ -113,6 +116,7 @@ describe("BienTabs", () => {
         documents={[] as DocumentBien[]}
         offres={[] as Offre[]}
         compromis={[] as Compromis[]}
+        labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
       />
     );
 
@@ -140,6 +144,7 @@ describe("BienTabs", () => {
         documents={[] as DocumentBien[]}
         offres={[] as Offre[]}
         compromis={[] as Compromis[]}
+        labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
       />
     );
 
@@ -156,6 +161,7 @@ describe("BienTabs", () => {
         documents={[] as DocumentBien[]}
         offres={[] as Offre[]}
         compromis={[] as Compromis[]}
+        labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
       />
     );
 

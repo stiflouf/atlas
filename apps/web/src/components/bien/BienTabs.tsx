@@ -32,6 +32,7 @@ import {
   type Remuneration,
 } from "@/types/remuneration";
 import { LABEL_ETAT_CONTROLE_EXIGENCE, type ChecklistDossier } from "@/lib/documents/checklistDossier";
+import type { CodeRegleAutomatisation } from "@/types/automatisation";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerTacheAction } from "@/actions/terminerTache";
 import { annulerTacheAction } from "@/actions/annulerTache";
@@ -112,6 +113,7 @@ export default function BienTabs({
   compromisActuel,
   prospectVendeurOrigine,
   checklist,
+  labelRegleAutomatisation,
 }: {
   bien: Bien;
   dossier?: DossierBien;
@@ -128,6 +130,7 @@ export default function BienTabs({
   compromisActuel?: Compromis;
   prospectVendeurOrigine?: ProspectVendeur;
   checklist?: ChecklistDossier;
+  labelRegleAutomatisation: Record<CodeRegleAutomatisation, string>;
 }) {
   const [active, setActive] = useState<Tab>("contexte");
   const [acquereurOffreSelectionne, setAcquereurOffreSelectionne] = useState("");
@@ -1310,6 +1313,14 @@ export default function BienTabs({
                           ? `Échéance : ${formatDate(tache.echeance)}`
                           : LABEL_ECHEANCE_ABSENTE}
                     </p>
+                    {tache.origine === "automatique" && (
+                      <p className="text-[11px] text-[#94a3b8] mt-0.5">
+                        Créée automatiquement — Règle :{" "}
+                        {tache.origineCode && labelRegleAutomatisation[tache.origineCode as CodeRegleAutomatisation]
+                          ? labelRegleAutomatisation[tache.origineCode as CodeRegleAutomatisation]
+                          : "inconnue"}
+                      </p>
+                    )}
                     <div className="flex items-center gap-3 mt-1">
                       {deriverCibleTache(tache) && (
                         <Link

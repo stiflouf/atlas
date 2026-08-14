@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { taches as tachesTable } from "@/db/schema";
 import { tachesMetier as tachesDemo } from "@/data/taches";
 import type { CibleTache, OrigineTache, PrioriteTache, Tache, TypeTache } from "@/types/tache";
@@ -93,9 +93,11 @@ export type NouvelleTache = Omit<
 > & { cible?: CibleTache };
 
 // Insertion pure : la validation métier (titre non vide, au plus une cible, archivage, etc.) est
-// de la responsabilité de l'appelant (Server Action), pas de ce repository.
-export async function creerTache(input: NouvelleTache): Promise<Tache> {
-  const [ligne] = await getDb()
+// de la responsabilité de l'appelant (Server Action), pas de ce repository. `executeur` optionnel
+// (même principe que bienRepository.creerBien, ADR-019) : permet au moteur d'automatisations
+// (ADR-032) de créer la tâche dans la même transaction que la pose de reussieLe sur l'exécution.
+export async function creerTache(input: NouvelleTache, executeur: Executeur = getDb()): Promise<Tache> {
+  const [ligne] = await executeur
     .insert(tachesTable)
     .values({
       titre: input.titre,

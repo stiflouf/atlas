@@ -590,6 +590,51 @@ encodage RFC 2047 de l'objet, base64url pour le message complet.
 CRM, qui ne porte que l'objet). Clôture de tâche proposée explicitement après succès, jamais
 automatique. Fallback `mailto:`/copie conservé dans tous les états. Aucun contact notaire ajouté.
 
+## 32. Moteur d'automatisations déterministes événement → action interne
+
+Premier maillon reliant un fait métier structuré à la création automatique d'une tâche (ADR-028) —
+distinct des alertes ADR-026 (jugement dérivé, jamais une action) et des tâches ADR-028 elles-mêmes
+(l'action produite, sans mécanisme de déclenchement avant cet ADR). Quatre concepts strictement
+séparés : ÉVÉNEMENT (`evenements_metier`, append-only) / RÈGLE (catalogue TypeScript, testé et
+versionné, pas une table) / EXÉCUTION (`executions_automatisation`, traçable) / ACTION PRODUITE
+(`taches`, `origine = 'automatique'`). Aucun LLM, seule action possible : `creer_tache`.
+
+**Idempotence à deux niveaux** : trois index uniques partiels sur `evenements_metier` empêchent
+qu'un double submit de la mutation métier crée deux événements pour le même fait ;
+`UNIQUE(regleCode, evenementId)` sur `executions_automatisation` empêche une règle de s'exécuter
+deux fois pour un même événement déjà enregistré. Un événement n'est émis que sur une transition
+métier réelle, jamais un état déjà atteint.
+
+**Aucun trou crash entre événement et exécutions prévues** : mutation métier, insertion de
+l'événement et préparation des exécutions à traiter (selon les règles actives à cet instant précis
+— activation figée, jamais réévaluée après coup) vivent dans la même transaction ; le traitement
+effectif reste synchrone juste après le COMMIT, sans worker (aucun n'existe, ADR-005). Une
+exécution `a_traiter` laissée par un crash reste visible, jamais perdue, jamais retraitée
+automatiquement.
+
+**Création de la tâche et succès de l'exécution : une seule transaction** — verrouillage
+(`FOR UPDATE`), construction, `creerTache`, pose de `tacheId`/`reussieLe` d'un bloc ; un échec
+annule tout (aucune tâche orpheline), `echoueeLe` + message technique court posés séparément,
+hors de la transaction avortée.
+
+**Les 4 règles V1** démarrent toutes inactives (seed `active = false`) — l'activation est un geste
+explicite depuis `/automatisations`, jamais un effet de bord d'un déploiement :
+`suivi_apres_visite`, `suivi_apres_rdv_estimation`, `preparation_apres_mandat`,
+`preparation_dossier_notaire_apres_compromis`. La page rend visibles les états À traiter/Réussie/
+Échouée, sans retry automatique.
+
+**`evenements_metier` append-only** : aucune cascade depuis les entités source
+(compte rendu de visite, prospect vendeur, compromis) ni depuis `executions_automatisation.
+evenementId` (`NO ACTION`) — supprimer une donnée métier référencée par un événement est refusé,
+jamais un effacement silencieux de la trace d'audit. Effet de bord corrigé dans 5 suites de tests
+préexistantes dont les fixtures signaient un mandat/créaient un compromis puis le supprimaient en
+`afterAll`.
+
+Provenance visible sur toute tâche automatique ("Créée automatiquement — Règle : {nom}"). Points de
+déclenchement : `enregistrerCompteRenduVisiteAction`, `marquerRdvEstimationRealiseProspectVendeurAction`,
+`signerMandatProspectVendeur`, `ajouterCompromisAction` (devenu transactionnel à cette occasion,
+corrigeant une non-atomicité préexistante).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

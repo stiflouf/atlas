@@ -991,6 +991,68 @@ Le corps complet du message n'y est jamais stocké.
 **après** le déclenchement de l'appel Gmail — le résultat réel est alors inconnu, jamais assimilé à
 un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 
+## `evenements_metier` (ADR-032)
+
+**Rôle** : trace append-only d'un fait métier structuré déjà survenu — jamais un jugement dérivé
+(voir `evenements_metier` vs alertes ADR-026), jamais l'action produite (voir `taches`, ADR-028).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `type_evenement` | text | non | `CHECK IN ('visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe')` |
+| `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | |
+| `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, **`NO ACTION`**) | oui | |
+| `compromis_id` | uuid (FK → `compromis.id`, **`NO ACTION`**) | oui | |
+| `survenu_le` | timestamptz | non | |
+
+**Contraintes** :
+- `evenements_metier_une_seule_cible_check` — exactement une des trois colonnes cible est
+  renseignée (`= 1`, pas `<= 1` : un événement sans cible n'a pas de sens).
+- Trois index uniques **partiels** : `(type_evenement, compte_rendu_visite_id) WHERE ... IS NOT
+  NULL`, idem pour `prospect_vendeur_id` et `compromis_id` — empêchent un double submit de la
+  mutation métier de créer deux événements représentant le même fait.
+
+**Aucun `ON DELETE CASCADE` depuis les trois entités source** (volontaire, ADR-032 correction n°5) :
+supprimer un compte rendu de visite, un prospect vendeur ou un compromis alors qu'un événement le
+référence encore est **refusé** par Postgres, jamais un effacement silencieux de la trace d'audit.
+
+## `executions_automatisation` (ADR-032)
+
+**Rôle** : une tentative d'application d'une règle (`src/lib/automatisations/catalogueRegles.ts`,
+code TypeScript, pas une table) à un événement donné — traçable, jamais réévaluée après coup.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `regle_code` | text | non | `CHECK`, une des 4 valeurs `CodeRegleAutomatisation` |
+| `evenement_id` | uuid (FK → `evenements_metier.id`, **`NO ACTION`**) | non | |
+| `tache_id` | uuid (FK → `taches.id`, `SET NULL`) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche |
+| `demarree_le` | timestamptz | non | posée à la création de la ligne (dans la transaction métier — ADR-032 correction n°2, jamais après coup) |
+| `reussie_le` / `echouee_le` | timestamptz | oui | mutuellement exclusifs par construction applicative (gel concurrent), jamais un `CHECK` SQL |
+| `erreur_technique` | text | oui | message court (`.slice(0,200)`), jamais un dump brut |
+
+**Contrainte `UNIQUE(regle_code, evenement_id)`** : une règle ne s'exécute jamais deux fois pour le
+même événement déjà enregistré.
+
+État jamais stocké séparément : dérivé de `reussie_le`/`echouee_le` (`deriverEtatEnvoiEmail`-like
+`deriverEtatExecutionAutomatisation`, `src/types/automatisation.ts`) — `a_traiter` (les deux `NULL`,
+état laissé par la transaction métier), `reussie`, `echouee`.
+
+## `configurations_automatisation` (ADR-032)
+
+**Rôle** : seule partie d'une règle qui vit en base — son activation, jamais sa logique (le
+catalogue reste TypeScript, versionné et testé, pas un constructeur no-code).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `regle_code` | text (PK) | non | `CHECK`, une des 4 valeurs `CodeRegleAutomatisation` |
+| `active` | boolean | non | défaut `false` — une règle absente de cette table est traitée comme inactive par l'appelant, jamais supposée active |
+| `modifie_le` | timestamptz | non | |
+
+Lue **au moment de l'émission de l'événement**, dans la transaction métier (ADR-032 correction
+n°3) — jamais réévaluée plus tard : activer une règle après coup ne traite jamais rétroactivement
+les événements déjà survenus pendant qu'elle était inactive.
+
 ## Migrations
 
 | Fichier | Tables introduites |
@@ -1015,6 +1077,7 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 | `0017_sudden_surge.sql` | `taches` (remplace `actions`, supprimée) ; migration des données `actions`→`taches` et `prospects_vendeurs.prochaine_action*`→`taches` ; `DROP TABLE actions` ; `DROP COLUMN` des deux anciens champs simples sur `prospects_vendeurs` |
 | `0018_wise_morgan_stark.sql` | ADR-029 : `nom_copropriete`/`charge_honoraires` sur `biens` ; `type_document`, `type_document_detail`, `date_document`, `date_fin_validite`, `compromis_id`, `acquereur_id`, `prospect_vendeur_id`, `copropriete_declaree`, `adresse_declaree`, `provenance`, `etat_verification`, `modifie_le` sur `documents_bien` |
 | `0019_new_hemingway.sql` | ADR-031-bis : table `envois_email` |
+| `0020_furry_whirlwind.sql` | ADR-032 : `evenements_metier`, `executions_automatisation`, `configurations_automatisation` ; seed des 4 règles V1, toutes `active = false` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

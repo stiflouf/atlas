@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 // Garde-fous des Server Actions (ADR-027) : aucune séquence stricte entre jalons, mais perte et
 // signature restent terminales — même style que actions/compromis.test.ts (seul le chemin de
@@ -7,7 +7,12 @@ import { eq } from "drizzle-orm";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, prospectsVendeurs: prospectsVendeursTable } = await import("@/db/schema");
+const {
+  biens: biensTable,
+  prospectsVendeurs: prospectsVendeursTable,
+  evenementsMetier: evenementsMetierTable,
+  executionsAutomatisation: executionsAutomatisationTable,
+} = await import("@/db/schema");
 const { creerProspectVendeur, marquerProspectVendeurPerdu, signerMandatProspectVendeur } = await import(
   "@/lib/prospectVendeurRepository"
 );
@@ -23,6 +28,20 @@ const idsProspectsCrees: string[] = [];
 const idsBiensCrees: string[] = [];
 
 afterAll(async () => {
+  // signerMandatProspectVendeur émet un événement mandat_signe (ADR-032) — evenements_metier ne
+  // cascade jamais depuis sa source (correction n°5, append-only) : à purger avant le prospect
+  // lui-même, sinon la suppression échoue (violation de clé étrangère).
+  if (idsProspectsCrees.length > 0) {
+    const evenements = await getDb()
+      .select({ id: evenementsMetierTable.id })
+      .from(evenementsMetierTable)
+      .where(inArray(evenementsMetierTable.prospectVendeurId, idsProspectsCrees));
+    const idsEvenements = evenements.map((e) => e.id);
+    if (idsEvenements.length > 0) {
+      await getDb().delete(executionsAutomatisationTable).where(inArray(executionsAutomatisationTable.evenementId, idsEvenements));
+      await getDb().delete(evenementsMetierTable).where(inArray(evenementsMetierTable.id, idsEvenements));
+    }
+  }
   for (const id of idsProspectsCrees) await getDb().delete(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id));
   for (const id of idsBiensCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
 });

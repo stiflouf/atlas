@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Building2, Users, LayoutDashboard, Landmark, UserSearch } from "lucide-react";
+import { Home, Building2, Users, LayoutDashboard, Landmark, UserSearch, Zap } from "lucide-react";
 
 const items = [
   { label: "Aujourd'hui", href: "/", icon: Home },
@@ -11,6 +11,7 @@ const items = [
   { label: "Clients", href: "/clients", icon: Users },
   { label: "Prospects vendeurs", href: "/prospects-vendeurs", icon: UserSearch },
   { label: "Fiscal", href: "/fiscal", icon: Landmark },
+  { label: "Automatisations", href: "/automatisations", icon: Zap },
 ];
 
 type Props = { variant: "sidebar" | "bottom" };

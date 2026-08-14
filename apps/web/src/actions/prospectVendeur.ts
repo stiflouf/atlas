@@ -16,6 +16,9 @@ import {
   desarchiverProspectVendeur,
 } from "@/lib/prospectVendeurRepository";
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
+import { getDb } from "@/db/client";
+import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
+import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import { parseProspectVendeurFormData, parseSignatureMandatFormData } from "@/lib/prospectVendeurFormulaire";
 import { parseMontantCentimes } from "@/types/remuneration";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
@@ -100,12 +103,26 @@ export async function planifierRdvEstimationProspectVendeurAction(formData: Form
 export async function marquerRdvEstimationRealiseProspectVendeurAction(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
-  await chargerProspectPourJalon(id);
+  const prospectAvant = await chargerProspectPourJalon(id);
 
   const rdvEstimationRealiseLe = parseDateHeure(formData.get("rdvEstimationRealiseLe"));
   if (!rdvEstimationRealiseLe) throw new Error("La date et l'heure du rendez-vous réalisé sont obligatoires.");
 
-  await marquerRdvEstimationRealiseProspectVendeur(id, rdvEstimationRealiseLe);
+  // Événement `rdv_estimation_realise` émis UNIQUEMENT sur une vraie transition (ADR-032,
+  // correction n°1) — jamais si le rendez-vous était déjà marqué réalisé (ce repository autorise
+  // toujours une correction de date, qui ne doit jamais réémettre l'événement).
+  const estTransitionReelle = prospectAvant.rdvEstimationRealiseLe === undefined;
+  const idsExecutionsATraiter = await getDb().transaction(async (tx) => {
+    await marquerRdvEstimationRealiseProspectVendeur(id, rdvEstimationRealiseLe, tx);
+    if (!estTransitionReelle) return [];
+    const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
+      { typeEvenement: "rdv_estimation_realise", prospectVendeurId: id },
+      tx
+    );
+    return idsExecutionsATraiter;
+  });
+  await traiterExecutionsEnAttente(idsExecutionsATraiter);
+
   redirect(`/prospects-vendeurs/${id}`);
 }
 
@@ -129,6 +146,10 @@ export async function signerMandatProspectVendeurAction(formData: FormData): Pro
   const donneesBien = parseSignatureMandatFormData(formData);
   const resultat = await signerMandatProspectVendeur(id, donneesBien);
   if (!resultat) notFound();
+
+  // Traitement synchrone après le COMMIT (déjà acté à l'intérieur de signerMandatProspectVendeur,
+  // ADR-032) — jamais avant, jamais susceptible de faire échouer la conversion elle-même.
+  await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
 
   redirect(`/biens/${resultat.bien.id}`);
 }

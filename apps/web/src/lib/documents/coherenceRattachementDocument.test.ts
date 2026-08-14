@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 // Test d'intégration : les vérifications de cohérence lisent des entités réelles (compromis,
 // prospect vendeur) — même repli DATABASE_URL que les autres suites d'intégration.
@@ -11,6 +11,8 @@ const {
   acquereurs: acquereursTable,
   compromis: compromisTable,
   prospectsVendeurs: prospectsVendeursTable,
+  evenementsMetier: evenementsMetierTable,
+  executionsAutomatisation: executionsAutomatisationTable,
 } = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
@@ -24,6 +26,20 @@ const idsCompromis: string[] = [];
 const idsProspects: string[] = [];
 
 afterAll(async () => {
+  // signerMandatProspectVendeur émet un événement mandat_signe (ADR-032) — evenements_metier ne
+  // cascade jamais depuis sa source (correction n°5, append-only) : à purger avant le prospect
+  // lui-même, sinon la suppression échoue (violation de clé étrangère).
+  if (idsProspects.length > 0) {
+    const evenements = await getDb()
+      .select({ id: evenementsMetierTable.id })
+      .from(evenementsMetierTable)
+      .where(inArray(evenementsMetierTable.prospectVendeurId, idsProspects));
+    const idsEvenements = evenements.map((e) => e.id);
+    if (idsEvenements.length > 0) {
+      await getDb().delete(executionsAutomatisationTable).where(inArray(executionsAutomatisationTable.evenementId, idsEvenements));
+      await getDb().delete(evenementsMetierTable).where(inArray(evenementsMetierTable.id, idsEvenements));
+    }
+  }
   for (const id of idsCompromis) await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
   for (const id of idsProspects) await getDb().delete(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id));
   for (const id of idsAcquereurs) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));

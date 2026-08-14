@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { terminerTacheAction } from "@/actions/terminerTache";
+import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
 import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, type Tache } from "@/types/tache";
+import type { CodeRegleAutomatisation } from "@/types/automatisation";
 
 // "Sans échéance" (ADR-028) — jamais "En attente" : une tâche ouverte sans échéance n'est pas une
 // tâche "en attente" au sens métier (réservé à une future notion d'attente client/notaire/document,
@@ -41,6 +43,14 @@ export default function TacheItem({
             LABEL_ECHEANCE_ABSENTE
           )}
         </p>
+        {tache.origine === "automatique" && (
+          <p className="text-[11px] text-[#94a3b8] mt-0.5">
+            Créée automatiquement — Règle :{" "}
+            {tache.origineCode && LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
+              ? LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
+              : "inconnue"}
+          </p>
+        )}
         {deriverCibleTache(tache) && (
           <Link
             href={`/communications/nouveau?tacheId=${tache.id}`}

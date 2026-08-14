@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
+import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import type { NouveauProspectVendeur, ProspectVendeur } from "@/types/prospectVendeur";
 import type { TypeBien } from "@/types/bien";
@@ -196,12 +197,17 @@ export async function planifierRdvEstimationProspectVendeur(
 
 // Un rendez-vous tenu est par nature une vraie interaction (ADR-027, correction n° 4) : seule
 // écriture de jalon de pipeline qui met aussi à jour dernier_contact_le, dans la même UPDATE.
+// `executeur` optionnel (ADR-032) : permet à l'appelant d'émettre l'événement métier
+// `rdv_estimation_realise` dans la même transaction — l'appelant reste seul responsable de ne
+// l'émettre que sur une vraie transition (valeur absente avant cet appel), ce repository continue
+// d'autoriser une correction de date sans garde (comportement inchangé).
 export async function marquerRdvEstimationRealiseProspectVendeur(
   id: string,
-  rdvEstimationRealiseLe: Date
+  rdvEstimationRealiseLe: Date,
+  executeur: Executeur = getDb()
 ): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(prospectsVendeursTable)
     .set({ rdvEstimationRealiseLe, dernierContactLe: new Date(), modifieLe: new Date() })
     .where(eq(prospectsVendeursTable.id, id))
@@ -226,10 +232,14 @@ export async function proposerMandatProspectVendeur(id: string): Promise<Prospec
 // opportunité par bien, et un bien ne peut être le résultat que d'une seule conversion — une
 // violation de cette contrainte fait échouer la transaction dans son ensemble (rollback complet,
 // aucun bien orphelin créé).
+// `idsExecutionsATraiter` (ADR-032) : l'événement métier `mandat_signe` est émis dans CETTE MÊME
+// transaction (jamais après coup) — le statut "déjà signé" est déjà exclu en amont par
+// `chargerProspectPourJalon` (Server Action), pas besoin d'une garde de transition supplémentaire
+// ici, contrairement à `marquerRdvEstimationRealiseProspectVendeur` qui autorise une correction.
 export async function signerMandatProspectVendeur(
   id: string,
   donneesBien: NouveauBien
-): Promise<{ prospect: ProspectVendeur; bien: Bien } | undefined> {
+): Promise<{ prospect: ProspectVendeur; bien: Bien; idsExecutionsATraiter: string[] } | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const existant = await getProspectVendeurById(id);
   if (!existant) return undefined;
@@ -241,7 +251,11 @@ export async function signerMandatProspectVendeur(
       .set({ mandatSigneLe: new Date(), bienId: bien.id, modifieLe: new Date() })
       .where(eq(prospectsVendeursTable.id, id))
       .returning();
-    return { prospect: ligneVersProspectVendeur(ligne), bien };
+    const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
+      { typeEvenement: "mandat_signe", prospectVendeurId: id },
+      tx
+    );
+    return { prospect: ligneVersProspectVendeur(ligne), bien, idsExecutionsATraiter };
   });
 }
 

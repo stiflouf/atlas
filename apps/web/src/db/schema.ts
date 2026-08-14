@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, check } from "drizzle-orm/pg-core";
+import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // Produit mono-conseiller pour l'instant (voir ADR-006) : une seule ligne possible,
@@ -915,6 +915,125 @@ export const envoisEmail = pgTable(
       sql`${table.origineIntention} IS NULL OR ${table.origineIntention} IN (
         'relance_prospect_vendeur','suivi_rdv_estimation','suivi_acquereur','suivi_visite',
         'demande_document_manquant','relance_piece_a_verifier','message_compromis','message_notaire'
+      )`
+    ),
+  ]
+);
+
+// Fait métier atomique, append-only (ADR-032) : distinct d'une alerte (ADR-026, jamais persistée,
+// un jugement dérivé sur l'état courant) et d'une tâche (ADR-028, une action à faire). Un
+// événement décrit uniquement "ceci est réellement survenu à cet instant" — jamais une décision
+// ni une action. Cible dédiée par colonne FK (même discipline que `taches`, ADR-028) : jamais un
+// couple `objetType`/`objetId` polymorphe. Contrairement à `taches` (`<= 1`, cible optionnelle),
+// ici EXACTEMENT une colonne est renseignée : un événement a toujours une source.
+//
+// Aucun `onDelete` sur les FK vers les entités source (ni CASCADE ni SET NULL) — même précédent
+// que `prospectsVendeurs.bienId` : NO ACTION par défaut. Supprimer/archiver une donnée métier ne
+// doit jamais effacer silencieusement la trace d'un événement déjà survenu (aucune suppression
+// n'existe aujourd'hui pour ces entités de toute façon, ADR-013/027/028).
+//
+// Index uniques PARTIELS (un par cible) : empêchent qu'un double submit sur la Server Action
+// d'origine crée deux lignes représentant le MÊME fait (ex. deux événements `visite_realisee`
+// pour le même `compte_rendu_visite_id`) — protection indépendante de
+// `executions_automatisation.UNIQUE(regle_code, evenement_id)`, qui protège seulement le rejeu
+// d'un événement déjà existant, pas la création du doublon lui-même.
+export const evenementsMetier = pgTable(
+  "evenements_metier",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    typeEvenement: text("type_evenement").notNull(),
+    compteRenduVisiteId: uuid("compte_rendu_visite_id").references(() => comptesRendusVisite.id),
+    prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id),
+    compromisId: uuid("compromis_id").references(() => compromis.id),
+    survenuLe: timestamp("survenu_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "evenements_metier_type_check",
+      sql`${table.typeEvenement} IN ('visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe')`
+    ),
+    check(
+      "evenements_metier_une_seule_cible_check",
+      sql`(
+        (case when ${table.compteRenduVisiteId} is not null then 1 else 0 end) +
+        (case when ${table.prospectVendeurId} is not null then 1 else 0 end) +
+        (case when ${table.compromisId} is not null then 1 else 0 end)
+      ) = 1`
+    ),
+    uniqueIndex("evenements_metier_visite_unique")
+      .on(table.typeEvenement, table.compteRenduVisiteId)
+      .where(sql`${table.compteRenduVisiteId} IS NOT NULL`),
+    uniqueIndex("evenements_metier_prospect_vendeur_unique")
+      .on(table.typeEvenement, table.prospectVendeurId)
+      .where(sql`${table.prospectVendeurId} IS NOT NULL`),
+    uniqueIndex("evenements_metier_compromis_unique")
+      .on(table.typeEvenement, table.compromisId)
+      .where(sql`${table.compromisId} IS NOT NULL`),
+  ]
+);
+
+// Snapshot d'exécution d'une règle pour un événement précis (ADR-032). Créée dans LA MÊME
+// transaction que l'événement et la mutation métier déclenchante (jamais après coup) : la
+// décision "cette règle devait-elle réagir ?" est figée au moment où l'événement survient, à
+// l'activation alors en vigueur — activer une règle plus tard ne traite jamais rétroactivement
+// les événements passés (aucune ligne n'existe pour eux).
+//
+// `UNIQUE(regle_code, evenement_id)` est LA clé d'idempotence d'exécution — jamais
+// `taches.origineCode` seul (insuffisant : une même règle s'exécute pour plusieurs objets).
+//
+// Trois états dérivés de deux timestamps terminaux (jamais un troisième "incertain" : contrairement
+// à un envoi Gmail, créer une tâche est une écriture Postgres locale, sans ambiguïté réseau) :
+// `reussieLe` posé -> "reussie" ; `echoueeLe` posé -> "echouee" ; ni l'un ni l'autre -> "a_traiter"
+// (état normal juste après le COMMIT de la transaction métier, avant le traitement synchrone qui
+// suit immédiatement — mais aussi l'état laissé si le process s'arrête entre les deux : jamais
+// perdu, jamais confondu avec "traité", voir deriverEtatExecutionAutomatisation).
+//
+// `tacheId` SET NULL (comme `taches.*Id` vers leurs cibles) : l'audit peut survivre même si la
+// tâche produite venait un jour à disparaître (aucune suppression n'existe aujourd'hui).
+export const executionsAutomatisation = pgTable(
+  "executions_automatisation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    regleCode: text("regle_code").notNull(),
+    evenementId: uuid("evenement_id")
+      .notNull()
+      .references(() => evenementsMetier.id),
+    tacheId: uuid("tache_id").references(() => taches.id, { onDelete: "set null" }),
+    demarreeLe: timestamp("demarree_le", { withTimezone: true }).notNull().defaultNow(),
+    reussieLe: timestamp("reussie_le", { withTimezone: true }),
+    echoueeLe: timestamp("echouee_le", { withTimezone: true }),
+    erreurTechnique: text("erreur_technique"),
+  },
+  (table) => [
+    check(
+      "executions_automatisation_regle_code_check",
+      sql`${table.regleCode} IN (
+        'suivi_apres_visite','suivi_apres_rdv_estimation',
+        'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis'
+      )`
+    ),
+    unique("executions_automatisation_regle_evenement_unique").on(table.regleCode, table.evenementId),
+  ]
+);
+
+// Activation mono-conseiller par règle (ADR-032). Absence de ligne = INACTIF (jamais actif par
+// défaut) : une règle ajoutée au catalogue TypeScript n'entre jamais en production silencieusement
+// du seul fait d'une migration/déploiement — seule une ligne explicite `active = true` (posée ici
+// par un geste délibéré, humain ou de seed documenté) fait réagir le moteur. Bascule visible et
+// explicite depuis /automatisations.
+export const configurationsAutomatisation = pgTable(
+  "configurations_automatisation",
+  {
+    regleCode: text("regle_code").primaryKey(),
+    active: boolean("active").notNull().default(false),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "configurations_automatisation_regle_code_check",
+      sql`${table.regleCode} IN (
+        'suivi_apres_visite','suivi_apres_rdv_estimation',
+        'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis'
       )`
     ),
   ]

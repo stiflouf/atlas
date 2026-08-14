@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 // Test d'intégration + garde-fous : ajouterCompromisAction/changerStatutCompromisAction doivent
 // refuser explicitement (throw) sur bien/acquéreur invalides ou archivés, sur une offre liée
@@ -13,6 +13,8 @@ const {
   acquereurs: acquereursTable,
   offres: offresTable,
   compromis: compromisTable,
+  evenementsMetier: evenementsMetierTable,
+  executionsAutomatisation: executionsAutomatisationTable,
 } = await import("@/db/schema");
 const { creerBien, archiverBien, getBienById } = await import("@/lib/bienRepository");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
@@ -28,6 +30,20 @@ const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
+  // ajouterCompromisAction émet un événement compromis_signe (ADR-032) — evenements_metier ne
+  // cascade jamais depuis sa source (correction n°5, append-only) : à purger avant le compromis
+  // lui-même, sinon la suppression échoue (violation de clé étrangère).
+  if (idsCompromisCrees.length > 0) {
+    const evenements = await getDb()
+      .select({ id: evenementsMetierTable.id })
+      .from(evenementsMetierTable)
+      .where(inArray(evenementsMetierTable.compromisId, idsCompromisCrees));
+    const idsEvenements = evenements.map((e) => e.id);
+    if (idsEvenements.length > 0) {
+      await getDb().delete(executionsAutomatisationTable).where(inArray(executionsAutomatisationTable.evenementId, idsEvenements));
+      await getDb().delete(evenementsMetierTable).where(inArray(evenementsMetierTable.id, idsEvenements));
+    }
+  }
   for (const id of idsCompromisCrees) {
     await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
   }
