@@ -1,5 +1,6 @@
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
+import type { SecteurRecherche } from "@/types/secteurRecherche";
 import type { EvaluationCritere, ResultatCompatibilite, StatutCompatibilite } from "./types";
 import {
   evaluerAccessibilite,
@@ -7,6 +8,7 @@ import {
   evaluerExterieur,
   evaluerParking,
   evaluerPieces,
+  evaluerSecteur,
   evaluerSurface,
 } from "./criteres";
 
@@ -25,7 +27,14 @@ function agregerStatutGlobal(criteres: EvaluationCritere[]): StatutCompatibilite
 // bord, zéro texte libre interprété, déterministe pour les mêmes entrées. Source unique des règles
 // de compatibilité commerciale — distincte de src/lib/matching/, qui résout un rendez-vous Google
 // Calendar vers un bien/acquéreur par correspondance floue et ne participe jamais à cette décision.
-export function evaluerCompatibilite(bien: Bien, acquereur: ProfilAcquereur): ResultatCompatibilite {
+// `secteursRecherche` (ADR-035) est fourni par l'appelant (orchestration.ts, déjà chargé, jamais
+// requêté ici) — défaut `[]` pour rester compatible avec tout appel à deux arguments (équivaut à
+// "aucun secteur connu pour cet acquéreur", exactement la même sémantique que ne rien fournir).
+export function evaluerCompatibilite(
+  bien: Bien,
+  acquereur: ProfilAcquereur,
+  secteursRecherche: SecteurRecherche[] = []
+): ResultatCompatibilite {
   const criteres: EvaluationCritere[] = [
     evaluerBudgetMax(bien, acquereur),
     evaluerPieces(bien, acquereur),
@@ -33,6 +42,7 @@ export function evaluerCompatibilite(bien: Bien, acquereur: ProfilAcquereur): Re
     evaluerParking(bien, acquereur),
     evaluerExterieur(bien, acquereur),
     evaluerAccessibilite(bien, acquereur),
+    evaluerSecteur(bien, secteursRecherche),
   ];
   return {
     bienId: bien.id,

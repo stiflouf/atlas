@@ -106,6 +106,15 @@ export const biens = pgTable(
     // deux faits jamais confondus, l'un qualitatif (qui paie les honoraires de la transaction),
     // l'autre financier (combien perçoit le conseiller).
     chargeHonoraires: text("charge_honoraires"),
+    // Code commune INSEE canonique (ADR-035, citycode IGN) — chaîne, jamais un entier (Corse :
+    // "2A"/"2B"). Résolu automatiquement (adresse/ville/codePostal -> IGN Géoplateforme) à chaque
+    // création/modification du bien, jamais calculé à la lecture ni saisi manuellement. NULL si
+    // l'IGN était indisponible ou le résultat insuffisamment fiable — jamais bloquant pour
+    // l'enregistrement du bien, jamais une ancienne valeur périmée conservée après un changement
+    // d'adresse (la résolution est toujours refaite en entier, jamais fusionnée avec l'existant).
+    // Sert uniquement au critère géographique du moteur de compatibilité (src/lib/compatibilite/) —
+    // ne remplace jamais adresse/ville/codePostal, qui restent la saisie de référence affichée.
+    codeInseeCommune: text("code_insee_commune"),
   },
   (table) => [
     check("biens_type_check", sql`${table.type} IN ('appartement','maison','studio','loft','local_commercial')`),
@@ -153,6 +162,29 @@ export const acquereurs = pgTable(
       sql`${table.stadeProjet} IN ('decouverte','recherche_active','offre','compromis','acte')`
     ),
   ]
+);
+
+// Secteurs de recherche géographique d'un acquéreur (ADR-035) — une ligne par commune/
+// arrondissement recherché. codeInsee est l'identifiant canonique (citycode IGN, chaîne, jamais un
+// entier : la Corse porte des codes non numériques "2A"/"2B") sur lequel porte toute comparaison de
+// compatibilité géographique (src/lib/compatibilite/) ; nomCommune/codePostal ne servent qu'à
+// l'affichage, jamais comparés. Une ligne n'est insérée qu'après vérification serveur fraîche du
+// citycode auprès de l'IGN (verifierCommune, jamais une confiance aveugle dans trois hidden inputs
+// soumis par le client). acquereurId est une vraie FK CASCADE : un acquéreur supprimé (jamais en
+// pratique, archivage seulement — ADR-012) n'entraîne aucune ligne orpheline.
+export const secteursRechercheAcquereur = pgTable(
+  "secteurs_recherche_acquereur",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    acquereurId: uuid("acquereur_id")
+      .notNull()
+      .references(() => acquereurs.id, { onDelete: "cascade" }),
+    codeInsee: text("code_insee").notNull(),
+    nomCommune: text("nom_commune").notNull(),
+    codePostal: text("code_postal").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("secteurs_recherche_acquereur_id_code_insee_unique").on(table.acquereurId, table.codeInsee)]
 );
 
 // Notes libres sur un bien réel. Contrairement à actions/memoireContextuelle, bienId est une

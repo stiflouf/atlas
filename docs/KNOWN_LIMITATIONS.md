@@ -552,11 +552,8 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Aucune sémantique pour `budgetMin`** : un bien moins cher que le budget minimum indiqué par
   l'acquéreur n'est jamais signalé incompatible — décision explicite, le champ reste dans le modèle
   sans être lu par le moteur.
-- **Géographie hors périmètre** : la recherche géographique acquéreur n'est pas suffisamment
-  structurée dans le modèle actuel (aucun champ de secteur/zone recherchée, seulement du texte
-  libre) pour participer à ce moteur déterministe. Aucune comparaison de chaînes, aucune extraction
-  depuis `criteres`, aucun géocodage bricolé n'y supplée. Fera l'objet d'une décision/modélisation
-  séparée si elle est priorisée plus tard.
+- **Géographie couverte depuis ADR-035** — voir la section dédiée ci-dessous pour ses limites
+  propres (granularité commune/arrondissement uniquement, pas de rayon, backfill non exhaustif...).
 - **Aucune préférence pondérée** : les champs actuels ne sont interprétés que comme des contraintes
   explicites (minimum/requis) — pas de scoring, pas de poids, pas de `"nice to have"` implicite, pas
   d'inférence depuis les notes.
@@ -569,6 +566,38 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Aucune édition ni suppression d'un critère individuel** : le moteur est une pure lecture, il n'y
   a rien à éditer — seuls les champs structurés du bien/acquéreur eux-mêmes (formulaires existants)
   influencent le résultat.
+
+## Secteurs de recherche géographique (ADR-035)
+
+- **Granularité V1 = commune/arrondissement, jamais plus fine** : aucun quartier, aucun IRIS, aucun
+  rayon kilométrique, aucune notion GPS/distance/temps de trajet. Un acquéreur qui recherche "le
+  bord de Seine à Houilles" doit sélectionner la commune entière — pas de sous-découpage.
+- **Aucun regroupement "Tout Paris"/"Tout Lyon"/"Tout Marseille"** : sélectionner tous les
+  arrondissements d'une de ces trois villes reste un geste manuel, arrondissement par
+  arrondissement — aucune expansion automatique depuis l'entrée générique "ville entière" (exclue
+  de la recherche, voir `docs/BUSINESS_RULES.md`). Une future fonctionnalité pourrait proposer un
+  raccourci explicite "Tout Paris", non construit ici.
+- **`ville`/`codePostal` du bien ne participent jamais à la compatibilité géographique**, même
+  lorsque `codeInseeCommune` est `NULL` — ce sont des champs de saisie libre historiques, jamais
+  fiables comme identifiant. Un bien dont l'adresse est mal saisie mais dont `ville`/`codePostal`
+  "semblent" correspondre à un secteur recherché reste `a_verifier`, jamais silencieusement
+  `compatible`.
+- **Résolution automatique du bien non exhaustive** : dépend de la qualité de l'adresse saisie et de
+  la disponibilité/qualité de la réponse IGN au moment de l'enregistrement — une adresse
+  incomplète, ambiguë, ou un score IGN insuffisant laisse `codeInseeCommune = NULL` durablement (pas
+  de nouvelle tentative automatique tant que le conseiller ne réédite pas le bien). Le backfill
+  ponctuel (`scripts/backfill-code-insee-commune.mjs`) traite les biens existants au moment où il est
+  lancé, mais n'est pas un mécanisme récurrent — un bien qui reste non résolu après le backfill le
+  reste jusqu'à une prochaine édition manuelle ou un nouveau passage du script.
+- **Un secteur de recherche n'est pas éditable en place** : corriger `nomCommune`/`codePostal` d'un
+  secteur impose de le supprimer puis de le rechercher/sélectionner à nouveau — décision explicite
+  pour ne jamais laisser un couple `codeInsee`/`nomCommune` incohérent.
+- **Aucun historique des secteurs recherchés** : supprimer un secteur ne laisse aucune trace — pas
+  de journal d'anciennes recherches, conformément au principe de minimisation (rien n'est conservé
+  au-delà de "où l'acquéreur recherche actuellement").
+- **Aucune automatisation liée à un changement de compatibilité géographique** (ADR-032/033 non
+  intégrées) — ajouter un secteur ou résoudre un bien ne déclenche jamais de tâche, d'email, ni
+  d'événement.
 
 ## Limites du moteur de matching
 

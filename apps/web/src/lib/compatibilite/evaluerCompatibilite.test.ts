@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
+import type { SecteurRecherche } from "@/types/secteurRecherche";
 import { evaluerCompatibilite } from "./evaluerCompatibilite";
 import {
   evaluerAccessibilite,
@@ -8,6 +9,7 @@ import {
   evaluerExterieur,
   evaluerParking,
   evaluerPieces,
+  evaluerSecteur,
   evaluerSurface,
 } from "./criteres";
 
@@ -242,6 +244,70 @@ describe("evaluerAccessibilite", () => {
   });
 });
 
+function secteurTest(surcharge: Partial<SecteurRecherche> = {}): SecteurRecherche {
+  return {
+    id: "secteur-test",
+    acquereurId: "acquereur-test",
+    codeInsee: "78311",
+    nomCommune: "Houilles",
+    codePostal: "78800",
+    creeLe: "2026-01-01T00:00:00.000Z",
+    ...surcharge,
+  };
+}
+
+describe("evaluerSecteur (ADR-035)", () => {
+  it("non_concerne quand aucun secteur n'est recherché", () => {
+    const r = evaluerSecteur(bienTest({ codeInseeCommune: "78311" }), []);
+    expect(r.statut).toBe("non_concerne");
+  });
+
+  it("a_verifier quand au moins un secteur est recherché mais le code du bien est inconnu", () => {
+    const r = evaluerSecteur(bienTest({ codeInseeCommune: undefined }), [secteurTest()]);
+    expect(r.statut).toBe("a_verifier");
+  });
+
+  it("compatible quand le code du bien correspond à un secteur recherché", () => {
+    const r = evaluerSecteur(bienTest({ codeInseeCommune: "78311" }), [secteurTest({ codeInsee: "78311" })]);
+    expect(r.statut).toBe("compatible");
+  });
+
+  it("incompatible quand le code du bien est connu mais absent de tous les secteurs recherchés", () => {
+    const r = evaluerSecteur(bienTest({ codeInseeCommune: "75056" }), [secteurTest({ codeInsee: "78311" })]);
+    expect(r.statut).toBe("incompatible");
+  });
+
+  it("compatible dès qu'un des PLUSIEURS secteurs recherchés correspond", () => {
+    const r = evaluerSecteur(bienTest({ codeInseeCommune: "78124" }), [
+      secteurTest({ id: "s1", codeInsee: "78311", nomCommune: "Houilles" }),
+      secteurTest({ id: "s2", codeInsee: "78124", nomCommune: "Carrières-sur-Seine" }),
+      secteurTest({ id: "s3", codeInsee: "78575", nomCommune: "Sartrouville" }),
+    ]);
+    expect(r.statut).toBe("compatible");
+  });
+
+  it("ne déduit jamais un secteur recherché depuis criteres/notes en texte libre — reste non_concerne sans ligne structurée", () => {
+    // bienTest()/acquereurTest() embarquent volontairement du texte libre géographique
+    // ("Paris — arrondissements centraux" type de mention) dans description/caracteristiques —
+    // evaluerSecteur() ne les lit jamais, seul le tableau secteursRecherche structuré compte.
+    const bien = bienTest({
+      codeInseeCommune: "75110",
+      caracteristiques: ["Paris 10e ou 11e"],
+      description: "Idéal pour un acquéreur qui cherche absolument à Houilles",
+    });
+    const r = evaluerSecteur(bien, []);
+    expect(r.statut).toBe("non_concerne");
+  });
+
+  it("ne compare jamais bien.ville/bien.codePostal — seul bien.codeInseeCommune participe à la décision", () => {
+    const bien = bienTest({ codeInseeCommune: "78311", ville: "Une ville totalement différente", codePostal: "99999" });
+    const r = evaluerSecteur(bien, [secteurTest({ codeInsee: "78311", nomCommune: "Houilles", codePostal: "78800" })]);
+    // Compatible malgré ville/codePostal du bien complètement étrangers au secteur recherché :
+    // seul codeInseeCommune (identique) détermine le résultat.
+    expect(r.statut).toBe("compatible");
+  });
+});
+
 describe("evaluerCompatibilite — agrégation globale", () => {
   it("tout compatible/non_concerne → statutGlobal compatible", () => {
     const resultat = evaluerCompatibilite(
@@ -304,9 +370,95 @@ describe("evaluerCompatibilite — agrégation globale", () => {
       })
     );
     // Tous les critères non pertinents sont non_concerne malgré des valeurs "défavorables" côté
-    // bien — seul budget_max reste pertinent et compatible.
+    // bien — seul budget_max reste pertinent et compatible. secteur_geographique est lui aussi
+    // non_concerne ici : aucun secteursRecherche fourni (3e argument par défaut []).
     expect(resultat.statutGlobal).toBe("compatible");
-    expect(resultat.criteres.filter((c) => c.statut === "non_concerne")).toHaveLength(5);
+    expect(resultat.criteres.filter((c) => c.statut === "non_concerne")).toHaveLength(6);
+  });
+
+  it("géographie incompatible → statutGlobal incompatible", () => {
+    const resultat = evaluerCompatibilite(
+      bienTest({
+        prix: 300000,
+        pieces: 3,
+        surface: 50,
+        parking: true,
+        exterieur: "jardin",
+        etage: 0,
+        codeInseeCommune: "75056",
+      }),
+      acquereurTest({
+        piecesMin: undefined,
+        surfaceMin: undefined,
+        necessiteParking: undefined,
+        necessiteExterieur: undefined,
+        accessibiliteRequise: undefined,
+      }),
+      [secteurTest({ codeInsee: "78311" })]
+    );
+    expect(resultat.statutGlobal).toBe("incompatible");
+  });
+
+  it("géographie a_verifier, aucun autre incompatible → statutGlobal a_verifier", () => {
+    const resultat = evaluerCompatibilite(
+      bienTest({
+        prix: 300000,
+        pieces: 3,
+        surface: 50,
+        parking: true,
+        exterieur: "jardin",
+        etage: 0,
+        codeInseeCommune: undefined,
+      }),
+      acquereurTest({
+        piecesMin: undefined,
+        surfaceMin: undefined,
+        necessiteParking: undefined,
+        necessiteExterieur: undefined,
+        accessibiliteRequise: undefined,
+      }),
+      [secteurTest({ codeInsee: "78311" })]
+    );
+    expect(resultat.statutGlobal).toBe("a_verifier");
+  });
+
+  it("géographie compatible + tous les autres critères compatibles/non_concerne → statutGlobal compatible", () => {
+    const resultat = evaluerCompatibilite(
+      bienTest({
+        prix: 300000,
+        pieces: 3,
+        surface: 50,
+        parking: true,
+        exterieur: "jardin",
+        etage: 0,
+        codeInseeCommune: "78311",
+      }),
+      acquereurTest({
+        piecesMin: undefined,
+        surfaceMin: undefined,
+        necessiteParking: undefined,
+        necessiteExterieur: undefined,
+        accessibiliteRequise: undefined,
+      }),
+      [secteurTest({ codeInsee: "78311" })]
+    );
+    expect(resultat.statutGlobal).toBe("compatible");
+  });
+
+  it("géographie compatible mais un autre critère incompatible → statutGlobal incompatible (priorité inchangée)", () => {
+    const resultat = evaluerCompatibilite(
+      bienTest({ prix: 500000, pieces: 3, surface: 50, codeInseeCommune: "78311" }), // prix > budgetMax
+      acquereurTest({
+        budgetMax: 400000,
+        piecesMin: undefined,
+        surfaceMin: undefined,
+        necessiteParking: undefined,
+        necessiteExterieur: undefined,
+        accessibiliteRequise: undefined,
+      }),
+      [secteurTest({ codeInsee: "78311" })]
+    );
+    expect(resultat.statutGlobal).toBe("incompatible");
   });
 
   it("retourne bienId/acquereurId issus des entités passées", () => {
@@ -315,10 +467,10 @@ describe("evaluerCompatibilite — agrégation globale", () => {
     expect(resultat.acquereurId).toBe("acquereur-99");
   });
 
-  it("expose exactement 6 critères, avec des identifiants stables", () => {
+  it("expose exactement 7 critères, avec des identifiants stables", () => {
     const resultat = evaluerCompatibilite(bienTest(), acquereurTest());
     expect(resultat.criteres.map((c) => c.critere).sort()).toEqual(
-      ["accessibilite", "budget_max", "exterieur", "parking", "pieces_min", "surface_min"].sort()
+      ["accessibilite", "budget_max", "exterieur", "parking", "pieces_min", "secteur_geographique", "surface_min"].sort()
     );
   });
 

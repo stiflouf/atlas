@@ -34,6 +34,12 @@ export type Bien = {
   ascenseur?: boolean;
   parking?: boolean;
   exterieur?: Exterieur;
+  // Code commune INSEE canonique (ADR-035) — résolu automatiquement depuis adresse/ville/
+  // codePostal à chaque création/modification, jamais calculé à la lecture, jamais saisi
+  // manuellement. Chaîne, jamais un entier (Corse : "2A"/"2B"). Absent si l'IGN était indisponible
+  // ou le résultat insuffisamment fiable — ne remplace jamais adresse/ville/codePostal, qui
+  // restent la saisie de référence pour l'affichage.
+  codeInseeCommune?: string;
   // Déclaratif, texte libre (ADR-029) : pas d'entité copropriete en V1. Référence pour une
   // comparaison humaine avec documentBien.coproprieteDeclaree — jamais automatique.
   nomCopropriete?: string;

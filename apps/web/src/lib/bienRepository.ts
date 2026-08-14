@@ -32,6 +32,7 @@ function ligneVersBien(ligne: LigneBien): Bien {
     exterieur: (ligne.exterieur as Exterieur | null) ?? undefined,
     nomCopropriete: ligne.nomCopropriete ?? undefined,
     chargeHonoraires: (ligne.chargeHonoraires as ChargeHonoraires | null) ?? undefined,
+    codeInseeCommune: ligne.codeInseeCommune ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
     archiveLe: ligne.archiveLe?.toISOString(),
     offreEnCoursLe: ligne.offreEnCoursLe?.toISOString(),
@@ -116,6 +117,7 @@ export async function creerBien(input: NouveauBien, executeur: Executeur = getDb
       exterieur: input.exterieur ?? null,
       nomCopropriete: input.nomCopropriete ?? null,
       chargeHonoraires: input.chargeHonoraires ?? null,
+      codeInseeCommune: input.codeInseeCommune ?? null,
     })
     .returning();
   return ligneVersBien(ligne);
@@ -150,6 +152,12 @@ export async function modifierBien(id: string, input: NouveauBien): Promise<Bien
       exterieur: input.exterieur ?? null,
       nomCopropriete: input.nomCopropriete ?? null,
       chargeHonoraires: input.chargeHonoraires ?? null,
+      // Toujours écrit explicitement, jamais omis : si input.codeInseeCommune est undefined (échec
+      // de résolution IGN au moment de l'édition), la ligne DOIT repasser à NULL — un ancien
+      // citycode associé à une adresse désormais différente serait plus dangereux qu'une donnée
+      // inconnue (ADR-035, section 6). Ne jamais transformer ce SET en update partiel qui
+      // laisserait l'ancienne valeur en base.
+      codeInseeCommune: input.codeInseeCommune ?? null,
       modifieLe: new Date(),
     })
     .where(eq(biensTable.id, id))

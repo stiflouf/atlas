@@ -707,6 +707,54 @@ libre (`notes`/`criteres`/`caracteristiques`/`description`) — testé explicite
 mentionnant "parking obligatoire", "cherche terrasse", "5e sans ascenseur" sans effet sur le
 résultat tant que les champs structurés correspondants restent absents.
 
+## 35. Secteurs de recherche géographique acquéreur / compatibilité géographique
+
+Nouvelle table `secteurs_recherche_acquereur` (`acquereur_id` FK CASCADE, `code_insee` texte,
+`nom_commune`, `code_postal`, `UNIQUE(acquereur_id, code_insee)`) et nouvelle colonne nullable
+`biens.code_insee_commune` — identifiant canonique `citycode` IGN (Géoplateforme/BAN), une chaîne,
+jamais un entier (Corse `2A`/`2B`). Septième critère du moteur ADR-034 (`evaluerSecteur`),
+`ville`/`codePostal` du bien jamais lus par ce critère.
+
+`src/lib/geocodage/ignClient.ts` étendu (pas de second client) : `rechercherCommunes()` pour
+l'autocomplétion acquéreur, `verifierCommune()` pour la re-vérification serveur, `geocoderAdresse()`
+inchangé dans son comportement externe, retourne désormais aussi la commune résolue.
+`resoudreCommuneBien()` (nouveau, `src/lib/geocodage/resolutionBien.ts`) réutilise le seuil de
+fiabilité déjà établi (`SEUIL_FIABLE = 0.8`) pour décider si une résolution est assez fiable pour être
+persistée.
+
+**Résolution du bien non bloquante** : `creerBienAction`/`modifierBienAction` tentent toujours la
+résolution mais n'échouent jamais à cause d'IGN (réseau, ambiguïté, score insuffisant, réponse
+incomplète → `codeInseeCommune = NULL`). Recalculée **systématiquement** à chaque édition (jamais
+conditionnée à "l'adresse a changé") — un échec de la nouvelle résolution efface toujours l'ancien
+`codeInseeCommune`, jamais de localisation périmée après un changement d'adresse (non-régression
+testée explicitement).
+
+**Sélection d'un secteur acquéreur validée côté serveur** : `ajouterSecteurRechercheAction`
+ré-interroge l'IGN (`verifierCommune`) avant toute écriture — les valeurs soumises par le client ne
+sont jamais persistées telles quelles, seule la réponse IGN fraîche l'est. Panne IGN pendant l'ajout
+→ rien n'est écrit, erreur actionnable. `nomCommune`/`codePostal` d'un secteur existant ne sont
+jamais éditables indépendamment de `codeInsee` (supprimer + resélectionner pour corriger).
+
+**Paris/Lyon/Marseille** : chaque arrondissement reste sélectionnable individuellement ; l'entrée
+générique "ville entière" (`75056`/`69123`/`13055`) est explicitement exclue de la recherche
+(`CODES_INSEE_VILLE_A_ARRONDISSEMENTS`, ensemble documenté et non heuristique — une piste basée sur
+l'absence de `banId` a été testée puis écartée après avoir constaté qu'elle excluait aussi des
+communes rurales ordinaires) pour ne jamais produire un faux `incompatible` par confusion
+ville/arrondissements.
+
+**Orchestration sans N+1** : `listerSecteursPourAcquereurs()` (nouveau, batch `inArray`) charge en
+une seule requête les secteurs de tous les acquéreurs candidats pour `evaluerCompatibiliteBien` ;
+`evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté. Aucune
+requête IGN dans le moteur de compatibilité.
+
+**Backfill** (`scripts/backfill-code-insee-commune.mjs`, script `.mjs` autonome — les alias `@/`
+n'étant pas résolubles hors du build Next.js) : dry-run par défaut, `--apply` pour écrire ; ne lit que
+les champs d'adresse structurés du bien, jamais de texte libre ; idempotent (ne retouche jamais un
+bien déjà résolu) ; aucune écriture sur un résultat ambigu ou un échec IGN.
+
+Documentation : `docs/adr/035-secteurs-recherche-acquereur.md` (nouveau), mise à jour de
+`DATA_MODEL.md`, `BUSINESS_RULES.md`, `KNOWN_LIMITATIONS.md`, `AI_HANDOFF.md`.
+
 Orchestration symétrique (`evaluerCompatibiliteBien`/`evaluerCompatibiliteAcquereur`, toutes deux
 appuyées sur la même fonction pure `evaluerCompatibilite`), au-dessus des repositories existants —
 aucun nouveau repository, aucune table, aucun cache, aucune automatisation déclenchée (ADR-032/033

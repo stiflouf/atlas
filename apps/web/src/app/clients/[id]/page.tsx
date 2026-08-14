@@ -14,6 +14,8 @@ import { LABEL_STATUT_OFFRE } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS } from "@/types/compromis";
 import { evaluerCompatibiliteAcquereur } from "@/lib/compatibilite/orchestration";
 import { LABEL_STATUT_COMPATIBILITE, LABEL_STATUT_CRITERE } from "@/lib/compatibilite/types";
+import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
+import SecteursRechercheSection from "@/components/client/SecteursRechercheSection";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,6 +58,7 @@ export default async function FicheClient({ params }: PageProps) {
   const biensPourOffres = await Promise.all(bienIds.map((id) => getBienById(id)));
   const biensParId = new Map(bienIds.map((id, i) => [id, biensPourOffres[i]]));
 
+  const secteursRecherche = await listerSecteursPourAcquereur(client.id);
   const compatibilites = await evaluerCompatibiliteAcquereur(client.id);
   const biensActifs = await listerBiens();
   const biensCompatibiliteParId = new Map(biensActifs.map((b) => [b.id, b]));
@@ -136,6 +139,12 @@ export default async function FicheClient({ params }: PageProps) {
           )}
         </div>
       </div>
+
+      <SecteursRechercheSection
+        acquereurId={client.id}
+        secteursInitiaux={secteursRecherche}
+        archive={!!client.archiveLe}
+      />
 
       <section className="mb-8">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Offres</p>

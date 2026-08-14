@@ -178,4 +178,44 @@ describe("bienRepository (intégration Postgres)", () => {
     await expect(marquerCompromisSigne("bien-001")).resolves.toBeUndefined();
     await expect(annulerCompromis("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
   });
+
+  // ADR-035 : codeInseeCommune est un champ purement écrit par le repository (résolution IGN
+  // toujours faite en amont, dans la Server Action) — ces tests vérifient uniquement que le
+  // repository persiste/efface correctement ce que l'appelant lui fournit, sans réseau.
+  it("creerBien() persiste codeInseeCommune quand fourni", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-001", codeInseeCommune: "78311" }));
+    idsCrees.push(cree.id);
+    expect(cree.codeInseeCommune).toBe("78311");
+  });
+
+  it("creerBien() laisse codeInseeCommune undefined (NULL) quand absent", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-002" }));
+    idsCrees.push(cree.id);
+    expect(cree.codeInseeCommune).toBeUndefined();
+  });
+
+  it("modifierBien() écrase codeInseeCommune par NULL si l'appelant ne le fournit pas — jamais l'ancienne valeur périmée conservée (ADR-035, section 6)", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-003", codeInseeCommune: "78311" }));
+    idsCrees.push(cree.id);
+    expect(cree.codeInseeCommune).toBe("78311");
+
+    // Simule une adresse modifiée dont la nouvelle résolution IGN a échoué : l'appelant
+    // (modifierBienAction) transmet codeInseeCommune undefined, jamais l'ancienne valeur.
+    const modifie = await modifierBien(cree.id, bienTest({ reference: "[test réel] INSEE-003", ville: "Nouvelleville" }));
+    expect(modifie?.codeInseeCommune).toBeUndefined();
+
+    const relu = await getBienById(cree.id);
+    expect(relu?.codeInseeCommune).toBeUndefined();
+  });
+
+  it("modifierBien() remplace codeInseeCommune par une nouvelle valeur résolue", async () => {
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-004", codeInseeCommune: "78311" }));
+    idsCrees.push(cree.id);
+
+    const modifie = await modifierBien(
+      cree.id,
+      bienTest({ reference: "[test réel] INSEE-004", codeInseeCommune: "75108" })
+    );
+    expect(modifie?.codeInseeCommune).toBe("75108");
+  });
 });

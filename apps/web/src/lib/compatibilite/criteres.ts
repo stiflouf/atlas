@@ -1,5 +1,6 @@
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
+import type { SecteurRecherche } from "@/types/secteurRecherche";
 import type { EvaluationCritere } from "./types";
 
 // Une fonction pure par critère, réutilisée à la fois par evaluerCompatibilite() (ADR-034) et par
@@ -274,5 +275,58 @@ export function evaluerAccessibilite(bien: Bien, acquereur: ProfilAcquereur): Ev
     valeurBien: bien.etage,
     statut: "a_verifier",
     explication: `L'accessibilité est requise ; ce bien est au ${bien.etage}e étage, la présence d'un ascenseur n'est pas renseignée.`,
+  };
+}
+
+// Critère géographique (ADR-035). Ne lit JAMAIS bien.ville/bien.codePostal — uniquement
+// bien.codeInseeCommune (identifiant canonique résolu et persisté, jamais recalculé ici) comparé
+// aux codeInsee des secteurs recherchés. `nomCommune`/`codePostal` utilisés dans l'explication
+// proviennent toujours d'un SecteurRecherche déjà vérifié auprès de l'IGN (jamais de bien.ville),
+// pour ne jamais introduire la moindre comparaison de texte libre/déclaratif (ADR-035, section 12).
+// `secteursRecherche` est fourni par l'appelant (orchestration) — cette fonction ne fait, comme le
+// reste du module, aucun fetch : la liste est déjà chargée.
+export function evaluerSecteur(bien: Bien, secteursRecherche: SecteurRecherche[]): EvaluationCritere {
+  const critere = "secteur_geographique";
+  const label = "Secteur géographique";
+
+  if (secteursRecherche.length === 0) {
+    return {
+      critere,
+      label,
+      statut: "non_concerne",
+      explication: "Aucun secteur de recherche n'est renseigné pour cet acquéreur.",
+    };
+  }
+
+  const nomsRecherches = secteursRecherche.map((s) => `${s.nomCommune} (${s.codePostal})`).join(", ");
+
+  if (bien.codeInseeCommune === undefined) {
+    return {
+      critere,
+      label,
+      exigenceAcquereur: nomsRecherches,
+      statut: "a_verifier",
+      explication: `Cet acquéreur recherche dans : ${nomsRecherches}. La commune de ce bien n'est pas résolue.`,
+    };
+  }
+
+  const secteurCorrespondant = secteursRecherche.find((s) => s.codeInsee === bien.codeInseeCommune);
+  if (secteurCorrespondant) {
+    return {
+      critere,
+      label,
+      exigenceAcquereur: nomsRecherches,
+      valeurBien: bien.codeInseeCommune,
+      statut: "compatible",
+      explication: `Le bien est situé à ${secteurCorrespondant.nomCommune} (${secteurCorrespondant.codePostal}), un secteur recherché par l'acquéreur.`,
+    };
+  }
+  return {
+    critere,
+    label,
+    exigenceAcquereur: nomsRecherches,
+    valeurBien: bien.codeInseeCommune,
+    statut: "incompatible",
+    explication: `Le bien n'est situé dans aucun des secteurs recherchés par l'acquéreur (${nomsRecherches}).`,
   };
 }

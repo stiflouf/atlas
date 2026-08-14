@@ -170,7 +170,61 @@ même archivée (`getBienById`/`getClientById`).
 acquéreur — statut global + détail critère par critère toujours disponible, `a_verifier` jamais
 présenté comme une incompatibilité, aucun score sur 100.
 
-**Géographie et préférences pondérées : hors périmètre V1** — voir `docs/KNOWN_LIMITATIONS.md`.
+**Préférences pondérées : hors périmètre V1** — voir `docs/KNOWN_LIMITATIONS.md`. La géographie,
+elle, est désormais couverte — voir ci-dessous (ADR-035).
+
+## Secteurs de recherche géographique (ADR-035)
+
+**Fichiers** : `src/lib/geocodage/ignClient.ts` (étendu), `src/lib/geocodage/resolutionBien.ts`,
+`src/lib/secteurRechercheRepository.ts`, `src/lib/compatibilite/criteres.ts` (`evaluerSecteur`,
+septième critère du moteur ADR-034, réutilisant `evaluerCompatibilite`/`orchestration.ts` sans les
+modifier structurellement).
+
+**Identifiant canonique** : `citycode` IGN (Géoplateforme/BAN), une **chaîne** — jamais un entier
+(Corse `2A`/`2B`). `ville`/`codePostal` restent des champs de saisie libre du bien, **jamais lus**
+par ce critère ni par aucune comparaison de compatibilité — seule `bien.codeInseeCommune` (résolue,
+persistée) compte.
+
+| Situation | Statut |
+|---|---|
+| Acquéreur sans secteur de recherche enregistré | `non_concerne` |
+| Au moins un secteur enregistré, `bien.codeInseeCommune` inconnu | `a_verifier` |
+| `bien.codeInseeCommune` présente dans un des secteurs recherchés | `compatible` |
+| `bien.codeInseeCommune` connue mais absente de tous les secteurs recherchés | `incompatible` |
+
+**Résolution du bien** : tentée automatiquement à chaque création/modification d'un bien via
+`resoudreCommuneBien()` (réutilise le seuil de fiabilité `SEUIL_FIABLE = 0.8` déjà utilisé pour le
+géocodage de préparation de visite) — **jamais bloquante** : un échec IGN (réseau, ambiguïté, score
+insuffisant, réponse sans `citycode`) laisse `codeInseeCommune = NULL`, le bien reste enregistré
+normalement. Recalculée **systématiquement** à chaque édition, jamais conditionnée à "l'adresse a
+changé" — une résolution en échec efface toujours un éventuel ancien `codeInseeCommune`, pour ne
+jamais laisser survivre une localisation périmée après un changement d'adresse.
+
+**Sélection d'un secteur acquéreur** : validée côté serveur avant écriture (`verifierCommune()`
+ré-interroge l'IGN filtré par `citycode`) — un `codeInsee`/`nomCommune`/`codePostal` soumis par le
+client n'est **jamais** persisté tel quel, seule la réponse IGN fraîche l'est. Si l'IGN est
+indisponible pendant l'ajout, rien n'est écrit — erreur actionnable, le conseiller réessaie. Un
+secteur n'est jamais édité en place : `nomCommune`/`codePostal` ne sont pas modifiables
+indépendamment de `codeInsee` — pour corriger, supprimer puis rechercher/sélectionner à nouveau.
+`UNIQUE(acquereur_id, code_insee)` empêche un doublon.
+
+**Paris/Lyon/Marseille** : chaque arrondissement est sélectionnable individuellement (son propre
+`citycode`, motifs `751xx`/`693xx`/`132xx`). L'entrée générique "ville entière" (`citycode` `75056`
+Paris, `69123` Lyon, `13055` Marseille) est explicitement exclue des résultats de recherche
+(`CODES_INSEE_VILLE_A_ARRONDISSEMENTS`) — jamais traitée comme équivalente à "tous les
+arrondissements", ce qui produirait de faux `incompatible`.
+
+**Aucune lecture de texte libre** : un secteur mentionné uniquement dans `criteres`/`notes` (ex.
+"Paris 10e ou 11e") n'a aucun effet tant qu'aucune ligne structurée `secteurs_recherche_acquereur`
+n'existe — `non_concerne` dans ce cas, jamais une extraction automatique (ADR-008).
+
+**Orchestration sans N+1** : `evaluerCompatibiliteBien` charge en une seule requête les secteurs de
+tous les acquéreurs candidats (`listerSecteursPourAcquereurs`, `Map` en mémoire) ;
+`evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté, réutilisés
+pour chaque bien comparé. Aucune requête IGN dans le moteur de compatibilité lui-même.
+
+**UX** : section dédiée "Secteurs de recherche" sur la fiche acquéreur (voir/ajouter/supprimer) —
+volontairement pas dans `AcquereurFormulaire`.
 
 ## Tâches (ADR-028)
 

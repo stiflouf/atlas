@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0017`, vérifiées le 2026-08-13). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0022`, vérifiées le 2026-08-14). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -34,6 +34,7 @@ erDiagram
     offres |o--o{ taches : "offre_id (FK, nullable)"
     compromis |o--o{ taches : "compromis_id (FK, nullable)"
     remuneration |o--o{ taches : "remuneration_id (FK, nullable)"
+    acquereurs ||--o{ secteurs_recherche_acquereur : "acquereur_id (FK)"
     biens ||..o{ memoire_contextuelle : "bien_id (text, sans FK)"
     acquereurs ||..o{ memoire_contextuelle : "client_id (text, sans FK)"
 
@@ -312,6 +313,7 @@ optionnelles nullables sans défaut (ADR-009).
 | `compromis_signe_le` | timestamptz | **oui** | jalon commercial — ADR-014, peut être posé sans `offre_en_cours_le` (compromis marqué directement) |
 | `nom_copropriete` | text | **oui** | ADR-029 — déclaratif, pas d'entité `copropriete` dédiée en V1 (voir ADR-029, point 7) |
 | `charge_honoraires` | text | **oui** | ADR-029 — `CHECK`, condition du mandat, connue avant toute offre/tout compromis (jamais dupliquée sur `compromis`) |
+| `code_insee_commune` | text | **oui** | ADR-035 — citycode IGN canonique, chaîne (jamais un entier, Corse "2A"/"2B"), résolu automatiquement à chaque création/édition (non bloquant), jamais calculé à la lecture ni saisi manuellement ; ne remplace jamais `adresse`/`ville`/`code_postal` |
 
 **Contraintes `CHECK`** :
 - `type IN ('appartement','maison','studio','loft','local_commercial')`
@@ -327,10 +329,11 @@ toujours — voir `docs/DEMO_VS_REAL.md`. `offre_en_cours_le`/`compromis_signe_l
 aucun statut commercial stocké, dérivé en lecture par `deriverStatutCommercial()`
 (`src/lib/statutCommercialBien.ts`) — voir ADR-014.
 
-`etage`/`ascenseur`/`parking`/`exterieur`/`pieces`/`surface`/`prix` sont les champs lus par le
-moteur de compatibilité déterministe bien × acquéreur (`src/lib/compatibilite/`, ADR-034), en plus
-de `pointsAttention`/`pointsForts` (ADR-034 en réutilise désormais les mêmes fonctions de critère
-pour les règles qui se recouvrent).
+`etage`/`ascenseur`/`parking`/`exterieur`/`pieces`/`surface`/`prix`/`code_insee_commune` sont les
+champs lus par le moteur de compatibilité déterministe bien × acquéreur (`src/lib/compatibilite/`,
+ADR-034/035), en plus de `pointsAttention`/`pointsForts` (ADR-034 en réutilise désormais les mêmes
+fonctions de critère pour les règles qui se recouvrent). `ville`/`code_postal` ne sont **jamais**
+lus par ce moteur (ADR-035) — seul `code_insee_commune` participe à la décision géographique.
 
 ## `acquereurs`
 
@@ -357,8 +360,33 @@ que `biens`.
 `listerClients()` exclut les lignes où `archive_le` est non NULL ; `getClientById()` les résout
 toujours — voir `docs/DEMO_VS_REAL.md`.
 
-Relation fonctionnelle : référencé par FK réelle depuis `comptes_rendus_visite` et `taches`
-(ADR-028) ; par id texte (sans FK) depuis `memoire_contextuelle`.
+Relation fonctionnelle : référencé par FK réelle depuis `comptes_rendus_visite`, `taches`
+(ADR-028) et `secteurs_recherche_acquereur` (ADR-035) ; par id texte (sans FK) depuis
+`memoire_contextuelle`.
+
+## `secteurs_recherche_acquereur`
+
+**Rôle** : secteurs de recherche géographique d'un acquéreur (ADR-035) — une ligne par commune/
+arrondissement explicitement sélectionné par le conseiller, via une recherche IGN vérifiée
+côté serveur (jamais une valeur soumise par le client persistée telle quelle).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE CASCADE`) | non | |
+| `code_insee` | text | non | citycode IGN canonique — chaîne, jamais un entier ; seul champ comparé par le moteur de compatibilité |
+| `nom_commune` | text | non | affichage uniquement, jamais comparé — vient toujours de la réponse IGN vérifiée, jamais de la saisie brute du conseiller |
+| `code_postal` | text | non | affichage uniquement, jamais comparé |
+| `cree_le` | timestamptz | non | |
+
+**Contrainte `UNIQUE`** : `(acquereur_id, code_insee)` — empêche un doublon en base pour un même
+acquéreur, indépendamment de toute validation applicative.
+
+Aucune colonne `jsonb`/`json` n'a été utilisée pour cette collection (le schéma Atlas n'en compte
+aucune à ce jour) — table dédiée avec FK `CASCADE`, même idiome que `notes_bien`/`taches`/
+`notes_prospect_vendeur` pour toute entité répétable structurée. `nom_commune`/`code_postal` ne
+sont jamais éditables indépendamment de `code_insee` — corriger un secteur suppose de le supprimer
+puis d'en resélectionner un nouveau.
 
 `pieces_min`/`surface_min`/`accessibilite_requise`/`necessite_parking`/`necessite_exterieur` (ADR-009)
 et `budget_max` sont les champs lus par le moteur de compatibilité déterministe
@@ -1123,6 +1151,7 @@ uniquement des compteurs agrégés, jamais un identifiant de prospect.
 | `0019_new_hemingway.sql` | ADR-031-bis : table `envois_email` |
 | `0020_furry_whirlwind.sql` | ADR-032 : `evenements_metier`, `executions_automatisation`, `configurations_automatisation` ; seed des 4 règles V1, toutes `active = false` |
 | `0021_loud_jubilee.sql` | ADR-033 : `ancre_cycle` sur `evenements_metier` (+ index prospect ponctuel corrigé, index cyclique dédié) ; `seuil_jours_inactivite` sur `configurations_automatisation` ; `CHECK` étendus (`inactivite_prospect_vendeur`) ; table `runs_scan_automatisation` ; seed de la 5ᵉ règle, `active = false` |
+| `0022_dashing_speed.sql` | ADR-035 : table `secteurs_recherche_acquereur` (FK CASCADE, `UNIQUE(acquereur_id, code_insee)`) ; colonne nullable `code_insee_commune` sur `biens` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

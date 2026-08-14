@@ -11,6 +11,7 @@ const { getDb } = await import("@/db/client");
 const { biens: biensTable, acquereurs: acquereursTable } = await import("@/db/schema");
 const { creerBien, archiverBien } = await import("@/lib/bienRepository");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
+const { ajouterSecteurRecherche } = await import("@/lib/secteurRechercheRepository");
 const { evaluerCompatibiliteBien, evaluerCompatibiliteAcquereur } = await import("./orchestration");
 
 const idsBiensCrees: string[] = [];
@@ -109,5 +110,53 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
 
     const resultats = await evaluerCompatibiliteBien(bien.id);
     expect(resultats.some((r) => r.acquereurId === acquereur.id)).toBe(true);
+  });
+
+  it("évaluerCompatibiliteBien() : le chargement groupé des secteurs distingue correctement chaque acquéreur (ADR-035, section 15, non N+1)", async () => {
+    const bien = await creerBienDeTest("005", { codeInseeCommune: "78311" });
+    const acquereurAvecSecteurCorrespondant = await creerAcquereurDeTest("005a");
+    const acquereurAvecSecteurDifferent = await creerAcquereurDeTest("005b");
+    const acquereurSansSecteur = await creerAcquereurDeTest("005c");
+
+    await ajouterSecteurRecherche(acquereurAvecSecteurCorrespondant.id, {
+      citycode: "78311",
+      nom: "Houilles",
+      codePostal: "78800",
+      contexte: "",
+    });
+    await ajouterSecteurRecherche(acquereurAvecSecteurDifferent.id, {
+      citycode: "75056",
+      nom: "Paris",
+      codePostal: "75001",
+      contexte: "",
+    });
+
+    const resultats = await evaluerCompatibiliteBien(bien.id);
+
+    const critereGeo = (acquereurId: string) => {
+      const resultat = resultats.find((r) => r.acquereurId === acquereurId);
+      return resultat?.criteres.find((c) => c.critere === "secteur_geographique");
+    };
+
+    expect(critereGeo(acquereurAvecSecteurCorrespondant.id)?.statut).toBe("compatible");
+    expect(critereGeo(acquereurAvecSecteurDifferent.id)?.statut).toBe("incompatible");
+    expect(critereGeo(acquereurSansSecteur.id)?.statut).toBe("non_concerne");
+  });
+
+  it("évaluerCompatibiliteAcquereur() : réutilise les mêmes secteurs de l'acquéreur pour chaque bien, sans requête par paire", async () => {
+    const acquereur = await creerAcquereurDeTest("006");
+    await ajouterSecteurRecherche(acquereur.id, { citycode: "78311", nom: "Houilles", codePostal: "78800", contexte: "" });
+    const bienDansLeSecteur = await creerBienDeTest("006a", { codeInseeCommune: "78311" });
+    const bienHorsSecteur = await creerBienDeTest("006b", { codeInseeCommune: "75056" });
+
+    const resultats = await evaluerCompatibiliteAcquereur(acquereur.id);
+
+    const critereGeo = (bienId: string) => {
+      const resultat = resultats.find((r) => r.bienId === bienId);
+      return resultat?.criteres.find((c) => c.critere === "secteur_geographique");
+    };
+
+    expect(critereGeo(bienDansLeSecteur.id)?.statut).toBe("compatible");
+    expect(critereGeo(bienHorsSecteur.id)?.statut).toBe("incompatible");
   });
 });

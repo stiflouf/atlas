@@ -13,8 +13,9 @@ Produit mono-conseiller en construction active, 100% TypeScript/Next.js (`apps/w
 via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-14 : biens, acquéreurs,
 prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), notes de bien, comptes
 rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien, moteur
-d'automatisations événement → tâche (ADR-032), moteur temporel/relances programmées (ADR-033) et
-moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compatibilite/`).
+d'automatisations événement → tâche (ADR-032), moteur temporel/relances programmées (ADR-033),
+moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compatibilite/`) et secteurs
+de recherche géographique acquéreur / critère géographique du moteur de compatibilité (ADR-035).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -84,15 +85,23 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   ADR-033, seuil configurable en jours) — **aucun scheduler interne à Atlas** ne la déclenche : sans
   un cron externe appelant `POST /api/automatisations/scan`, elle ne s'exécute jamais spontanément.
   Relance acquéreur, relance sur offre restent des candidates non construites.
-- **Compatibilité Bien ↔ Acquéreur (ADR-034) sans géographie, sans préférences pondérées, sans
-  persistance** — `src/lib/compatibilite/` est un moteur canonique déterministe distinct de
-  `src/lib/matching/` (jamais le même module : `matching/` résout un rendez-vous Calendar par
-  correspondance floue, `compatibilite/` compare un bien et un acquéreur déjà identifiés sur des
-  champs strictement structurés). `budgetMin` n'a aucune sémantique dans ce moteur — ne jamais
-  supposer qu'un bien moins cher que `budgetMin` est signalé. Aucune comparaison géographique
-  (aucun champ structuré de secteur recherché n'existe). Aucun score, aucune pondération, aucune
-  automatisation déclenchée (ADR-032/033 non intégrées), aucun résultat persisté — recalculé à
-  chaque affichage. Ne jamais supposer qu'un critère `a_verifier` signifie une incompatibilité.
+- **Compatibilité Bien ↔ Acquéreur (ADR-034/035) sans préférences pondérées, sans persistance** —
+  `src/lib/compatibilite/` est un moteur canonique déterministe distinct de `src/lib/matching/`
+  (jamais le même module : `matching/` résout un rendez-vous Calendar par correspondance floue,
+  `compatibilite/` compare un bien et un acquéreur déjà identifiés sur des champs strictement
+  structurés). `budgetMin` n'a aucune sémantique dans ce moteur — ne jamais supposer qu'un bien
+  moins cher que `budgetMin` est signalé. Aucun score, aucune pondération, aucune automatisation
+  déclenchée (ADR-032/033 non intégrées), aucun résultat persisté — recalculé à chaque affichage.
+  Ne jamais supposer qu'un critère `a_verifier` signifie une incompatibilité.
+- **Géographie (ADR-035) limitée à la granularité commune/arrondissement, jamais un rayon** —
+  `bien.codeInseeCommune` (citycode IGN, une chaîne, jamais un entier) est le seul identifiant
+  géographique lu par le moteur ; `ville`/`codePostal` du bien ne sont **jamais** comparés à un
+  secteur recherché, même quand `codeInseeCommune` est `NULL`. La résolution du bien est non
+  bloquante et systématiquement recalculée à chaque édition (jamais de `codeInseeCommune` périmé).
+  L'ajout d'un secteur acquéreur est, lui, strictement validé côté serveur avant écriture (aucune
+  confiance dans les valeurs soumises par le client). Les entrées génériques "ville entière"
+  Paris/Lyon/Marseille sont exclues de la recherche — ne jamais supposer qu'un citycode générique
+  équivaut à "tous les arrondissements". Aucun quartier, aucun IRIS, aucun rayon kilométrique.
 
 ## Conventions impératives
 
@@ -131,7 +140,9 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/contexteRepository.ts` | Mémoire persistée du matching (validation humaine > cache > moteur) |
 | `src/lib/google/agendaSource.ts` | `getAgendaSemaine()` — bascule Google Calendar / mocks |
 | `src/lib/tachePriority.ts` | Moteur de priorité des tâches, réutilisé partout |
-| `src/lib/compatibilite/evaluerCompatibilite.ts` | Moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034) — distinct de `matching/` |
+| `src/lib/compatibilite/evaluerCompatibilite.ts` | Moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034/035) — distinct de `matching/` |
+| `src/lib/geocodage/ignClient.ts` | Client IGN Géoplateforme unique — géocodage adresse, recherche de communes, re-vérification serveur (ADR-035) |
+| `src/lib/secteurRechercheRepository.ts` | Secteurs de recherche acquéreur — ajout/suppression/listing simple et batché (ADR-035) |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
@@ -248,6 +259,20 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
   temporel — ADR-033 a explicitement écarté cette approche (aucune garantie de process persistant
   selon l'hébergement, non tranché). Le déclenchement reste un cron **externe** appelant
   `POST /api/automatisations/scan`.
+- Une détection des entrées génériques Paris/Lyon/Marseille basée sur l'absence du champ `banId`
+  dans la réponse IGN — heuristique testée puis explicitement écartée (ADR-035) : des communes
+  rurales ordinaires en sont également dépourvues, ce qui les aurait exclues à tort. La liste
+  `CODES_INSEE_VILLE_A_ARRONDISSEMENTS` (3 citycodes fixes, documentés) est la seule source de
+  vérité pour cette exclusion.
+- Un `codeInsee`/`nomCommune`/`codePostal` de secteur acquéreur persisté depuis les valeurs soumises
+  par le formulaire client sans re-vérification IGN côté serveur, ou un champ `codeInsee` typé/validé
+  comme un entier/`^\d{5}$` — rejetterait les codes Corse `2A`/`2B` valides (ADR-035).
+- Une colonne JSON/JSONB pour stocker la liste des secteurs recherchés d'un acquéreur — écarté au
+  profit d'une table dédiée `secteurs_recherche_acquereur`, cohérent avec l'absence totale de
+  JSON/JSONB ailleurs dans le schéma (ADR-035).
+- Un rayon kilométrique, une distance GPS, ou une expansion automatique "Tout Paris" → 20
+  arrondissements sans convention officielle démontrée sans heuristique — hors périmètre V1,
+  explicitement écarté (ADR-035).
 
 ## Procédure obligatoire avant toute modification
 
