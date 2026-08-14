@@ -915,6 +915,34 @@ ci-dessus (ADR-024/025) et par `dashboardRepository.chargerRemuneration()`/
   jamais exposé à l'UI.
 - `moteur.ts` — `produireAlertes` : compose règles → déduplication → priorité.
 
+## Pack notaire (`src/lib/documents/packNotaire.ts`, ADR-030)
+
+**Rôle** : contrôle documentaire pré-transmission et sélection d'export — entièrement **dérivé**,
+aucune table, aucune ligne persistée. Consomme `calculerChecklistDossier()` (ADR-029) tel quel,
+ne réimplémente aucune règle de présence/validité documentaire.
+
+- `calculerPackNotaire(ctx, documents, maintenant?)` : classe le résultat de la checklist en
+  `ConstatPackNotaire[]` à sévérité (`a_obtenir`/`a_verifier`/`information`/`bloquant_technique`,
+  jamais de critère juridique bloquant inventé), ajoute la détection anti-mauvais-dossier
+  (rattachements `compromisId`/`acquereurId`/`prospectVendeurId` structurellement contradictoires
+  avec `compromisActuel`/`prospectVendeurOrigine`, distincte d'une simple correspondance
+  impossible à établir faute de contexte), et calcule `documentsInterdits`/`selectionProposee`/
+  `documentsDisponibles` ainsi qu'un `EtatPreparationPack` (jamais une prétention juridique de
+  complétude).
+- `genererNomExport(doc, index, ctx)` : nom d'export séquentiel dérivé uniquement de données déjà
+  structurées — ne renomme jamais `nomFichierOriginal`/`cleStockage` (ADR-013 inchangée).
+- `genererManifestePackNotaire(ctx, pack, documentsSelectionnes)` : texte brut, uniquement des
+  faits structurés (« Contact vendeur principal », « Acquéreur enregistré » — jamais « Vendeur »/
+  « Acquéreur » seuls, ADR-027).
+- `genererZipPackNotaire()` (`src/lib/documents/genererZipPackNotaire.ts`, E/S) : génération ZIP
+  **atomique** en mémoire (`jszip`) — vérifie la taille cumulée (`MAX_TAILLE_PACK_OCTETS`, 200 Mo,
+  contrainte technique V1) avant toute lecture, lit et valide tous les fichiers avant tout
+  `zip.file()`, jamais de ZIP partiel. Jamais écrit sur disque.
+- `POST /api/biens/[id]/pack-notaire` : revalide tout côté serveur (jamais confiance dans la
+  sélection client), refuse (409) si aucun compromis en cours n'existe pour le bien.
+- `/biens/[id]/pack-notaire` : page de lecture, formulaire HTML natif (pas de JavaScript
+  nécessaire) pour la sélection manuelle éphémère.
+
 ## Migrations
 
 | Fichier | Tables introduites |

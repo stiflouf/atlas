@@ -105,13 +105,40 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   pas dans le vocabulaire. Ne pas confondre avec `remuneration.montantRemunerationConseillerCentimes`
   (ADR-021, part du conseiller) : deux faits distincts.
 - **Checklist V1 volontairement minimale** (`REGLES_CHECKLIST`, `src/lib/documents/
-  checklistDossier.ts`) : un noyau de règles par famille, pas une couverture exhaustive de toutes
-  les pièces citées dans le retour terrain (ex. fiche synthétique/carnet d'entretien/procédures
-  syndic sont dans le vocabulaire `typeDocument` mais ne portent pas encore toutes une exigence de
-  checklist dédiée). Étendre `REGLES_CHECKLIST` est additif, sans migration.
+  checklistDossier.ts`) : un noyau de règles par famille (les 7 pièces copropriété du retour
+  terrain — règlement, EDD, PV AG, pré-état daté, fiche synthétique, carnet d'entretien,
+  procédures syndic — ont chacune une exigence dédiée), mais pas une couverture exhaustive de
+  tout le vocabulaire `typeDocument` (ex. `avenant`, `offre_pret`, `projet_acte` n'ont pas encore
+  d'exigence de checklist associée). Étendre `REGLES_CHECKLIST` est additif, sans migration.
 - **Aucune génération automatique de tâche depuis un constat documentaire** (ex. "pré-état daté
   manquant") — la checklist produit uniquement des constats affichés, la chaîne constat → règle
   d'automatisation → tâche ADR-028 reste un futur ADR, jamais un dual-write ici.
+
+## Pack notaire (ADR-030)
+
+- **Aucun ZIP en mémoire n'est écrit sur disque, mais aucune persistance non plus** : si la
+  génération échoue en cours de route (fichier illisible, ex. suppression concurrente du fichier
+  physique entre le chargement des métadonnées et la lecture), le conseiller doit relancer
+  l'export depuis le début — aucune reprise partielle.
+- **Aucune authentification n'existe dans Atlas aujourd'hui** (ADR-006). Le pack notaire agrège
+  des pièces d'identité et données sensibles de plusieurs documents en un seul point d'accès — une
+  agrégation plus sensible que la consultation d'un document isolé. Ce point n'est **pas résolu**
+  par ADR-030 et doit être traité avant toute exposition à un tiers (envoi effectif au notaire) ou
+  tout usage multi-utilisateur — ADR-030 ne doit pas être considéré prêt pour un usage au-delà du
+  poste local du conseiller tant que ce n'est pas fait.
+- **`MAX_TAILLE_PACK_OCTETS` (200 Mo) est une contrainte technique Atlas V1**, pas une règle
+  métier ni légale — un dossier légitimement plus volumineux (nombreuses pièces copropriété par
+  exemple) devra être exporté en plusieurs packs, aucun découpage automatique n'existe.
+- **Aucune journalisation persistante** des générations/transmissions de pack — une vraie
+  traçabilité (qui, quand, quel pack, quels documents) reste une évolution future, à traiter
+  conjointement avec l'authentification.
+- **`REGLES_CHECKLIST` non exhaustive** (voir "Dossier documentaire (ADR-029)" ci-dessus) se
+  répercute directement sur le pack : un type de document non couvert par une exigence n'apparaît
+  jamais dans `selectionProposee`/`documentsDisponibles` via la checklist, mais reste listé comme
+  n'importe quel autre document du bien dans `documentsDisponibles` (sélection manuelle toujours
+  possible).
+- **Pas de découpage par famille/lot** : un seul ZIP par génération, pas de pack partiel
+  pré-configuré (ex. "uniquement les pièces copropriété").
 
 ## Statut commercial du bien
 

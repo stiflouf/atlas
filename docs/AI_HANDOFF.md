@@ -157,6 +157,18 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
 - Une entité `dossier_vente` ou `copropriete` "pour donner un nom à l'UI" sans besoin
   d'intégrité/mutualisation réel — le dossier reste une vue composée dérivée de `bien` +
   `compromis` + parties liées (ADR-029, point 3).
+- Une table `pack_notaire` ou toute persistance de sélection/export documentaire — le pack reste
+  entièrement dérivé à la demande, y compris la sélection manuelle d'export (éphémère, jamais
+  écrite en base — ADR-030).
+- Une exigence de checklist `manquant` traitée comme `bloquant_technique` — la checklist ADR-029
+  n'est pas juridiquement exhaustive, seule une contradiction structurelle FACTUELLEMENT démontrée
+  (mauvais rattachement, classement `rejete`, fichier illisible) justifie un blocage technique
+  (ADR-030).
+- Une dépendance ZIP/PDF ajoutée sans vérifier au préalable l'absence de binding natif et la
+  compatibilité avec le runtime Node.js par défaut des Route Handlers — voir l'audit `jszip`
+  (ADR-030) comme référence de la démarche attendue.
+- Un `console.log` présenté comme une piste d'audit — ce n'est pas une traçabilité, une vraie
+  journalisation reste une évolution future explicite (ADR-030).
 
 ## Procédure obligatoire avant toute modification
 

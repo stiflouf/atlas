@@ -473,6 +473,50 @@ jamais réimplémenté dans un composant React.
 générée automatiquement, aucun dual-write avec `taches` (ADR-028). La chaîne constat → règle
 d'automatisation → tâche reste un futur ADR.
 
+## 30. Pack notaire et contrôle documentaire pré-transmission
+
+Nouveau contrôle pré-transmission (`src/lib/documents/packNotaire.ts`), entièrement dérivé — aucune
+table `pack_notaire`, aucune sélection ni ZIP persistés. Consomme `calculerChecklistDossier()`
+(ADR-029) tel quel, sans réimplémenter aucune règle de présence/validité documentaire.
+
+**Quatre sévérités, aucun critère juridique bloquant inventé** : `a_obtenir` (exigence checklist
+manquante — jamais `bloquant`, la checklist Atlas n'est pas juridiquement exhaustive), `a_verifier`
+(validité/rapprochement incertain, y compris un diagnostic périmé — constat strictement factuel,
+jamais la conclusion « transmission impossible »), `information`, `bloquant_technique` (strictement
+réservé à une impossibilité sûre/factuelle : rattachement structurellement contradictoire,
+classement `rejete`, fichier illisible à l'export).
+
+**Anti-mauvais-dossier étendu au-delà des pièces d'identité** : `compromisId`/`acquereurId`/
+`prospectVendeurId` d'un document comparés à `compromisActuel`/`prospectVendeurOrigine` — une
+contradiction n'est démontrée (`bloquant_technique`) que si une référence existe réellement pour
+comparer ; en son absence, seule une correspondance « impossible à établir » (`a_verifier`) est
+signalée, jamais une exclusion.
+
+**Sélection proposée + choix manuel éphémère, jamais persisté** : auto-sélection strictement
+croisée `etatVerification = 'confirme'` **et** état checklist `present` — un document jamais
+explicitement confirmé (`non_verifie`, le défaut à l'upload) n'est jamais auto-inclus. Formulaire
+HTML natif (`<form method="POST">`, aucun JavaScript nécessaire), revalidation intégrale côté
+serveur de chaque id soumis, aucune écriture en base à la sélection.
+
+**Aucun export sans compromis courant** : `POST /api/biens/[id]/pack-notaire` refuse
+explicitement (409) en l'absence de `compromisActuel` — l'export ZIP est indisponible, pas
+seulement affiché « non prêt ». État de préparation exposé (`contexte_transactionnel_incomplet` /
+`elements_bloquants` / `elements_a_traiter` / `preparation_atlas_complete`) sans jamais prétendre à
+une complétude juridique ou une acceptation garantie par le notaire.
+
+**Export ZIP atomique en mémoire** (`jszip`, nouvelle dépendance — pure JS, sans binding natif) :
+taille cumulée vérifiée avant toute lecture (`MAX_TAILLE_PACK_OCTETS`, 200 Mo, contrainte technique
+V1 documentée comme telle), tous les fichiers lus et validés avant tout `zip.file()` — un seul
+document illisible fait échouer la génération entière, jamais un ZIP partiel. Jamais écrit sur
+disque. Nom d'export (`genererNomExport`) dérivé uniquement de données structurées, ne renomme
+jamais le fichier stocké (ADR-013). Manifeste texte (`Contact vendeur principal`/`Acquéreur
+enregistré` — jamais « Vendeur »/« Acquéreur » seuls, prudence ADR-027) généré uniquement depuis
+des faits structurés.
+
+Aucun email, aucun OCR/LLM, aucune tâche automatique, aucune journalisation d'audit persistante.
+L'absence d'authentification (ADR-006) reste une limite héritée non résolue, documentée comme
+bloquante avant toute exposition à un tiers.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

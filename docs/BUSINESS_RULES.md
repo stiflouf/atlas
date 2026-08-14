@@ -634,6 +634,32 @@ d'e-mails, campagnes, automatisation de la génération de tâches (réservée �
 `Tache.origine === 'automatique'` préparé mais inutilisé), intégration Google Calendar pour le
 rendez-vous d'estimation, révocation d'un mandat déjà signé.
 
+## Pack notaire (ADR-030)
+
+**Fichiers** : `src/lib/documents/{packNotaire,genererZipPackNotaire}.ts`,
+`src/app/api/biens/[id]/pack-notaire/route.ts`, `src/app/biens/[id]/pack-notaire/page.tsx`.
+Contrôle documentaire pré-transmission et export ZIP — entièrement dérivé, aucune table.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Exigence checklist `manquant` | Toujours | `a_obtenir` — **jamais** `bloquant_technique` (règle produit non exhaustive juridiquement) |
+| Exigence `perime` | Toujours | `a_verifier`, message factuel (date dépassée) — jamais la conclusion « transmission impossible » |
+| Exigence `incoherent` (document `rejete`) | Toujours | `bloquant_technique`, document exclu |
+| `chargeHonoraires` non renseigné | Toujours | `a_obtenir` |
+| `compromisId`/`acquereurId`/`prospectVendeurId` divergent d'une référence **existante** | `compromisActuel`/`prospectVendeurOrigine` présent et différent | `bloquant_technique`, document exclu, message nommant la contradiction |
+| `compromisId`/`acquereurId`/`prospectVendeurId` renseigné, aucune référence à comparer | `compromisActuel`/`prospectVendeurOrigine` absent | `a_verifier` seulement — jamais une contradiction démontrée |
+| `coproprieteDeclaree`/`adresseDeclaree` divergents | Toujours | `a_verifier` — texte libre, jamais une preuve structurelle |
+| Sélection automatique d'un document | `etatVerification = 'confirme'` **et** état checklist `present` | Inclus dans `selectionProposee` |
+| Document `present` + `non_verifie`/`a_verifier` | Toujours | Visible dans `documentsDisponibles`, **jamais** auto-sélectionné |
+| Export ZIP sans compromis en cours | `compromisActuel` absent | Refusé explicitement (409) — aucun export transactionnel sans contexte réel |
+| Sélection soumise contenant un id interdit/inconnu | Toujours | Requête entière refusée (400), aucun ZIP généré |
+| Fichier illisible à l'export | Toujours | Génération entière refusée (`ErreurGenerationPack`), aucun ZIP partiel |
+| Taille cumulée de la sélection | `> MAX_TAILLE_PACK_OCTETS` (200 Mo) | Refusé avant toute lecture fichier — contrainte technique, pas légale |
+| Nom d'export | Toujours | Dérivé uniquement de données structurées, jamais un renommage du fichier stocké (ADR-013) |
+
+**Hors périmètre V1** : envoi email/notaire, OCR/LLM, création automatique de tâches, PDF serveur,
+authentification, journalisation d'audit persistante.
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

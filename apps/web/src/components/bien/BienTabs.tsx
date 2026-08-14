@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import { LABEL_ECHEANCE_ABSENTE, deriverStatutTache, type Tache } from "@/types/tache";
@@ -422,6 +423,12 @@ export default function BienTabs({
                   {checklist.pvAg.presents.length} / {checklist.pvAg.attendus} derniers
                 </span>
               </div>
+              <Link
+                href={`/biens/${bien.id}/pack-notaire`}
+                className="self-start text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+              >
+                Préparer le pack notaire →
+              </Link>
             </div>
           )}
 
