@@ -15,6 +15,7 @@ function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier 
     compteRenduVisiteId: ligne.compteRenduVisiteId ?? undefined,
     prospectVendeurId: ligne.prospectVendeurId ?? undefined,
     compromisId: ligne.compromisId ?? undefined,
+    ancreCycle: ligne.ancreCycle ? ligne.ancreCycle.toISOString() : undefined,
     survenuLe: ligne.survenuLe.toISOString(),
   };
 }
@@ -22,10 +23,14 @@ function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier 
 // Discriminée par cible plutôt qu'un objet générique {type, id} : chaque type d'événement V1 a une
 // seule cible possible, connue statiquement — évite une erreur de câblage (mauvaise colonne pour
 // un type donné) qu'un couple générique ne détecterait qu'à l'exécution.
+//
+// 'inactivite_prospect_vendeur' (ADR-033) exige `ancreCycle` : c'est elle, pas prospectVendeurId
+// seul, qui identifie l'occurrence (voir cibleIndex ci-dessous et l'index dédié, db/schema.ts).
 export type NouvelEvenementMetier =
   | { typeEvenement: "visite_realisee"; compteRenduVisiteId: string }
   | { typeEvenement: "rdv_estimation_realise" | "mandat_signe"; prospectVendeurId: string }
-  | { typeEvenement: "compromis_signe"; compromisId: string };
+  | { typeEvenement: "compromis_signe"; compromisId: string }
+  | { typeEvenement: "inactivite_prospect_vendeur"; prospectVendeurId: string; ancreCycle: Date };
 
 export type ResultatEmissionEvenement = {
   // undefined si l'événement existait déjà (index unique partiel, double submit) — dans ce cas,
@@ -55,21 +60,33 @@ export async function emettreEvenementEtPreparerExecutions(
     compteRenduVisiteId: "compteRenduVisiteId" in input ? input.compteRenduVisiteId : null,
     prospectVendeurId: "prospectVendeurId" in input ? input.prospectVendeurId : null,
     compromisId: "compromisId" in input ? input.compromisId : null,
+    ancreCycle: "ancreCycle" in input ? input.ancreCycle : null,
   };
 
+  // Le `where` DOIT correspondre exactement au prédicat de l'index visé (inférence Postgres de
+  // l'arbitre ON CONFLICT) — d'où la distinction explicite du type cyclique ici, jamais un simple
+  // "IS NOT NULL" générique qui réutiliserait par erreur l'index ponctuel (ADR-033).
   const cibleIndex =
     "compteRenduVisiteId" in input
-      ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compteRenduVisiteId], colonneCible: evenementsMetier.compteRenduVisiteId }
-      : "prospectVendeurId" in input
-        ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.prospectVendeurId], colonneCible: evenementsMetier.prospectVendeurId }
-        : { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compromisId], colonneCible: evenementsMetier.compromisId };
+      ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compteRenduVisiteId], where: sql`${evenementsMetier.compteRenduVisiteId} IS NOT NULL` }
+      : "compromisId" in input
+        ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compromisId], where: sql`${evenementsMetier.compromisId} IS NOT NULL` }
+        : input.typeEvenement === "inactivite_prospect_vendeur"
+          ? {
+              colonnes: [evenementsMetier.typeEvenement, evenementsMetier.prospectVendeurId, evenementsMetier.ancreCycle],
+              where: sql`${evenementsMetier.typeEvenement} = 'inactivite_prospect_vendeur'`,
+            }
+          : {
+              colonnes: [evenementsMetier.typeEvenement, evenementsMetier.prospectVendeurId],
+              where: sql`${evenementsMetier.prospectVendeurId} IS NOT NULL AND ${evenementsMetier.typeEvenement} <> 'inactivite_prospect_vendeur'`,
+            };
 
   const [ligne] = await executeur
     .insert(evenementsMetier)
     .values(valeurs)
     .onConflictDoNothing({
       target: cibleIndex.colonnes,
-      where: sql`${cibleIndex.colonneCible} IS NOT NULL`,
+      where: cibleIndex.where,
     })
     .returning();
 

@@ -734,6 +734,34 @@ TypeScript) / EXÉCUTION (`executions_automatisation`) / ACTION PRODUITE (`tache
 règles fondées sur un constat de checklist documentaire (ADR-029), retry automatique, constructeur
 de règles no-code, modification/annulation d'une exécution déjà résolue.
 
+## Moteur temporel et relances programmées (ADR-033)
+
+**Fichiers** : `src/lib/automatisations/{calculOccurrencesInactivite,scanTemporel,
+runScanAutomatisationRepository}.ts`, `src/app/api/automatisations/scan/route.ts`. Source d'événement
+supplémentaire pour le moteur ADR-032 (inchangé) — une horloge/échéance, pas un second moteur de
+règles.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Détection d'un scheduler interne à Atlas | Toujours | Aucun — `POST /api/automatisations/scan` doit être déclenché par un cron **externe** ; sans lui, le moteur temporel ne s'exécute jamais spontanément |
+| Protection de l'endpoint | Toujours | `Authorization: Bearer <secret>` (`AUTOMATISATIONS_SCAN_SECRET`), jamais en query string, comparaison en temps constant |
+| Ancre du cycle d'inactivité | Toujours | `dernierContactLe` s'il existe, sinon `creeLe` (un prospect jamais contacté entre dans le mécanisme) |
+| Seuil franchi | `joursCivilsEcoules(ancre, maintenant) >= seuil` | Occurrence due — jamais une égalité stricte (un scan en retard doit encore détecter un seuil dépassé) |
+| Double submit / scans concurrents sur la même occurrence | Même (règle, prospect, ancre) | Un seul événement, une seule tâche — contrainte DB (index unique partiel), jamais un verrou applicatif |
+| Nouveau contact après une première relance | `dernierContactLe` change puis un nouveau seuil est franchi | Nouvelle occurrence acceptée, **même si** la tâche automatique du cycle précédent est encore ouverte — l'idempotence porte sur le cycle (l'ancre), jamais sur l'historique complet des relances |
+| Prospect archivé, perdu, ou mandat déjà signé | Toujours | Exclu (`listerProspectsVendeurs()`, ADR-027 — statuts dérivés, jamais une interprétation de texte libre) |
+| Activation de `inactivite_prospect_vendeur` | Aucun seuil valide configuré | Refusée explicitement (throw) — jamais une valeur implicite |
+| Calcul du nombre de jours écoulés | Toujours | Jours civils dans le fuseau `Europe/Paris` (`joursCivilsEcoules`), jamais une division de millisecondes (fausse lors d'un changement d'heure été/hiver) |
+| Action produite | Toujours | `creer_tache` uniquement — mêmes bornes qu'ADR-032, aucune action externe |
+| Note interne (`note_interne`) sur un prospect vendeur | Toujours | N'est jamais un contact (ADR-027) — ne remet jamais `dernierContactLe` à zéro |
+| Erreur sur un prospect pendant un scan | Toujours | Isolée (loggée, ignorée) — n'affecte jamais les autres prospects ni la complétion du run |
+| Interruption du scan (crash) | Toujours | Aucune reprise à piloter manuellement — le scan suivant recalcule toutes les occurrences dues depuis zéro, les contraintes d'idempotence empêchent les doublons |
+
+**Hors périmètre V1** : email/SMS automatique, LLM, règle fondée sur un constat de checklist
+documentaire (ADR-029), relance acquéreur (aucun `dernierContactLe` structuré côté `acquereurs`),
+tâche créée pour signaler qu'une autre tâche est en retard, retry automatique, timezone par
+conseiller réellement configurable, choix définitif du cron externe.
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

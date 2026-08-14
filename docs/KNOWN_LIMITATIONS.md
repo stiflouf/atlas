@@ -222,6 +222,35 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   `echouee`, une ligne `executions_automatisation` est figée ; corriger une tâche produite par
   erreur se fait au niveau de la tâche elle-même (ADR-028), jamais en rejouant l'exécution.
 
+## Moteur temporel et relances programmées (ADR-033)
+
+- **Aucun déclencheur intégré à Atlas** — `POST /api/automatisations/scan` existe et fonctionne,
+  mais rien dans le code ne l'appelle périodiquement : sans un cron **externe** configuré (choix
+  qui dépend d'un hébergement lui-même non tranché, voir ADR-002), le moteur temporel ne s'exécute
+  jamais spontanément. Ce n'est pas un oubli — c'est le choix délibéré d'un endpoint neutre plutôt
+  que de coupler le code à une plateforme précise.
+- **Une seule règle temporelle** (`inactivite_prospect_vendeur`) — relance acquéreur et relance sur
+  offre sans décision restent des candidates non construites (voir ADR-033, la première nécessite
+  un chantier de modélisation préalable : aucun `dernierContactLe` structuré n'existe côté
+  `acquereurs`).
+- **Aucun scheduler, aucune échéance secondaire** — pas de notion de relance répétée ou croissante
+  (ex. "relancer à nouveau si toujours sans réponse après 14 jours") ; un seul seuil, un seul cycle
+  par période de silence.
+- **Aucun retry automatique d'un run resté `en_cours`** (crash pendant le scan) ou d'une exécution
+  `echouee` — le run reste visible comme tel sur `/automatisations`, sa reprise éventuelle est un
+  scan ultérieur ordinaire (déclenché par le prochain appel du cron externe), jamais un mécanisme
+  dédié de relance de run.
+- **`survenuLe` date la détection, pas nécessairement le franchissement réel du seuil** — un scan
+  exécuté plusieurs jours après le franchissement pose `survenuLe` au moment du scan ; `ancreCycle`
+  reste la donnée honnête pour reconstituer depuis quand le silence dure réellement.
+- **Le secret de l'endpoint (`AUTOMATISATIONS_SCAN_SECRET`) n'a ni rotation ni rate-limiting
+  construits** — un secret unique, statique, sans expiration ; à traiter comme tout autre secret V1
+  d'Atlas (aucune gestion de secrets avancée n'existe ailleurs non plus).
+- **`joursCivilsEcoules` utilise un fuseau constant (`Europe/Paris`)** — passé en paramètre
+  explicite partout (préparé pour un futur fuseau par conseiller), mais sa seule source aujourd'hui
+  reste `FUSEAU_HORAIRE_APP`, une constante de module — aucune configuration par conseiller
+  n'existe (mono-conseiller assumé, ADR-006).
+
 ## Statut commercial du bien
 
 - **Historique dérivé non append-only pour "Offre en cours"/"Compromis signé"** (ADR-014),

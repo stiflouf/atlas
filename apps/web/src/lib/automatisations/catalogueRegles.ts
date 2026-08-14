@@ -81,6 +81,29 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
       };
     },
   },
+  {
+    code: "inactivite_prospect_vendeur",
+    nom: "Relance après période sans contact",
+    description: "Crée une tâche de relance lorsqu'un prospect vendeur actif n'a connu aucune interaction depuis le seuil configuré (ADR-033).",
+    typeEvenement: "inactivite_prospect_vendeur",
+    // Aucun blocage sur une éventuelle tâche automatique déjà ouverte d'un cycle précédent
+    // (ADR-033, décision validée) : un vrai nouveau contact change l'ancre du cycle et ouvre une
+    // occurrence métier à part entière, qui ne doit jamais être perdue au prétexte qu'une ancienne
+    // relance traîne encore. L'idempotence porte sur le cycle (voir evenementMetierRepository.ts),
+    // jamais sur l'historique complet des relances du prospect.
+    construireTache: async (evenement) => {
+      if (!evenement.prospectVendeurId) return undefined;
+      const prospect = await getProspectVendeurById(evenement.prospectVendeurId);
+      if (!prospect) return undefined;
+      const contact = prospect.prenom ? `${prospect.prenom} ${prospect.nom}` : prospect.nom;
+      return {
+        titre: `Relancer ${contact}`,
+        type: "relance",
+        priorite: "normale",
+        cible: { type: "prospectVendeur", id: evenement.prospectVendeurId },
+      };
+    },
+  },
 ];
 
 export const LABEL_REGLE_AUTOMATISATION: Record<CodeRegleAutomatisation, string> = Object.fromEntries(

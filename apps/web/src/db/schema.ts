@@ -937,6 +937,10 @@ export const envoisEmail = pgTable(
 // pour le même `compte_rendu_visite_id`) — protection indépendante de
 // `executions_automatisation.UNIQUE(regle_code, evenement_id)`, qui protège seulement le rejeu
 // d'un événement déjà existant, pas la création du doublon lui-même.
+// `ancreCycle` (ADR-033) : NULL pour les quatre types ponctuels d'ADR-032, obligatoire pour
+// 'inactivite_prospect_vendeur' — porte la valeur de dernierContactLe (ou creeLe en repli) qui a
+// servi de base au calcul du seuil franchi. C'est elle, pas prospectVendeurId seul, qui distingue
+// deux cycles de silence successifs pour le même prospect (voir les deux index prospect ci-dessous).
 export const evenementsMetier = pgTable(
   "evenements_metier",
   {
@@ -945,12 +949,16 @@ export const evenementsMetier = pgTable(
     compteRenduVisiteId: uuid("compte_rendu_visite_id").references(() => comptesRendusVisite.id),
     prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id),
     compromisId: uuid("compromis_id").references(() => compromis.id),
+    ancreCycle: timestamp("ancre_cycle", { withTimezone: true }),
     survenuLe: timestamp("survenu_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check(
       "evenements_metier_type_check",
-      sql`${table.typeEvenement} IN ('visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe')`
+      sql`${table.typeEvenement} IN (
+        'visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe',
+        'inactivite_prospect_vendeur'
+      )`
     ),
     check(
       "evenements_metier_une_seule_cible_check",
@@ -963,9 +971,19 @@ export const evenementsMetier = pgTable(
     uniqueIndex("evenements_metier_visite_unique")
       .on(table.typeEvenement, table.compteRenduVisiteId)
       .where(sql`${table.compteRenduVisiteId} IS NOT NULL`),
+    // Réservé aux types PONCTUELS sur prospectVendeurId (rdv_estimation_realise, mandat_signe) —
+    // exclut explicitement 'inactivite_prospect_vendeur' (ADR-033), cyclique par nature : sans
+    // cette exclusion, cet index bloquerait à vie toute deuxième occurrence de silence pour le
+    // même prospect après un nouveau contact.
     uniqueIndex("evenements_metier_prospect_vendeur_unique")
       .on(table.typeEvenement, table.prospectVendeurId)
-      .where(sql`${table.prospectVendeurId} IS NOT NULL`),
+      .where(sql`${table.prospectVendeurId} IS NOT NULL AND ${table.typeEvenement} <> 'inactivite_prospect_vendeur'`),
+    // Dédié au type cyclique : une occurrence par (prospect, ancre de cycle) — un nouveau contact
+    // change l'ancre et ouvre donc une nouvelle occurrence possible ; la même ancre rejouée
+    // (double submit du scan, scans concurrents) ne duplique jamais.
+    uniqueIndex("evenements_metier_inactivite_prospect_vendeur_unique")
+      .on(table.typeEvenement, table.prospectVendeurId, table.ancreCycle)
+      .where(sql`${table.typeEvenement} = 'inactivite_prospect_vendeur'`),
     uniqueIndex("evenements_metier_compromis_unique")
       .on(table.typeEvenement, table.compromisId)
       .where(sql`${table.compromisId} IS NOT NULL`),
@@ -1009,7 +1027,8 @@ export const executionsAutomatisation = pgTable(
       "executions_automatisation_regle_code_check",
       sql`${table.regleCode} IN (
         'suivi_apres_visite','suivi_apres_rdv_estimation',
-        'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis'
+        'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
+        'inactivite_prospect_vendeur'
       )`
     ),
     unique("executions_automatisation_regle_evenement_unique").on(table.regleCode, table.evenementId),
@@ -1026,6 +1045,12 @@ export const configurationsAutomatisation = pgTable(
   {
     regleCode: text("regle_code").primaryKey(),
     active: boolean("active").notNull().default(false),
+    // Paramètre produit explicite (ADR-033), pas une constante cachée — n'a de sens que pour
+    // 'inactivite_prospect_vendeur' aujourd'hui, NULL pour les autres règles ET par défaut : une
+    // règle qui a besoin d'un seuil ne peut jamais être activée tant qu'il n'est pas renseigné
+    // (garde applicative dans la Server Action, pas un CHECK croisé avec `active` ici — cohérent
+    // avec ADR-007, la validation métier vit dans la Server Action, pas dans le schéma).
+    seuilJoursInactivite: integer("seuil_jours_inactivite"),
     modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -1033,7 +1058,41 @@ export const configurationsAutomatisation = pgTable(
       "configurations_automatisation_regle_code_check",
       sql`${table.regleCode} IN (
         'suivi_apres_visite','suivi_apres_rdv_estimation',
-        'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis'
+        'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
+        'inactivite_prospect_vendeur'
+      )`
+    ),
+    check(
+      "configurations_automatisation_seuil_positif_check",
+      sql`${table.seuilJoursInactivite} IS NULL OR ${table.seuilJoursInactivite} > 0`
+    ),
+  ]
+);
+
+// Journal technique des passages du scanner temporel (ADR-033) — mutation contrôlée, pas
+// append-only strict : une ligne est insérée au DÉMARRAGE (demarreLe) puis complétée à la FIN
+// (termineLe + compteurs, ou erreurTechnique) par runScanAutomatisationRepository.ts. Un run resté
+// sans termineLe (crash pendant le scan) reste honnêtement visible comme tel — voir
+// deriverEtatRunScanAutomatisation (types/automatisation.ts). Aucune donnée personnelle : jamais
+// un identifiant de prospect ni de bien, seulement des compteurs agrégés.
+export const runsScanAutomatisation = pgTable(
+  "runs_scan_automatisation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    regleCode: text("regle_code").notNull(),
+    demarreLe: timestamp("demarre_le", { withTimezone: true }).notNull().defaultNow(),
+    termineLe: timestamp("termine_le", { withTimezone: true }),
+    nombreCandidats: integer("nombre_candidats"),
+    nombreOccurrencesCreees: integer("nombre_occurrences_creees"),
+    erreurTechnique: text("erreur_technique"),
+  },
+  (table) => [
+    check(
+      "runs_scan_automatisation_regle_code_check",
+      sql`${table.regleCode} IN (
+        'suivi_apres_visite','suivi_apres_rdv_estimation',
+        'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
+        'inactivite_prospect_vendeur'
       )`
     ),
   ]

@@ -281,3 +281,70 @@ describe("executions_automatisation — idempotence de l'exécution (UNIQUE regl
     ).rejects.toThrow();
   });
 });
+
+describe("emettreEvenementEtPreparerExecutions — idempotence du cycle temporel (ADR-033)", () => {
+  it("même ancre rejouée pour le même prospect : refusée ; nouvelle ancre : acceptée (test obligatoire, correction n°1)", async () => {
+    const prospect = await creerProspectDeTest("CYCLE-INACTIVITE");
+    const ancreA = new Date("2026-01-01T10:00:00Z");
+    const ancreB = new Date("2026-02-01T10:00:00Z");
+
+    const premier = await emettreEvenementEtPreparerExecutions({
+      typeEvenement: "inactivite_prospect_vendeur",
+      prospectVendeurId: prospect.id,
+      ancreCycle: ancreA,
+    });
+    expect(premier.evenement).toBeDefined();
+    expect(premier.evenement!.ancreCycle).toBe(ancreA.toISOString());
+    idsEvenementsCrees.push(premier.evenement!.id);
+
+    // Même ancre rejouée (double submit du scan, ou deux scans concurrents) : refusée.
+    const rejeuMemeAncre = await emettreEvenementEtPreparerExecutions({
+      typeEvenement: "inactivite_prospect_vendeur",
+      prospectVendeurId: prospect.id,
+      ancreCycle: ancreA,
+    });
+    expect(rejeuMemeAncre.evenement).toBeUndefined();
+
+    // Nouvelle ancre (un vrai nouveau contact a eu lieu entre-temps, puis un nouveau silence) :
+    // acceptée — un nouveau cycle, jamais bloqué par l'ancien.
+    const nouvelleAncre = await emettreEvenementEtPreparerExecutions({
+      typeEvenement: "inactivite_prospect_vendeur",
+      prospectVendeurId: prospect.id,
+      ancreCycle: ancreB,
+    });
+    expect(nouvelleAncre.evenement).toBeDefined();
+    expect(nouvelleAncre.evenement!.ancreCycle).toBe(ancreB.toISOString());
+    idsEvenementsCrees.push(nouvelleAncre.evenement!.id);
+
+    const lignes = await getDb()
+      .select()
+      .from(evenementsMetierTable)
+      .where(
+        and(
+          eq(evenementsMetierTable.typeEvenement, "inactivite_prospect_vendeur"),
+          eq(evenementsMetierTable.prospectVendeurId, prospect.id)
+        )
+      );
+    expect(lignes).toHaveLength(2);
+  });
+
+  it("l'ancien index prospect ponctuel (rdv_estimation_realise) n'interfère jamais avec le cycle temporel du même prospect", async () => {
+    const prospect = await creerProspectDeTest("CYCLE-VS-PONCTUEL");
+    const ancre = new Date("2026-03-01T10:00:00Z");
+
+    const ponctuel = await emettreEvenementEtPreparerExecutions({
+      typeEvenement: "rdv_estimation_realise",
+      prospectVendeurId: prospect.id,
+    });
+    expect(ponctuel.evenement).toBeDefined();
+    idsEvenementsCrees.push(ponctuel.evenement!.id);
+
+    const cyclique = await emettreEvenementEtPreparerExecutions({
+      typeEvenement: "inactivite_prospect_vendeur",
+      prospectVendeurId: prospect.id,
+      ancreCycle: ancre,
+    });
+    expect(cyclique.evenement).toBeDefined();
+    idsEvenementsCrees.push(cyclique.evenement!.id);
+  });
+});

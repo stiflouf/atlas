@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { configurationsAutomatisation } from "@/db/schema";
 import { CODES_REGLE_AUTOMATISATION } from "@/types/automatisation";
@@ -7,6 +8,7 @@ function ligneVersConfiguration(ligne: typeof configurationsAutomatisation.$infe
   return {
     regleCode: ligne.regleCode as CodeRegleAutomatisation,
     active: ligne.active,
+    seuilJoursInactivite: ligne.seuilJoursInactivite ?? undefined,
     modifieLe: ligne.modifieLe.toISOString(),
   };
 }
@@ -19,6 +21,17 @@ export async function listerConfigurationsAutomatisation(): Promise<Configuratio
   return CODES_REGLE_AUTOMATISATION.map(
     (code) => parCode.get(code) ?? { regleCode: code, active: false, modifieLe: new Date(0).toISOString() }
   );
+}
+
+// Lecture unitaire (ADR-033) — utilisée par le scanner temporel, qui n'a besoin que d'une seule
+// règle à la fois. Même repli "absent = inactif" que listerConfigurationsAutomatisation.
+export async function getConfigurationAutomatisation(regleCode: CodeRegleAutomatisation): Promise<ConfigurationAutomatisation> {
+  const [ligne] = await getDb()
+    .select()
+    .from(configurationsAutomatisation)
+    .where(eq(configurationsAutomatisation.regleCode, regleCode))
+    .limit(1);
+  return ligne ? ligneVersConfiguration(ligne) : { regleCode, active: false, modifieLe: new Date(0).toISOString() };
 }
 
 // Bascule explicite (ADR-032, point 7) — jamais un état implicite. `onConflictDoUpdate` : la ligne
@@ -34,5 +47,21 @@ export async function definirActivationAutomatisation(
     .onConflictDoUpdate({
       target: configurationsAutomatisation.regleCode,
       set: { active, modifieLe: new Date() },
+    });
+}
+
+// Seuil produit explicite (ADR-033, point 4) — jamais une constante cachée. Ne touche jamais
+// `active` : renseigner/corriger le seuil est un geste distinct de l'activation (la garde
+// "impossible d'activer sans seuil valide" vit dans la Server Action, pas ici — ADR-007).
+export async function definirSeuilAutomatisation(
+  regleCode: CodeRegleAutomatisation,
+  seuilJoursInactivite: number
+): Promise<void> {
+  await getDb()
+    .insert(configurationsAutomatisation)
+    .values({ regleCode, seuilJoursInactivite })
+    .onConflictDoUpdate({
+      target: configurationsAutomatisation.regleCode,
+      set: { seuilJoursInactivite, modifieLe: new Date() },
     });
 }

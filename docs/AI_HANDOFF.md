@@ -13,8 +13,8 @@ Produit mono-conseiller en construction active, 100% TypeScript/Next.js (`apps/w
 via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-14 : biens, acquéreurs,
 prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), notes de bien, comptes
 rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien, moteur
-d'automatisations événement → tâche (ADR-032). Détail complet : `docs/ARCHITECTURE.md`,
-chronologie : `docs/CHANGELOG_V1.md`.
+d'automatisations événement → tâche (ADR-032) et moteur temporel/relances programmées (ADR-033).
+Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
 
@@ -73,14 +73,16 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   le confondre avec l'absence d'échéance ("Sans échéance" en UI). Terminer une tâche liée à un
   prospect vendeur n'enregistre une vraie interaction (ADR-027) que si le conseiller coche
   explicitement la case prévue — jamais automatique, jamais pour les autres cibles.
-- **Automatisations (ADR-032) limitées à 4 règles fixes, une seule action possible** — `creer_tache`
-  uniquement ; `envoyer_email`, `envoyer_sms`, `transmettre_pack_notaire`, `modifier_offre`,
-  `modifier_compromis`, `archiver`, `supprimer` ne sont câblables par aucune règle actuelle. Aucun
-  scheduler, aucune échéance artificielle (type "aucun contact depuis 7 jours"), aucune règle
-  fondée sur un constat de checklist documentaire (ADR-029), aucun retry automatique d'une
-  exécution `echouee`/`a_traiter`. Les 4 règles démarrent **inactives** au seed — ne jamais supposer
-  qu'une règle listée dans le catalogue est effectivement active sans vérifier
-  `configurations_automatisation`.
+- **Automatisations (ADR-032/033) limitées à 5 règles fixes, une seule action possible** —
+  `creer_tache` uniquement ; `envoyer_email`, `envoyer_sms`, `transmettre_pack_notaire`,
+  `modifier_offre`, `modifier_compromis`, `archiver`, `supprimer` ne sont câblables par aucune règle
+  actuelle. Aucune règle fondée sur un constat de checklist documentaire (ADR-029), aucun retry
+  automatique d'une exécution `echouee`/`a_traiter`. Les 5 règles démarrent **inactives** au seed —
+  ne jamais supposer qu'une règle listée dans le catalogue est effectivement active sans vérifier
+  `configurations_automatisation`. Une seule règle temporelle existe (`inactivite_prospect_vendeur`,
+  ADR-033, seuil configurable en jours) — **aucun scheduler interne à Atlas** ne la déclenche : sans
+  un cron externe appelant `POST /api/automatisations/scan`, elle ne s'exécute jamais spontanément.
+  Relance acquéreur, relance sur offre restent des candidates non construites.
 
 ## Conventions impératives
 
@@ -214,6 +216,23 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
 - Une réévaluation de l'activation d'une règle au moment du traitement plutôt qu'à l'émission de
   l'événement — figée une fois pour toutes dans la transaction métier (ADR-032 correction n°3),
   jamais un effet rétroactif d'une activation tardive.
+- Un index d'idempotence sur `(typeEvenement, prospectVendeurId)` réutilisé tel quel pour un
+  événement **cyclique** (ADR-033) — bloquerait à vie toute deuxième occurrence pour le même
+  prospect. Un type d'événement répétable dans le temps a besoin de sa propre colonne d'ancrage de
+  cycle (voir `ancreCycle`, `evenements_metier`) et de son propre index dédié, jamais un partage
+  avec l'index des types ponctuels.
+- Une tâche automatique d'un cycle précédent encore ouverte utilisée pour bloquer la création
+  d'une tâche pour un **nouveau** cycle (ADR-033) — écarté explicitement : un vrai nouveau contact
+  ouvre une occurrence métier à part entière, qui ne doit jamais être perdue au prétexte qu'une
+  ancienne relance traîne encore. Ne jamais dédupliquer une automatisation par titre de tâche, ni
+  par `origineCode + cible` seuls sans tenir compte du cycle/de l'ancre.
+- `new Date().getTime() / 86400000` (ou équivalent) pour compter des jours écoulés — casse lors
+  d'un changement d'heure été/hiver. Toujours passer par `joursCivilsEcoules` (`src/lib/temps.ts`),
+  qui compare des dates civiles dans un fuseau explicite, jamais une durée brute.
+- Un scheduler ou un `setInterval` démarré dans le process Next.js pour déclencher le scan
+  temporel — ADR-033 a explicitement écarté cette approche (aucune garantie de process persistant
+  selon l'hébergement, non tranché). Le déclenchement reste un cron **externe** appelant
+  `POST /api/automatisations/scan`.
 
 ## Procédure obligatoire avant toute modification
 

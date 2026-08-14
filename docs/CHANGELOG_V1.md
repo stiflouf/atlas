@@ -635,6 +635,48 @@ déclenchement : `enregistrerCompteRenduVisiteAction`, `marquerRdvEstimationReal
 `signerMandatProspectVendeur`, `ajouterCompromisAction` (devenu transactionnel à cette occasion,
 corrigeant une non-atomicité préexistante).
 
+## 33. Moteur temporel et relances programmées
+
+Ajoute une source d'événement supplémentaire au moteur ADR-032 (inchangé) : une horloge/échéance,
+jamais un second moteur de règles. `POST /api/automatisations/scan` — endpoint neutre, protégé par
+un secret partagé (`Authorization: Bearer`, comparaison en temps constant), déclenché par un cron
+**externe** (aucun scheduler interne à Atlas, aucun couplage à une plateforme d'hébergement — ce
+choix reste ouvert, ADR-002).
+
+**Le conflit d'index d'idempotence du plan initial, corrigé avant codage** : un événement cyclique
+(`inactivite_prospect_vendeur`, peut survenir plusieurs fois pour un même prospect au fil du temps)
+ne peut pas réutiliser tel quel l'index ponctuel d'ADR-032 (`UNIQUE(typeEvenement,
+prospectVendeurId)`, pensé pour des faits non répétables) — celui-ci exclut désormais explicitement
+ce type, et une nouvelle colonne `ancreCycle` (le `dernierContactLe`, ou `creeLe` en repli, qui a
+ouvert le cycle) porte un index unique partiel qui lui est dédié. C'est l'ancre, pas le prospect
+seul, qui identifie l'occurrence.
+
+**Un vrai nouveau contact ouvre toujours un nouveau cycle** — même si la tâche automatique du cycle
+précédent est encore ouverte : l'idempotence porte sur le cycle (l'ancre), jamais sur l'historique
+complet des relances d'un prospect, jamais sur un titre de tâche.
+
+**Fallback `creeLe`** quand aucun contact n'a jamais eu lieu — un prospect jamais recontacté depuis
+sa création entre dans le mécanisme plutôt que de rester hors périmètre silencieusement. Cette
+sémantique plus large a motivé le nom `inactivite_prospect_vendeur` (jamais `silence_...`, qui
+aurait supposé un contact préalable).
+
+**Seuil produit explicite** (`seuilJoursInactivite`, nullable, `CHECK > 0`) — activer la règle sans
+seuil valide configuré est refusé explicitement, jamais une valeur implicite. La règle démarre
+inactive, comme les 4 règles ADR-032.
+
+**Calcul en jours civils, jamais en millisecondes** (`joursCivilsEcoules`, `src/lib/temps.ts`,
+fuseau `Europe/Paris` par défaut, paramètre explicite) — testé de part et d'autre du changement
+d'heure été/hiver. `>= seuil`, jamais `=== seuil` : un scan en retard doit encore détecter un seuil
+dépassé depuis plusieurs jours.
+
+**Scanner séparé en calcul pur + I/O** — la détection des occurrences dues est une fonction
+synchrone sans accès base, testable seule ; la couche I/O émet chaque occurrence dans sa propre
+transaction courte, isole les erreurs par prospect, et journalise chaque passage
+(`runs_scan_automatisation`, mutation contrôlée — pas append-only strict — jamais de donnée
+personnelle). Aucun état de progression persisté : une interruption se résout par un recalcul
+complet au scan suivant, jamais une reprise pilotée manuellement. Concurrence : la contrainte DB
+(index unique partiel) reste la seule défense, comme ADR-032.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

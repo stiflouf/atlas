@@ -40,14 +40,22 @@ export function formatDateISO(date: Date, fuseau: string = FUSEAU_HORAIRE_APP): 
   return new Intl.DateTimeFormat("fr-CA", { timeZone: fuseau }).format(date);
 }
 
+function versMidiUTC(dateCivileISO: string): number {
+  const [annee, mois, jour] = dateCivileISO.split("-").map(Number);
+  return Date.UTC(annee, mois - 1, jour, 12);
+}
+
+// Différence en jours civils entre deux dates "YYYY-MM-DD" (jusqu'à - depuis), comparées à midi
+// UTC pour ignorer tout décalage d'heure d'été/hiver — jamais une simple soustraction de
+// millisecondes sur deux timestamps complets, qui serait fausse de ±1h lors d'un changement DST.
+function differenceJoursCivils(depuisISO: string, jusquaISO: string): number {
+  return Math.round((versMidiUTC(jusquaISO) - versMidiUTC(depuisISO)) / 86_400_000);
+}
+
 // Formate une date "YYYY-MM-DD" relative à aujourd'hui ("Demain" à J+1, sinon "lun. 18 août"),
-// pour les rendez-vous à venir. Les deux dates sont comparées à midi UTC pour ignorer le fuseau.
+// pour les rendez-vous à venir.
 export function formatDateRelative(dateISO: string, aujourdHuiISO: string): string {
-  const versMidiUTC = (iso: string) => {
-    const [annee, mois, jour] = iso.split("-").map(Number);
-    return Date.UTC(annee, mois - 1, jour, 12);
-  };
-  const diffJours = Math.round((versMidiUTC(dateISO) - versMidiUTC(aujourdHuiISO)) / 86_400_000);
+  const diffJours = differenceJoursCivils(aujourdHuiISO, dateISO);
   if (diffJours === 1) return "Demain";
   return new Intl.DateTimeFormat("fr-FR", {
     weekday: "short",
@@ -55,4 +63,12 @@ export function formatDateRelative(dateISO: string, aujourdHuiISO: string): stri
     month: "short",
     timeZone: "UTC",
   }).format(new Date(versMidiUTC(dateISO)));
+}
+
+// Nombre de jours civils PLEINS écoulés entre `dateReference` et `maintenant`, dans le fuseau
+// donné (ADR-033) — ex. pour mesurer un silence prospect. Les deux instants sont réduits à leur
+// date calendaire dans ce fuseau avant d'être différenciés : jamais un calcul en millisecondes
+// brutes, qui déraillerait d'une heure lors d'un changement d'heure été/hiver.
+export function joursCivilsEcoules(dateReference: Date, maintenant: Date, fuseau: string = FUSEAU_HORAIRE_APP): number {
+  return differenceJoursCivils(formatDateISO(dateReference, fuseau), formatDateISO(maintenant, fuseau));
 }

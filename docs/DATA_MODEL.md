@@ -999,20 +999,31 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `type_evenement` | text | non | `CHECK IN ('visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe')` |
+| `type_evenement` | text | non | `CHECK`, 5 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) |
 | `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, **`NO ACTION`**) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, **`NO ACTION`**) | oui | |
+| `ancre_cycle` | timestamptz | oui | ADR-033 — `NULL` pour les 4 types ponctuels ; pour `inactivite_prospect_vendeur`, `dernierContactLe` (ou `creeLe` si aucun contact n'a jamais eu lieu) au moment du franchissement du seuil. Voir index dédié ci-dessous |
 | `survenu_le` | timestamptz | non | |
 
 **Contraintes** :
 - `evenements_metier_une_seule_cible_check` — exactement une des trois colonnes cible est
-  renseignée (`= 1`, pas `<= 1` : un événement sans cible n'a pas de sens).
-- Trois index uniques **partiels** : `(type_evenement, compte_rendu_visite_id) WHERE ... IS NOT
-  NULL`, idem pour `prospect_vendeur_id` et `compromis_id` — empêchent un double submit de la
-  mutation métier de créer deux événements représentant le même fait.
+  renseignée (`= 1`, pas `<= 1` : un événement sans cible n'a pas de sens). `ancre_cycle` n'entre
+  jamais dans ce calcul (ce n'est pas une cible).
+- Index unique partiel `(type_evenement, compte_rendu_visite_id) WHERE ... IS NOT NULL`, idem pour
+  `compromis_id` — empêchent un double submit de la mutation métier de créer deux événements
+  représentant le même fait.
+- Index unique partiel `(type_evenement, prospect_vendeur_id) WHERE prospect_vendeur_id IS NOT NULL
+  AND type_evenement <> 'inactivite_prospect_vendeur'` — réservé aux types **ponctuels** sur
+  prospect (`rdv_estimation_realise`, `mandat_signe`). Exclut explicitement le type cyclique
+  d'ADR-033 (corrigé depuis la version initiale du plan ADR-033, qui aurait sinon bloqué à vie
+  toute deuxième occurrence de silence pour le même prospect).
+- Index unique partiel dédié `(type_evenement, prospect_vendeur_id, ancre_cycle) WHERE
+  type_evenement = 'inactivite_prospect_vendeur'` (ADR-033) — une occurrence par (prospect, ancre
+  de cycle). Un nouveau contact change l'ancre et ouvre donc une nouvelle occurrence possible ; la
+  même ancre rejouée (double submit, scans concurrents) ne duplique jamais.
 
-**Aucun `ON DELETE CASCADE` depuis les trois entités source** (volontaire, ADR-032 correction n°5) :
+**Aucun `ON DELETE CASCADE` depuis les entités source** (volontaire, ADR-032 correction n°5) :
 supprimer un compte rendu de visite, un prospect vendeur ou un compromis alors qu'un événement le
 référence encore est **refusé** par Postgres, jamais un effacement silencieux de la trace d'audit.
 
@@ -1024,7 +1035,7 @@ code TypeScript, pas une table) à un événement donné — traçable, jamais r
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK`, une des 4 valeurs `CodeRegleAutomatisation` |
+| `regle_code` | text | non | `CHECK`, une des 5 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`) |
 | `evenement_id` | uuid (FK → `evenements_metier.id`, **`NO ACTION`**) | non | |
 | `tache_id` | uuid (FK → `taches.id`, `SET NULL`) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche |
 | `demarree_le` | timestamptz | non | posée à la création de la ligne (dans la transaction métier — ADR-032 correction n°2, jamais après coup) |
@@ -1045,13 +1056,36 @@ catalogue reste TypeScript, versionné et testé, pas un constructeur no-code).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
-| `regle_code` | text (PK) | non | `CHECK`, une des 4 valeurs `CodeRegleAutomatisation` |
+| `regle_code` | text (PK) | non | `CHECK`, une des 5 valeurs `CodeRegleAutomatisation` |
 | `active` | boolean | non | défaut `false` — une règle absente de cette table est traitée comme inactive par l'appelant, jamais supposée active |
+| `seuil_jours_inactivite` | integer | oui | ADR-033 — paramètre produit explicite, n'a de sens que pour `inactivite_prospect_vendeur` (`NULL` pour les autres). `CHECK > 0` si renseigné. Activer la règle sans seuil valide configuré est refusé (Server Action), jamais une valeur implicite |
 | `modifie_le` | timestamptz | non | |
 
 Lue **au moment de l'émission de l'événement**, dans la transaction métier (ADR-032 correction
 n°3) — jamais réévaluée plus tard : activer une règle après coup ne traite jamais rétroactivement
 les événements déjà survenus pendant qu'elle était inactive.
+
+## `runs_scan_automatisation` (ADR-033)
+
+**Rôle** : journal technique des passages du scanner temporel — répond à "un scan a-t-il eu lieu ?"
+même quand il ne trouve rien de nouveau (aucune ligne `evenements_metier` n'est alors écrite).
+**Mutation contrôlée, pas append-only strict** : une ligne est insérée au démarrage puis complétée
+à la fin.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `regle_code` | text | non | `CHECK`, une des 5 valeurs `CodeRegleAutomatisation` |
+| `demarre_le` | timestamptz | non | posé à l'insertion, au tout début du scan |
+| `termine_le` | timestamptz | oui | posé à la complétion (succès ou échec) — absent si le process a crashé pendant le scan |
+| `nombre_candidats` | integer | oui | prospects actifs analysés |
+| `nombre_occurrences_creees` | integer | oui | événements réellement nouveaux (jamais un rejeu idempotent) |
+| `erreur_technique` | text | oui | message court, jamais un dump brut |
+
+Trois états dérivés (`deriverEtatRunScanAutomatisation`, jamais stockés) : `termine_le` absent →
+`en_cours` (reste honnêtement visible comme tel après un crash, jamais confondu avec un run
+terminé) ; `erreur_technique` posé → `echoue` ; sinon → `termine`. **Aucune donnée personnelle** :
+uniquement des compteurs agrégés, jamais un identifiant de prospect.
 
 ## Migrations
 
@@ -1078,6 +1112,7 @@ les événements déjà survenus pendant qu'elle était inactive.
 | `0018_wise_morgan_stark.sql` | ADR-029 : `nom_copropriete`/`charge_honoraires` sur `biens` ; `type_document`, `type_document_detail`, `date_document`, `date_fin_validite`, `compromis_id`, `acquereur_id`, `prospect_vendeur_id`, `copropriete_declaree`, `adresse_declaree`, `provenance`, `etat_verification`, `modifie_le` sur `documents_bien` |
 | `0019_new_hemingway.sql` | ADR-031-bis : table `envois_email` |
 | `0020_furry_whirlwind.sql` | ADR-032 : `evenements_metier`, `executions_automatisation`, `configurations_automatisation` ; seed des 4 règles V1, toutes `active = false` |
+| `0021_loud_jubilee.sql` | ADR-033 : `ancre_cycle` sur `evenements_metier` (+ index prospect ponctuel corrigé, index cyclique dédié) ; `seuil_jours_inactivite` sur `configurations_automatisation` ; `CHECK` étendus (`inactivite_prospect_vendeur`) ; table `runs_scan_automatisation` ; seed de la 5ᵉ règle, `active = false` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.
