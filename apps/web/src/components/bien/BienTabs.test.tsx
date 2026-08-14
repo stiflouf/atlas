@@ -43,10 +43,10 @@ function dossierTest(): DossierBien {
   };
 }
 
-const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Tâches"];
+const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Tâches", "Acquéreurs compatibles"];
 
 describe("BienTabs", () => {
-  it("n'affiche que Contexte, Notes, Visites, Documents, Offres, Compromis et Tâches pour un bien réel sans dossier", () => {
+  it("n'affiche que Contexte, Notes, Visites, Documents, Offres, Compromis, Tâches et Acquéreurs compatibles pour un bien réel sans dossier", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
@@ -67,6 +67,7 @@ describe("BienTabs", () => {
     expect(html).toContain("Offres");
     expect(html).toContain("Compromis");
     expect(html).toContain("Tâches");
+    expect(html).toContain("Acquéreurs compatibles");
     expect(html).not.toContain("Historique");
   });
 

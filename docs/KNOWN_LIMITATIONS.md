@@ -542,6 +542,34 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Aucune récurrence** : une tâche ne se recrée jamais automatiquement après avoir été terminée
   ou annulée.
 
+## Compatibilité Bien ↔ Acquéreur (ADR-034)
+
+- **`src/lib/matching/` n'est PAS le moteur de compatibilité commerciale** — ce sont deux modules
+  distincts : `matching/` résout un rendez-vous Google Calendar vers un bien/acquéreur par
+  correspondance floue (texte de titre/lieu) ; `compatibilite/` compare un bien et un acquéreur déjà
+  identifiés sur des champs strictement structurés, jamais de texte libre. Ne jamais confondre l'un
+  avec l'autre ni supposer qu'ils partagent une quelconque logique.
+- **Aucune sémantique pour `budgetMin`** : un bien moins cher que le budget minimum indiqué par
+  l'acquéreur n'est jamais signalé incompatible — décision explicite, le champ reste dans le modèle
+  sans être lu par le moteur.
+- **Géographie hors périmètre** : la recherche géographique acquéreur n'est pas suffisamment
+  structurée dans le modèle actuel (aucun champ de secteur/zone recherchée, seulement du texte
+  libre) pour participer à ce moteur déterministe. Aucune comparaison de chaînes, aucune extraction
+  depuis `criteres`, aucun géocodage bricolé n'y supplée. Fera l'objet d'une décision/modélisation
+  séparée si elle est priorisée plus tard.
+- **Aucune préférence pondérée** : les champs actuels ne sont interprétés que comme des contraintes
+  explicites (minimum/requis) — pas de scoring, pas de poids, pas de `"nice to have"` implicite, pas
+  d'inférence depuis les notes.
+- **Résultat non persisté, jamais mis en cache** : recalculé à chaque affichage de la fiche bien ou
+  acquéreur — aucune table `resultats_matching`, aucun `matching_score`, rien à synchroniser. Un
+  nouveau bien ou une nouvelle exigence acquéreur n'a donc aucun effet différé à surveiller : le
+  résultat est déjà à jour dès le prochain chargement de la page.
+- **Aucune automatisation déclenchée** : un couple compatible ne crée jamais de tâche, d'email ni
+  d'événement — aucune intégration avec le moteur d'automatisations (ADR-032/033) dans cette V1.
+- **Aucune édition ni suppression d'un critère individuel** : le moteur est une pure lecture, il n'y
+  a rien à éditer — seuls les champs structurés du bien/acquéreur eux-mêmes (formulaires existants)
+  influencent le résultat.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

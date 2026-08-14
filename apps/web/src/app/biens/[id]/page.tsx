@@ -15,6 +15,7 @@ import { listerLiensPourBien } from "@/lib/offreVisiteRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerRemunerationsPourBien } from "@/lib/remunerationRepository";
 import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
+import { evaluerCompatibiliteBien } from "@/lib/compatibilite/orchestration";
 import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
 import { calculerChecklistDossier } from "@/lib/documents/checklistDossier";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
@@ -68,6 +69,7 @@ export default async function FicheBien({ params }: PageProps) {
   const compromis = await listerCompromisPourBien(bien.id);
   const remunerations = await listerRemunerationsPourBien(bien.id);
   const acquereursActifs = await listerClients();
+  const compatibilites = await evaluerCompatibiliteBien(bien.id);
   const acquereurIds = [
     ...new Set([
       ...comptesRendus.map((cr) => cr.acquereurId),
@@ -258,6 +260,7 @@ export default async function FicheBien({ params }: PageProps) {
         prospectVendeurOrigine={prospectVendeurOrigine}
         checklist={checklist}
         labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
+        compatibilites={compatibilites}
       />
     </div>
   );

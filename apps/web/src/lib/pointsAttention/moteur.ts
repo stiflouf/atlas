@@ -3,6 +3,14 @@ import type { ProfilAcquereur } from "@/types/client";
 import type { TransportsProximite, VelibProximite } from "@/types/transports";
 import type { PointAttention } from "@/types/pointsAttention";
 import { RAYON_METRES_TRANSPORTS } from "@/lib/transports/constantes";
+import {
+  evaluerAccessibilite,
+  evaluerBudgetMax,
+  evaluerExterieur,
+  evaluerParking,
+  evaluerPieces,
+  evaluerSurface,
+} from "@/lib/compatibilite/criteres";
 
 // Ce que chaque règle peut lire. Bien/acquereur exposent maintenant des champs structurés
 // (étage, ascenseur, parking, extérieur, pièces/surface min, accessibilité...) en plus des champs
@@ -32,7 +40,7 @@ const libelleStatutMandat: Record<StatutMandat, string> = {
 const reglePrixSuperieurBudgetMax: ReglePointAttention = {
   id: "prix_superieur_budget_max",
   evaluer: ({ bien, acquereur }) => {
-    if (bien.prix <= acquereur.budgetMax) return undefined;
+    if (evaluerBudgetMax(bien, acquereur).statut !== "incompatible") return undefined;
     return {
       id: "prix_superieur_budget_max",
       texte: `Le prix affiché (${formatPrix(bien.prix)}) dépasse le budget maximum indiqué par l'acquéreur (${formatPrix(acquereur.budgetMax)}).`,
@@ -69,15 +77,17 @@ const regleAucunTransportProche: ReglePointAttention = {
 };
 
 // Croisements bien × acquéreur — champs structurés uniquement, aucune lecture de texte libre.
-// "Absent" (undefined) signifie toujours "inconnu" : une règle ne se déclenche que si les deux
-// champs qu'elle croise sont explicitement renseignés.
+// La décision (compatible/incompatible/a_verifier/non_concerne) est déléguée aux fonctions de
+// critère partagées de src/lib/compatibilite/criteres.ts (ADR-034, section 11) : source unique de
+// chaque règle métier, jamais réimplémentée ici. pointsAttention n'en garde que sa propre
+// sémantique éditoriale — ne signaler qu'un fait négatif certain (statut === "incompatible"),
+// rester silencieux sur "a_verifier"/"non_concerne"/"compatible" — et sa propre formulation,
+// pensée pour la Mémoire du dossier plutôt que pour l'explicabilité critère par critère d'ADR-034.
 
 const regleAccessibilite: ReglePointAttention = {
   id: "accessibilite_requise",
   evaluer: ({ bien, acquereur }) => {
-    if (acquereur.accessibiliteRequise !== true) return undefined;
-    if (bien.etage === undefined || bien.ascenseur === undefined) return undefined;
-    if (bien.etage <= 0 || bien.ascenseur !== false) return undefined;
+    if (evaluerAccessibilite(bien, acquereur).statut !== "incompatible") return undefined;
     return {
       id: "accessibilite_requise",
       texte: `Ce bien est au ${bien.etage}e étage sans ascenseur, alors que l'accessibilité du logement est indiquée comme nécessaire pour cette recherche.`,
@@ -89,8 +99,7 @@ const regleAccessibilite: ReglePointAttention = {
 const reglePiecesInsuffisantes: ReglePointAttention = {
   id: "pieces_insuffisantes",
   evaluer: ({ bien, acquereur }) => {
-    if (acquereur.piecesMin === undefined) return undefined;
-    if (bien.pieces >= acquereur.piecesMin) return undefined;
+    if (evaluerPieces(bien, acquereur).statut !== "incompatible") return undefined;
     return {
       id: "pieces_insuffisantes",
       texte: `Le bien a moins de pièces (${bien.pieces}) que le minimum recherché par l'acquéreur (${acquereur.piecesMin}).`,
@@ -102,8 +111,7 @@ const reglePiecesInsuffisantes: ReglePointAttention = {
 const regleSurfaceInsuffisante: ReglePointAttention = {
   id: "surface_insuffisante",
   evaluer: ({ bien, acquereur }) => {
-    if (acquereur.surfaceMin === undefined) return undefined;
-    if (bien.surface >= acquereur.surfaceMin) return undefined;
+    if (evaluerSurface(bien, acquereur).statut !== "incompatible") return undefined;
     return {
       id: "surface_insuffisante",
       texte: `Le bien est plus petit (${bien.surface} m²) que la surface minimum recherchée par l'acquéreur (${acquereur.surfaceMin} m²).`,
@@ -115,8 +123,7 @@ const regleSurfaceInsuffisante: ReglePointAttention = {
 const regleParkingManquant: ReglePointAttention = {
   id: "parking_manquant",
   evaluer: ({ bien, acquereur }) => {
-    if (acquereur.necessiteParking !== true) return undefined;
-    if (bien.parking === undefined || bien.parking !== false) return undefined;
+    if (evaluerParking(bien, acquereur).statut !== "incompatible") return undefined;
     return {
       id: "parking_manquant",
       texte: "Un parking est requis par l'acquéreur, mais ce bien n'en propose pas.",
@@ -128,8 +135,7 @@ const regleParkingManquant: ReglePointAttention = {
 const regleExterieurManquant: ReglePointAttention = {
   id: "exterieur_manquant",
   evaluer: ({ bien, acquereur }) => {
-    if (acquereur.necessiteExterieur !== true) return undefined;
-    if (bien.exterieur === undefined || bien.exterieur !== "aucun") return undefined;
+    if (evaluerExterieur(bien, acquereur).statut !== "incompatible") return undefined;
     return {
       id: "exterieur_manquant",
       texte: "Un extérieur (balcon, terrasse ou jardin) est requis par l'acquéreur, mais ce bien n'en a aucun.",

@@ -13,7 +13,8 @@ Produit mono-conseiller en construction active, 100% TypeScript/Next.js (`apps/w
 via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-14 : biens, acquéreurs,
 prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), notes de bien, comptes
 rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien, moteur
-d'automatisations événement → tâche (ADR-032) et moteur temporel/relances programmées (ADR-033).
+d'automatisations événement → tâche (ADR-032), moteur temporel/relances programmées (ADR-033) et
+moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compatibilite/`).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -83,6 +84,15 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   ADR-033, seuil configurable en jours) — **aucun scheduler interne à Atlas** ne la déclenche : sans
   un cron externe appelant `POST /api/automatisations/scan`, elle ne s'exécute jamais spontanément.
   Relance acquéreur, relance sur offre restent des candidates non construites.
+- **Compatibilité Bien ↔ Acquéreur (ADR-034) sans géographie, sans préférences pondérées, sans
+  persistance** — `src/lib/compatibilite/` est un moteur canonique déterministe distinct de
+  `src/lib/matching/` (jamais le même module : `matching/` résout un rendez-vous Calendar par
+  correspondance floue, `compatibilite/` compare un bien et un acquéreur déjà identifiés sur des
+  champs strictement structurés). `budgetMin` n'a aucune sémantique dans ce moteur — ne jamais
+  supposer qu'un bien moins cher que `budgetMin` est signalé. Aucune comparaison géographique
+  (aucun champ structuré de secteur recherché n'existe). Aucun score, aucune pondération, aucune
+  automatisation déclenchée (ADR-032/033 non intégrées), aucun résultat persisté — recalculé à
+  chaque affichage. Ne jamais supposer qu'un critère `a_verifier` signifie une incompatibilité.
 
 ## Conventions impératives
 
@@ -121,6 +131,7 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/contexteRepository.ts` | Mémoire persistée du matching (validation humaine > cache > moteur) |
 | `src/lib/google/agendaSource.ts` | `getAgendaSemaine()` — bascule Google Calendar / mocks |
 | `src/lib/tachePriority.ts` | Moteur de priorité des tâches, réutilisé partout |
+| `src/lib/compatibilite/evaluerCompatibilite.ts` | Moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034) — distinct de `matching/` |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
@@ -157,6 +168,10 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
   (ADR-006, ADR-011, ADR-028) au profit d'une table dédiée par concept / de FK nullables dédiées.
 - Un résumé ou une extraction automatique depuis un champ de texte libre, même "juste pour
   l'affichage" (ADR-008).
+- Un score numérique ou une pondération pour la compatibilité Bien ↔ Acquéreur, ou une fusion de
+  `src/lib/matching/` et `src/lib/compatibilite/` en un seul module — ce sont deux moteurs distincts
+  à des fins différentes (résolution floue de rendez-vous vs compatibilité commerciale déterministe
+  sur champs structurés), écarté explicitement (ADR-034).
 - De l'OCR, un LLM, ou un rattachement automatique/probabiliste sur les documents — ADR-029
   prépare le vocabulaire (rattachement `propose`/`confirme`/`rejete`) mais n'implémente rien de
   tel ; toute correction de classement reste un geste manuel explicite.

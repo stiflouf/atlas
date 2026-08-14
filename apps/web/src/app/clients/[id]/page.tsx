@@ -9,9 +9,11 @@ import { deriverStatutTache } from "@/types/tache";
 import { archiverAcquereurAction, desarchiverAcquereurAction } from "@/actions/archivageAcquereur";
 import { listerOffresPourAcquereur } from "@/lib/offreRepository";
 import { listerCompromisPourAcquereur } from "@/lib/compromisRepository";
-import { getBienById } from "@/lib/bienRepository";
+import { getBienById, listerBiens } from "@/lib/bienRepository";
 import { LABEL_STATUT_OFFRE } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS } from "@/types/compromis";
+import { evaluerCompatibiliteAcquereur } from "@/lib/compatibilite/orchestration";
+import { LABEL_STATUT_COMPATIBILITE, LABEL_STATUT_CRITERE } from "@/lib/compatibilite/types";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -53,6 +55,23 @@ export default async function FicheClient({ params }: PageProps) {
   const bienIds = [...new Set([...offres.map((o) => o.bienId), ...compromis.map((c) => c.bienId)])];
   const biensPourOffres = await Promise.all(bienIds.map((id) => getBienById(id)));
   const biensParId = new Map(bienIds.map((id, i) => [id, biensPourOffres[i]]));
+
+  const compatibilites = await evaluerCompatibiliteAcquereur(client.id);
+  const biensActifs = await listerBiens();
+  const biensCompatibiliteParId = new Map(biensActifs.map((b) => [b.id, b]));
+  // Compatible en premier (candidats les plus actionnables), incompatible en dernier — jamais un
+  // score, uniquement un ordre d'affichage sur le statut discret (même convention que BienTabs).
+  const ORDRE_STATUT_COMPATIBILITE = { compatible: 0, a_verifier: 1, incompatible: 2 } as const;
+  const compatibilitesTriees = [...compatibilites].sort(
+    (a, b) => ORDRE_STATUT_COMPATIBILITE[a.statutGlobal] - ORDRE_STATUT_COMPATIBILITE[b.statutGlobal]
+  );
+  const VARIANT_PAR_STATUT_COMPATIBILITE = { compatible: "success", incompatible: "danger", a_verifier: "default" } as const;
+  const VARIANT_PAR_STATUT_CRITERE = {
+    compatible: "success",
+    incompatible: "danger",
+    a_verifier: "default",
+    non_concerne: "muted",
+  } as const;
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -162,6 +181,50 @@ export default async function FicheClient({ params }: PageProps) {
                     {formatPrix(c.prixConvenu)} — {bienCompromis ? bienCompromis.titre : "Bien indisponible"}
                   </p>
                 </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ADR-034 — moteur canonique et déterministe, déjà calculé côté serveur. Jamais de score,
+          jamais "a_verifier" présenté comme une incompatibilité. */}
+      <section className="mb-8">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Biens compatibles</p>
+        {compatibilitesTriees.length === 0 ? (
+          <p className="text-[14px] text-[#94a3b8]">Aucun bien à comparer pour l'instant.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {compatibilitesTriees.map((resultat) => {
+              const bienCompatible = biensCompatibiliteParId.get(resultat.bienId);
+              const criteresPertinents = resultat.criteres.filter((c) => c.statut !== "non_concerne");
+              return (
+                <details key={resultat.bienId} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                  <summary className="cursor-pointer flex items-center justify-between gap-3 list-none">
+                    <span className="text-[14px] font-medium text-[#0f172a]">
+                      {bienCompatible ? bienCompatible.titre : "Bien indisponible"}
+                    </span>
+                    <Badge variant={VARIANT_PAR_STATUT_COMPATIBILITE[resultat.statutGlobal]}>
+                      {LABEL_STATUT_COMPATIBILITE[resultat.statutGlobal]}
+                    </Badge>
+                  </summary>
+                  <div className="mt-3 pt-3 border-t border-[#f1f5f9] flex flex-col gap-2">
+                    {criteresPertinents.length === 0 ? (
+                      <p className="text-[13px] text-[#94a3b8]">
+                        Aucune exigence structurée déclarée par cet acquéreur pour ce bien.
+                      </p>
+                    ) : (
+                      criteresPertinents.map((critere) => (
+                        <div key={critere.critere} className="flex items-start gap-2">
+                          <Badge variant={VARIANT_PAR_STATUT_CRITERE[critere.statut]}>
+                            {LABEL_STATUT_CRITERE[critere.statut]}
+                          </Badge>
+                          <p className="text-[13px] text-[#64748b] leading-snug">{critere.explication}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </details>
               );
             })}
           </div>

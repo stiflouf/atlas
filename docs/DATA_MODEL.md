@@ -327,6 +327,11 @@ toujours — voir `docs/DEMO_VS_REAL.md`. `offre_en_cours_le`/`compromis_signe_l
 aucun statut commercial stocké, dérivé en lecture par `deriverStatutCommercial()`
 (`src/lib/statutCommercialBien.ts`) — voir ADR-014.
 
+`etage`/`ascenseur`/`parking`/`exterieur`/`pieces`/`surface`/`prix` sont les champs lus par le
+moteur de compatibilité déterministe bien × acquéreur (`src/lib/compatibilite/`, ADR-034), en plus
+de `pointsAttention`/`pointsForts` (ADR-034 en réutilise désormais les mêmes fonctions de critère
+pour les règles qui se recouvrent).
+
 ## `acquereurs`
 
 **Rôle** : premier acquéreur réel persisté (au-delà des mocks `data/clients.ts`). Mêmes principes
@@ -343,7 +348,7 @@ que `biens`.
 | `date_premiere_contact` | date | non | |
 | `pieces_min` | integer | **oui** | |
 | `surface_min` | real | **oui** | |
-| `accessibilite_requise`, `necessite_parking`, `necessite_exterieur` | boolean | **oui** | inconnu = NULL |
+| `accessibilite_requise`, `necessite_parking`, `necessite_exterieur` | boolean | **oui** | inconnu = NULL — besoin fonctionnel immobilier uniquement (`accessibilite_requise`), jamais une donnée de santé |
 | `cree_le` / `modifie_le` | timestamptz | non | |
 | `archive_le` | timestamptz | **oui** | `NULL` = actif, sinon date d'archivage — ADR-012, aucun défaut |
 
@@ -354,6 +359,11 @@ toujours — voir `docs/DEMO_VS_REAL.md`.
 
 Relation fonctionnelle : référencé par FK réelle depuis `comptes_rendus_visite` et `taches`
 (ADR-028) ; par id texte (sans FK) depuis `memoire_contextuelle`.
+
+`pieces_min`/`surface_min`/`accessibilite_requise`/`necessite_parking`/`necessite_exterieur` (ADR-009)
+et `budget_max` sont les champs lus par le moteur de compatibilité déterministe
+(`src/lib/compatibilite/`, ADR-034) — `budget_min`, lui, n'a volontairement aucune sémantique dans
+ce moteur (voir `docs/BUSINESS_RULES.md`). Aucune nouvelle colonne introduite par ADR-034.
 
 ## `taches`
 

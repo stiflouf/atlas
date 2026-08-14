@@ -96,7 +96,12 @@ le cache sur des changements sans rapport avec le matching (réponse d'un invit�
 
 **Fichier** : `src/lib/pointsAttention/moteur.ts` (`produirePointsAttention`). Entrée : `Bien`,
 `ProfilAcquereur`, et optionnellement `TransportsProximite`/`VelibProximite` (résultats réels des
-clients externes, jamais recalculés). 8 règles indépendantes, chacune 0 ou 1 point :
+clients externes, jamais recalculés). 8 règles indépendantes, chacune 0 ou 1 point. Depuis ADR-034,
+les 6 règles qui recoupent une règle du moteur de compatibilité (prix/budget, accessibilité,
+pièces, surface, parking, extérieur) délèguent leur condition aux fonctions de critère partagées de
+`src/lib/compatibilite/criteres.ts` — ne se déclenchent que si le critère partagé retourne
+`statut === "incompatible"` ; comportement inchangé, verrouillé par
+`src/lib/pointsAttention/moteur.test.ts` (tests de caractérisation) :
 
 | Règle | Condition | Résultat | Provenance |
 |---|---|---|---|
@@ -123,6 +128,49 @@ critère explicitement demandé n'est jamais un "point fort", juste une conformi
 |---|---|---|
 | Bonus parking | `bien.parking === true` **et** `acquereur.necessiteParking !== true` (non demandé) | Bien (parking) — atout non demandé |
 | Bonus extérieur | `bien.exterieur` défini et ≠ `"aucun"`, **et** `acquereur.necessiteExterieur !== true` | Bien (extérieur) — atout non demandé |
+
+`pointsForts` n'a volontairement pas été refactoré pour partager de code avec ADR-034 : un bonus non
+demandé a une sémantique différente d'une contrainte de compatibilité (voir ADR-034, section 11).
+
+## Compatibilité Bien ↔ Acquéreur (ADR-034)
+
+**Fichiers** : `src/lib/compatibilite/{types,criteres,evaluerCompatibilite,orchestration}.ts`.
+Moteur déterministe et entièrement dérivé à la lecture — aucune table, aucun cache, aucune
+automatisation déclenchée. Distinct de `src/lib/matching/`, qui résout un rendez-vous Google
+Calendar vers un bien/acquéreur par correspondance floue et ne participe jamais à cette décision.
+
+Six critères, chacun une fonction pure indépendante (`src/lib/compatibilite/criteres.ts`),
+réutilisées telles quelles par `pointsAttention` (voir ci-dessus) :
+
+| Critère | Non concerné | Compatible | Incompatible | À vérifier |
+|---|---|---|---|---|
+| `budget_max` | jamais (`budgetMax`/`prix` toujours renseignés) | `bien.prix <= budgetMax` | `bien.prix > budgetMax` | jamais |
+| `pieces_min` | `piecesMin` absent | `bien.pieces >= piecesMin` | `bien.pieces < piecesMin` | jamais (`bien.pieces` toujours renseigné) |
+| `surface_min` | `surfaceMin` absent | `bien.surface >= surfaceMin` | `bien.surface < surfaceMin` | jamais (`bien.surface` toujours renseigné) |
+| `parking` | `necessiteParking !== true` | `bien.parking === true` | `bien.parking === false` | `bien.parking` inconnu |
+| `exterieur` | `necessiteExterieur !== true` | `bien.exterieur` ∈ {balcon,terrasse,jardin} | `bien.exterieur === "aucun"` | `bien.exterieur` inconnu |
+| `accessibilite` | `accessibiliteRequise !== true` | `etage === 0`, ou `etage > 0` et `ascenseur === true` | `etage > 0` et `ascenseur === false` | `etage` inconnu, `etage > 0` et `ascenseur` inconnu, ou `etage < 0` (hors modèle) |
+
+**`budgetMin` n'a aucune sémantique dans ce moteur** — décision explicite (ADR-034) : un bien moins
+cher que `budgetMin` n'est jamais incompatible pour ce seul motif. Le champ reste dans le modèle,
+simplement jamais lu par `evaluerBudgetMax()`.
+
+**Agrégation du statut global** (`evaluerCompatibilite`, sur les critères pertinents,
+`non_concerne` ignoré) : au moins un `incompatible` → `incompatible` ; sinon au moins un
+`a_verifier` → `a_verifier` ; sinon `compatible`. Aucun score, aucune pondération.
+
+**Aucune lecture de texte libre** (`notes`, `criteres`, `caracteristiques`, `description`) — ADR-008.
+
+**Orchestration symétrique** — `evaluerCompatibiliteBien(bienId)`/`evaluerCompatibiliteAcquereur(acquereurId)`
+appellent toutes deux la même `evaluerCompatibilite()`, itèrent sur `listerClients()`/`listerBiens()`
+(candidats actifs uniquement, ADR-012) ; la fiche consultée (bien ou acquéreur), elle, reste résolue
+même archivée (`getBienById`/`getClientById`).
+
+**UX** : onglet "Acquéreurs compatibles" sur la fiche bien, section "Biens compatibles" sur la fiche
+acquéreur — statut global + détail critère par critère toujours disponible, `a_verifier` jamais
+présenté comme une incompatibilité, aucun score sur 100.
+
+**Géographie et préférences pondérées : hors périmètre V1** — voir `docs/KNOWN_LIMITATIONS.md`.
 
 ## Tâches (ADR-028)
 

@@ -677,6 +677,44 @@ personnelle). Aucun état de progression persisté : une interruption se résout
 complet au scan suivant, jamais une reprise pilotée manuellement. Concurrence : la contrainte DB
 (index unique partiel) reste la seule défense, comme ADR-032.
 
+## 34. Moteur canonique de compatibilité Bien ↔ Acquéreur
+
+Nouveau module `src/lib/compatibilite/` — moteur déterministe et entièrement dérivé à la lecture,
+aucune migration de schéma (uniquement les champs structurés déjà introduits par ADR-009). Distinct
+de `src/lib/matching/` (résolution floue d'un rendez-vous Calendar, jamais réutilisé pour cette
+décision). Quatre statuts de critère (`compatible`/`incompatible`/`a_verifier`/`non_concerne`),
+trois statuts globaux (`non_concerne` n'existe qu'au niveau critère) : distingue explicitement une
+exigence absente côté acquéreur d'une information manquante côté bien. Agrégation sans score ni
+pondération — un seul critère `incompatible` suffit à rendre le dossier `incompatible`, sinon un
+seul `a_verifier` suffit à rendre le statut `a_verifier`, sinon `compatible`.
+
+`budgetMax` est une contrainte dure (`bien.prix > budgetMax` → incompatible) ; `budgetMin`
+n'a volontairement aucune sémantique dans ce moteur — décision explicite, documentée. Pièces/surface
+minimum : `bien.pieces`/`bien.surface` vérifiés `NOT NULL` en base pour cette ADR, jamais de
+`a_verifier` pour ces deux critères. Parking/extérieur/accessibilité respectent strictement
+l'invariant "inconnu ≠ faux" (ADR-009) — une valeur non renseignée produit toujours `a_verifier`,
+jamais une hypothèse. Accessibilité corrigée par rapport à l'audit initial : au rez-de-chaussée
+(étage 0), l'état de l'ascenseur n'a jamais besoin d'être connu pour conclure à la compatibilité ;
+un étage négatif (hors du modèle réel, `bienFormulaire.ts` rejette toute valeur négative à la
+saisie) produit `a_verifier` plutôt qu'une sémantique de sous-sol inventée.
+
+Avant de toucher `pointsAttention/moteur.ts` (aucun test jusqu'ici), un fichier de caractérisation
+(30 cas) a verrouillé son comportement existant. Les 6 règles qui recoupent une règle ADR-034
+délèguent désormais leur condition aux fonctions de critère partagées — comportement inchangé,
+vérifié par les mêmes 30 tests restés verts. `pointsForts` n'a pas été touché : les bonus non
+demandés ont une sémantique différente d'une contrainte de compatibilité. Aucune lecture de texte
+libre (`notes`/`criteres`/`caracteristiques`/`description`) — testé explicitement avec des textes
+mentionnant "parking obligatoire", "cherche terrasse", "5e sans ascenseur" sans effet sur le
+résultat tant que les champs structurés correspondants restent absents.
+
+Orchestration symétrique (`evaluerCompatibiliteBien`/`evaluerCompatibiliteAcquereur`, toutes deux
+appuyées sur la même fonction pure `evaluerCompatibilite`), au-dessus des repositories existants —
+aucun nouveau repository, aucune table, aucun cache, aucune automatisation déclenchée (ADR-032/033
+non intégrées ici). Nouvel onglet "Acquéreurs compatibles" sur la fiche bien, nouvelle section
+"Biens compatibles" sur la fiche acquéreur : statut global + détail critère par critère toujours
+disponible, `a_verifier` jamais présenté comme une incompatibilité, aucun score sur 100. Géographie
+et préférences pondérées explicitement hors périmètre V1 — documentées, pas construites.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,
