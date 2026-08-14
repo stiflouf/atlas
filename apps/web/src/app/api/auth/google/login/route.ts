@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
-import { construireUrlAutorisation } from "@/lib/google/oauth";
+import { SCOPE_CALENDAR_READONLY, construireUrlAutorisation } from "@/lib/google/oauth";
 import { ecrireStateTemporaire } from "@/lib/google/state";
 import { lireConnexionGoogle } from "@/lib/google/connexion";
 
@@ -17,5 +17,7 @@ export async function GET(request: Request) {
   await ecrireStateTemporaire(state);
 
   const forcerConsentement = reconnexionExplicite || !dejaConnecte;
-  return NextResponse.redirect(construireUrlAutorisation(state, forcerConsentement));
+  // Calendar seul — jamais couplé à Gmail ici (ADR-031-bis) : ce flux reste strictement inchangé
+  // pour les utilisateurs n'ayant jamais autorisé Gmail.
+  return NextResponse.redirect(construireUrlAutorisation(state, forcerConsentement, [SCOPE_CALENDAR_READONLY]));
 }

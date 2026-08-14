@@ -5,7 +5,13 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 
 // Lecture seule uniquement — aucune écriture dans le calendrier n'est possible avec ce scope.
-const SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly";
+export const SCOPE_CALENDAR_READONLY = "https://www.googleapis.com/auth/calendar.events.readonly";
+// Envoi seul (ADR-031-bis) : ni lecture, ni recherche, ni suppression, ni labels, ni pièces
+// jointes reçues — principe de moindre privilège appliqué au strict besoin de `users.messages.send`.
+// Scope classé "Sensitive" (pas "Restricted") par Google au moment de l'écriture — une vérification
+// de l'application par Google peut néanmoins être nécessaire avant un usage public en production,
+// indépendamment de ce code (voir docs/KNOWN_LIMITATIONS.md).
+export const SCOPE_GMAIL_SEND = "https://www.googleapis.com/auth/gmail.send";
 
 function requireEnv(nom: string): string {
   const valeur = process.env[nom];
@@ -13,14 +19,21 @@ function requireEnv(nom: string): string {
   return valeur;
 }
 
+// `scopes` explicite plutôt qu'une constante unique (ADR-031-bis) : Calendar et Gmail sont deux
+// capacités demandées indépendamment, jamais couplées dans ce code — chaque flux d'autorisation
+// demande exactement ce dont il a besoin. `include_granted_scopes=true` (toujours actif) laisse
+// Google plier les scopes déjà accordés dans le nouveau refresh_token (autorisation incrémentale
+// native) plutôt que de recomposer nous-mêmes une union de scopes à chaque demande.
+//
 // Ne force le consentement Google (et donc l'émission d'un nouveau refresh_token) que lorsque
-// c'est nécessaire : première connexion, ou reconnexion explicite après un refresh_token invalide.
-export function construireUrlAutorisation(state: string, forcerConsentement: boolean): string {
+// c'est nécessaire : première connexion, reconnexion explicite après un refresh_token invalide,
+// ou demande d'une nouvelle capacité (Gmail) où un refresh_token est requis à coup sûr.
+export function construireUrlAutorisation(state: string, forcerConsentement: boolean, scopes: string[]): string {
   const params = new URLSearchParams({
     client_id: requireEnv("GOOGLE_CLIENT_ID"),
     redirect_uri: requireEnv("GOOGLE_REDIRECT_URI"),
     response_type: "code",
-    scope: SCOPE,
+    scope: scopes.join(" "),
     access_type: "offline",
     state,
     include_granted_scopes: "true",
@@ -50,6 +63,9 @@ export async function echangerCodeContreTokens(code: string): Promise<TokensGoog
   });
   if (!res.ok) throw new Error(`Échange du code OAuth échoué (${res.status})`);
 
+  // Garde défensive (ADR-031-bis, correction explicite) : `TokensGoogle.refreshToken` est typé
+  // `string`, jamais optionnel — l'appelant (le callback) ne peut donc jamais écraser un
+  // refresh_token valide déjà stocké par `undefined` si cet échange n'en retourne pas un.
   const data = (await res.json()) as GoogleTokenResponse;
   if (!data.refresh_token) {
     throw new Error(

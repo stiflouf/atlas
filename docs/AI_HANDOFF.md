@@ -173,14 +173,24 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
   document — la résolution suit uniquement des FK/relations métier réelles, jamais un texte libre
   ni une correspondance type → personne codée en dur (ADR-031).
 - Une interaction (`notesProspectVendeur`/`dernierContactLe`) marquée automatiquement après la
-  génération d'un brouillon d'email — `mailto:` ne permet aucune confirmation d'envoi vérifiable,
-  seul un futur envoi Gmail réel (ADR-031-bis) rendrait cette automatisation légitime.
+  génération d'un brouillon d'email ou sur un envoi Gmail `incertain`/`echec` — l'automatisation
+  n'existe (ADR-031-bis) que sur `envoiEmail.reussiLe` réellement posé (réponse HTTP 2xx de Gmail
+  avec un `id` de message valide), jamais avant, jamais sur un résultat ambigu. Avec `mailto:`
+  seul (sans Gmail autorisé), aucune interaction n'est jamais journalisée automatiquement.
 - `biens.notaireEmail` ou tout champ scalaire unique pour un contact notaire — écarté
-  explicitement (ADR-031), une future modélisation devra supporter plusieurs contacts au niveau
-  transaction/parties.
+  explicitement (ADR-031 et ADR-031-bis), une future modélisation devra supporter plusieurs
+  contacts au niveau transaction/parties.
 - Une couche LLM introduite "en même temps" qu'un moteur de contenu déterministe — ADR-004 exige
   Human-in-the-Loop et une sortie structurée typée ; un LLM ne reçoit jamais que du texte déjà
   entièrement déterminé par la couche 1, jamais les faits bruts.
+- Un scope Gmail (`gmail.send`) demandé en même temps que Calendar dans la même route
+  d'autorisation, ou une union de scopes codée en dur — ADR-031-bis s'appuie sur l'autorisation
+  incrémentale native de Google (`include_granted_scopes=true`), deux routes distinctes.
+- Un résultat d'envoi `incertain` (timeout/rupture réseau après déclenchement de l'appel Gmail)
+  traité comme un `echec` (inviterait à tort un renvoi automatique) ou comme un succès —
+  `envois_email` porte trois timestamps terminaux distincts, jamais deux fondus en un.
+- Le corps complet d'un email envoyé stocké une seconde fois dans `envois_email` — seul un
+  `contenuHash` (SHA-256) de diagnostic y est conservé, jamais le texte.
 
 ## Procédure obligatoire avant toute modification
 

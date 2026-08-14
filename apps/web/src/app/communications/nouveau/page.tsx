@@ -20,6 +20,7 @@ import {
   resoudreContexteCommunicationDepuisTache,
 } from "@/lib/communications/resoudreContexteCommunicationDepuisTache";
 import { resoudreDestinatairesDepuisDocument } from "@/lib/communications/destinataireCommunication";
+import { chargerCapacitesGoogle } from "@/lib/google/capacites";
 
 type PageProps = {
   searchParams: Promise<{ tacheId?: string; bienId?: string; exigenceCode?: string; notaire?: string; candidat?: string }>;
@@ -34,6 +35,11 @@ type ResultatContexte = {
   candidats: DestinataireCandidat[];
   faits: Omit<FaitsCommunication, "destinataireNom" | "destinatairePrenom">;
   retourHref: string;
+  // Optionnel : uniquement renseigné quand le bien est directement connu sans lookup
+  // supplémentaire (jamais recherché exprès pour ce seul besoin) — contexte pour l'écran d'envoi
+  // Gmail (ADR-031-bis, ex. redirection après clôture de tâche).
+  bienId?: string;
+  tacheId?: string;
 };
 
 function trouverCandidatChoisi(candidats: DestinataireCandidat[], valeur: string | undefined) {
@@ -64,6 +70,8 @@ async function resoudreDepuisTache(tacheId: string): Promise<ResultatContexte | 
     candidats,
     faits,
     retourHref: "/",
+    bienId: cibleType === "bien" ? tache.bienId : undefined,
+    tacheId: tache.id,
   };
 }
 
@@ -86,6 +94,7 @@ async function resoudreDepuisConstat(bienId: string, exigenceCode: string): Prom
     candidats,
     faits: { bienAdresse: bien.adresse, documentLabel: exigence.label },
     retourHref: `/biens/${bienId}`,
+    bienId,
   };
 }
 
@@ -104,6 +113,7 @@ async function resoudreDepuisNotaire(bienId: string): Promise<ResultatContexte |
     candidats: [],
     faits: { bienAdresse: bien.adresse, documentsAObtenirNotaire: documentsAObtenir },
     retourHref: `/biens/${bienId}/pack-notaire`,
+    bienId,
   };
 }
 
@@ -120,7 +130,8 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
   }
 
   if (!resultat) notFound();
-  const { titre, determinerIntention, candidats, faits, retourHref } = resultat;
+  const { titre, determinerIntention, candidats, faits, retourHref, bienId, tacheId } = resultat;
+  const { gmailAutorise } = await chargerCapacitesGoogle();
 
   // Un destinataire déjà choisi (retour du formulaire de choix ci-dessous) prime toujours sur une
   // ambiguïté résiduelle — jamais retranché arbitrairement si le choix explicite du conseiller est
@@ -174,6 +185,11 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
           intention={intention}
           faits={assemblerFaits(candidatChoisi, faits)}
           destinataireEmail={candidatChoisi?.email}
+          gmailAutorise={gmailAutorise}
+          destinataireCandidatType={candidatChoisi?.type}
+          destinataireCandidatId={candidatChoisi?.id}
+          tacheId={tacheId}
+          bienId={bienId}
         />
       )}
     </div>

@@ -968,6 +968,29 @@ aucun brouillon persisté. Cinq couches séparées (intention/faits/brouillon/va
 - Aucun contact notaire structuré n'existe : `message_notaire` a toujours 0 candidat (contenu
   seul) — `biens.notaireEmail` volontairement non ajouté (arbitrage ADR-031).
 
+## `envois_email` (ADR-031-bis)
+
+**Rôle** : audit TECHNIQUE d'une tentative d'envoi Gmail — jamais un fait CRM (voir
+`notes_prospect_vendeur`, ADR-027, pour l'équivalent CRM, posé séparément uniquement après succès).
+Le corps complet du message n'y est jamais stocké.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | **Fourni par l'appelant** (pas `defaultRandom()`) — clé d'idempotence cliente, `INSERT ... ON CONFLICT (id) DO NOTHING` avant tout appel Gmail |
+| `destinataire_email`, `objet` | text | non | |
+| `contenu_hash` | text | non | SHA-256(destinataire+objet+corps) — diagnostic uniquement, jamais utilisé pour bloquer un envoi |
+| `fournisseur` | text | non | défaut `"gmail"`, `CHECK` |
+| `bien_id` (FK → `biens`, SET NULL), `tache_id` (FK → `taches`, SET NULL) | uuid | **oui** | contexte d'origine |
+| `origine_intention` | text | **oui** | `CHECK`, les 8 valeurs `IntentionCommunication` (ADR-031) |
+| `gmail_message_id` | text | **oui** | posé uniquement au succès |
+| `demarre_le` | timestamptz | non | |
+| `reussi_le` / `echoue_le` / `incertain_le` | timestamptz | **oui** | mutuellement exclusifs par construction applicative (gel concurrent), jamais un `CHECK` SQL — voir `deriverEtatEnvoiEmail` |
+| `erreur_technique` | text | **oui** | catégorie courte, jamais un dump brut ni un token |
+
+`incertain_le` est distinct d'`echoue_le` : posé quand une rupture réseau/timeout survient
+**après** le déclenchement de l'appel Gmail — le résultat réel est alors inconnu, jamais assimilé à
+un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
+
 ## Migrations
 
 | Fichier | Tables introduites |
@@ -991,6 +1014,7 @@ aucun brouillon persisté. Cinq couches séparées (intention/faits/brouillon/va
 | `0016_cute_doorman.sql` | `prospects_vendeurs`, `notes_prospect_vendeur` |
 | `0017_sudden_surge.sql` | `taches` (remplace `actions`, supprimée) ; migration des données `actions`→`taches` et `prospects_vendeurs.prochaine_action*`→`taches` ; `DROP TABLE actions` ; `DROP COLUMN` des deux anciens champs simples sur `prospects_vendeurs` |
 | `0018_wise_morgan_stark.sql` | ADR-029 : `nom_copropriete`/`charge_honoraires` sur `biens` ; `type_document`, `type_document_detail`, `date_document`, `date_fin_validite`, `compromis_id`, `acquereur_id`, `prospect_vendeur_id`, `copropriete_declaree`, `adresse_declaree`, `provenance`, `etat_verification`, `modifie_le` sur `documents_bien` |
+| `0019_new_hemingway.sql` | ADR-031-bis : table `envois_email` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

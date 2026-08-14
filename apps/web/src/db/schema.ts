@@ -870,3 +870,52 @@ export const taches = pgTable(
     ),
   ]
 );
+
+// Envoi Gmail réel (ADR-031-bis) : audit TECHNIQUE d'une tentative d'envoi, jamais un fait CRM
+// (voir notes_prospect_vendeur, ADR-027, pour le fait CRM correspondant, posé séparément
+// uniquement après succès confirmé). `id` n'est PAS `defaultRandom()` : fourni par l'appelant
+// (généré côté client à l'entrée de l'écran de confirmation) et utilisé comme CLÉ D'IDEMPOTENCE —
+// `INSERT ... ON CONFLICT (id) DO NOTHING` empêche tout double envoi sur double clic/retry/replay,
+// jamais une fenêtre de temps arbitraire. `contenuHash` (SHA-256 de destinataire+objet+corps) est
+// une donnée technique de diagnostic uniquement, jamais utilisée pour bloquer un envoi — le corps
+// complet n'est lui-même jamais persisté ici (seule sa mention resterait dans une note ADR-027,
+// courte, jamais un copier-coller intégral).
+//
+// Trois timestamps terminaux mutuellement exclusifs PAR CONSTRUCTION APPLICATIVE (gel concurrent
+// via `WHERE ... IS NULL`, même patron que taches.termineeLe/annuleeLe ADR-028), jamais un CHECK
+// SQL. `incertainLe` est distinct d'`echoueLe` : posé uniquement quand une rupture réseau/timeout
+// survient APRÈS le déclenchement de l'appel Gmail — on ne sait alors PAS si l'email a été
+// réellement envoyé, jamais assimilé à un échec net (qui suppose une réponse HTTP effectivement
+// reçue de Google). Ni l'un ni l'autre posé = `en_cours` (transitoire, la durée d'une seule
+// requête serveur synchrone).
+export const envoisEmail = pgTable(
+  "envois_email",
+  {
+    id: uuid("id").primaryKey(),
+    destinataireEmail: text("destinataire_email").notNull(),
+    objet: text("objet").notNull(),
+    contenuHash: text("contenu_hash").notNull(),
+    fournisseur: text("fournisseur").notNull().default("gmail"),
+    bienId: uuid("bien_id").references(() => biens.id, { onDelete: "set null" }),
+    tacheId: uuid("tache_id").references(() => taches.id, { onDelete: "set null" }),
+    origineIntention: text("origine_intention"),
+    gmailMessageId: text("gmail_message_id"),
+    demarreLe: timestamp("demarre_le", { withTimezone: true }).notNull().defaultNow(),
+    reussiLe: timestamp("reussi_le", { withTimezone: true }),
+    echoueLe: timestamp("echoue_le", { withTimezone: true }),
+    incertainLe: timestamp("incertain_le", { withTimezone: true }),
+    // Court libellé technique catégorisé — jamais un dump brut de l'erreur Google, jamais un
+    // token, jamais le corps du message.
+    erreurTechnique: text("erreur_technique"),
+  },
+  (table) => [
+    check("envois_email_fournisseur_check", sql`${table.fournisseur} IN ('gmail')`),
+    check(
+      "envois_email_origine_intention_check",
+      sql`${table.origineIntention} IS NULL OR ${table.origineIntention} IN (
+        'relance_prospect_vendeur','suivi_rdv_estimation','suivi_acquereur','suivi_visite',
+        'demande_document_manquant','relance_piece_a_verifier','message_compromis','message_notaire'
+      )`
+    ),
+  ]
+);

@@ -14,6 +14,7 @@ import { formatDateISO, formatDateRelative, heureDuJour, minutesDepuisMinuit } f
 import { rendezVousAVenir, statutRendezVous } from "@/lib/rendezVous";
 import { tachePrioritaire, raisonTache, scoreTache } from "@/lib/tachePriority";
 import { getAgendaSemaine } from "@/lib/google/agendaSource";
+import { chargerCapacitesGoogle } from "@/lib/google/capacites";
 import { construireContexte } from "@/lib/matching";
 import { resoudreContextesPersistes } from "@/lib/contexteRepository";
 import { chargerContexteAlertes } from "@/lib/alertes/contexte";
@@ -52,6 +53,7 @@ export default async function AujourdHui() {
   const aujourdHuiISO = formatDateISO(maintenant);
 
   const { rendezVous, source } = await getAgendaSemaine();
+  const { gmailAutorise } = await chargerCapacitesGoogle();
   // La fenêtre de lecture couvre 7 jours (utile aux prochains sprints) ; cet écran ne montre
   // que le jour courant. Les rendez-vous mockés n'ont pas de `date` : ils sont toujours
   // considérés comme "aujourd'hui".
@@ -185,17 +187,20 @@ export default async function AujourdHui() {
         </SectionTitle>
 
         {source === "google_calendar" && (
-          <div className="text-[12px] text-[#94a3b8] mb-3">
-            Source : Google Calendar ·{" "}
+          <div className="text-[12px] text-[#94a3b8] mb-1">
+            Google Calendar : connecté ·{" "}
             <form action="/api/auth/google/logout" method="POST" className="inline">
+              {/* La révocation Google est globale (ADR-031-bis) : ce bouton déconnecte aussi Gmail
+                  s'il a été autorisé — le libellé le dit explicitement, jamais "Déconnecter
+                  Calendar" seul une fois Gmail accordé. */}
               <button type="submit" className="font-medium underline">
-                Déconnecter
+                {gmailAutorise ? "Déconnecter Google (Calendar + Gmail)" : "Déconnecter"}
               </button>
             </form>
           </div>
         )}
         {source === "demo" && (
-          <div className="text-[12px] text-[#94a3b8] mb-3">
+          <div className="text-[12px] text-[#94a3b8] mb-1">
             Source : Données de démonstration ·{" "}
             <a href="/api/auth/google/login" className="text-[#4338ca] font-medium">
               Connecter Google Calendar
@@ -203,13 +208,27 @@ export default async function AujourdHui() {
           </div>
         )}
         {source === "demo_erreur" && (
-          <div className="text-[12px] text-[#b45309] mb-3">
+          <div className="text-[12px] text-[#b45309] mb-1">
             Google Calendar indisponible — données de démonstration affichées ·{" "}
             <a href="/api/auth/google/login?reconnexion=1" className="font-medium underline">
               Se reconnecter
             </a>
           </div>
         )}
+        {/* Capacité distincte de Calendar (ADR-031-bis) : jamais un simple "Google connecté" —
+            le conseiller doit voir explicitement ce qui est autorisé pour l'envoi d'emails. */}
+        <div className="text-[12px] text-[#94a3b8] mb-3">
+          Gmail : {gmailAutorise ? "autorisé" : "non autorisé"}
+          {!gmailAutorise && (
+            <>
+              {" "}
+              ·{" "}
+              <a href="/api/auth/google/gmail/login" className="text-[#4338ca] font-medium">
+                Autoriser Gmail
+              </a>
+            </>
+          )}
+        </div>
 
         {rdvActifs.length > 0 && (
           <div className="flex flex-col gap-2">

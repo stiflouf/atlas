@@ -551,6 +551,45 @@ multi-contacts, pas un champ scalaire unique sur `biens`.
 Points d'entrée : tâches (`TacheItem`, `BienTabs`, fiche prospect vendeur), constats de checklist
 (onglet Documents de `BienTabs`), pack notaire (message notaire).
 
+## 31-bis. Envoi Gmail réel avec validation humaine
+
+Remplace la dernière étape d'ADR-031 (`mailto:`) par un vrai envoi, uniquement lorsqu'explicitement
+autorisé — le moteur de contenu (destinataire/objet/corps, templates, tons) reste totalement
+inchangé.
+
+**Scope minimal, additif** : `gmail.send` seul (ni lecture, ni recherche, ni labels), demandé via
+une route d'autorisation dédiée (`/api/auth/google/gmail/login`) utilisant l'autorisation
+incrémentale native de Google (`include_granted_scopes=true`) plutôt qu'une union de scopes codée
+en dur — Calendar et Gmail restent deux capacités indépendantes dans ce code, jamais couplées. La
+route Calendar existante est inchangée. Le statut de chaque capacité (`chargerCapacitesGoogle()`)
+se dérive uniquement du `scope` réellement retourné par Google, jamais d'une supposition liée à la
+route appelée — affiché distinctement sur la page d'accueil (`Google Calendar : connecté` /
+`Gmail : non autorisé`), jamais un statut "Google connecté" unique.
+
+**Confirmation humaine obligatoire** : un écran dédié fige À/Objet/Corps avant tout envoi — jamais
+à la génération du brouillon, au chargement de page, à une création de tâche ou à une navigation.
+
+**Idempotence par clé cliente, pas une fenêtre de temps** : nouvelle table `envois_email`, `id`
+fourni par l'appelant (généré à l'entrée de l'écran de confirmation) utilisé comme clé
+d'idempotence (`INSERT ... ON CONFLICT DO NOTHING` avant tout appel Gmail) — une garde temporelle
+arbitraire initialement envisagée a été retirée au profit d'un `contenuHash` (SHA-256) purement
+diagnostique, jamais utilisé pour bloquer un envoi.
+
+**`incertain` distinct d'`echec`** : une rupture réseau/timeout survenue après le déclenchement de
+l'appel Gmail ne permet jamais de conclure — jamais assimilée à un échec net (qui suppose une
+réponse HTTP effectivement reçue de Google), jamais un renvoi automatique, jamais une interaction
+posée. Un succès n'est jamais annoncé comme "reçu" ou "délivré" — uniquement "Envoi confirmé par
+Gmail" (`users.messages.send` ne renseigne pas la livraison effective).
+
+**Sécurité de la construction MIME** : rejet strict de `\r`/`\n` dans tous les en-têtes (protection
+contre l'injection d'en-têtes, objet/corps étant édités par le conseiller juste avant envoi),
+encodage RFC 2047 de l'objet, base64url pour le message complet.
+
+**Interaction ADR-027 uniquement sur succès réel confirmé** — jamais sur un résultat incertain ou
+échoué. Le corps complet du message n'est jamais persisté (ni dans `envois_email`, ni dans la note
+CRM, qui ne porte que l'objet). Clôture de tâche proposée explicitement après succès, jamais
+automatique. Fallback `mailto:`/copie conservé dans tous les états. Aucun contact notaire ajouté.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

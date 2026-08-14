@@ -162,9 +162,31 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   par id de rémunération, une tâche rattachée à une rémunération retourne toujours 0 candidat.
 - **Couche LLM de reformulation entièrement hors périmètre** : aucune dépendance, aucune clé API,
   aucun fournisseur choisi — la couche 1 (templates) reste seule en V1.
-- **Envoi Gmail réel (ADR-031-bis) non construit** : la seule intégration Google du projet reste
-  Calendar en lecture seule (`calendar.events.readonly`) — aucun scope d'envoi n'a jamais été
-  demandé au consentement.
+
+## Envoi Gmail réel (ADR-031-bis)
+
+- **Révocation Google globale** : un refresh token couvre l'union des scopes accordés — impossible
+  de révoquer Gmail seul en gardant Calendar (ou l'inverse) sans repasser par un consentement
+  complet. Le bouton "Déconnecter" reflète cela honnêtement (libellé explicite une fois Gmail
+  accordé) mais ne le résout pas.
+- **Statut `gmailAutorise` optimiste, pas une vérification live** : reflète le dernier consentement
+  accordé — si l'accès a été révoqué directement depuis le compte Google du conseiller, le badge
+  reste "autorisé" jusqu'au prochain échec réel d'envoi.
+- **Aucune reprise automatique d'un état `incertain`** : une tentative dont le résultat réel est
+  inconnu (timeout/rupture réseau après déclenchement de l'envoi) reste `incertain` indéfiniment en
+  base — aucun job de réconciliation ne vérifie a posteriori auprès de Gmail si l'email est
+  réellement parti. Le conseiller doit vérifier manuellement.
+- **Aucun journal d'interaction pour `acquereurs`/autres domaines** : un envoi confirmé vers un
+  acquéreur n'est tracé nulle part au niveau CRM (contrairement à `prospectsVendeurs`) — seul
+  `envois_email` (technique) en garde la preuve.
+- **Une seule tentative "en vol" par écran de confirmation** : la clé d'idempotence protège une
+  resoumission du même écran, mais deux écrans de confirmation ouverts en parallèle (deux onglets)
+  pour le même destinataire/objet généreraient deux clés distinctes, donc potentiellement deux
+  envois réels — pas de garde inter-onglets construite (aurait nécessité une heuristique de
+  contenu explicitement écartée, voir ADR-031-bis).
+- **Vérification Google de l'application** : `gmail.send` est un scope "Sensitive" — un usage en
+  production hors mode test peut nécessiter une vérification par Google, indépendamment de ce
+  code, à traiter comme un prérequis opérationnel avant toute mise en production réelle.
 
 ## Statut commercial du bien
 

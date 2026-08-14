@@ -36,7 +36,9 @@ function dechiffrer(valeur: string): string {
   return Buffer.concat([decipher.update(chiffre), decipher.final()]).toString("utf8");
 }
 
-export type ConnexionGoogle = { refreshToken: string };
+// `scope` exposé ici (ADR-031-bis) : les capacités Calendar/Gmail réellement accordées se dérivent
+// uniquement de ce champ (voir capacites.ts), jamais d'une supposition sur la route appelée.
+export type ConnexionGoogle = { refreshToken: string; scope: string };
 
 // Le refresh_token n'est jamais transmis au navigateur : il est chiffré (AES-256-GCM) et vit
 // uniquement en base. L'access_token n'est jamais persisté, régénéré à la demande.
@@ -50,7 +52,7 @@ export async function lireConnexionGoogle(): Promise<ConnexionGoogle | undefined
   if (!ligne) return undefined;
 
   try {
-    return { refreshToken: dechiffrer(ligne.refreshTokenChiffre) };
+    return { refreshToken: dechiffrer(ligne.refreshTokenChiffre), scope: ligne.scope };
   } catch {
     // Ligne corrompue ou clé de chiffrement changée : traité comme non connecté.
     return undefined;

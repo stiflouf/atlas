@@ -681,6 +681,27 @@ aucune table.
 | Constat documentaire choisi | Toujours | Ne crée jamais de tâche automatiquement |
 | Contact notaire | — | Non modélisé — `message_notaire` toujours en contenu seul, aucun champ `biens.notaireEmail` ajouté |
 
+## Envoi Gmail réel (ADR-031-bis)
+
+**Fichiers** : `src/lib/google/{capacites,mimeEmail,gmailClient}.ts`, `src/lib/envoiEmailRepository.ts`,
+`src/actions/envoyerEmailGmail.ts`. Étend ADR-031 (moteur de contenu inchangé) d'un vrai envoi.
+
+| Règle | Condition | Résultat |
+|---|---|---|
+| Scope Gmail demandé | Autorisation dédiée `/api/auth/google/gmail/login` | `gmail.send` seul, jamais couplé à Calendar dans ce code (autorisation incrémentale Google) |
+| Statut `gmailAutorise` | Toujours | Dérivé uniquement du `scope` réellement stocké — jamais du fait que la route Gmail a été appelée |
+| Envoi Gmail | Toujours | Précédé d'un écran de confirmation figé (À/Objet/Corps) — jamais à la génération du brouillon, au chargement de page ou à une navigation |
+| Double soumission / retry | Même clé d'idempotence (`envois_email.id`, fournie par le client) | `INSERT ... ON CONFLICT DO NOTHING` — jamais un second appel Gmail |
+| Réponse HTTP Gmail non-2xx reçue | Toujours | `echec` — résultat connu, une nouvelle tentative (nouvelle clé) est autorisée |
+| Rupture réseau/timeout/réponse illisible après déclenchement de l'envoi | Toujours | `incertain` — jamais assimilé à `echec`, jamais un renvoi automatique, jamais un succès |
+| Interaction ADR-027 (prospect vendeur) | Uniquement après `reussi_le` posé | Note `'email'` + `dernierContactLe` — jamais sur `incertain`/`echec` |
+| Journal acquéreur/autre domaine | Toujours | Aucun — limite documentée, jamais écrit dans `taches` |
+| Corps du message | Toujours | Jamais persisté dans `envois_email` — seul un `contenuHash` (SHA-256) de diagnostic est conservé |
+| Clôture de tâche après envoi | Toujours | Proposée explicitement (`terminerTacheAction` réutilisée), jamais automatique |
+| En-têtes du message (To/Subject) | Toujours | `\r`/`\n` rejetés explicitement (protection contre l'injection d'en-têtes) |
+| Révocation Google | Toujours | Globale (Calendar + Gmail si les deux sont accordés) — libellé UI honnête, jamais partiel |
+| Fallback mailto/copie | Toujours | Conservé dans tous les états, y compris Gmail disponible |
+
 ## Archivage
 
 **Fichiers** : `bienRepository.ts`/`clientRepository.ts` (`archiverBien`/`desarchiverBien`,

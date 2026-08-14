@@ -134,6 +134,13 @@
       "when": 1786692683182,
       "tag": "0018_wise_morgan_stark",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1786701699713,
+      "tag": "0019_new_hemingway",
+      "breakpoints": true
     }
   ]
 }
