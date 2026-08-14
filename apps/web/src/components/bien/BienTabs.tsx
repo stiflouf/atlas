@@ -7,9 +7,22 @@ import { LABEL_ECHEANCE_ABSENTE, deriverStatutTache, type Tache } from "@/types/
 import type { NoteBien } from "@/types/noteBien";
 import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
-import { LABEL_CATEGORIE_DOCUMENT, type CategorieDocument, type DocumentBien } from "@/types/documentBien";
+import {
+  FAMILLE_PAR_TYPE_DOCUMENT,
+  LABEL_CATEGORIE_DOCUMENT,
+  LABEL_ETAT_VERIFICATION_DOCUMENT,
+  LABEL_FAMILLE_DOCUMENT,
+  LABEL_TYPE_DOCUMENT,
+  TYPES_DOCUMENT,
+  type CategorieDocument,
+  type DocumentBien,
+  type EtatVerificationDocument,
+  type FamilleDocument,
+  type TypeDocument,
+} from "@/types/documentBien";
 import { LABEL_STATUT_OFFRE, type Offre } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS, type Compromis } from "@/types/compromis";
+import type { ProspectVendeur } from "@/types/prospectVendeur";
 import { MOTIFS_PERTE, LABEL_MOTIF_PERTE } from "@/types/motifPerte";
 import {
   LABEL_ETAT_REMUNERATION,
@@ -17,11 +30,12 @@ import {
   formatMontantCentimes,
   type Remuneration,
 } from "@/types/remuneration";
+import { LABEL_ETAT_CONTROLE_EXIGENCE, type ChecklistDossier } from "@/lib/documents/checklistDossier";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerTacheAction } from "@/actions/terminerTache";
 import { annulerTacheAction } from "@/actions/annulerTache";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
-import { ajouterDocumentBienAction } from "@/actions/ajouterDocumentBien";
+import { ajouterDocumentBienAction, corrigerClassementDocumentBienAction } from "@/actions/ajouterDocumentBien";
 import { ajouterOffreAction, changerStatutOffreAction } from "@/actions/offre";
 import { lierVisiteAOffreAction, delierVisiteAction } from "@/actions/offreVisite";
 import { ajouterCompromisAction, changerStatutCompromisAction } from "@/actions/compromis";
@@ -41,6 +55,28 @@ const CATEGORIES_DOCUMENT: CategorieDocument[] = [
   "compromis",
   "autre",
 ];
+
+const FAMILLES_DOCUMENT: FamilleDocument[] = [
+  "parties",
+  "bien",
+  "diagnostics",
+  "copropriete",
+  "transaction",
+  "financement",
+  "notaire",
+  "autre",
+];
+
+const ETATS_VERIFICATION_DOCUMENT: EtatVerificationDocument[] = ["non_verifie", "confirme", "a_verifier", "rejete"];
+
+const COULEUR_ETAT_CONTROLE: Record<string, string> = {
+  present: "text-[#16a34a]",
+  manquant: "text-[#dc2626]",
+  a_verifier: "text-[#d97706]",
+  perime: "text-[#dc2626]",
+  incoherent: "text-[#dc2626]",
+  non_applicable: "text-[#94a3b8]",
+};
 
 function formatTaille(octets: number): string {
   if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} Ko`;
@@ -72,6 +108,9 @@ export default function BienTabs({
   liens = [],
   acquereursActifs = [],
   acquereursParId = new Map(),
+  compromisActuel,
+  prospectVendeurOrigine,
+  checklist,
 }: {
   bien: Bien;
   dossier?: DossierBien;
@@ -85,6 +124,9 @@ export default function BienTabs({
   liens?: { lienId: string; offreId: string; visite: CompteRenduVisite }[];
   acquereursActifs?: ProfilAcquereur[];
   acquereursParId?: Map<string, ProfilAcquereur | undefined>;
+  compromisActuel?: Compromis;
+  prospectVendeurOrigine?: ProspectVendeur;
+  checklist?: ChecklistDossier;
 }) {
   const [active, setActive] = useState<Tab>("contexte");
   const [acquereurOffreSelectionne, setAcquereurOffreSelectionne] = useState("");
@@ -341,6 +383,48 @@ export default function BienTabs({
 
       {active === "documents" && !dossier && (
         <div className="flex flex-col gap-4">
+          {checklist && (
+            <div className="bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">
+                  Dossier documentaire
+                </p>
+                {!checklist.honorairesRenseignes && (
+                  <span className="text-[11px] font-medium text-[#dc2626]">
+                    Charge des honoraires non renseignée
+                  </span>
+                )}
+              </div>
+              {FAMILLES_DOCUMENT.map((famille) => {
+                const exigencesFamille = checklist.exigences.filter(
+                  (e) => e.famille === famille && e.etat !== "non_applicable"
+                );
+                if (exigencesFamille.length === 0) return null;
+                return (
+                  <div key={famille}>
+                    <p className="text-[12px] font-medium text-[#64748b] mb-1">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
+                    <div className="flex flex-col gap-0.5">
+                      {exigencesFamille.map((e) => (
+                        <div key={e.code} className="flex items-center justify-between text-[13px]">
+                          <span className="text-[#0f172a]">{e.label}</span>
+                          <span className={`font-medium ${COULEUR_ETAT_CONTROLE[e.etat]}`}>
+                            {LABEL_ETAT_CONTROLE_EXIGENCE[e.etat]}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="flex items-center justify-between text-[13px] pt-2 border-t border-[#e2e8f0]">
+                <span className="text-[#0f172a]">PV d&apos;assemblée générale</span>
+                <span className="text-[#64748b]">
+                  {checklist.pvAg.presents.length} / {checklist.pvAg.attendus} derniers
+                </span>
+              </div>
+            </div>
+          )}
+
           {bien.archiveLe ? (
             <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
               Ce bien est archivé — impossible d'ajouter un nouveau document.
@@ -355,17 +439,108 @@ export default function BienTabs({
                 placeholder="Nom du document (ex. Diagnostics énergétiques)"
                 className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
               />
-              <select
-                name="categorie"
-                defaultValue="autre"
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  name="categorie"
+                  defaultValue="autre"
+                  className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                >
+                  {CATEGORIES_DOCUMENT.map((categorie) => (
+                    <option key={categorie} value={categorie}>
+                      {LABEL_CATEGORIE_DOCUMENT[categorie]}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  name="typeDocument"
+                  defaultValue=""
+                  className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                >
+                  <option value="">Type — non classé</option>
+                  {FAMILLES_DOCUMENT.map((famille) => (
+                    <optgroup key={famille} label={LABEL_FAMILLE_DOCUMENT[famille]}>
+                      {TYPES_DOCUMENT.filter((t) => FAMILLE_PAR_TYPE_DOCUMENT[t] === famille).map((type) => (
+                        <option key={type} value={type}>
+                          {LABEL_TYPE_DOCUMENT[type]}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <input
+                type="text"
+                name="typeDocumentDetail"
+                placeholder="Précision si type « Autre » (optionnel)"
                 className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-              >
-                {CATEGORIES_DOCUMENT.map((categorie) => (
-                  <option key={categorie} value={categorie}>
-                    {LABEL_CATEGORIE_DOCUMENT[categorie]}
-                  </option>
-                ))}
-              </select>
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[11px] text-[#94a3b8]">
+                  Date du document
+                  <input
+                    type="date"
+                    name="dateDocument"
+                    className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                  />
+                </label>
+                <label className="text-[11px] text-[#94a3b8]">
+                  Fin de validité (diagnostics)
+                  <input
+                    type="date"
+                    name="dateFinValidite"
+                    className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                  />
+                </label>
+              </div>
+              {(compromisActuel || acquereursActifs.length > 0 || prospectVendeurOrigine) && (
+                <div className="flex flex-col gap-1.5 pt-1">
+                  <p className="text-[11px] font-medium text-[#64748b]">Rattachement (optionnel)</p>
+                  {compromisActuel && (
+                    <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                      <input type="checkbox" name="compromisId" value={compromisActuel.id} />
+                      Rattacher au compromis en cours
+                    </label>
+                  )}
+                  {acquereursActifs.length > 0 && (
+                    <select
+                      name="acquereurId"
+                      defaultValue=""
+                      className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                    >
+                      <option value="">Acquéreur — aucun</option>
+                      {acquereursActifs.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.prenom} {a.nom}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {prospectVendeurOrigine && (
+                    <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                      <input type="checkbox" name="prospectVendeurId" value={prospectVendeurOrigine.id} />
+                      Rattacher au vendeur d&apos;origine ({prospectVendeurOrigine.nom})
+                    </label>
+                  )}
+                </div>
+              )}
+              <input
+                type="text"
+                name="coproprieteDeclaree"
+                placeholder="Copropriété déclarée par le document (optionnel)"
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              />
+              <input
+                type="text"
+                name="adresseDeclaree"
+                placeholder="Adresse déclarée par le document (optionnel)"
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              />
+              <input
+                type="text"
+                name="provenance"
+                placeholder="Provenance (optionnel — agent, vendeur, notaire...)"
+                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              />
               <input
                 type="file"
                 name="fichier"
@@ -388,20 +563,157 @@ export default function BienTabs({
           ) : (
             <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
               {documents.map((doc) => (
-                <div key={doc.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[14px] text-[#0f172a] truncate">{doc.nom}</p>
-                    <p className="text-[11px] text-[#94a3b8]">
-                      {LABEL_CATEGORIE_DOCUMENT[doc.categorie]} · {formatTaille(doc.tailleOctets)} ·{" "}
-                      {formatDate(doc.creeLe)}
-                    </p>
+                <div key={doc.id} className="flex flex-col gap-2 px-4 py-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] text-[#0f172a] truncate">{doc.nom}</p>
+                      <p className="text-[11px] text-[#94a3b8]">
+                        {doc.typeDocument ? LABEL_TYPE_DOCUMENT[doc.typeDocument] : LABEL_CATEGORIE_DOCUMENT[doc.categorie]}
+                        {" · "}
+                        {formatTaille(doc.tailleOctets)} · {formatDate(doc.creeLe)}
+                        {doc.etatVerification !== "non_verifie" &&
+                          ` · ${LABEL_ETAT_VERIFICATION_DOCUMENT[doc.etatVerification]}`}
+                      </p>
+                    </div>
+                    <a href={`/api/documents/${doc.id}`} className="text-[13px] text-[#4338ca] font-medium shrink-0">
+                      Télécharger
+                    </a>
                   </div>
-                  <a
-                    href={`/api/documents/${doc.id}`}
-                    className="text-[13px] text-[#4338ca] font-medium shrink-0"
-                  >
-                    Télécharger
-                  </a>
+
+                  <details className="text-[12px]">
+                    <summary className="text-[#94a3b8] cursor-pointer select-none">Corriger le classement</summary>
+                    <form
+                      action={corrigerClassementDocumentBienAction}
+                      className="flex flex-col gap-2 mt-2 pt-2 border-t border-[#f1f5f9]"
+                    >
+                      <input type="hidden" name="id" value={doc.id} />
+                      <input
+                        type="text"
+                        name="bienId"
+                        required
+                        defaultValue={doc.bienId}
+                        placeholder="Identifiant du bien"
+                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                      />
+                      <input
+                        type="text"
+                        name="nom"
+                        required
+                        defaultValue={doc.nom}
+                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          name="categorie"
+                          defaultValue={doc.categorie}
+                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        >
+                          {CATEGORIES_DOCUMENT.map((categorie) => (
+                            <option key={categorie} value={categorie}>
+                              {LABEL_CATEGORIE_DOCUMENT[categorie]}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          name="typeDocument"
+                          defaultValue={doc.typeDocument ?? ""}
+                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        >
+                          <option value="">Type — non classé</option>
+                          {FAMILLES_DOCUMENT.map((famille) => (
+                            <optgroup key={famille} label={LABEL_FAMILLE_DOCUMENT[famille]}>
+                              {TYPES_DOCUMENT.filter((t) => FAMILLE_PAR_TYPE_DOCUMENT[t] === famille).map((type) => (
+                                <option key={type} value={type}>
+                                  {LABEL_TYPE_DOCUMENT[type]}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="date"
+                          name="dateDocument"
+                          defaultValue={doc.dateDocument ?? ""}
+                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        />
+                        <input
+                          type="date"
+                          name="dateFinValidite"
+                          defaultValue={doc.dateFinValidite ?? ""}
+                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        />
+                      </div>
+                      {compromisActuel && (
+                        <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                          <input
+                            type="checkbox"
+                            name="compromisId"
+                            value={compromisActuel.id}
+                            defaultChecked={doc.compromisId === compromisActuel.id}
+                          />
+                          Rattacher au compromis en cours
+                        </label>
+                      )}
+                      {acquereursActifs.length > 0 && (
+                        <select
+                          name="acquereurId"
+                          defaultValue={doc.acquereurId ?? ""}
+                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        >
+                          <option value="">Acquéreur — aucun</option>
+                          {acquereursActifs.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.prenom} {a.nom}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {prospectVendeurOrigine && (
+                        <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                          <input
+                            type="checkbox"
+                            name="prospectVendeurId"
+                            value={prospectVendeurOrigine.id}
+                            defaultChecked={doc.prospectVendeurId === prospectVendeurOrigine.id}
+                          />
+                          Rattacher au vendeur d&apos;origine ({prospectVendeurOrigine.nom})
+                        </label>
+                      )}
+                      <input
+                        type="text"
+                        name="coproprieteDeclaree"
+                        defaultValue={doc.coproprieteDeclaree ?? ""}
+                        placeholder="Copropriété déclarée par le document"
+                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                      />
+                      <input
+                        type="text"
+                        name="adresseDeclaree"
+                        defaultValue={doc.adresseDeclaree ?? ""}
+                        placeholder="Adresse déclarée par le document"
+                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                      />
+                      <select
+                        name="etatVerification"
+                        defaultValue={doc.etatVerification}
+                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                      >
+                        {ETATS_VERIFICATION_DOCUMENT.map((etat) => (
+                          <option key={etat} value={etat}>
+                            {LABEL_ETAT_VERIFICATION_DOCUMENT[etat]}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        className="self-start text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                      >
+                        Enregistrer la correction
+                      </button>
+                    </form>
+                  </details>
                 </div>
               ))}
             </div>

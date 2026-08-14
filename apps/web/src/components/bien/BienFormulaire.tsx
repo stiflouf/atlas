@@ -196,6 +196,26 @@ export default function BienFormulaire({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className={labelCls}>Copropriété</label>
+          <input
+            name="nomCopropriete"
+            defaultValue={bien?.nomCopropriete ?? ""}
+            className={inputCls}
+            placeholder="Inconnu si vide"
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Charge des honoraires d&apos;agence</label>
+          <select name="chargeHonoraires" defaultValue={bien?.chargeHonoraires ?? ""} className={inputCls}>
+            <option value="">Non renseignée</option>
+            <option value="vendeur">Vendeur</option>
+            <option value="acquereur">Acquéreur</option>
+          </select>
+        </div>
+      </div>
+
       <div>
         <label className={labelCls}>Caractéristiques (une par ligne)</label>
         <textarea

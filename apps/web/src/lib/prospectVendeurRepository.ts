@@ -86,6 +86,20 @@ export async function getProspectVendeurById(id: string): Promise<ProspectVendeu
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
 
+// Le prospect vendeur ayant converti ce bien, s'il existe (ADR-029) — bienId porte une contrainte
+// UNIQUE (ADR-027) : au plus une ligne. Utilisé pour rattacher un document (ex. CNI vendeur) au
+// vendeur d'origine depuis la fiche bien, et par le moteur de checklist
+// (src/lib/documents/checklistDossier.ts).
+export async function getProspectVendeurParBien(bienId: string): Promise<ProspectVendeur | undefined> {
+  if (!UUID_REGEX.test(bienId)) return undefined;
+  const [ligne] = await getDb()
+    .select()
+    .from(prospectsVendeursTable)
+    .where(eq(prospectsVendeursTable.bienId, bienId))
+    .limit(1);
+  return ligne ? ligneVersProspectVendeur(ligne) : undefined;
+}
+
 // Insertion pure : la validation métier (email/téléphone, etc.) est de la responsabilité de
 // l'appelant (Server Action), pas de ce repository.
 export async function creerProspectVendeur(input: NouveauProspectVendeur): Promise<ProspectVendeur> {

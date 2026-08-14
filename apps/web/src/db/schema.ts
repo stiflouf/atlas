@@ -88,6 +88,24 @@ export const biens = pgTable(
     // l'inverse ne doit être créé artificiellement par le code applicatif.
     offreEnCoursLe: timestamp("offre_en_cours_le", { withTimezone: true }),
     compromisSigneLe: timestamp("compromis_signe_le", { withTimezone: true }),
+    // Déclaratif, texte libre (ADR-029) : pas d'entité copropriete en V1 (aucun besoin de
+    // mutualisation entre plusieurs biens exprimé aujourd'hui). Sert de référence pour une
+    // comparaison humaine avec documentsBien.coproprieteDeclaree (anti-mauvais-dossier futur,
+    // jamais automatique dans cette passe). NULL = non renseigné, jamais "pas de copropriété".
+    nomCopropriete: text("nom_copropriete"),
+    // Condition commerciale du mandat (ADR-029) : qui supporte les honoraires d'agence de la
+    // transaction. Portée par `biens` (pas `compromis`) car c'est une caractéristique du mandat/de
+    // l'annonce, connue avant toute offre ou tout compromis — poser le champ ici permet à Atlas de
+    // signaler l'absence d'information dès la commercialisation, pas seulement au moment du
+    // compromis, et évite toute ressaisie/duplication entre bien et compromis. NULL = non
+    // renseigné ("Charge des honoraires non renseignée"), jamais une valeur par défaut inventée.
+    // V1 volontairement binaire : aucun modèle de répartition réelle (montants/pourcentages par
+    // partie) n'est demandé aujourd'hui, "partagee" n'est donc pas dans le vocabulaire — l'ajouter
+    // sans modéliser la répartition serait un état à moitié construit.
+    // Distinct de remuneration.montantRemunerationConseillerCentimes (ADR-021, part du conseiller) :
+    // deux faits jamais confondus, l'un qualitatif (qui paie les honoraires de la transaction),
+    // l'autre financier (combien perçoit le conseiller).
+    chargeHonoraires: text("charge_honoraires"),
   },
   (table) => [
     check("biens_type_check", sql`${table.type} IN ('appartement','maison','studio','loft','local_commercial')`),
@@ -95,6 +113,10 @@ export const biens = pgTable(
     check(
       "biens_exterieur_check",
       sql`${table.exterieur} IS NULL OR ${table.exterieur} IN ('aucun','balcon','terrasse','jardin')`
+    ),
+    check(
+      "biens_charge_honoraires_check",
+      sql`${table.chargeHonoraires} IS NULL OR ${table.chargeHonoraires} IN ('vendeur','acquereur')`
     ),
   ]
 );
@@ -150,14 +172,22 @@ export const notesBien = pgTable("notes_bien", {
 // document n'est attachable que depuis la fiche d'un bien déjà réel. cleStockage est un
 // identifiant opaque généré côté serveur (jamais dérivé d'un nom fourni par l'utilisateur) — le
 // chemin physique sur disque est reconstruit uniquement dans src/lib/stockageDocuments.ts à
-// partir de STORAGE_ROOT + cleStockage. Append-only comme notes_bien/comptes_rendus_visite
-// (ADR-011) : aucune suppression en V1 — voir docs/adr pour le stockage (ON DELETE CASCADE
-// nettoie la ligne DB mais jamais le fichier physique, à traiter le jour où une suppression est
-// implémentée).
+// partir de STORAGE_ROOT + cleStockage. Le FICHIER reste append-only comme notes_bien/
+// comptes_rendus_visite (ADR-011/ADR-013) : aucune suppression, aucune ré-upload en V1 — mais
+// depuis ADR-029, les MÉTADONNÉES de classement (colonnes ci-dessous, hors bienId/nom/
+// nomFichierOriginal/cleStockage/tailleOctets/typeMime/creeLe qui décrivent le fichier lui-même)
+// sont corrigibles via documentBienRepository.corrigerClassementDocumentBien : une erreur de
+// classement (mauvais bien, mauvaise catégorie, mauvais rattachement) ne doit jamais être
+// irréversible. modifieLe (nullable, posé uniquement par une correction) suit le même patron que
+// remuneration.modifieLe (ADR-021) — pas de table de versions séparée, la valeur courante fait
+// foi, aucun historique des corrections n'est demandé.
 export const documentsBien = pgTable(
   "documents_bien",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // Corrigible (ADR-029) : un document mal classé sur le mauvais bien (retour terrain — agents
+    // mélangeant les pièces de plusieurs dossiers) doit pouvoir être réattribué sans toucher au
+    // fichier physique, qui ne dépend que de cleStockage.
     bienId: uuid("bien_id")
       .notNull()
       .references(() => biens.id, { onDelete: "cascade" }),
@@ -168,11 +198,79 @@ export const documentsBien = pgTable(
     tailleOctets: integer("taille_octets").notNull(),
     typeMime: text("type_mime").notNull(),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    // Vocabulaire produit Atlas (src/types/documentBien.ts, TYPES_DOCUMENT) — liste fermée mais
+    // volontairement non exhaustive juridiquement, jamais une affirmation d'obligation légale.
+    // NULL = non classé finement (seule `categorie` connue). typeDocumentDetail : texte libre,
+    // pertinent uniquement pour typeDocument = 'autre' (même patron que origineLead/
+    // origineLeadDetail, ADR-027) — jamais une seconde façon d'écrire un type déjà couvert par la
+    // liste fermée.
+    typeDocument: text("type_document"),
+    typeDocumentDetail: text("type_document_detail"),
+    // Date du document lui-même (émission/réalisation), distincte de creeLe (date d'upload dans
+    // Atlas) — les deux ne coïncident quasiment jamais en pratique (un DPE réalisé il y a 3 mois
+    // uploadé aujourd'hui). NULL = date du document inconnue, jamais assimilée à creeLe.
+    dateDocument: date("date_document"),
+    // Pertinent uniquement pour les diagnostics à durée de vie légale — NULL = validité inconnue,
+    // jamais interprété comme "valide indéfiniment". Aucune durée légale n'est calculée depuis
+    // cette colonne dans cette passe (ADR-029) : uniquement une date saisie manuellement.
+    dateFinValidite: date("date_fin_validite"),
+    // Rattachements additionnels à bienId (ADR-029), indépendants et cumulables — jamais le
+    // patron "une seule cible" de `taches` (CHECK <= 1) : un document peut légitimement porter
+    // bienId ET acquereurId en même temps (ex. une CNI acquéreur rattachée à la fois au dossier du
+    // bien et à la personne). ON DELETE SET NULL (pas cascade, même rationale que
+    // compromis.offreId, ADR-016) : un document reste consultable même si la cible d'un
+    // rattachement venait à disparaître, le document est plus fondamental que ce lien. Cohérence
+    // croisée (compromisId doit appartenir à bienId, acquereurId cohérent avec le compromis,
+    // prospectVendeurId cohérent avec le bien converti) portée par
+    // src/lib/documents/coherenceRattachementDocument.ts (validerCoherenceRattachementsDocument),
+    // appelée par les Server Actions — aucune de ces règles n'est
+    // exprimable en CHECK SQL (comparaisons inter-tables), même séparation que
+    // offres.statut/compromis.offreId (ADR-015/016).
+    compromisId: uuid("compromis_id").references(() => compromis.id, { onDelete: "set null" }),
+    acquereurId: uuid("acquereur_id").references(() => acquereurs.id, { onDelete: "set null" }),
+    prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id, {
+      onDelete: "set null",
+    }),
+    // Déclaratif, texte libre (ADR-029) : ce que le document prétend concerner, jamais extrait
+    // automatiquement (aucun OCR/LLM dans cette passe). Terrain de comparaison humaine future avec
+    // biens.nomCopropriete/biens.adresse (anti-mauvais-dossier — retour terrain : documents reçus
+    // pour la mauvaise copropriété).
+    coproprieteDeclaree: text("copropriete_declaree"),
+    adresseDeclaree: text("adresse_declaree"),
+    // Provenance texte libre (ADR-029) : d'où vient le document (agent, vendeur, acquéreur,
+    // notaire, syndic...) — pas de vocabulaire fermé, l'usage réel n'est pas encore assez connu
+    // pour figer une liste.
+    provenance: text("provenance"),
+    // État de VÉRIFICATION DU CLASSEMENT (ADR-029) — distinct de l'état de contrôle d'une exigence
+    // de checklist (present/manquant/a_verifier/non_applicable/perime/incoherent), qui reste
+    // entièrement dérivé et jamais stocké (src/lib/documents/checklistDossier.ts). Cette colonne ne
+    // porte qu'un jugement du conseiller sur le rattachement/classement lui-même : 'rejete' signale
+    // un classement explicitement incorrect (le moteur de checklist en dérive alors 'incoherent'
+    // pour l'exigence concernée) — jamais déduit automatiquement.
+    etatVerification: text("etat_verification").notNull().default("non_verifie"),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }),
   },
   (table) => [
     check(
       "documents_bien_categorie_check",
       sql`${table.categorie} IN ('mandat','diagnostic','copropriete','technique','commercial','compromis','autre')`
+    ),
+    check(
+      "documents_bien_type_document_check",
+      sql`${table.typeDocument} IS NULL OR ${table.typeDocument} IN (
+        'cni','justificatif_domicile','rib',
+        'titre_propriete','plan','taxe_fonciere',
+        'dpe','amiante','plomb','electricite','gaz','carrez','termites','erp','assainissement',
+        'reglement_copropriete','edd','pv_ag','pre_etat_date','fiche_synthetique','carnet_entretien','procedures_syndic',
+        'mandat','offre_achat','compromis','avenant',
+        'attestation_financement','offre_pret',
+        'courrier_notaire','projet_acte',
+        'autre'
+      )`
+    ),
+    check(
+      "documents_bien_etat_verification_check",
+      sql`${table.etatVerification} IN ('non_verifie','confirme','a_verifier','rejete')`
     ),
   ]
 );

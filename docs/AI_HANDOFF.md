@@ -146,6 +146,17 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
   (ADR-006, ADR-011, ADR-028) au profit d'une table dédiée par concept / de FK nullables dédiées.
 - Un résumé ou une extraction automatique depuis un champ de texte libre, même "juste pour
   l'affichage" (ADR-008).
+- De l'OCR, un LLM, ou un rattachement automatique/probabiliste sur les documents — ADR-029
+  prépare le vocabulaire (rattachement `propose`/`confirme`/`rejete`) mais n'implémente rien de
+  tel ; toute correction de classement reste un geste manuel explicite.
+- Une durée légale de validité de diagnostic codée "de mémoire" — `documentsBien.dateFinValidite`
+  reste purement déclarative tant qu'aucune source officielle n'a été auditée (ADR-029).
+- Confondre `documentsBien.etatVerification` (jugement sur le classement d'UN document) avec
+  l'état de contrôle d'une exigence de checklist (`present`/`manquant`/... dérivé, jamais stocké)
+  — deux vocabulaires distincts, voir ADR-029.
+- Une entité `dossier_vente` ou `copropriete` "pour donner un nom à l'UI" sans besoin
+  d'intégrité/mutualisation réel — le dossier reste une vue composée dérivée de `bien` +
+  `compromis` + parties liées (ADR-029, point 3).
 
 ## Procédure obligatoire avant toute modification
 

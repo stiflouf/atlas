@@ -1,7 +1,13 @@
 import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { documentsBien as documentsBienTable } from "@/db/schema";
-import type { CategorieDocument, DocumentBien } from "@/types/documentBien";
+import type {
+  CategorieDocument,
+  ChampsCorrectionDocumentBien,
+  DocumentBien,
+  EtatVerificationDocument,
+  TypeDocument,
+} from "@/types/documentBien";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,6 +24,18 @@ function ligneVersDocumentBien(ligne: LigneDocumentBien): DocumentBien {
     tailleOctets: ligne.tailleOctets,
     typeMime: ligne.typeMime,
     creeLe: ligne.creeLe.toISOString(),
+    typeDocument: (ligne.typeDocument as TypeDocument | null) ?? undefined,
+    typeDocumentDetail: ligne.typeDocumentDetail ?? undefined,
+    dateDocument: ligne.dateDocument ?? undefined,
+    dateFinValidite: ligne.dateFinValidite ?? undefined,
+    compromisId: ligne.compromisId ?? undefined,
+    acquereurId: ligne.acquereurId ?? undefined,
+    prospectVendeurId: ligne.prospectVendeurId ?? undefined,
+    coproprieteDeclaree: ligne.coproprieteDeclaree ?? undefined,
+    adresseDeclaree: ligne.adresseDeclaree ?? undefined,
+    provenance: ligne.provenance ?? undefined,
+    etatVerification: ligne.etatVerification as EtatVerificationDocument,
+    modifieLe: ligne.modifieLe?.toISOString() ?? undefined,
   };
 }
 
@@ -53,10 +71,11 @@ export async function getDocumentBienById(id: string): Promise<DocumentBien | un
   }
 }
 
-// Validation (nom non vide, type MIME et taille contrôlés, bien non archivé) déjà faite par
-// l'appelant (server action), écriture du fichier sur disque déjà faite avant cet appel
-// (src/lib/stockageDocuments.ts) — insertion pure ici, même principe que les autres repositories.
-export type NouveauDocumentBien = Omit<DocumentBien, "id" | "creeLe">;
+// Validation (nom non vide, type MIME et taille contrôlés, bien non archivé, cohérence des
+// rattachements — ADR-029) déjà faite par l'appelant (Server Action), écriture du fichier sur
+// disque déjà faite avant cet appel (src/lib/stockageDocuments.ts) — insertion pure ici, même
+// principe que les autres repositories.
+export type NouveauDocumentBien = Omit<DocumentBien, "id" | "creeLe" | "modifieLe">;
 
 export async function enregistrerDocumentBien(input: NouveauDocumentBien): Promise<DocumentBien> {
   const [ligne] = await getDb()
@@ -69,7 +88,53 @@ export async function enregistrerDocumentBien(input: NouveauDocumentBien): Promi
       cleStockage: input.cleStockage,
       tailleOctets: input.tailleOctets,
       typeMime: input.typeMime,
+      typeDocument: input.typeDocument ?? null,
+      typeDocumentDetail: input.typeDocumentDetail ?? null,
+      dateDocument: input.dateDocument ?? null,
+      dateFinValidite: input.dateFinValidite ?? null,
+      compromisId: input.compromisId ?? null,
+      acquereurId: input.acquereurId ?? null,
+      prospectVendeurId: input.prospectVendeurId ?? null,
+      coproprieteDeclaree: input.coproprieteDeclaree ?? null,
+      adresseDeclaree: input.adresseDeclaree ?? null,
+      provenance: input.provenance ?? null,
+      etatVerification: input.etatVerification,
     })
     .returning();
   return ligneVersDocumentBien(ligne);
+}
+
+// Correction de classement (ADR-029) : remplacement complet des champs corrigibles, jamais un
+// patch partiel — même contrat que remunerationRepository.modifierRemunerationPrevisionnelle
+// (ADR-021). Ne touche jamais nomFichierOriginal/cleStockage/tailleOctets/typeMime/creeLe (le
+// fichier reste immuable, ADR-013). La cohérence des rattachements (compromisId/acquereurId/
+// prospectVendeurId vs bienId) est vérifiée par l'appelant AVANT cet appel
+// (validerCoherenceRattachementsDocument) — insertion/update pure ici.
+export async function corrigerClassementDocumentBien(
+  id: string,
+  champs: ChampsCorrectionDocumentBien
+): Promise<DocumentBien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(documentsBienTable)
+    .set({
+      bienId: champs.bienId,
+      nom: champs.nom,
+      categorie: champs.categorie,
+      typeDocument: champs.typeDocument,
+      typeDocumentDetail: champs.typeDocumentDetail,
+      dateDocument: champs.dateDocument,
+      dateFinValidite: champs.dateFinValidite,
+      compromisId: champs.compromisId,
+      acquereurId: champs.acquereurId,
+      prospectVendeurId: champs.prospectVendeurId,
+      coproprieteDeclaree: champs.coproprieteDeclaree,
+      adresseDeclaree: champs.adresseDeclaree,
+      provenance: champs.provenance,
+      etatVerification: champs.etatVerification,
+      modifieLe: new Date(),
+    })
+    .where(eq(documentsBienTable.id, id))
+    .returning();
+  return ligne ? ligneVersDocumentBien(ligne) : undefined;
 }

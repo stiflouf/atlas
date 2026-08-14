@@ -2,6 +2,17 @@ export type TypeBien = "appartement" | "maison" | "studio" | "loft" | "local_com
 export type StatutMandat = "actif" | "suspendu" | "expire";
 export type Exterieur = "aucun" | "balcon" | "terrasse" | "jardin";
 
+// Qui supporte les honoraires d'agence de la transaction (ADR-029) — jamais confondu avec
+// remuneration.montantRemunerationConseillerCentimes (ADR-021, part du conseiller, un fait
+// financier distinct). V1 volontairement binaire : aucune répartition réelle (montants/
+// pourcentages par partie) n'est modélisée, "partagée" n'existe donc pas dans ce vocabulaire.
+export type ChargeHonoraires = "vendeur" | "acquereur";
+
+export const LABEL_CHARGE_HONORAIRES: Record<ChargeHonoraires, string> = {
+  vendeur: "Vendeur",
+  acquereur: "Acquéreur",
+};
+
 export type Bien = {
   id: string;
   reference: string;
@@ -23,6 +34,11 @@ export type Bien = {
   ascenseur?: boolean;
   parking?: boolean;
   exterieur?: Exterieur;
+  // Déclaratif, texte libre (ADR-029) : pas d'entité copropriete en V1. Référence pour une
+  // comparaison humaine avec documentBien.coproprieteDeclaree — jamais automatique.
+  nomCopropriete?: string;
+  // Condition du mandat (ADR-029), connue avant toute offre/tout compromis — voir ChargeHonoraires.
+  chargeHonoraires?: ChargeHonoraires;
   // Absent pour les biens mockés (data/biens.ts) : aucune notion de date de création pour des
   // données statiques. Présent pour tout bien réel (colonne DB non nulle).
   creeLe?: string;

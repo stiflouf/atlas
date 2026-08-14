@@ -9,9 +9,12 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 const { getDb } = await import("@/db/client");
 const { biens: biensTable, documentsBien: documentsBienTable } = await import("@/db/schema");
 const { creerBien } = await import("./bienRepository");
-const { listerDocumentsPourBien, getDocumentBienById, enregistrerDocumentBien } = await import(
-  "./documentBienRepository"
-);
+const {
+  listerDocumentsPourBien,
+  getDocumentBienById,
+  enregistrerDocumentBien,
+  corrigerClassementDocumentBien,
+} = await import("./documentBienRepository");
 
 const idsCrees: string[] = [];
 const idsBiensCrees: string[] = [];
@@ -64,6 +67,7 @@ describe("documentBienRepository (intégration Postgres)", () => {
       cleStockage: "cle-test-1",
       tailleOctets: 1024,
       typeMime: "application/pdf",
+      etatVerification: "non_verifie",
     });
     idsCrees.push(premier.id);
     const second = await enregistrerDocumentBien({
@@ -74,6 +78,9 @@ describe("documentBienRepository (intégration Postgres)", () => {
       cleStockage: "cle-test-2",
       tailleOctets: 2048,
       typeMime: "application/pdf",
+      typeDocument: "mandat",
+      dateDocument: "2026-01-15",
+      etatVerification: "non_verifie",
     });
     idsCrees.push(second.id);
 
@@ -90,6 +97,98 @@ describe("documentBienRepository (intégration Postgres)", () => {
       cleStockage: "cle-test-1",
       tailleOctets: 1024,
       typeMime: "application/pdf",
+      etatVerification: "non_verifie",
     });
+
+    const resoluSecond = await getDocumentBienById(second.id);
+    expect(resoluSecond).toMatchObject({
+      typeDocument: "mandat",
+      dateDocument: "2026-01-15",
+    });
+  });
+
+  it("corrigerClassementDocumentBien() remplace les champs de classement, ne touche jamais le fichier, pose modifieLe", async () => {
+    const bien = await creerBien({
+      reference: "[test réel] DOC-BIEN-002",
+      titre: "Bien de test 2",
+      type: "appartement",
+      adresse: "2 rue du Test",
+      ville: "Testville",
+      codePostal: "00000",
+      surface: 40,
+      pieces: 1,
+      prix: 200000,
+      statutMandat: "actif",
+      dateMandat: "2026-01-01",
+      caracteristiques: [],
+      description: "",
+    });
+    idsBiensCrees.push(bien.id);
+
+    const document = await enregistrerDocumentBien({
+      bienId: bien.id,
+      nom: "Document mal classé",
+      categorie: "autre",
+      nomFichierOriginal: "fichier.pdf",
+      cleStockage: "cle-test-correction",
+      tailleOctets: 512,
+      typeMime: "application/pdf",
+      etatVerification: "non_verifie",
+    });
+    idsCrees.push(document.id);
+    expect(document.modifieLe).toBeUndefined();
+
+    const corrige = await corrigerClassementDocumentBien(document.id, {
+      bienId: bien.id,
+      nom: "Document reclassé",
+      categorie: "diagnostic",
+      typeDocument: "dpe",
+      typeDocumentDetail: null,
+      dateDocument: "2026-02-01",
+      dateFinValidite: null,
+      compromisId: null,
+      acquereurId: null,
+      prospectVendeurId: null,
+      coproprieteDeclaree: null,
+      adresseDeclaree: null,
+      provenance: "agent",
+      etatVerification: "confirme",
+    });
+
+    expect(corrige).toMatchObject({
+      nom: "Document reclassé",
+      categorie: "diagnostic",
+      typeDocument: "dpe",
+      dateDocument: "2026-02-01",
+      provenance: "agent",
+      etatVerification: "confirme",
+      // Le fichier physique n'est jamais touché par une correction (ADR-013/ADR-029).
+      nomFichierOriginal: "fichier.pdf",
+      cleStockage: "cle-test-correction",
+      tailleOctets: 512,
+      typeMime: "application/pdf",
+    });
+    expect(corrige?.modifieLe).toBeDefined();
+  });
+
+  it("corrigerClassementDocumentBien() retourne undefined pour un id inexistant", async () => {
+    await expect(
+      corrigerClassementDocumentBien("00000000-0000-0000-0000-000000000000", {
+        bienId: "00000000-0000-0000-0000-000000000000",
+        nom: "x",
+        categorie: "autre",
+        typeDocument: null,
+        typeDocumentDetail: null,
+        dateDocument: null,
+        dateFinValidite: null,
+        compromisId: null,
+        acquereurId: null,
+        prospectVendeurId: null,
+        coproprieteDeclaree: null,
+        adresseDeclaree: null,
+        provenance: null,
+        etatVerification: "non_verifie",
+      })
+    ).resolves.toBeUndefined();
   });
 });

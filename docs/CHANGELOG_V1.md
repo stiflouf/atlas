@@ -414,6 +414,65 @@ la même migration — aucune période de compatibilité, aucun dual-write. Nouv
 bien/acquéreur/prospect vendeur, `/prospects-vendeurs` (liste) et `/` (accueil) désormais dérivés
 des tâches réelles plutôt que des anciens champs simples.
 
+## 29. Dossier documentaire transactionnel
+
+Audit préalable complet du système documentaire réel (`documents_bien`, ADR-013), des entités
+bien/acquéreur/prospect vendeur/offre/compromis/tâches (ADR-027/028), et des retours terrain d'une
+clerc de notaire — avant tout codage. Quatre concepts séparés explicitement : DOCUMENT (fichier
+reçu), RATTACHEMENT (à quel bien/personne/transaction), EXIGENCE DOCUMENTAIRE (règle produit
+codée) et CONTRÔLE (état dérivé, jamais stocké).
+
+**Immutabilité du fichier séparée de la correction du classement.** `documents_bien` gagne des
+colonnes de classement/rattachement corrigibles (`typeDocument`, dates, `compromisId`/
+`acquereurId`/`prospectVendeurId`, `coproprieteDeclaree`/`adresseDeclaree`, `provenance`,
+`etatVerification`) via `corrigerClassementDocumentBien` (remplacement complet, même contrat que
+`remuneration`, ADR-021) — mais `nomFichierOriginal`/`cleStockage`/`tailleOctets`/`typeMime`/
+`creeLe` restent immuables (ADR-013 inchangée). Une erreur de classement (le retour terrain le
+plus fréquent : pièces mélangées entre dossiers) devient réversible sans jamais ré-uploader.
+
+**Invariants de cohérence entre rattachements**, portés en Server Action
+(`validerCoherenceRattachementsDocument`, pas en `CHECK` SQL — comparaisons inter-tables) :
+un `compromisId` doit appartenir au `bienId` du document, un `acquereurId` doit correspondre à
+l'acquéreur du compromis rattaché, un `prospectVendeurId` doit être le vendeur ayant réellement
+converti ce bien. Des FK valides séparément ne suffisent jamais.
+
+**Deux vocabulaires d'état distincts, jamais confondus** : `etatVerification` (colonne, jugement du
+conseiller sur le classement d'un document précis — `non_verifie`/`confirme`/`a_verifier`/
+`rejete`) et l'état de contrôle d'une exigence de checklist (dérivé uniquement —
+`present`/`manquant`/`a_verifier`/`non_applicable`/`perime`/`incoherent`). `incoherent` ne dérive
+que d'un `etatVerification = 'rejete'` explicitement posé par le conseiller — jamais une déduction
+automatique (aucun OCR, aucun LLM dans cette passe).
+
+**Charge des honoraires portée par `biens`, pas `compromis`.** Nouveau champ
+`biens.chargeHonoraires` (`vendeur`/`acquereur`, V1 volontairement binaire — pas de `partagee` sans
+modéliser une vraie répartition) : condition du mandat, connue avant toute offre/tout compromis,
+jamais dupliquée entre bien et compromis. Distinct de
+`remuneration.montantRemunerationConseillerCentimes` (ADR-021, part du conseiller) — deux faits
+jamais confondus.
+
+**Vocabulaire `typeDocument` fermé mais non exhaustif juridiquement** (`TYPES_DOCUMENT`, 28
+valeurs réparties en 8 familles — parties/bien/diagnostics/copropriete/transaction/financement/
+notaire/autre), décorrélé de `categorie` (existante, inchangée). PV d'assemblée générale : jamais
+un booléen, plusieurs documents `pv_ag` datés, "3 derniers présents" dérivé au calcul
+(`checklistDossier.ts`). Diagnostics : présence ≠ validité, `dateFinValidite` purement déclarative,
+aucune durée légale codée depuis la mémoire.
+
+**Pas de nouvelle entité `dossier_vente`, pas d'entité `copropriete` dédiée.** Le "dossier" est une
+vue composée dérivée de `bien` + le compromis pertinent + les parties liées, calculée à la lecture
+(`/biens/[id]`) — aucune table supplémentaire pour lui donner une existence. `biens.nomCopropriete`
+(texte déclaratif) suffit pour cette passe ; une vraie entité `copropriete` reste une évolution
+future si un besoin de mutualisation entre plusieurs biens apparaît.
+
+**Moteur de checklist déterministe et pur** (`calculerChecklistDossier`,
+`src/lib/documents/checklistDossier.ts`) : contexte (bien + compromis actuel + prospect vendeur
+d'origine) + règles codées + documents présents ⇒ état par exigence, jamais un score global,
+jamais réimplémenté dans un composant React.
+
+**Constats, pas de tâches.** ADR-029 produit uniquement des constats documentaires dérivés
+(affichés dans le nouveau bloc "Dossier documentaire" de l'onglet Documents) — aucune tâche
+générée automatiquement, aucun dual-write avec `taches` (ADR-028). La chaîne constat → règle
+d'automatisation → tâche reste un futur ADR.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

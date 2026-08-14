@@ -127,6 +127,13 @@
       "when": 1786643652647,
       "tag": "0017_sudden_surge",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1786692683182,
+      "tag": "0018_wise_morgan_stark",
+      "breakpoints": true
     }
   ]
 }

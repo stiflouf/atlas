@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { biens as biensTable } from "@/db/schema";
 import { biens as biensDemo, getBienById as getBienDemoById } from "@/data/biens";
-import type { Bien, TypeBien, StatutMandat, Exterieur } from "@/types/bien";
+import type { Bien, TypeBien, StatutMandat, Exterieur, ChargeHonoraires } from "@/types/bien";
 
 type LigneBien = typeof biensTable.$inferSelect;
 
@@ -30,6 +30,8 @@ function ligneVersBien(ligne: LigneBien): Bien {
     ascenseur: ligne.ascenseur ?? undefined,
     parking: ligne.parking ?? undefined,
     exterieur: (ligne.exterieur as Exterieur | null) ?? undefined,
+    nomCopropriete: ligne.nomCopropriete ?? undefined,
+    chargeHonoraires: (ligne.chargeHonoraires as ChargeHonoraires | null) ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
     archiveLe: ligne.archiveLe?.toISOString(),
     offreEnCoursLe: ligne.offreEnCoursLe?.toISOString(),
@@ -112,6 +114,8 @@ export async function creerBien(input: NouveauBien, executeur: Executeur = getDb
       ascenseur: input.ascenseur ?? null,
       parking: input.parking ?? null,
       exterieur: input.exterieur ?? null,
+      nomCopropriete: input.nomCopropriete ?? null,
+      chargeHonoraires: input.chargeHonoraires ?? null,
     })
     .returning();
   return ligneVersBien(ligne);
@@ -144,6 +148,8 @@ export async function modifierBien(id: string, input: NouveauBien): Promise<Bien
       ascenseur: input.ascenseur ?? null,
       parking: input.parking ?? null,
       exterieur: input.exterieur ?? null,
+      nomCopropriete: input.nomCopropriete ?? null,
+      chargeHonoraires: input.chargeHonoraires ?? null,
       modifieLe: new Date(),
     })
     .where(eq(biensTable.id, id))

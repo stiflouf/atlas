@@ -9,14 +9,24 @@ import { eq } from "drizzle-orm";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable } = await import("@/db/schema");
+const { biens: biensTable, compromis: compromisTable, acquereurs: acquereursTable } = await import("@/db/schema");
 const { creerBien, archiverBien } = await import("@/lib/bienRepository");
-const { listerDocumentsPourBien } = await import("@/lib/documentBienRepository");
-const { ajouterDocumentBienAction } = await import("./ajouterDocumentBien");
+const { creerAcquereur } = await import("@/lib/clientRepository");
+const { enregistrerCompromis } = await import("@/lib/compromisRepository");
+const { listerDocumentsPourBien, getDocumentBienById } = await import("@/lib/documentBienRepository");
+const { ajouterDocumentBienAction, corrigerClassementDocumentBienAction } = await import("./ajouterDocumentBien");
 
 const idsCrees: string[] = [];
+const idsCompromisCrees: string[] = [];
+const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
+  for (const id of idsCompromisCrees) {
+    await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
+  }
+  for (const id of idsAcquereursCrees) {
+    await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
+  }
   for (const id of idsCrees) {
     await getDb().delete(biensTable).where(eq(biensTable.id, id));
   }
@@ -97,5 +107,78 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
     ).catch(() => {});
 
     await expect(listerDocumentsPourBien(bien.id)).resolves.toEqual([]);
+  });
+
+  it("refuse explicitement (throw) un compromisId rattaché à un autre bien (ADR-029)", async () => {
+    const bienDuDocument = await creerBienDeTest("[test réel] DOC-COHER-001");
+    const bienDuCompromis = await creerBienDeTest("[test réel] DOC-COHER-002");
+    const acquereur = await creerAcquereur({
+      prenom: "Jean",
+      nom: "Test",
+      email: "doc-coher@test.local",
+      telephone: "0600000000",
+      budgetMin: 100000,
+      budgetMax: 400000,
+      criteres: [],
+      stadeProjet: "decouverte",
+      notes: "",
+      datePremiereContact: "2026-01-01",
+    });
+    idsAcquereursCrees.push(acquereur.id);
+    const compromis = await enregistrerCompromis({
+      bienId: bienDuCompromis.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-02-01",
+    });
+    idsCompromisCrees.push(compromis.id);
+
+    const fichier = new File([new Uint8Array([1, 2, 3])], "diag.pdf", { type: "application/pdf" });
+    await expect(
+      ajouterDocumentBienAction(
+        formDataAvecFichier(
+          { bienId: bienDuDocument.id, nom: "Diagnostic", categorie: "diagnostic", compromisId: compromis.id },
+          fichier
+        )
+      )
+    ).rejects.toThrow(/n'appartient pas au bien/);
+
+    await expect(listerDocumentsPourBien(bienDuDocument.id)).resolves.toEqual([]);
+  });
+});
+
+describe("corrigerClassementDocumentBienAction — remplacement complet, jamais le fichier", () => {
+  it("corrige le classement sans jamais toucher au fichier physique", async () => {
+    const bien = await creerBienDeTest("[test réel] DOC-CORRECTION-001");
+    const fichier = new File([new Uint8Array([1, 2, 3])], "diag.pdf", { type: "application/pdf" });
+    await ajouterDocumentBienAction(
+      formDataAvecFichier({ bienId: bien.id, nom: "Diagnostic", categorie: "diagnostic" }, fichier)
+    ).catch(() => {});
+
+    const [document] = await listerDocumentsPourBien(bien.id);
+    expect(document).toBeDefined();
+
+    await corrigerClassementDocumentBienAction(
+      formDataAvecFichier(
+        {
+          id: document.id,
+          bienId: bien.id,
+          nom: "Diagnostic reclassé",
+          categorie: "diagnostic",
+          typeDocument: "dpe",
+          etatVerification: "confirme",
+        },
+        null
+      )
+    ).catch(() => {});
+
+    const corrige = await getDocumentBienById(document.id);
+    expect(corrige).toMatchObject({
+      nom: "Diagnostic reclassé",
+      typeDocument: "dpe",
+      etatVerification: "confirme",
+      cleStockage: document.cleStockage,
+      nomFichierOriginal: document.nomFichierOriginal,
+    });
   });
 });

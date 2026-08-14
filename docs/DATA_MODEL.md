@@ -310,11 +310,15 @@ optionnelles nullables sans défaut (ADR-009).
 | `archive_le` | timestamptz | **oui** | `NULL` = actif, sinon date d'archivage — ADR-012, aucun défaut |
 | `offre_en_cours_le` | timestamptz | **oui** | jalon commercial — ADR-014, aucun défaut |
 | `compromis_signe_le` | timestamptz | **oui** | jalon commercial — ADR-014, peut être posé sans `offre_en_cours_le` (compromis marqué directement) |
+| `nom_copropriete` | text | **oui** | ADR-029 — déclaratif, pas d'entité `copropriete` dédiée en V1 (voir ADR-029, point 7) |
+| `charge_honoraires` | text | **oui** | ADR-029 — `CHECK`, condition du mandat, connue avant toute offre/tout compromis (jamais dupliquée sur `compromis`) |
 
 **Contraintes `CHECK`** :
 - `type IN ('appartement','maison','studio','loft','local_commercial')`
 - `statut_mandat IN ('actif','suspendu','expire')`
 - `exterieur IS NULL OR exterieur IN ('aucun','balcon','terrasse','jardin')`
+- `charge_honoraires IS NULL OR charge_honoraires IN ('vendeur','acquereur')` — V1 volontairement
+  binaire, aucune répartition réelle modélisée (ADR-029)
 
 Relation fonctionnelle : référencé par FK réelle depuis `notes_bien`, `comptes_rendus_visite` et
 `taches` (ADR-028) ; référencé par id texte (sans FK) depuis `memoire_contextuelle` (ADR-010).
@@ -438,31 +442,52 @@ couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`.
 
 ## `documents_bien`
 
-**Rôle** : documents réels attachés à un bien (mandat, diagnostics, plans, compromis...),
-append-only, aucune suppression en V1 — voir ADR-013 (stratégie de stockage local hors `public/`).
+**Rôle** : documents réels attachés à un bien (mandat, diagnostics, plans, compromis...). Depuis
+ADR-029, sépare explicitement le **fichier** (immuable, ADR-013 — jamais de ré-upload) des
+**métadonnées de classement/rattachement** (corrigibles sans toucher au fichier).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | non | vraie FK — voir ADR-010 |
-| `nom` | text | non | libellé saisi par le conseiller |
-| `categorie` | text | non | défaut `"autre"`, `CHECK` |
-| `nom_fichier_original` | text | non | nom du fichier tel qu'uploadé — **jamais** utilisé comme chemin physique |
-| `cle_stockage` | text | non | identifiant opaque généré côté serveur (ADR-013), reconstruit en chemin uniquement dans `src/lib/stockageDocuments.ts` |
-| `taille_octets` | integer | non | |
-| `type_mime` | text | non | liste blanche applicative : `application/pdf`, `image/jpeg`, `image/png` |
-| `cree_le` | timestamptz | non | |
+| `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | non | vraie FK — corrigible (ADR-029, retour terrain : documents mélangés entre dossiers) |
+| `nom` | text | non | libellé saisi par le conseiller — corrigible |
+| `categorie` | text | non | défaut `"autre"`, `CHECK` — corrigible |
+| `nom_fichier_original` | text | non | nom du fichier tel qu'uploadé — **immuable**, jamais utilisé comme chemin physique |
+| `cle_stockage` | text | non | identifiant opaque généré côté serveur (ADR-013), **immuable** |
+| `taille_octets` | integer | non | **immuable** |
+| `type_mime` | text | non | liste blanche applicative : `application/pdf`, `image/jpeg`, `image/png` — **immuable** |
+| `cree_le` | timestamptz | non | date d'upload — **immuable**, distincte de `date_document` |
+| `type_document` | text | **oui** | ADR-029 — vocabulaire produit fermé (`src/types/documentBien.ts`, `TYPES_DOCUMENT`), `CHECK`, non exhaustif juridiquement |
+| `type_document_detail` | text | **oui** | ADR-029 — texte libre, pertinent seulement si `type_document = 'autre'` |
+| `date_document` | date | **oui** | ADR-029 — date du document lui-même (émission/réalisation), distincte de `cree_le` |
+| `date_fin_validite` | date | **oui** | ADR-029 — pertinent pour les diagnostics ; aucune durée légale calculée, uniquement saisie manuelle |
+| `compromis_id` | uuid (FK → `compromis.id`, `ON DELETE SET NULL`) | **oui** | ADR-029 — rattachement cumulable, cohérence avec `bien_id` vérifiée en Server Action (jamais en `CHECK`) |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE SET NULL`) | **oui** | ADR-029 — idem, cohérence avec le compromis rattaché si présent |
+| `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, `ON DELETE SET NULL`) | **oui** | ADR-029 — cohérence avec `bien_id` (doit être le vendeur ayant converti ce bien) |
+| `copropriete_declaree` | text | **oui** | ADR-029 — déclaratif, terrain de comparaison humaine future avec `biens.nom_copropriete` |
+| `adresse_declaree` | text | **oui** | ADR-029 — idem, comparaison future avec `biens.adresse` |
+| `provenance` | text | **oui** | ADR-029 — texte libre, vocabulaire non figé |
+| `etat_verification` | text | non | ADR-029 — défaut `"non_verifie"`, `CHECK` (`non_verifie`/`confirme`/`a_verifier`/`rejete`) — état du **classement**, distinct de l'état de contrôle d'une exigence de checklist |
+| `modifie_le` | timestamptz | **oui** | ADR-029 — posé uniquement par une correction de classement, jamais par un upload |
 
-**Contrainte `CHECK`** : `categorie IN ('mandat','diagnostic','copropriete','technique','commercial','compromis','autre')`.
+**Contraintes `CHECK`** :
+- `categorie IN ('mandat','diagnostic','copropriete','technique','commercial','compromis','autre')`
+- `type_document IS NULL OR type_document IN (...)` — 28 valeurs, voir `TYPES_DOCUMENT`
+- `etat_verification IN ('non_verifie','confirme','a_verifier','rejete')`
 
-Pas de `modifie_le` (append-only, même principe que `notes_bien`/`comptes_rendus_visite`,
-ADR-011). `ON DELETE CASCADE` nettoie la ligne si un bien était supprimé, mais **ne nettoie
+`ON DELETE CASCADE` sur `bien_id` nettoie la ligne si un bien était supprimé, mais **ne nettoie
 jamais le fichier physique associé** — aucune fonction de suppression n'existe aujourd'hui, voir
-ADR-013.
+ADR-013. `compromis_id`/`acquereur_id`/`prospect_vendeur_id` en `ON DELETE SET NULL` (jamais
+cascade) : un document reste consultable même si la cible d'un rattachement disparaissait.
 
 Relation fonctionnelle : lue par `listerDocumentsPourBien()`/`getDocumentBienById()`
-(`src/lib/documentBienRepository.ts`), écrite par `ajouterDocumentBienAction`, servie en lecture
-par le Route Handler `/api/documents/[id]`.
+(`src/lib/documentBienRepository.ts`), écrite par `ajouterDocumentBienAction`, corrigée par
+`corrigerClassementDocumentBienAction` (remplacement complet, jamais un patch partiel — même
+contrat que `remuneration`, ADR-021), servie en lecture par le Route Handler `/api/documents/[id]`.
+Cohérence des rattachements vérifiée par
+`validerCoherenceRattachementsDocument` (`src/lib/documents/coherenceRattachementDocument.ts`) —
+des FK valides séparément ne suffisent pas (ADR-029). Moteur de checklist dérivé :
+`src/lib/documents/checklistDossier.ts` (`calculerChecklistDossier`).
 
 ## `offres`
 
@@ -912,6 +937,7 @@ ci-dessus (ADR-024/025) et par `dashboardRepository.chargerRemuneration()`/
 | `0015_seed_referentiel_fiscal_2026.sql` | seed `regle_fiscale` (aucune nouvelle table) |
 | `0016_cute_doorman.sql` | `prospects_vendeurs`, `notes_prospect_vendeur` |
 | `0017_sudden_surge.sql` | `taches` (remplace `actions`, supprimée) ; migration des données `actions`→`taches` et `prospects_vendeurs.prochaine_action*`→`taches` ; `DROP TABLE actions` ; `DROP COLUMN` des deux anciens champs simples sur `prospects_vendeurs` |
+| `0018_wise_morgan_stark.sql` | ADR-029 : `nom_copropriete`/`charge_honoraires` sur `biens` ; `type_document`, `type_document_detail`, `date_document`, `date_fin_validite`, `compromis_id`, `acquereur_id`, `prospect_vendeur_id`, `copropriete_declaree`, `adresse_declaree`, `provenance`, `etat_verification`, `modifie_le` sur `documents_bien` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

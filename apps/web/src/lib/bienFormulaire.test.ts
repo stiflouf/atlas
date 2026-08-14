@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseBienFormData, parseExterieur, parseTriEtat } from "./bienFormulaire";
+import { parseBienFormData, parseChargeHonoraires, parseExterieur, parseTriEtat } from "./bienFormulaire";
 
 function formDataValide(surcharge: Record<string, string> = {}): FormData {
   const champs: Record<string, string> = {
@@ -40,6 +40,15 @@ describe("parseExterieur", () => {
   });
 });
 
+describe("parseChargeHonoraires", () => {
+  it("accepte vendeur/acquereur, undefined sinon (V1 volontairement binaire, ADR-029)", () => {
+    expect(parseChargeHonoraires("vendeur")).toBe("vendeur");
+    expect(parseChargeHonoraires("acquereur")).toBe("acquereur");
+    expect(parseChargeHonoraires("")).toBeUndefined();
+    expect(parseChargeHonoraires("partagee")).toBeUndefined();
+  });
+});
+
 describe("parseBienFormData", () => {
   it("parse un formulaire valide, champs optionnels absents -> undefined", () => {
     const bien = parseBienFormData(formDataValide());
@@ -49,6 +58,14 @@ describe("parseBienFormData", () => {
     expect(bien.etage).toBeUndefined();
     expect(bien.ascenseur).toBeUndefined();
     expect(bien.exterieur).toBeUndefined();
+    expect(bien.nomCopropriete).toBeUndefined();
+    expect(bien.chargeHonoraires).toBeUndefined();
+  });
+
+  it("parse nomCopropriete/chargeHonoraires quand renseignés", () => {
+    const bien = parseBienFormData(formDataValide({ nomCopropriete: "Résidence A", chargeHonoraires: "acquereur" }));
+    expect(bien.nomCopropriete).toBe("Résidence A");
+    expect(bien.chargeHonoraires).toBe("acquereur");
   });
 
   it("rejette une surface nulle ou négative", () => {

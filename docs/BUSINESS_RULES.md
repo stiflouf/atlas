@@ -212,19 +212,26 @@ deux granularités différentes des mêmes faits.
 ## Documents réels d'un bien
 
 **Fichiers** : `src/lib/documentBienRepository.ts`, `src/lib/stockageDocuments.ts`,
+`src/lib/documents/coherenceRattachementDocument.ts`, `src/lib/documents/checklistDossier.ts`,
 `src/actions/ajouterDocumentBien.ts`, `src/app/api/documents/[id]/route.ts`. Détail de la
-stratégie de stockage : ADR-013.
+stratégie de stockage : ADR-013. Modèle documentaire étendu (rattachements, checklist) : ADR-029.
 
 | Règle | Condition | Résultat |
 |---|---|---|
-| Type de fichier accepté | Toujours | Liste blanche stricte : `application/pdf`, `image/jpeg`, `image/png` — tout autre type MIME est refusé silencieusement (redirection sans insertion ni écriture disque) |
+| Type de fichier accepté | Toujours | Liste blanche stricte : `application/pdf`, `image/jpeg`, `image/png` — tout autre type MIME est refusé explicitement (`throw`, ADR-029) |
 | Taille maximale | Toujours | 10 Mo (validation applicative) — au-delà de la limite framework (11 Mo, `next.config.ts`), la requête échoue avant même d'atteindre cette validation, voir `docs/KNOWN_LIMITATIONS.md` |
-| Ajout sur un bien archivé | `bien.archiveLe` non NULL | Refusé — formulaire masqué côté UI, refus silencieux côté serveur si l'appel est contourné (même patron que Notes/Comptes rendus, ADR-012) |
+| Ajout sur un bien archivé | `bien.archiveLe` non NULL | Refusé explicitement (`throw`) — formulaire masqué côté UI, même patron que Notes/Comptes rendus (ADR-012) |
 | Documents existants d'un bien archivé | Toujours | Restent listés et téléchargeables (`getBienById()`/`getDocumentBienById()` résolvent toujours une entité archivée) |
 | Nom physique sur disque | Toujours | Clé opaque générée côté serveur (`genererCleStockage()`) — jamais le nom original, jamais un chemin fourni par l'utilisateur (ADR-013) |
 | Nom affiché au téléchargement | Toujours | `nomFichierOriginal` (métadonnée DB), restitué via `Content-Disposition: attachment` — le chemin physique n'est jamais révélé |
 | Document introuvable (id invalide, métadonnée absente, fichier physique absent) | Toujours | `404`, sans distinction observable entre ces cas |
 | Suppression | — | Aucune en V1 — voir ADR-013 |
+| Correction de classement (`bienId`, `nom`, `categorie`, `typeDocument`, dates, rattachements, `provenance`, `etatVerification`) | Toujours | Autorisée, remplacement complet (jamais un patch partiel) via `corrigerClassementDocumentBienAction` — **ne touche jamais** `nomFichierOriginal`/`cleStockage`/`tailleOctets`/`typeMime`/`creeLe` (fichier immuable, ADR-013/ADR-029) |
+| Rattachement `compromisId`/`acquereurId`/`prospectVendeurId` incohérent avec `bienId` | `compromisId` renseigné et `compromis.bienId ≠ bienId`, ou `acquereurId` renseigné et incohérent avec le compromis, ou `prospectVendeurId` renseigné et `prospectVendeur.bienId ≠ bienId` | Refusé explicitement (`throw`, ADR-029) — des FK valides séparément ne suffisent pas |
+| Vocabulaire `typeDocument` | Toujours | Liste fermée (`TYPES_DOCUMENT`, ADR-029) — vocabulaire **produit**, jamais une affirmation d'obligation légale |
+| Checklist documentaire (`calculerChecklistDossier`) | Toujours | Entièrement dérivée (contexte + règles codées + documents présents), jamais un score global, jamais un booléen stocké — voir ADR-029 |
+| Diagnostic sans `dateFinValidite` renseignée | Exigence à `suiviValidite` | État `a_verifier` — aucune durée légale calculée automatiquement (ADR-029, aucun audit officiel des durées) |
+| Document `etatVerification = 'rejete'` | Toujours | L'exigence de checklist correspondante devient `incoherent` — jamais déduit automatiquement, uniquement sur signalement explicite du conseiller |
 
 ## Statut commercial du bien
 

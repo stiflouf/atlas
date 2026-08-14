@@ -49,10 +49,12 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   aucune règle d'archivage automatique (ex. archiver un mandat expiré depuis longtemps) n'existe,
   l'archivage est toujours un geste manuel du conseiller ; aucun archivage groupé (un bien/
   acquéreur à la fois).
-- **Documents** (`documents_bien`) : append-only comme Notes/Comptes rendus, **aucune suppression
-  en V1**, ni de la métadonnée ni du fichier physique. Voir ADR-013 pour la justification et le
-  garde-fou à respecter le jour où une suppression sera implémentée (`ON DELETE CASCADE` seul ne
-  nettoiera jamais le fichier).
+- **Documents** (`documents_bien`) : le **fichier physique** reste append-only, **aucune
+  suppression en V1**. Voir ADR-013 pour la justification et le garde-fou à respecter le jour où
+  une suppression sera implémentée (`ON DELETE CASCADE` seul ne nettoiera jamais le fichier).
+  Depuis ADR-029, les **métadonnées de classement** (bien rattaché, catégorie, type, dates,
+  rattachements, provenance, état de vérification) sont corrigibles sans ré-upload
+  (`corrigerClassementDocumentBienAction`) — voir "Dossier documentaire (ADR-029)" ci-dessous.
 
 ## Documents réels : stockage local V1
 
@@ -62,14 +64,54 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   de déploiement n'existe), verrou explicite pour plus tard — voir ADR-013.
 - **Aucune sauvegarde automatique** de ce répertoire (un `pg_dump` seul ne couvre pas les fichiers).
 - **Deux limites de taille non alignées, comportement vérifié en conditions réelles** : un upload
-  entre 10 et 11 Mo est rejeté proprement par la validation applicative (redirection silencieuse,
-  aucune écriture) ; un upload dépassant 11 Mo (`serverActions.bodySizeLimit`, `next.config.ts`)
+  entre 10 et 11 Mo est rejeté proprement par la validation applicative (`throw` explicite depuis
+  ADR-029, aucune écriture) ; un upload dépassant 11 Mo (`serverActions.bodySizeLimit`, `next.config.ts`)
   échoue en erreur serveur (500) **avant** d'atteindre cette validation — pas de message utilisateur
   propre dans ce cas, seulement le crash générique de Next.js. Corriger ce cas proprement
   nécessiterait une validation côté client (taille du fichier avant soumission), hors périmètre V1.
 - **Liste blanche de types de fichiers volontairement restreinte** (`application/pdf`,
   `image/jpeg`, `image/png`) — pas de Word/Excel, pas d'archives ZIP, pas de scans TIFF.
 - **Un seul fichier par soumission** — pas d'upload multiple en une fois.
+
+## Dossier documentaire (ADR-029)
+
+- **`typeDocument` est un vocabulaire PRODUIT, pas un référentiel juridique.** La liste
+  (`TYPES_DOCUMENT`, `src/types/documentBien.ts`) reprend notamment le retour terrain d'une clerc
+  de notaire pour la copropriété — aucune de ces pièces n'est une obligation légale codée, aucune
+  source officielle n'a été auditée. Ne jamais présenter la checklist comme une liste légalement
+  exhaustive.
+- **Aucune durée légale de validité des diagnostics n'est codée.** `dateFinValidite` est purement
+  déclarative (saisie manuelle) ; sans elle, l'exigence correspondante reste `a_verifier`, jamais
+  déduite d'une durée par type de diagnostic. Un futur référentiel des durées légales devra suivre
+  le même patron que `regle_fiscale` (source datée, statut de vérification) — non construit ici.
+- **Pas d'entité `copropriete` dédiée.** `biens.nomCopropriete` et
+  `documentsBien.coproprieteDeclaree`/`adresseDeclaree` sont de simples champs texte, comparables
+  uniquement à l'œil par le conseiller — aucune détection automatique d'incohérence entre la
+  copropriété/l'adresse déclarée d'un document et celle du bien. Le rattachement à trois états
+  (`propose`/`confirme`/`rejete`) évoqué pour une future passe anti-mauvais-dossier n'existe pas.
+- **Aucun OCR, aucun LLM, aucun rattachement automatique/probabiliste** — toute correction de
+  classement ou de rattachement est un geste manuel explicite du conseiller.
+- **Multi-acquéreurs non supporté.** `offres`/`compromis` portent un `acquereurId` scalaire — le
+  rattachement documentaire par personne hérite de cette limite, une indivision/plusieurs
+  acquéreurs sur un même compromis ne peut pas être représentée.
+- **Un seul vendeur par bien.** `prospectVendeurId` sur un document ne peut référencer que le
+  prospect ayant réellement converti ce bien (`prospects_vendeurs.bienId`, UNIQUE, ADR-027) —
+  aucune indivision vendeur/plusieurs propriétaires n'est modélisée (même limite qu'ADR-027).
+- **Correction de `bienId` via un champ texte libre** (identifiant du bien), pas un sélecteur —
+  fonctionnel mais peu ergonomique pour réattribuer un document à un autre bien depuis l'UI ; une
+  vraie recherche/sélection de bien serait une amélioration UX naturelle, non implémentée ici.
+- **`chargeHonoraires` (`biens`) V1 volontairement binaire** (`vendeur`/`acquereur`) — aucune
+  répartition réelle (montants/pourcentages par partie) n'est modélisée, `partagee` n'existe donc
+  pas dans le vocabulaire. Ne pas confondre avec `remuneration.montantRemunerationConseillerCentimes`
+  (ADR-021, part du conseiller) : deux faits distincts.
+- **Checklist V1 volontairement minimale** (`REGLES_CHECKLIST`, `src/lib/documents/
+  checklistDossier.ts`) : un noyau de règles par famille, pas une couverture exhaustive de toutes
+  les pièces citées dans le retour terrain (ex. fiche synthétique/carnet d'entretien/procédures
+  syndic sont dans le vocabulaire `typeDocument` mais ne portent pas encore toutes une exigence de
+  checklist dédiée). Étendre `REGLES_CHECKLIST` est additif, sans migration.
+- **Aucune génération automatique de tâche depuis un constat documentaire** (ex. "pré-état daté
+  manquant") — la checklist produit uniquement des constats affichés, la chaîne constat → règle
+  d'automatisation → tâche ADR-028 reste un futur ADR, jamais un dual-write ici.
 
 ## Statut commercial du bien
 

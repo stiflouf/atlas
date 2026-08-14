@@ -1,5 +1,5 @@
 import type { NouveauBien } from "@/lib/bienRepository";
-import type { TypeBien, StatutMandat, Exterieur } from "@/types/bien";
+import type { TypeBien, StatutMandat, Exterieur, ChargeHonoraires } from "@/types/bien";
 
 // Un select à 3 états (Inconnu/Oui/Non) — jamais une checkbox — pour ne jamais pouvoir soumettre
 // "false" par accident quand l'information est simplement inconnue. Partagé entre création et
@@ -12,6 +12,11 @@ export function parseTriEtat(valeur: FormDataEntryValue | null): boolean | undef
 
 export function parseExterieur(valeur: FormDataEntryValue | null): Exterieur | undefined {
   if (valeur === "aucun" || valeur === "balcon" || valeur === "terrasse" || valeur === "jardin") return valeur;
+  return undefined;
+}
+
+export function parseChargeHonoraires(valeur: FormDataEntryValue | null): ChargeHonoraires | undefined {
+  if (valeur === "vendeur" || valeur === "acquereur") return valeur;
   return undefined;
 }
 
@@ -61,5 +66,7 @@ export function parseBienFormData(formData: FormData): NouveauBien {
     ascenseur: parseTriEtat(formData.get("ascenseur")),
     parking: parseTriEtat(formData.get("parking")),
     exterieur: parseExterieur(formData.get("exterieur")),
+    nomCopropriete: String(formData.get("nomCopropriete") ?? "").trim() || undefined,
+    chargeHonoraires: parseChargeHonoraires(formData.get("chargeHonoraires")),
   };
 }

@@ -14,6 +14,8 @@ import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerLiensPourBien } from "@/lib/offreVisiteRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerRemunerationsPourBien } from "@/lib/remunerationRepository";
+import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
+import { calculerChecklistDossier } from "@/lib/documents/checklistDossier";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { rendezVousDuJour } from "@/data/agenda";
 import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
@@ -74,6 +76,14 @@ export default async function FicheBien({ params }: PageProps) {
   ];
   const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
   const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
+  const prospectVendeurOrigine = await getProspectVendeurParBien(bien.id);
+  // Contexte du dossier (ADR-029) : le compromis en_cours, sinon le plus récent (garde le contexte
+  // d'un dossier déjà réalisé/annulé plutôt que de perdre toute pertinence transaction/financement/
+  // notaire dès qu'un compromis change de statut).
+  const compromisActuel =
+    compromis.find((c) => c.statut === "en_cours") ??
+    [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1))[0];
+  const checklist = calculerChecklistDossier({ bien, compromisActuel, prospectVendeurOrigine }, documents);
   const tachePrincipale = tachePrioritaire(taches);
   const statutCommercial = deriverStatutCommercial(bien, compromis);
   const prochaineVisite = rendezVousDuJour.find(
@@ -243,6 +253,9 @@ export default async function FicheBien({ params }: PageProps) {
         liens={liens}
         acquereursActifs={acquereursActifs}
         acquereursParId={acquereursParId}
+        compromisActuel={compromisActuel}
+        prospectVendeurOrigine={prospectVendeurOrigine}
+        checklist={checklist}
       />
     </div>
   );
