@@ -1088,12 +1088,14 @@ code TypeScript, pas une table) à un événement donné — traçable, jamais r
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK`, une des 5 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`) |
+| `regle_code` | text | non | `CHECK`, 6 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`) |
 | `evenement_id` | uuid (FK → `evenements_metier.id`, **`NO ACTION`**) | non | |
 | `tache_id` | uuid (FK → `taches.id`, `SET NULL`) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche |
 | `demarree_le` | timestamptz | non | posée à la création de la ligne (dans la transaction métier — ADR-032 correction n°2, jamais après coup) |
 | `reussie_le` / `echouee_le` | timestamptz | oui | mutuellement exclusifs par construction applicative (gel concurrent), jamais un `CHECK` SQL |
 | `erreur_technique` | text | oui | message court (`.slice(0,200)`), jamais un dump brut |
+| `nombre_tentatives` | integer | non | ADR-038 — défaut `0`, `CHECK >= 0`. Observabilité/plafond de la reprise après crash, **jamais** la source de la garantie d'idempotence (portée par `UNIQUE` + la transaction unique ci-dessous) |
+| `derniere_tentative_le` | timestamptz | oui | ADR-038 — posée dans une petite transaction séparée, avant chaque tentative de traitement |
 
 **Contrainte `UNIQUE(regle_code, evenement_id)`** : une règle ne s'exécute jamais deux fois pour le
 même événement déjà enregistré.
@@ -1101,6 +1103,17 @@ même événement déjà enregistré.
 État jamais stocké séparément : dérivé de `reussie_le`/`echouee_le` (`deriverEtatEnvoiEmail`-like
 `deriverEtatExecutionAutomatisation`, `src/types/automatisation.ts`) — `a_traiter` (les deux `NULL`,
 état laissé par la transaction métier), `reussie`, `echouee`.
+
+**Atomicité effet + succès (ADR-032, correction n°6, vérifiée par audit ADR-038)** :
+`traiterUneExecution()` (`moteur.ts`) crée la tâche **et** pose `reussie_le` dans une **seule**
+transaction Postgres — un crash à n'importe quel point entre les deux annule l'ensemble, jamais un
+résidu partiel. C'est cette propriété, déjà acquise, qui rend sûre la reprise inconditionnelle
+d'une ligne `a_traiter` (ADR-038, `/api/automatisations/reprise`) : `a_traiter` signifie
+indifféremment "jamais commencée" ou "tentée puis avortée par un crash", les deux étant strictement
+équivalentes côté DB. `nombre_tentatives` plafonne cette reprise (`MAX_TENTATIVES_AUTOMATISATION =
+5`, `src/lib/automatisations/reprise.ts`) — au-delà, la ligne devient `echouee` (sémantique
+d'échec déjà existante, jamais un nouveau statut), retraitée manuellement si besoin, jamais en
+boucle silencieuse. `echouee` reste dans tous les cas terminal : aucun retry automatique.
 
 ## `configurations_automatisation` (ADR-032)
 
@@ -1243,6 +1256,8 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0021_loud_jubilee.sql` | ADR-033 : `ancre_cycle` sur `evenements_metier` (+ index prospect ponctuel corrigé, index cyclique dédié) ; `seuil_jours_inactivite` sur `configurations_automatisation` ; `CHECK` étendus (`inactivite_prospect_vendeur`) ; table `runs_scan_automatisation` ; seed de la 5ᵉ règle, `active = false` |
 | `0022_dashing_speed.sql` | ADR-035 : table `secteurs_recherche_acquereur` (FK CASCADE, `UNIQUE(acquereur_id, code_insee)`) ; colonne nullable `code_insee_commune` sur `biens` |
 | `0023_milky_giant_girl.sql` | ADR-036 : tables `compatibilites_bien_acquereur_etat` (PK composite) et `compatibilites_a_resynchroniser` (index uniques partiels) ; `bien_id`/`acquereur_id`/`cycle_compatibilite` sur `evenements_metier` ; `CHECK`/index étendus pour le 6ᵉ type d'événement |
+| `0024_blue_roland_deschain.sql` | ADR-037 : `CHECK` étendus (`configurations_automatisation`, `executions_automatisation`) pour la 6ᵉ règle `nouveau_match_bien_acquereur` ; seed `active = false` |
+| `0025_wide_mindworm.sql` | ADR-038 : `nombre_tentatives`/`derniere_tentative_le` sur `executions_automatisation`, `CHECK` associé — aucune nouvelle table |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

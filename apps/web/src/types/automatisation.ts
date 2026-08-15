@@ -79,6 +79,11 @@ export type ExecutionAutomatisation = {
   reussieLe?: string;
   echoueeLe?: string;
   erreurTechnique?: string;
+  // ADR-038 — observabilité/plafond de la reprise après crash, jamais la source de la garantie
+  // d'idempotence (voir schema.ts). `nombreTentatives` reste à 0/`derniereTentativeLe` undefined
+  // pour toute exécution résolue par le chemin synchrone normal, sans jamais passer par la reprise.
+  nombreTentatives: number;
+  derniereTentativeLe?: string;
 };
 
 export function deriverEtatExecutionAutomatisation(execution: ExecutionAutomatisation): EtatExecutionAutomatisation {

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { evenementsMetier, executionsAutomatisation, taches } from "@/db/schema";
 import type { CodeRegleAutomatisation, ExecutionAutomatisation } from "@/types/automatisation";
@@ -15,6 +15,8 @@ function ligneVersExecution(ligne: typeof executionsAutomatisation.$inferSelect)
     reussieLe: ligne.reussieLe?.toISOString(),
     echoueeLe: ligne.echoueeLe?.toISOString(),
     erreurTechnique: ligne.erreurTechnique ?? undefined,
+    nombreTentatives: ligne.nombreTentatives,
+    derniereTentativeLe: ligne.derniereTentativeLe?.toISOString(),
   };
 }
 
@@ -55,6 +57,38 @@ export async function marquerExecutionReussie(id: string, tacheId: string | unde
     .update(executionsAutomatisation)
     .set({ tacheId: tacheId ?? null, reussieLe: new Date() })
     .where(and(eq(executionsAutomatisation.id, id), isNull(executionsAutomatisation.reussieLe), isNull(executionsAutomatisation.echoueeLe)));
+}
+
+// Filet de reprise (ADR-038) : liste les exécutions non résolues, les plus anciennes d'abord —
+// aucun verrou ici (le verrou a lieu par ligne, au moment du traitement individuel, voir
+// reprise.ts), simple lecture pour construire le lot à examiner. N'exclut jamais par
+// `nombreTentatives` : une ligne ayant déjà atteint le plafond doit encore être vue une dernière
+// fois pour être basculée en terminal (`echouee`, voir reprise.ts) — sinon elle resterait
+// indéfiniment `a_traiter` sans jamais être assainie.
+export async function listerExecutionsATraiter(limite = 200): Promise<ExecutionAutomatisation[]> {
+  const lignes = await getDb()
+    .select()
+    .from(executionsAutomatisation)
+    .where(and(isNull(executionsAutomatisation.reussieLe), isNull(executionsAutomatisation.echoueeLe)))
+    .orderBy(asc(executionsAutomatisation.demarreeLe))
+    .limit(limite);
+  return lignes.map(ligneVersExecution);
+}
+
+// Incrément DURABLE ET SÉPARÉ (ADR-038) — sa propre petite transaction, jamais celle du traitement
+// de l'exécution elle-même : si cette dernière crash à nouveau, l'incrément déjà commité ici
+// survit et permet de détecter une boucle de crash répétée. Purement observationnel/de contrôle de
+// plafond — ne participe JAMAIS à la garantie d'idempotence de l'effet (portée par
+// UNIQUE(regle_code, evenement_id) + la transaction unique effet+reussieLe de traiterUneExecution,
+// moteur.ts). Retourne `undefined` si la ligne est déjà résolue entre-temps (par le chemin
+// synchrone ou un autre appel de reprise concurrent) — rien à incrémenter, rien à traiter.
+export async function incrementerTentativeExecution(id: string): Promise<ExecutionAutomatisation | undefined> {
+  const [ligne] = await getDb()
+    .update(executionsAutomatisation)
+    .set({ nombreTentatives: sql`${executionsAutomatisation.nombreTentatives} + 1`, derniereTentativeLe: new Date() })
+    .where(and(eq(executionsAutomatisation.id, id), isNull(executionsAutomatisation.reussieLe), isNull(executionsAutomatisation.echoueeLe)))
+    .returning();
+  return ligne ? ligneVersExecution(ligne) : undefined;
 }
 
 // Identité inter-cycle d'une règle réactive à une paire bien/acquéreur (ADR-037, ex.

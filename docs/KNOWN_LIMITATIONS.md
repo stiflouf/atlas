@@ -642,18 +642,40 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   ancienne visite existe pour cette paire, même récente. Limite assumée (bloquer indéfiniment sur un
   rapport ancien aurait été pire) plutôt qu'un état inventé faute de signal fiable dans le modèle
   actuel pour distinguer une visite "encore pertinente" d'une visite historique.
-- **Aucun filet de reprise générique pour une exécution ADR-032 restée bloquée `a_traiter` après un
-  crash** — dette préexistante à ADR-032/033 (aucune des 6 règles, y compris `nouveau_match_bien_acquereur`,
-  n'en bénéficie), non corrigée par ADR-037 : un crash entre le commit de l'événement et le
-  traitement synchrone de l'exécution ne serait récupéré que par un rappel manuel de
-  `traiterExecutionsEnAttente()`, jamais un balayage automatique comme `/api/compatibilite/scan`
-  (ADR-036) ou `/api/automatisations/scan` (ADR-033, réservé au seul type cyclique).
+- **Le filet de reprise générique existe désormais (ADR-038)** — voir la section dédiée ci-dessous ;
+  une exécution `nouveau_match_bien_acquereur` restée `a_traiter` après un crash est reprise comme
+  n'importe quelle autre règle, sans traitement spécial.
 - **Anti-spam inter-cycle simple** : au plus une tâche ouverte à la fois par paire pour cette règle —
   si le conseiller laisse une tâche ouverte indéfiniment, un nouveau cycle réel ne relance jamais de
   rappel supplémentaire tant que celle-ci n'est pas résolue (terminée ou annulée).
 - **Aucune échéance automatique** : cohérent avec toutes les règles ADR-032/033 existantes
   (`ChampsTacheAutomatique` ne porte aucun champ d'échéance) — une tâche "nouveau match" reste "Sans
   échéance" jusqu'à ce que le conseiller en fixe une manuellement.
+
+## Reprise durable des exécutions d'automatisation bloquées (ADR-038)
+
+- **Seules les exécutions `a_traiter` sont reprises automatiquement** — une exécution `echouee`
+  (une vraie erreur technique a été levée et capturée) reste **définitivement terminale** : aucune
+  classification fiable transitoire/permanente n'existe aujourd'hui (`categoriserErreur()` ne lit
+  aucun code SQLSTATE), un retry automatique risquerait une boucle silencieuse sur une erreur
+  réellement permanente. Un retry manuel éventuel n'existe pas non plus — chantier séparé, non
+  construit ici.
+- **Plafond fixe non configurable** (`MAX_TENTATIVES_AUTOMATISATION = 5`, constante de code) — au-delà,
+  l'exécution devient `echouee` avec le message *"Nombre maximal de tentatives de reprise atteint"*,
+  même si la cause sous-jacente (ex. panne DB passagère) s'est entre-temps résolue. Aucune remise à
+  zéro automatique du compteur.
+- **`nombre_tentatives` n'est pas une preuve exhaustive** : un hard crash peut empêcher l'écriture
+  de l'incrément lui-même dans de rares cas — le compteur reste une estimation observable des
+  tentatives effectivement enregistrées, jamais la source de la garantie d'idempotence (portée par
+  ailleurs, voir `docs/BUSINESS_RULES.md`).
+- **Stratégie valable uniquement parce que les effets actuels sont 100 % transactionnels
+  PostgreSQL** — aucune des 6 règles n'appelle Gmail/Calendar/une API externe aujourd'hui (vérifié).
+  Le jour où une règle produira un effet non transactionnel, cette stratégie de reprise ne suffira
+  plus **pour cette règle spécifiquement** : réévaluer l'idempotence/reprise ADR-038 avant de
+  l'ajouter, jamais supposer que la reprise générique la couvre déjà.
+- **Le balayage de reprise (`/api/automatisations/reprise`) dépend d'un cron externe**, comme les
+  autres endpoints de ce type (ADR-033/036) — sans déclencheur configuré, seul le traitement
+  synchrone immédiatement après chaque mutation ferme la boucle.
 
 ## Limites du moteur de matching
 

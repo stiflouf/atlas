@@ -325,6 +325,50 @@ la paire retrouvée via la provenance déjà réelle du moteur ADR-032
 conseiller remonte à l'explication à jour depuis la fiche acquéreur (ADR-034). Aucun Gmail, aucune
 notification : ADR-037 s'arrête à la tâche.
 
+## Reprise durable des exécutions d'automatisation bloquées (ADR-038)
+
+**Fichiers** : `src/lib/automatisations/reprise.ts`, `src/app/api/automatisations/reprise/route.ts`.
+
+Fait central, vérifié sur le code réel de `moteur.ts` : la création de la tâche et la pose de
+`reussieLe` vivent **déjà** dans la même transaction Postgres (`traiterUneExecution`, invariant
+ADR-032 depuis l'origine) — un crash ne peut jamais laisser une tâche persistée sans que son
+exécution soit marquée `reussie`. Une ligne `executions_automatisation` restée `a_traiter` signifie
+donc toujours "rien de durable n'existe encore pour elle", que le process n'ait jamais commencé à
+la traiter ou qu'il ait crashé en plein milieu — les deux cas sont strictement indiscernables et
+strictement équivalents. La reprendre inconditionnellement est donc sûre par construction.
+
+**Aucun nouvel état, aucune lease** : le mécanisme réutilise tel quel `traiterExecutionsEnAttente()`
+(`moteur.ts`, inchangée) — un simple découvreur des lignes `a_traiter`, jamais une seconde
+implémentation des règles métier. Le verrou `FOR UPDATE` déjà en place (ADR-032) suffit pour la
+concurrence entre deux appels de reprise.
+
+**Plafond de tentatives** (`MAX_TENTATIVES_AUTOMATISATION = 5`, constante de code) : un compteur
+`nombre_tentatives`, incrémenté durablement dans sa propre petite transaction **avant** chaque
+tentative risquée (jamais dans la transaction du traitement lui-même, sinon un nouveau crash
+annulerait aussi le comptage). Purement observationnel — il ne participe jamais à la garantie
+d'idempotence, portée par `UNIQUE(regle_code, evenement_id)` et l'atomicité déjà décrite. Au-delà du
+plafond, l'exécution devient terminale via la sémantique d'échec **déjà existante**
+(`echoueeLe`, jamais un nouveau statut) — plus jamais retraitée automatiquement.
+
+**`echoueeLe` reste terminal, `construireTache() → undefined` reste un succès** : aucun retry
+automatique des erreurs techniques réelles (aucune classification transitoire/permanente fiable
+n'existe aujourd'hui) ; un effet devenu inutile (`undefined`) reste `reussie` sans tâche, jamais
+repris.
+
+**Endpoint dédié**, jamais mélangé au scanner temporel : `POST /api/automatisations/reprise`,
+secret `AUTOMATISATIONS_REPRISE_SECRET` distinct d'`AUTOMATISATIONS_SCAN_SECRET` — même patron
+d'authentification que les trois endpoints précédents (ADR-033/036).
+
+**Activation figée respectée** : ne rescanne jamais `evenements_metier`, ne recrée jamais
+d'exécution — travaille exclusivement sur des `executions_automatisation` déjà créées et déjà
+légitimes.
+
+**Hypothèse explicite** : cette stratégie est correcte parce que les 6 règles actuelles produisent
+exclusivement un effet transactionnel Postgres (aucun Gmail, Calendar, ni appel externe, vérifié
+par audit exhaustif du code). Avant d'ajouter un effet externe non transactionnel à une règle,
+réévaluer l'idempotence/reprise ADR-038 — une transaction Postgres ne peut jamais rendre atomique
+un appel externe.
+
 ## Tâches (ADR-028)
 
 **Fichier** : `src/lib/tachePriority.ts` (`scoreTache`). Utilisée pour trier les tâches sur

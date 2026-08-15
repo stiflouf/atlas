@@ -1079,6 +1079,14 @@ export const executionsAutomatisation = pgTable(
     reussieLe: timestamp("reussie_le", { withTimezone: true }),
     echoueeLe: timestamp("echouee_le", { withTimezone: true }),
     erreurTechnique: text("erreur_technique"),
+    // ADR-038 — observabilité/plafond de la reprise après crash, JAMAIS la source de la garantie
+    // d'idempotence (portée par UNIQUE(regle_code, evenement_id) + la transaction unique effet+
+    // reussieLe déjà existante, voir traiterUneExecution, moteur.ts). Un hard crash peut empêcher
+    // l'écriture de cet incrément lui-même (il vit dans sa propre petite transaction, séparée de la
+    // transaction de traitement) — ce compteur reste donc une estimation observable des tentatives
+    // effectivement enregistrées, jamais une preuve mathématique exhaustive.
+    nombreTentatives: integer("nombre_tentatives").notNull().default(0),
+    derniereTentativeLe: timestamp("derniere_tentative_le", { withTimezone: true }),
   },
   (table) => [
     check(
@@ -1089,6 +1097,7 @@ export const executionsAutomatisation = pgTable(
         'inactivite_prospect_vendeur','nouveau_match_bien_acquereur'
       )`
     ),
+    check("executions_automatisation_nombre_tentatives_positif_check", sql`${table.nombreTentatives} >= 0`),
     unique("executions_automatisation_regle_evenement_unique").on(table.regleCode, table.evenementId),
   ]
 );

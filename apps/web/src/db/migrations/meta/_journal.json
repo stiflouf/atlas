@@ -176,6 +176,13 @@
       "when": 1786791626978,
       "tag": "0024_blue_roland_deschain",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786793148607,
+      "tag": "0025_wide_mindworm",
+      "breakpoints": true
     }
   ]
 }

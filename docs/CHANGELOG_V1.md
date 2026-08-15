@@ -874,6 +874,45 @@ idempotence/concurrence, revalidation complète, archivage, entité absente, rel
 avancée, anti-spam inter-cycle, résolution "Préparer un email", non-régression append-only — suite
 complète du projet passante (879 tests).
 
+## 38. Reprise durable des exécutions d'automatisation bloquées
+
+Un audit de `moteur.ts` (`traiterUneExecution`) a établi, sur le code réel, que la création de la
+tâche et la pose de `reussieLe` vivent déjà dans une seule transaction Postgres (invariant ADR-032
+depuis l'origine, "correction n°6") — un crash ne peut donc jamais laisser une tâche persistée sans
+que son exécution soit marquée `reussie`. Cette passe s'appuie explicitement sur cette atomicité
+déjà acquise plutôt que d'en réinventer une : aucun statut `en_cours`, aucune lease, aucun jeton de
+claim — une exécution `a_traiter` (jamais commencée ou avortée par un crash, les deux étant
+strictement indiscernables et équivalentes côté DB) peut être reprise inconditionnellement.
+
+`src/lib/automatisations/reprise.ts` (nouveau) réutilise **tel quel** `traiterExecutionsEnAttente()`
+(`moteur.ts`, non modifiée) : découvre les exécutions non résolues
+(`listerExecutionsATraiter()`, nouveau), incrémente durablement un compteur de tentatives dans sa
+propre petite transaction **avant** chaque essai (`incrementerTentativeExecution()`, nouveau —
+séparée de la transaction de traitement, pour rester exacte même si l'essai crashe à nouveau), puis
+rejoue le noyau canonique. Deux nouvelles colonnes sur `executions_automatisation`
+(`nombre_tentatives`, `derniere_tentative_le`) — purement observationnelles, jamais la source de la
+garantie d'idempotence (`UNIQUE(regle_code, evenement_id)` + l'atomicité déjà décrite). Plafond
+`MAX_TENTATIVES_AUTOMATISATION = 5` (constante de code, même statut que `SEUIL_FIABLE` ADR-035) :
+au-delà, la ligne devient `echouee` via la sémantique d'échec **déjà existante**, jamais un nouveau
+statut, jamais une boucle silencieuse.
+
+`echoueeLe` reste strictement terminal (aucune classification fiable transitoire/permanente
+n'existe aujourd'hui) ; `construireTache() → undefined` reste un succès sans tâche, jamais repris —
+les deux contrats ADR-032/037 inchangés. `POST /api/automatisations/reprise` (nouveau), secret
+dédié `AUTOMATISATIONS_REPRISE_SECRET` (distinct d'`AUTOMATISATIONS_SCAN_SECRET`) — même patron
+d'authentification que les endpoints ADR-033/036 précédents, jamais mélangé au scanner temporel.
+Ne touche jamais `evenements_metier` ni `configurations_automatisation` : l'activation figée
+ADR-032 reste intégralement respectée, aucun rattrapage rétroactif.
+
+Hypothèse vérifiée et documentée : cette stratégie est correcte parce que les 6 règles actuelles
+produisent exclusivement un effet transactionnel Postgres (recherche exhaustive confirmée, aucun
+Gmail/Calendar/appel externe) — avant un futur effet externe non transactionnel, réévaluer
+l'idempotence/reprise de cette ADR.
+
+13 nouveaux tests (`reprise.test.ts` + `route.test.ts`) : sélection, plafond, idempotence,
+concurrence réelle, `undefined`/erreur technique toujours terminaux, activation figée jamais
+contournée — suite complète du projet passante.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

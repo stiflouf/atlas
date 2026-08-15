@@ -1,0 +1,3 @@
+ALTER TABLE "executions_automatisation" ADD COLUMN "nombre_tentatives" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "executions_automatisation" ADD COLUMN "derniere_tentative_le" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "executions_automatisation" ADD CONSTRAINT "executions_automatisation_nombre_tentatives_positif_check" CHECK ("executions_automatisation"."nombre_tentatives" >= 0);

@@ -16,9 +16,10 @@ rendus de visite, mémoire de matching Google Calendar, historique dérivé du b
 d'automatisations événement → tâche (ADR-032), moteur temporel/relances programmées (ADR-033),
 moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compatibilite/`), secteurs
 de recherche géographique acquéreur / critère géographique du moteur de compatibilité (ADR-035),
-détection durable des transitions de compatibilité vers un événement métier append-only (ADR-036)
-et une règle d'automatisation ADR-032 exploitant cet événement pour créer une tâche commerciale
-"nouveau match", désactivée par défaut (ADR-037).
+détection durable des transitions de compatibilité vers un événement métier append-only (ADR-036),
+une règle d'automatisation ADR-032 exploitant cet événement pour créer une tâche commerciale
+"nouveau match", désactivée par défaut (ADR-037), et un filet générique de reprise après crash pour
+les `executions_automatisation` restées bloquées (ADR-038).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -110,6 +111,16 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   `en_cours`/`realise`/tâche déjà ouverte n'existe pour cette paire précise. **Tant que cette règle
   n'est pas activée explicitement depuis `/automatisations`, 0 tâche est créée** — ne jamais
   supposer le contraire. Aucun email, aucun Gmail dans cette ADR.
+- **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
+  `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
+  `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
+  car `traiterUneExecution()` (`moteur.ts`) crée déjà la tâche et pose `reussieLe` dans **une seule**
+  transaction — jamais de tâche orpheline possible. Ne jamais supposer un statut `en_cours`/une
+  lease : ils n'existent pas et ne sont pas nécessaires pour les effets actuels (100 % DB, aucun
+  Gmail/Calendar). `nombre_tentatives`/`derniere_tentative_le` sont purement observationnels,
+  **jamais** la source de l'idempotence. Plafond fixe `MAX_TENTATIVES_AUTOMATISATION = 5` —
+  au-delà, `echouee` définitivement, jamais un retry automatique (comme pour toute autre erreur
+  technique réelle).
 - **Géographie (ADR-035) limitée à la granularité commune/arrondissement, jamais un rayon** —
   `bien.codeInseeCommune` (citycode IGN, une chaîne, jamais un entier) est le seul identifiant
   géographique lu par le moteur ; `ville`/`codePostal` du bien ne sont **jamais** comparés à un
@@ -165,7 +176,9 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/compatibilite/baseline.ts` | Outil de baseline/rebuild explicite — jamais d'événement, jamais automatique (ADR-036) |
 | `src/app/api/compatibilite/scan/route.ts` | Filet de reprise du handoff (ADR-036) — même patron d'authentification que `/api/automatisations/scan` |
 | `src/lib/automatisations/catalogueRegles.ts` | Catalogue de règles ADR-032/033/037 — dont `nouveau_match_bien_acquereur` (ADR-037), désactivée par défaut |
-| `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037) — anti-spam inter-cycle via la provenance ADR-032, jamais une analyse de texte |
+| `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037) et `listerExecutionsATraiter()`/`incrementerTentativeExecution()` (ADR-038) |
+| `src/lib/automatisations/reprise.ts` | Filet de reprise après crash (ADR-038) — réutilise `traiterExecutionsEnAttente()` (`moteur.ts`) telle quelle, jamais une seconde implémentation |
+| `src/app/api/automatisations/reprise/route.ts` | Endpoint de reprise (ADR-038) — même patron d'authentification que `/api/automatisations/scan`, secret dédié |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
