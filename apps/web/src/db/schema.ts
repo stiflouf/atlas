@@ -307,11 +307,50 @@ export const documentsBien = pgTable(
   ]
 );
 
+// Entité métier minimale « visite » (ADR-040) — une rencontre immobilière planifiée entre UN Bien
+// et UN Acquéreur, distincte à la fois de l'événement Google Calendar (jamais persisté comme fait
+// métier, seulement mis en cache de résolution via memoire_contextuelle) et de comptes_rendus_visite
+// (le compte rendu APRÈS coup, table séparée, jamais fusionnée ici — voir plus bas). bien_id/
+// acquereur_id sont de vraies FK NOT NULL : jamais de visite Atlas pour un bien/acquéreur mocké,
+// aucun fallback (le repository refuse la matérialisation si l'un des deux id n'est pas un vrai
+// UUID persisté). rendez_vous_calendar_id (ex. "gcal-xxxx" ou un id mock) reste une simple
+// référence vers la source externe, jamais la PK métier — la Visite possède son propre id. UNIQUE
+// dessus : garantie DB qu'un même rendez-vous Calendar ne matérialise jamais deux visites (double
+// clic, double onglet), pas seulement un find-before-insert applicatif.
+export const visites = pgTable(
+  "visites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id, { onDelete: "cascade" }),
+    acquereurId: uuid("acquereur_id")
+      .notNull()
+      .references(() => acquereurs.id, { onDelete: "cascade" }),
+    // Jour prévu de la visite — un simple `date`, jamais un `timestamptz` : même convention que
+    // dateVisite/dateOffre/dateMandat/dateSignature dans ce schéma, toutes des dates civiles d'un
+    // fait commercial, jamais un instant précis. `heure` (RendezVous.heure) reste une donnée
+    // d'affichage Calendar éphémère, jamais persistée ici.
+    datePrevue: date("date_prevue").notNull(),
+    statut: text("statut").notNull().default("planifiee"),
+    rendezVousCalendarId: text("rendez_vous_calendar_id").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("visites_statut_check", sql`${table.statut} IN ('planifiee','realisee','annulee')`),
+    unique("visites_rendez_vous_calendar_id_unique").on(table.rendezVousCalendarId),
+  ]
+);
+
 // Compte rendu après une visite. bienId/acquereurId sont de vraies FK, même rationale que
 // notes_bien : un compte rendu n'est créable que depuis /visites/[id]/preparer, où bien et
 // acquéreur sont déjà résolus et réels. dateVisite (date réelle de la visite, préremplie depuis
 // le rendez-vous mais modifiable) est volontairement distincte de creeLe (instant de saisie).
 // Pas de modifieLe : append-only, aucune édition prévue pour l'instant.
+// visiteId (ADR-040) : nullable — un compte rendu créé avant ADR-040 n'a et n'aura jamais de
+// visite liée (aucun backfill par proximité de date, jamais une inférence). ON DELETE SET NULL :
+// le compte rendu reste le fait historique append-only, il ne doit jamais disparaître si sa
+// visite venait à être supprimée (même rationale que compromis.offreId, ADR-016).
 export const comptesRendusVisite = pgTable(
   "comptes_rendus_visite",
   {
@@ -322,6 +361,7 @@ export const comptesRendusVisite = pgTable(
     acquereurId: uuid("acquereur_id")
       .notNull()
       .references(() => acquereurs.id, { onDelete: "cascade" }),
+    visiteId: uuid("visite_id").references(() => visites.id, { onDelete: "set null" }),
     dateVisite: date("date_visite").notNull(),
     retour: text("retour").notNull(),
     interet: text("interet").notNull().default("inconnu"),

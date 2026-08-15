@@ -9,6 +9,7 @@ import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getTachesPourBien } from "@/lib/tacheRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
+import { listerVisitesPourBien } from "@/lib/visiteRepository";
 import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerLiensPourBien } from "@/lib/offreVisiteRepository";
@@ -63,6 +64,7 @@ export default async function FicheBien({ params }: PageProps) {
   const taches = await getTachesPourBien(bien.id);
   const notes = await listerNotesPourBien(bien.id);
   const comptesRendus = await listerComptesRendusPourBien(bien.id);
+  const visites = await listerVisitesPourBien(bien.id);
   const documents = await listerDocumentsPourBien(bien.id);
   const offres = await listerOffresPourBien(bien.id);
   const liens = await listerLiensPourBien(bien.id);
@@ -75,6 +77,7 @@ export default async function FicheBien({ params }: PageProps) {
       ...comptesRendus.map((cr) => cr.acquereurId),
       ...offres.map((o) => o.acquereurId),
       ...compromis.map((c) => c.acquereurId),
+      ...visites.map((v) => v.acquereurId),
     ]),
   ];
   const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
@@ -249,6 +252,7 @@ export default async function FicheBien({ params }: PageProps) {
         taches={taches}
         notes={notes}
         comptesRendus={comptesRendus}
+        visites={visites}
         documents={documents}
         offres={offres}
         compromis={compromis}

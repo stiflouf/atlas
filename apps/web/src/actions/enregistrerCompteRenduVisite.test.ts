@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 // Test d'intégration + garde-fou : vérifie qu'un appel direct à enregistrerCompteRenduVisiteAction
 // (contournant le formulaire, remplacé par un message sur une fiche archivée — voir
@@ -8,16 +8,47 @@ import { eq } from "drizzle-orm";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, acquereurs: acquereursTable } = await import("@/db/schema");
+const {
+  biens: biensTable,
+  acquereurs: acquereursTable,
+  evenementsMetier,
+  executionsAutomatisation,
+  comptesRendusVisite,
+  taches: tachesTable,
+} = await import("@/db/schema");
 const { creerBien, archiverBien, desarchiverBien } = await import("@/lib/bienRepository");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
 const { listerComptesRendusPourBien } = await import("@/lib/compteRenduVisiteRepository");
 const { enregistrerCompteRenduVisiteAction } = await import("./enregistrerCompteRenduVisite");
+const { materialiserVisite, getVisiteById } = await import("@/lib/visiteRepository");
+const { definirActivationAutomatisation } = await import("@/lib/automatisations/configurationAutomatisationRepository");
 
 const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
+  // evenements_metier/executions_automatisation référencent comptes_rendus_visite/taches en
+  // NO ACTION (append-only, ADR-032) — doivent être purgés AVANT la suppression cascade des
+  // biens/acquéreurs, sinon la contrainte FK bloque le DELETE (même patron que
+  // catalogueRegles.nouveauMatch.test.ts).
+  if (idsBiensCrees.length > 0) {
+    const comptesRendus = await getDb()
+      .select({ id: comptesRendusVisite.id })
+      .from(comptesRendusVisite)
+      .where(inArray(comptesRendusVisite.bienId, idsBiensCrees));
+    const idsComptesRendus = comptesRendus.map((c) => c.id);
+    if (idsComptesRendus.length > 0) {
+      const evenements = await getDb()
+        .select({ id: evenementsMetier.id })
+        .from(evenementsMetier)
+        .where(inArray(evenementsMetier.compteRenduVisiteId, idsComptesRendus));
+      const idsEvenements = evenements.map((e) => e.id);
+      if (idsEvenements.length > 0) {
+        await getDb().delete(executionsAutomatisation).where(inArray(executionsAutomatisation.evenementId, idsEvenements));
+        await getDb().delete(evenementsMetier).where(inArray(evenementsMetier.id, idsEvenements));
+      }
+    }
+  }
   for (const id of idsBiensCrees) {
     await getDb().delete(biensTable).where(eq(biensTable.id, id));
   }
@@ -107,5 +138,122 @@ describe("enregistrerCompteRenduVisiteAction — garde-fou entité archivée", (
     ).catch(() => {});
 
     expect(await listerComptesRendusPourBien(bien.id)).toEqual([]);
+  });
+});
+
+describe("enregistrerCompteRenduVisiteAction — transition visite → realisee (ADR-040)", () => {
+  it("compte rendu sur une visite planifiee : la visite passe realisee, l'événement visite_realisee est émis une seule fois", async () => {
+    const bien = await creerBienTest("[test réel] CR-VISITE-1");
+    const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-ACQ-1");
+    const visite = await materialiserVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-08-01",
+      rendezVousCalendarId: `gcal-cr-${bien.id}`,
+    });
+
+    await enregistrerCompteRenduVisiteAction(
+      formData({
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        visiteId: visite.id,
+        dateVisite: "2026-08-01",
+        retour: "Visite très positive",
+        interet: "interesse",
+      })
+    ).catch(() => {});
+
+    expect((await getVisiteById(visite.id))?.statut).toBe("realisee");
+
+    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
+    expect(compteRendu.visiteId).toBe(visite.id);
+    // interet reste uniquement sur le compte rendu — jamais dupliqué sur la visite (§15 ADR-040).
+    expect(compteRendu.interet).toBe("interesse");
+
+    const evenements = await getDb()
+      .select()
+      .from(evenementsMetier)
+      .where(and(eq(evenementsMetier.typeEvenement, "visite_realisee"), eq(evenementsMetier.compteRenduVisiteId, compteRendu.id)));
+    expect(evenements).toHaveLength(1);
+  });
+
+  it("règle suivi_apres_visite non régressée : toujours déclenchée par le même événement visite_realisee", async () => {
+    await definirActivationAutomatisation("suivi_apres_visite", true);
+    const bien = await creerBienTest("[test réel] CR-VISITE-2");
+    const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-ACQ-2");
+    const visite = await materialiserVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-08-01",
+      rendezVousCalendarId: `gcal-cr-${bien.id}`,
+    });
+
+    await enregistrerCompteRenduVisiteAction(
+      formData({
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        visiteId: visite.id,
+        dateVisite: "2026-08-01",
+        retour: "À suivre",
+        interet: "a_reflechir",
+      })
+    ).catch(() => {});
+
+    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
+    const tachesDeSuivi = await getDb()
+      .select()
+      .from(tachesTable)
+      .where(eq(tachesTable.visiteId, compteRendu.id));
+    expect(tachesDeSuivi).toHaveLength(1);
+    expect(tachesDeSuivi[0].titre).toBe("Faire le suivi de la visite");
+
+    await definirActivationAutomatisation("suivi_apres_visite", false);
+  });
+
+  it("visiteId absent (page non ADR-040, ou visite non matérialisable) : compte rendu enregistré normalement, sans erreur", async () => {
+    const bien = await creerBienTest("[test réel] CR-SANS-VISITE-1");
+    const acquereur = await creerAcquereurTest("[test réel] CR-SANS-VISITE-ACQ-1");
+
+    await enregistrerCompteRenduVisiteAction(
+      formData({
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        dateVisite: "2026-08-01",
+        retour: "Sans visite Atlas associée",
+        interet: "inconnu",
+      })
+    ).catch(() => {});
+
+    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
+    expect(compteRendu).toBeDefined();
+    expect(compteRendu.visiteId).toBeUndefined();
+  });
+
+  it("visiteId soumis mais pointant vers un autre couple bien/acquéreur : ignoré, aucune transition, compte rendu quand même enregistré", async () => {
+    const bien = await creerBienTest("[test réel] CR-VISITE-MISMATCH-1");
+    const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-MISMATCH-ACQ-1");
+    const autreBien = await creerBienTest("[test réel] CR-VISITE-MISMATCH-AUTRE");
+    const autreAcquereur = await creerAcquereurTest("[test réel] CR-VISITE-MISMATCH-AUTRE-ACQ");
+    const visiteAutrePaire = await materialiserVisite({
+      bienId: autreBien.id,
+      acquereurId: autreAcquereur.id,
+      datePrevue: "2026-08-01",
+      rendezVousCalendarId: `gcal-mismatch-${bien.id}`,
+    });
+
+    await enregistrerCompteRenduVisiteAction(
+      formData({
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        visiteId: visiteAutrePaire.id,
+        dateVisite: "2026-08-01",
+        retour: "Tentative de contournement",
+        interet: "inconnu",
+      })
+    ).catch(() => {});
+
+    expect((await getVisiteById(visiteAutrePaire.id))?.statut).toBe("planifiee");
+    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
+    expect(compteRendu.visiteId).toBeUndefined();
   });
 });

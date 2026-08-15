@@ -1,7 +1,7 @@
 # Modèle de données — Atlas (`apps/web`)
 
 Généré depuis `apps/web/src/db/schema.ts` et les migrations réellement présentes dans
-`apps/web/src/db/migrations/` (`0000` à `0022`, vérifiées le 2026-08-14). **Le SQL des migrations
+`apps/web/src/db/migrations/` (`0000` à `0026`, vérifiées le 2026-08-15). **Le SQL des migrations
 fait foi du schéma physique, pas la définition Drizzle** (principe posé par ADR-006) — en cas de
 doute, se référer au fichier `.sql` correspondant.
 
@@ -15,6 +15,9 @@ part entière signifiant *explicitement connue comme négative* — pas une vale
 ```mermaid
 erDiagram
     biens ||--o{ notes_bien : "bien_id (FK)"
+    biens ||--o{ visites : "bien_id (FK)"
+    acquereurs ||--o{ visites : "acquereur_id (FK)"
+    visites |o--o{ comptes_rendus_visite : "visite_id (FK, nullable)"
     biens ||--o{ comptes_rendus_visite : "bien_id (FK)"
     biens ||--o{ documents_bien : "bien_id (FK)"
     biens ||--o{ offres : "bien_id (FK)"
@@ -131,10 +134,20 @@ erDiagram
         text contenu
         timestamptz cree_le
     }
+    visites {
+        uuid id PK
+        uuid bien_id FK
+        uuid acquereur_id FK
+        date date_prevue
+        text statut "planifiee/realisee/annulee"
+        text rendez_vous_calendar_id "UNIQUE, référence externe, jamais la PK"
+        timestamptz cree_le
+    }
     comptes_rendus_visite {
         uuid id PK
         uuid bien_id FK
         uuid acquereur_id FK
+        uuid visite_id FK "nullable"
         date date_visite
         text retour
         text interet
@@ -413,7 +426,7 @@ couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (t
 | `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | oui | |
 | `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE CASCADE`) | oui | |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, `ON DELETE CASCADE`) | oui | |
-| `visite_id` | uuid (FK → `comptes_rendus_visite.id`, `ON DELETE CASCADE`) | oui | |
+| `visite_id` | uuid (FK → `comptes_rendus_visite.id`, `ON DELETE CASCADE`) | oui | nom trompeur (ADR-040) : référence un **compte rendu**, jamais `visites.id` — `deriverRouteFicheCible()` (ADR-039) n'en dérive donc aucun lien navigable, limite documentée dans `KNOWN_LIMITATIONS.md` |
 | `offre_id` | uuid (FK → `offres.id`, `ON DELETE CASCADE`) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, `ON DELETE CASCADE`) | oui | |
 | `remuneration_id` | uuid (FK → `remuneration.id`, `ON DELETE CASCADE`) | oui | |
@@ -456,6 +469,30 @@ cibles.
 
 Pas de `modifie_le` (ADR-011). Aucune contrainte `CHECK`.
 
+## `visites`
+
+**Rôle** (ADR-040) : entité métier minimale — une rencontre immobilière planifiée entre UN Bien et
+UN Acquéreur, suivie par Atlas. Distincte de l'événement Google Calendar (jamais persisté comme
+fait métier) et de `comptes_rendus_visite` (le fait qualitatif après-coup, jamais fusionné ici).
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bien_id` | uuid (FK → `biens.id`, cascade) | non | jamais un id mocké — vrai UUID persisté uniquement |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, cascade) | non | idem |
+| `date_prevue` | date | non | jour civil prévu, jamais un `timestamptz` (même convention que `date_visite`/`date_offre`) |
+| `statut` | text | non | défaut `"planifiee"`, `CHECK` |
+| `rendez_vous_calendar_id` | text | non | référence externe (`RendezVous.id`, ex. `"gcal-xxxx"`) — **jamais la PK métier**, `UNIQUE` |
+| `cree_le` | timestamptz | non | instant de matérialisation |
+
+**Contrainte `CHECK`** : `statut IN ('planifiee','realisee','annulee')`.
+**Contrainte `UNIQUE`** : `rendez_vous_calendar_id` — garantit qu'un même rendez-vous Calendar ne
+matérialise jamais deux visites (idempotence au niveau DB, pas seulement applicative).
+
+Relation fonctionnelle : alimente l'onglet "Visites → À venir" de la fiche bien (statut
+`planifiee`, ADR-040) et le signal `existeVisitePlanifieePourPaire()` exploité par la règle
+`nouveau_match_bien_acquereur` (ADR-037/040) — voir `docs/BUSINESS_RULES.md`.
+
 ## `comptes_rendus_visite`
 
 **Rôle** : compte rendu structuré après une visite, append-only (ADR-011), table dédiée plutôt
@@ -466,9 +503,10 @@ qu'une variante de `notes_bien` (justification complète dans ADR-011).
 | `id` | uuid (PK) | non | |
 | `bien_id` | uuid (FK → `biens.id`, cascade) | non | |
 | `acquereur_id` | uuid (FK → `acquereurs.id`, cascade) | non | |
+| `visite_id` | uuid (FK → `visites.id`, `ON DELETE SET NULL`) | oui | ADR-040 — absent pour tout compte rendu créé avant cette ADR (aucun backfill par proximité de date) |
 | `date_visite` | date | non | date réelle de la visite — **distincte** de `cree_le` |
 | `retour` | text | non | texte libre, jamais analysé (ADR-008) |
-| `interet` | text | non | défaut `"inconnu"`, `CHECK` |
+| `interet` | text | non | défaut `"inconnu"`, `CHECK` — reste **uniquement** ici, jamais dupliqué sur `visites` (ADR-040) |
 | `prochaine_etape` | text | oui | texte libre, ne génère jamais d'action automatiquement |
 | `cree_le` | timestamptz | non | instant de saisie |
 
@@ -476,7 +514,11 @@ qu'une variante de `notes_bien` (justification complète dans ADR-011).
 
 Relation fonctionnelle : alimente l'historique dérivé du bien (`"Visite effectuée — {label}"`,
 jamais le texte de `retour`) et la "Mémoire du dossier" de la page de préparation, filtrée sur le
-couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`.
+couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`. L'enregistrement d'un
+compte rendu sur une visite `planifiee` fait transiter cette visite vers `realisee`, dans la même
+transaction (ADR-040) — `visites.statut` et `comptesRendusVisite.interet` restent deux notions
+séparées : le premier répond à "que s'est-il passé ?", le second à "quel est le retour de
+l'acquéreur ?".
 
 ## `documents_bien`
 
@@ -1258,6 +1300,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0023_milky_giant_girl.sql` | ADR-036 : tables `compatibilites_bien_acquereur_etat` (PK composite) et `compatibilites_a_resynchroniser` (index uniques partiels) ; `bien_id`/`acquereur_id`/`cycle_compatibilite` sur `evenements_metier` ; `CHECK`/index étendus pour le 6ᵉ type d'événement |
 | `0024_blue_roland_deschain.sql` | ADR-037 : `CHECK` étendus (`configurations_automatisation`, `executions_automatisation`) pour la 6ᵉ règle `nouveau_match_bien_acquereur` ; seed `active = false` |
 | `0025_wide_mindworm.sql` | ADR-038 : `nombre_tentatives`/`derniere_tentative_le` sur `executions_automatisation`, `CHECK` associé — aucune nouvelle table |
+| `0026_flowery_mephisto.sql` | ADR-040 : table `visites` (entité métier minimale, `CHECK`/`UNIQUE`) ; colonne nullable `visite_id` sur `comptes_rendus_visite` (`ON DELETE SET NULL`) |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

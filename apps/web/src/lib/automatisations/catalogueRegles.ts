@@ -4,6 +4,7 @@ import { getClientById } from "@/lib/clientRepository";
 import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
 import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
+import { existeVisitePlanifieePourPaire } from "@/lib/visiteRepository";
 import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
 import { existeExecutionAvecTacheOuvertePourPaire } from "./executionAutomatisationRepository";
 import type { ChampsTacheAutomatique, CodeRegleAutomatisation, EvenementMetier, TypeEvenementMetier } from "@/types/automatisation";
@@ -141,11 +142,6 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
       // jamais une machine d'état inventée : une offre encore "en_cours", ou un compromis
       // "en_cours"/"realise", représentent une opportunité déjà activement engagée par un autre
       // chemin ; un compromis "annule" ne bloque jamais indéfiniment un futur cycle légitime.
-      // Aucune vérification sur les comptes rendus de visite : ce modèle ne porte aucune notion de
-      // visite "programmée/en cours" (uniquement des rapports déjà réalisés, après coup) — bloquer
-      // sur un ancien rapport créerait une interdiction éternelle non voulue, sans signal fiable
-      // pour la borner. Limite assumée et documentée (docs/KNOWN_LIMITATIONS.md), jamais un état
-      // inventé.
       const [offres, compromisListe] = await Promise.all([listerOffresPourBien(bienId), listerCompromisPourBien(bienId)]);
       const offreEnCours = offres.some((o) => o.acquereurId === acquereurId && o.statut === "en_cours");
       if (offreEnCours) return undefined;
@@ -153,6 +149,15 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
         (c) => c.acquereurId === acquereurId && (c.statut === "en_cours" || c.statut === "realise")
       );
       if (compromisAvance) return undefined;
+
+      // Visite déjà planifiée pour cette paire (ADR-040, lève la limite documentée par ADR-037) :
+      // le modèle porte désormais une vraie notion de visite "programmée", persistée et
+      // interrogeable — une visite 'planifiee' rend ce contact redondant (déjà en cours de
+      // traitement humain par un autre chemin), exactement comme une offre "en_cours". Une visite
+      // 'realisee' ou 'annulee' ne bloque en revanche jamais indéfiniment un futur cycle légitime
+      // — seul le statut 'planifiee' compte ici, jamais une simple existence historique.
+      const visitePlanifiee = await existeVisitePlanifieePourPaire(bienId, acquereurId);
+      if (visitePlanifiee) return undefined;
 
       // Anti-spam inter-cycle — distinct de l'idempotence ADR-032 (UNIQUE(regle_code,
       // evenement_id), déjà garantie par ailleurs) : ne crée jamais une seconde tâche ouverte pour

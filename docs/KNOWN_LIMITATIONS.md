@@ -12,9 +12,12 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   l'acquéreur d'un compte rendu ne peut pas être résolu (cas normalement impossible, la FK de
   `comptes_rendus_visite` garantit son existence — ADR-010), l'UI affiche "Acquéreur indisponible"
   plutôt que d'inventer un nom.
-- **Onglet "Visites → À venir"** — lit exclusivement le mock statique `data/agenda.ts`
-  (`rendezVousDuJour`), jamais `getAgendaSemaine()`/Google Calendar. Un bien réel n'affichera donc
-  jamais ses vraies visites à venir dans cet onglet, même avec Google Calendar connecté.
+- **Onglet "Visites → À venir"** — **levé par ADR-040** pour un bien réel : lit désormais `visites`
+  (statut `planifiee`, triées par `datePrevue`), matérialisées lors du passage par
+  `/visites/[id]/preparer`. Pour un bien mocké avec `DossierBien`, comportement inchangé (mock
+  statique `data/agenda.ts`). Reste néanmoins dépendant de la matérialisation : un rendez-vous
+  Calendar jamais préparé une seule fois par le conseiller ne produit encore aucune ligne `visites`
+  (aucun import automatique de tout le calendrier, ADR-040).
 - **Préparation de visite curatée** — un seul exemple mocké (`data/preparations.ts`,
   `prep-rdv-001`). Tout autre couple bien/acquéreur retombe sur une préparation minimale
   (faits réels uniquement, aucune section qualitative).
@@ -640,12 +643,10 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Automatisation commerciale du nouveau match (ADR-037)
 
-- **Aucune vérification de visite existante pour la paire** : `comptesRendusVisite` ne représente
-  que des rapports déjà réalisés (jamais une notion de visite programmée/en cours) — la règle
-  `nouveau_match_bien_acquereur` ne bloque donc jamais la création d'une tâche au prétexte qu'une
-  ancienne visite existe pour cette paire, même récente. Limite assumée (bloquer indéfiniment sur un
-  rapport ancien aurait été pire) plutôt qu'un état inventé faute de signal fiable dans le modèle
-  actuel pour distinguer une visite "encore pertinente" d'une visite historique.
+- **Levée par ADR-040** : la règle vérifie désormais une vraie visite `planifiee` pour la paire
+  précise (`existeVisitePlanifieePourPaire()`) avant de produire une tâche — une visite `realisee`
+  ou `annulee`, elle, ne bloque jamais indéfiniment un futur cycle légitime (seul le statut
+  `planifiee` compte, jamais une simple existence historique).
 - **Le filet de reprise générique existe désormais (ADR-038)** — voir la section dédiée ci-dessous ;
   une exécution `nouveau_match_bien_acquereur` restée `a_traiter` après un crash est reprise comme
   n'importe quelle autre règle, sans traitement spécial.
@@ -694,6 +695,32 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   opaque.
 - **Pas de statistiques commerciales sur cette page** (volume, CA, taux de conversion) — voir
   « Dashboard commercial » ci-dessus pour l'état de ce chantier séparé.
+
+## Cycle de vie d'une visite (ADR-040)
+
+- **Aucune création native indépendante de Calendar** : une visite Atlas naît uniquement en
+  passant par `/visites/[id]/preparer` pour un rendez-vous Calendar déjà résolu — aucun formulaire
+  « Nouvelle visite » indépendant. Documenté comme limite V1 assumée, pas un oubli.
+- **`taches.visite_id` référence toujours un compte rendu, jamais `visites.id`** : la tâche
+  automatique `suivi_apres_visite` (ADR-032) n'a pas été modifiée pour cibler la nouvelle entité —
+  `deriverRouteFicheCible()` (ADR-039) n'a donc pas été étendue pour ce type de cible, et une tâche
+  « Faire le suivi de la visite » n'affiche toujours aucun lien « Voir la fiche » depuis le cockpit.
+  Faire cibler `visites.id` par cette règle est un changement de modèle distinct, hors périmètre
+  ADR-040.
+- **Rien ne pointe encore vers `/visites/{id}` (identité Atlas)** : la route existe (redirige vers
+  la préparation via l'id Calendar stocké) mais aucune tâche ne la référence encore — voir le point
+  précédent.
+- **Aucune synchronisation Calendar bidirectionnelle** : reporter ou annuler une visite dans Atlas
+  ne modifie jamais l'événement Google Calendar d'origine, et une modification/suppression côté
+  Calendar n'est jamais répercutée activement sur une visite déjà matérialisée. Calendar reste une
+  source externe de planification en lecture seule ; seule l'action explicite du conseiller
+  (matérialisation, report, annulation) fait foi côté Atlas.
+- **Historique non rétroactif** : les `comptes_rendus_visite` créés avant ADR-040 restent avec
+  `visite_id = NULL` définitivement — aucun backfill par proximité de date ou toute autre
+  heuristique, conformément au principe déjà appliqué à `offre_visites` (ADR-019).
+- **Aucune suppression automatique d'une tâche « nouveau match » devenue redondante** : si une
+  visite est planifiée après qu'une tâche de ce type a déjà été ouverte pour la même paire, la
+  tâche existante n'est ni terminée ni masquée automatiquement — sujet distinct, non traité ici.
 
 ## Limites du moteur de matching
 

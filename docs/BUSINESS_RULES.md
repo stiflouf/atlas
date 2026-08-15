@@ -307,8 +307,10 @@ compatible à un instant donné"*, jamais *"produire une tâche quelle que soit 
 actuelle"*. Aucune tâche si, au moment du traitement : le bien ou l'acquéreur est introuvable ou
 archivé ; `evaluerCompatibilite()` n'est plus `compatible` (redevenu incompatible ou à vérifier) ;
 une offre `en_cours` ou un compromis `en_cours`/`realise` existe déjà pour cette paire précise (un
-compromis `annule` ne bloque jamais indéfiniment) ; une tâche de cette règle est déjà ouverte pour
-cette même paire (voir ci-dessous). Chaque cas retourne le résultat honnête "rien à produire",
+compromis `annule` ne bloque jamais indéfiniment) ; **une visite `planifiee` existe déjà pour cette
+paire précise** (`existeVisitePlanifieePourPaire()`, ADR-040 — une visite `realisee` ou `annulee`
+ne bloque jamais indéfiniment, seul `planifiee` compte) ; une tâche de cette règle est déjà ouverte
+pour cette même paire (voir ci-dessous). Chaque cas retourne le résultat honnête "rien à produire",
 jamais une erreur — une vraie panne technique continue, elle, à suivre le mécanisme d'échec/retry
 ADR-032 existant.
 
@@ -451,6 +453,37 @@ Tri final par date décroissante sur l'ensemble combiné. **Jamais** le texte li
 compte rendu n'apparaît dans l'historique — seulement le label court dérivé du champ structuré
 `interet`.
 
+## Cycle de vie d'une visite (ADR-040)
+
+**Fichiers** : `src/types/visite.ts`, `src/lib/visiteRepository.ts`, `src/actions/visite.ts`.
+
+Entité métier minimale `visites` — une rencontre planifiée entre UN Bien et UN Acquéreur, distincte
+à la fois du rendez-vous Google Calendar (jamais persisté comme fait métier) et du compte rendu
+après-coup (`comptes_rendus_visite`, jamais fusionné).
+
+**Trois statuts, aucun `en_cours`** : `planifiee` (initial) → `realisee` ou `annulee`. Chaque
+transition est un `UPDATE ... WHERE statut = 'planifiee'` (même patron que `terminerTache`) — jamais
+une écrasement depuis un état terminal. **Invariant absolu** : `date_prevue` dans le passé ne
+signifie jamais `realisee` — aucune inférence depuis le temps calendaire seul, seule une action
+explicite du conseiller transitionne le statut.
+
+**Matérialisation explicite, jamais un import de calendrier** : une visite naît uniquement lorsque
+le conseiller atteint `/visites/[id]/preparer` pour un rendez-vous dont le bien et l'acquéreur sont
+résolus sans ambiguïté (garde déjà existant de cette page). Idempotente au niveau DB (`UNIQUE` sur
+`rendez_vous_calendar_id`, pas seulement un find-before-insert) — deux accès concurrents à la même
+page ne créent jamais deux visites. Aucune matérialisation si bien/acquéreur ne sont pas de vrais
+UUID persistés (cas mock).
+
+**Report** (`modifierDatePrevueVisite`, `reporterVisiteAction`) : modifie `date_prevue` sur la même
+ligne, même id — jamais annulée puis recréée. **Annulation** (`annulerVisite`,
+`annulerVisiteAction`) : aucun motif structuré, aucune raison obligatoire. Les deux sont restreints
+aux visites encore `planifiee`.
+
+**Transition vers `realisee`** : posée dans la même transaction que l'enregistrement du compte
+rendu (voir ci-dessous), jamais un bouton "Marquer réalisée" séparé — remplir le compte rendu EST
+le geste qui réalise la visite. Une visite déjà tranchée (`realisee`/`annulee`) n'affiche plus le
+formulaire de compte rendu.
+
 ## Comptes rendus de visite
 
 **Fichiers** : `src/actions/enregistrerCompteRenduVisite.ts`, `src/lib/compteRenduVisiteRepository.ts`.
@@ -462,12 +495,22 @@ compte rendu n'apparaît dans l'historique — seulement le label court dérivé
 - `prochaineEtape` (texte libre, optionnel) **ne crée jamais de tâche automatiquement** — c'est un
   rappel textuel affiché dans la Mémoire du dossier ; créer une tâche à partir de cette
   information reste un geste manuel du conseiller (via "+ Ajouter une tâche").
+- `visiteId` (ADR-040, optionnel) : si présent et valide (même bien/acquéreur, statut encore
+  `planifiee`), le compte rendu et la transition `visites.statut → 'realisee'` sont écrits dans la
+  **même transaction** que l'émission de l'événement `visite_realisee` (déjà existant, ADR-032) —
+  jamais un trou entre "compte rendu enregistré" et "visite marquée réalisée". `interet` reste
+  **uniquement** sur le compte rendu, jamais dupliqué sur `visites.statut` : le premier répond à
+  "quel est le retour de l'acquéreur ?", le second à "que s'est-il passé ?".
 
 ## Onglet Visites → Effectuées de la fiche bien
 
 **Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section
 "Effectuées" est dérivée de `comptes_rendus_visite`, triés par `dateVisite` décroissante — jamais
 mélangée au mock (`dossier.visitesEffectuees` reste affiché tel quel si un dossier existe).
+
+**« À venir » (ADR-040)** : pour un bien réel, dérivée désormais de `visites` (statut `planifiee`,
+triées par `datePrevue`) — remplace un mock statique qui n'affichait jamais rien de vrai pour un
+bien réel avant cette ADR. Comportement mock inchangé pour un bien avec `dossier`.
 
 | Champ affiché | Source | Traitement |
 |---|---|---|

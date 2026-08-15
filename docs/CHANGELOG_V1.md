@@ -936,6 +936,47 @@ Aucune migration : toutes les données affichées existaient déjà. `page.tsx` 
 aucun test ; 20 nouveaux tests (`TacheItem.test.tsx`, 13 cas ; `page.test.tsx`, 7 cas, intégration
 Postgres réelle sans mock du repository) — suite complète du projet passante (912 tests).
 
+## 40. Cycle de vie d'une visite — entité métier minimale `visites`
+
+Un audit préalable en lecture seule a établi un fait fondamental jusqu'ici jamais formulé
+explicitement : Atlas ne possédait **aucune** entité métier « visite ». Ce qu'un conseiller appelait
+ainsi recouvrait deux objets disjoints, jamais reliés par un identifiant commun — un événement
+Google Calendar éphémère, jamais persisté comme fait métier, et un compte rendu créé uniquement
+après coup (`comptes_rendus_visite`). Cette absence expliquait deux limites déjà documentées :
+l'incapacité d'ADR-037 à vérifier une visite déjà programmée avant de créer une tâche « nouveau
+match », et l'onglet « Visites → À venir » de la fiche bien, mort pour tout bien réel.
+
+`visites` (nouvelle table, ADR-040) comble ce manque au minimum strict : trois statuts
+(`planifiee`/`realisee`/`annulee`, aucun `en_cours`), matérialisée **explicitement** lorsque le
+conseiller atteint la page de préparation pour un rendez-vous résolu sans ambiguïté — jamais un
+import silencieux de tout le calendrier, idempotent au niveau DB (`UNIQUE` sur l'id Calendar
+d'origine, pas seulement un find-before-insert). Invariant absolu : une date prévue dépassée ne
+signifie jamais `realisee`, seule une action explicite du conseiller transitionne le statut.
+
+`comptes_rendus_visite` reste une table strictement séparée (ADR-011 toujours valide) — `interet`
+n'est jamais dupliqué sur `visites` : le statut répond à « que s'est-il passé ? », `interet`
+continue de répondre à « quel est le retour de l'acquéreur ? ». Enregistrer un compte rendu sur une
+visite planifiée transite désormais son statut vers `realisee` dans la **même transaction** que
+l'émission de l'événement `visite_realisee` (déjà existant depuis ADR-032, réutilisé tel quel,
+aucun second type créé) — remplir le compte rendu EST le geste qui réalise la visite, jamais un
+bouton séparé.
+
+La règle `nouveau_match_bien_acquereur` (ADR-037) exploite désormais ce nouveau signal : une visite
+`planifiee` pour la paire précise rend la tâche redondante, exactement comme une offre `en_cours` —
+mais une visite `realisee` ou `annulee` ne bloque jamais indéfiniment un futur cycle légitime, seul
+le statut `planifiee` compte. L'onglet « Visites → À venir » de la fiche bien lit désormais cette
+même table pour tout bien réel, remplaçant un mock statique qui n'affichait jamais rien de vrai.
+Une nouvelle route `/visites/{idAtlas}` offre une identité URL stable (redirige vers la préparation
+déjà existante) — rien n'y pointe encore aujourd'hui (la tâche de suivi post-visite cible toujours
+un compte rendu, pas une visite ; câbler cette liaison reste un chantier distinct, documenté comme
+limite).
+
+Aucune migration de données historiques : aucune visite n'existait avant cette ADR, et les comptes
+rendus déjà présents restent avec `visite_id` absent, sans aucun backfill par proximité de date.
+22 nouveaux tests (`visiteRepository.test.ts`, 14 cas ; extensions ciblées de
+`enregistrerCompteRenduVisite.test.ts` et `catalogueRegles.nouveauMatch.test.ts`, +4 cas chacun) —
+suite complète du projet passante (934 tests).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

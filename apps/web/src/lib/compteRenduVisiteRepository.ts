@@ -12,6 +12,7 @@ function ligneVersCompteRendu(ligne: LigneCompteRendu): CompteRenduVisite {
     id: ligne.id,
     bienId: ligne.bienId,
     acquereurId: ligne.acquereurId,
+    visiteId: ligne.visiteId ?? undefined,
     dateVisite: ligne.dateVisite,
     retour: ligne.retour,
     interet: ligne.interet as Interet,
@@ -61,6 +62,7 @@ export async function enregistrerCompteRenduVisite(
     .values({
       bienId: input.bienId,
       acquereurId: input.acquereurId,
+      visiteId: input.visiteId ?? null,
       dateVisite: input.dateVisite,
       retour: input.retour,
       interet: input.interet,

@@ -18,6 +18,9 @@ import {
   selectionnerHistoriqueRecent,
 } from "@/lib/memoireDossier";
 import { enregistrerCompteRenduVisiteAction } from "@/actions/enregistrerCompteRenduVisite";
+import { annulerVisiteAction, reporterVisiteAction } from "@/actions/visite";
+import { materialiserVisite } from "@/lib/visiteRepository";
+import { LABEL_STATUT_VISITE, type Visite } from "@/types/visite";
 import { LABEL_INTERET, type Interet } from "@/types/compteRenduVisite";
 import { formatDateISO } from "@/lib/temps";
 import { geocoderAdresse } from "@/lib/geocodage/ignClient";
@@ -38,6 +41,14 @@ import type { ProfilAcquereur } from "@/types/client";
 import type { RendezVous } from "@/types/agenda";
 
 type PageProps = { params: Promise<{ id: string }> };
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const VARIANT_BADGE_STATUT_VISITE = {
+  planifiee: "accent",
+  realisee: "success",
+  annulee: "muted",
+} as const;
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
@@ -117,6 +128,25 @@ export default async function PreparerVisite({ params }: PageProps) {
   const acquereur = await getClientById(contexte.client.clientId);
   if (!bien || !acquereur) notFound();
 
+  // Matérialisation explicite de la Visite Atlas (ADR-040) : le conseiller vient d'atteindre cette
+  // page avec un bien/acquéreur résolus sans ambiguïté (le seul garde-fou déjà en place ci-dessus,
+  // "réutilise-la plutôt que créer un second écran") — c'est le geste explicite qui fait entrer ce
+  // rendez-vous Calendar dans Atlas comme une vraie visite, jamais un import silencieux de tout le
+  // calendrier. Idempotent au niveau DB (UNIQUE sur rendez_vous_calendar_id) : ouvrir cette page
+  // plusieurs fois pour le même rendez-vous ne matérialise jamais deux visites. Aucun fallback
+  // mock : si bien/acquéreur ne sont pas de vrais UUID persistés (base entièrement vide, tout
+  // repose encore sur les mocks), aucune visite n'est créée — le reste de la page continue de
+  // fonctionner exactement comme avant ADR-040 (comportement déjà existant, jamais régressé).
+  const visite: Visite | undefined =
+    UUID_REGEX.test(bien.id) && UUID_REGEX.test(acquereur.id)
+      ? await materialiserVisite({
+          bienId: bien.id,
+          acquereurId: acquereur.id,
+          datePrevue: rdv.date ?? formatDateISO(new Date()),
+          rendezVousCalendarId: rdv.id,
+        })
+      : undefined;
+
   // Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (comptes
   // rendus, notes, tâches), jamais interprété ni résumé. N'alimente ni pointsAttention ni
   // pointsForts.
@@ -193,8 +223,11 @@ export default async function PreparerVisite({ params }: PageProps) {
 
       {/* En-tête */}
       <div className="mb-8">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <Badge variant="accent">Préparation de visite</Badge>
+          {/* Statut Visite (ADR-040) — absent si la visite n'a pas pu être matérialisée (bien/
+              acquéreur mockés) : comportement identique à avant ADR-040 dans ce cas. */}
+          {visite && <Badge variant={VARIANT_BADGE_STATUT_VISITE[visite.statut]}>{LABEL_STATUT_VISITE[visite.statut]}</Badge>}
           <span className="text-[13px] text-[#94a3b8]">{prep.heureVisite}</span>
         </div>
         <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mt-2">
@@ -501,10 +534,51 @@ export default async function PreparerVisite({ params }: PageProps) {
                 : "Cet acquéreur est archivé"}{" "}
             — impossible d'ajouter un nouveau compte rendu.
           </p>
+        ) : visite && visite.statut !== "planifiee" ? (
+          // Visite déjà tranchée (ADR-040) — jamais un second compte rendu ou une seconde
+          // transition depuis un état terminal (double soumission, contournement de formulaire).
+          <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+            Cette visite a déjà été marquée « {LABEL_STATUT_VISITE[visite.statut]} ».
+          </p>
         ) : (
+        <>
+          {/* Actions de planification (ADR-040) — reporter modifie la même visite (même id,
+              jamais annulée+recréée) ; annuler ne demande aucun motif structuré. Absentes si la
+              visite n'a pas pu être matérialisée (bien/acquéreur mockés). */}
+          {visite && (
+            <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-[#f1f5f9]">
+              <form action={reporterVisiteAction} className="flex items-center gap-2">
+                <input type="hidden" name="id" value={visite.id} />
+                <input type="hidden" name="rendezVousCalendarId" value={rdv.id} />
+                <input
+                  type="date"
+                  name="nouvelleDatePrevue"
+                  defaultValue={visite.datePrevue}
+                  className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                />
+                <button
+                  type="submit"
+                  className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                >
+                  Reporter
+                </button>
+              </form>
+              <form action={annulerVisiteAction}>
+                <input type="hidden" name="id" value={visite.id} />
+                <input type="hidden" name="rendezVousCalendarId" value={rdv.id} />
+                <button
+                  type="submit"
+                  className="text-[13px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors"
+                >
+                  Annuler la visite
+                </button>
+              </form>
+            </div>
+          )}
         <form action={enregistrerCompteRenduVisiteAction} className="flex flex-col gap-4">
           <input type="hidden" name="bienId" value={bien.id} />
           <input type="hidden" name="acquereurId" value={acquereur.id} />
+          <input type="hidden" name="visiteId" value={visite?.id ?? ""} />
 
           <div>
             <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Date de la visite</label>
@@ -559,6 +633,7 @@ export default async function PreparerVisite({ params }: PageProps) {
             Enregistrer le compte rendu
           </button>
         </form>
+        </>
         )}
       </section>
 

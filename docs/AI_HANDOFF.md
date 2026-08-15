@@ -19,8 +19,10 @@ de recherche géographique acquéreur / critère géographique du moteur de comp
 détection durable des transitions de compatibilité vers un événement métier append-only (ADR-036),
 une règle d'automatisation ADR-032 exploitant cet événement pour créer une tâche commerciale
 "nouveau match", désactivée par défaut (ADR-037), un filet générique de reprise après crash pour
-les `executions_automatisation` restées bloquées (ADR-038), et un raffinement ciblé du cockpit
-commercial quotidien existant `/` — lien « Voir la fiche », badge « En retard », état vide (ADR-039).
+les `executions_automatisation` restées bloquées (ADR-038), un raffinement ciblé du cockpit
+commercial quotidien existant `/` — lien « Voir la fiche », badge « En retard », état vide (ADR-039)
+—, et une entité métier minimale `visites` (statuts `planifiee`/`realisee`/`annulee`, matérialisée
+explicitement depuis la page de préparation) distincte du compte rendu après-coup (ADR-040).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -109,9 +111,19 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   `nouveau_match_bien_acquereur` (`catalogueRegles.ts`) crée une tâche ciblant l'**acquéreur**
   (jamais le bien — `taches` impose au plus une cible) tant que l'événement reste `compatible` au
   moment du traitement, l'entité non archivée, et qu'aucune offre `en_cours`/compromis
-  `en_cours`/`realise`/tâche déjà ouverte n'existe pour cette paire précise. **Tant que cette règle
+  `en_cours`/`realise`/**visite `planifiee` (ADR-040)**/tâche déjà ouverte n'existe pour cette paire
+  précise. Une visite `realisee`/`annulee` ne bloque jamais indéfiniment. **Tant que cette règle
   n'est pas activée explicitement depuis `/automatisations`, 0 tâche est créée** — ne jamais
   supposer le contraire. Aucun email, aucun Gmail dans cette ADR.
+- **`visites` (ADR-040) est une entité distincte de `comptes_rendus_visite`, jamais fusionnée** —
+  `visites.statut` (`planifiee`/`realisee`/`annulee`) répond à « que s'est-il passé ? »,
+  `comptesRendusVisite.interet` continue seul de répondre à « quel est le retour de l'acquéreur ? ».
+  Une visite naît **uniquement** via `/visites/[id]/preparer` (matérialisation explicite, idempotente
+  au niveau DB sur `rendez_vous_calendar_id`) — ne jamais supposer une création native indépendante
+  de Calendar, elle n'existe pas. `taches.visite_id` référence toujours un **compte rendu**, jamais
+  `visites.id` (nom trompeur hérité d'avant cette ADR) — `deriverRouteFicheCible()` n'a donc pas été
+  étendue pour ce type de cible. Aucune inférence depuis une date passée : `date_prevue < maintenant`
+  ne signifie jamais `realisee`.
 - **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
   `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
   `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
@@ -190,6 +202,9 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/app/page.tsx` | Cockpit commercial quotidien « Aujourd'hui » (ADR-026/039) — seule route de ce type, ne jamais en dupliquer une deuxième |
 | `src/components/aujourd-hui/TacheItem.tsx` | Composant canonique de rendu d'une tâche (cockpit + fiches bien/acquéreur/prospect vendeur) — lien « Voir la fiche », badge « En retard » (ADR-039) |
 | `src/types/tache.ts` | `deriverCibleTache()` (ADR-028) et `deriverRouteFicheCible()` (ADR-039) — dérivées, jamais une requête ni un parsing de titre |
+| `src/lib/visiteRepository.ts` | Entité `visites` (ADR-040) — matérialisation idempotente (`materialiserVisite`), transitions gardées (`marquerVisiteRealisee`/`annulerVisite`), report (`modifierDatePrevueVisite`), signal ADR-037 (`existeVisitePlanifieePourPaire`) |
+| `src/actions/visite.ts` | `annulerVisiteAction`/`reporterVisiteAction` (ADR-040) |
+| `src/app/visites/[id]/page.tsx` | Identité URL Atlas d'une visite (ADR-040) — redirige vers `/visites/{rendezVousCalendarId}/preparer`, rien n'y pointe encore aujourd'hui |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |

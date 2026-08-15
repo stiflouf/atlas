@@ -14,6 +14,7 @@ import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, deriverStatutTache, type Tac
 import type { NoteBien } from "@/types/noteBien";
 import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
+import { LABEL_STATUT_VISITE, type Visite } from "@/types/visite";
 import {
   FAMILLE_PAR_TYPE_DOCUMENT,
   LABEL_CATEGORIE_DOCUMENT,
@@ -131,6 +132,7 @@ export default function BienTabs({
   taches,
   notes,
   comptesRendus,
+  visites = [],
   documents,
   offres,
   compromis,
@@ -149,6 +151,10 @@ export default function BienTabs({
   taches: Tache[];
   notes: NoteBien[];
   comptesRendus: CompteRenduVisite[];
+  // ADR-040 — visites planifiées réelles pour ce bien, jamais un fallback mock (voir onglet
+  // "À venir" ci-dessous : source unique de vérité désormais, remplace le mock statique
+  // rendezVousDuJour utilisé avant ADR-040 pour tout bien réel).
+  visites?: Visite[];
   documents: DocumentBien[];
   offres: Offre[];
   compromis: Compromis[];
@@ -214,7 +220,14 @@ export default function BienTabs({
     { id: "compatibilite", label: "Acquéreurs compatibles" },
   ];
 
-  const visitesAVenir = rendezVousDuJour.filter((rdv) => rdv.bien?.id === bien.id);
+  // Mock uniquement pour un bien mocké (dossier) — un bien réel n'a jamais de visite persistée
+  // dans ce mock statique. Pour un bien réel, la table `visites` (ADR-040) est désormais la
+  // source unique de vérité : avant ADR-040, cet onglet lisait aussi ce mock pour un bien réel et
+  // n'affichait donc jamais rien de vrai (limite documentée, docs/KNOWN_LIMITATIONS.md).
+  const visitesAVenirMock = rendezVousDuJour.filter((rdv) => rdv.bien?.id === bien.id);
+  const visitesAVenirReelles = [...visites]
+    .filter((v) => v.statut === "planifiee")
+    .sort((a, b) => (a.datePrevue < b.datePrevue ? -1 : 1));
   const visitesPasseesMock = dossier
     ? [...dossier.visitesEffectuees].sort((a, b) => (a.date < b.date ? 1 : -1))
     : [];
@@ -354,16 +367,38 @@ export default function BienTabs({
         <div className="flex flex-col gap-6">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">À venir</p>
-            {visitesAVenir.length === 0 ? (
-              <p className="text-[14px] text-[#94a3b8]">Aucune visite à venir dans l'agenda.</p>
+            {dossier ? (
+              visitesAVenirMock.length === 0 ? (
+                <p className="text-[14px] text-[#94a3b8]">Aucune visite à venir dans l'agenda.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {visitesAVenirMock.map((rdv) => (
+                    <div key={rdv.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                      <p className="text-[13px] font-medium text-[#64748b]">{rdv.heure} — Aujourd'hui</p>
+                      <p className="text-[14px] font-medium text-[#0f172a] mt-0.5">{rdv.client?.prenom} {rdv.client?.nom}</p>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : visitesAVenirReelles.length === 0 ? (
+              <p className="text-[14px] text-[#94a3b8]">Aucune visite à venir enregistrée pour ce bien.</p>
             ) : (
               <div className="flex flex-col gap-2">
-                {visitesAVenir.map((rdv) => (
-                  <div key={rdv.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-                    <p className="text-[13px] font-medium text-[#64748b]">{rdv.heure} — Aujourd'hui</p>
-                    <p className="text-[14px] font-medium text-[#0f172a] mt-0.5">{rdv.client?.prenom} {rdv.client?.nom}</p>
-                  </div>
-                ))}
+                {visitesAVenirReelles.map((v) => {
+                  const acquereur = acquereursParId.get(v.acquereurId);
+                  return (
+                    <div key={v.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <p className="text-[13px] font-medium text-[#64748b]">{formatDate(v.datePrevue)}</p>
+                        <span className="text-[11px] text-[#94a3b8]">·</span>
+                        <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_VISITE[v.statut]}</span>
+                      </div>
+                      <p className="text-[14px] font-medium text-[#0f172a]">
+                        {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

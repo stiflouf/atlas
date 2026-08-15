@@ -22,6 +22,7 @@ const { creerBien, archiverBien, desarchiverBien } = await import("@/lib/bienRep
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
 const { enregistrerOffre } = await import("@/lib/offreRepository");
 const { enregistrerCompromis, marquerCompromisAnnule } = await import("@/lib/compromisRepository");
+const { materialiserVisite, marquerVisiteRealisee, annulerVisite } = await import("@/lib/visiteRepository");
 const { emettreEvenementEtPreparerExecutions } = await import("./evenementMetierRepository");
 const { traiterExecutionsEnAttente } = await import("./moteur");
 const { definirActivationAutomatisation } = await import("./configurationAutomatisationRepository");
@@ -330,6 +331,70 @@ describe("règle nouveau_match_bien_acquereur — relation commerciale déjà av
     const bien = await creerBienDeTest("COMPR2", 300000);
     const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-01-01" });
     await marquerCompromisAnnule(compromis.id, "2026-01-15", "financement_refuse");
+
+    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const champs = await trouverRegle(REGLE)!.construireTache(evenement);
+    expect(champs).toBeDefined();
+  });
+});
+
+describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, lève la limite documentée par ADR-037)", () => {
+  it("visite planifiee sur la paire : aucune tâche", async () => {
+    const acquereur = await creerAcquereurDeTest("VISITE1", 400000);
+    const bien = await creerBienDeTest("VISITE1", 300000);
+    await materialiserVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-09-01",
+      rendezVousCalendarId: `test-visite-${bien.id}`,
+    });
+
+    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    await expect(trouverRegle(REGLE)!.construireTache(evenement)).resolves.toBeUndefined();
+  });
+
+  it("visite realisee sur la paire : ne bloque pas indéfiniment, la tâche reste créée", async () => {
+    const acquereur = await creerAcquereurDeTest("VISITE2", 400000);
+    const bien = await creerBienDeTest("VISITE2", 300000);
+    const visite = await materialiserVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-01-01",
+      rendezVousCalendarId: `test-visite-${bien.id}`,
+    });
+    await marquerVisiteRealisee(visite.id);
+
+    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const champs = await trouverRegle(REGLE)!.construireTache(evenement);
+    expect(champs).toBeDefined();
+  });
+
+  it("visite annulee sur la paire : ne bloque pas, la tâche reste créée", async () => {
+    const acquereur = await creerAcquereurDeTest("VISITE3", 400000);
+    const bien = await creerBienDeTest("VISITE3", 300000);
+    const visite = await materialiserVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-09-01",
+      rendezVousCalendarId: `test-visite-${bien.id}`,
+    });
+    await annulerVisite(visite.id);
+
+    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const champs = await trouverRegle(REGLE)!.construireTache(evenement);
+    expect(champs).toBeDefined();
+  });
+
+  it("visite planifiee sur un AUTRE bien pour le même acquéreur : ne bloque pas cette paire précise", async () => {
+    const acquereur = await creerAcquereurDeTest("VISITE4", 400000);
+    const bien = await creerBienDeTest("VISITE4", 300000);
+    const autreBien = await creerBienDeTest("VISITE4-AUTRE", 300000);
+    await materialiserVisite({
+      bienId: autreBien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-09-01",
+      rendezVousCalendarId: `test-visite-${autreBien.id}`,
+    });
 
     const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
