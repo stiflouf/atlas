@@ -541,6 +541,10 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   d'interactions structuré.
 - **Aucune récurrence** : une tâche ne se recrée jamais automatiquement après avoir été terminée
   ou annulée.
+- **La tâche « nouveau match » (ADR-037) cible l'acquéreur, jamais le bien** (ADR-039) : le lien
+  « Voir la fiche » du cockpit résout donc uniquement vers la fiche acquéreur — le bien associé
+  n'est pas une seconde cible structurée de la tâche (`taches_une_seule_cible_check`), et n'a donc
+  aucun lien dédié depuis le cockpit.
 
 ## Compatibilité Bien ↔ Acquéreur (ADR-034)
 
@@ -676,6 +680,20 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Le balayage de reprise (`/api/automatisations/reprise`) dépend d'un cron externe**, comme les
   autres endpoints de ce type (ADR-033/036) — sans déclencheur configuré, seul le traitement
   synchrone immédiatement après chaque mutation ferme la boucle.
+
+## Cockpit commercial « Aujourd'hui » (ADR-039)
+
+- **Lien « Voir la fiche » limité aux trois types de cible ayant une fiche navigable** (bien,
+  acquéreur, prospect vendeur) — une tâche liée à une visite, une offre, un compromis ou une
+  rémunération n'affiche aucun lien direct depuis le cockpit (ces entités ne sont consultables que
+  depuis la fiche bien qui les héberge) ; aucune page dédiée n'existe encore pour elles.
+- **Le bien associé à une tâche « nouveau match » n'a pas de lien dédié** — voir la limitation
+  correspondante dans la section « Tâches (ADR-028) » ci-dessus.
+- **Aucune priorisation ni résumé par IA** : le tri reste entièrement déterministe (`tachePriority.ts`,
+  inchangé par cette ADR) — pas de score affiché au conseiller, jamais de classement heuristique
+  opaque.
+- **Pas de statistiques commerciales sur cette page** (volume, CA, taux de conversion) — voir
+  « Dashboard commercial » ci-dessus pour l'état de ce chantier séparé.
 
 ## Limites du moteur de matching
 

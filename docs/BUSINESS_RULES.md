@@ -392,6 +392,33 @@ explicite distincte de la simple terminaison. `en_attente` (`StatutTache`) est r
 vraie notion métier d'attente — jamais dérivé aujourd'hui ; l'absence d'échéance s'affiche "Sans
 échéance", jamais "En attente".
 
+## Cockpit commercial « Aujourd'hui » (ADR-039)
+
+**Fichiers** : `src/app/page.tsx` (route `/`, seul cockpit — aucune route dédiée créée),
+`src/components/aujourd-hui/TacheItem.tsx`, `src/types/tache.ts` (`deriverRouteFicheCible`).
+
+`/` centralise déjà alertes (ADR-026), agenda (Google Calendar ou source démo) et tâches — ADR-039
+en est un raffinement ciblé, jamais une reconstruction : aucun graphique, KPI, score affiché ou
+classement par IA.
+
+**« Voir la fiche »** : dérivée de `deriverCibleTache()` (ADR-028), sans requête supplémentaire.
+Seuls les types de cible possédant une fiche navigable réelle (bien, acquéreur, prospect vendeur)
+produisent un lien — visite/offre/compromis/rémunération n'ont aucune page dédiée aujourd'hui
+(consultables uniquement depuis la fiche bien qui les héberge) et n'affichent donc jamais de lien.
+Pour la tâche `nouveau_match_bien_acquereur` (ADR-037), le lien pointe vers l'acquéreur — sa seule
+cible structurée ; jamais un lien Bien reconstruit par parsing du titre ou relecture de l'événement
+ADR-036. « Préparer un email » reste inchangé et additif.
+
+**Badge « En retard »** : affiche `estEnRetard()` (`tachePriority.ts`), déjà écrite mais jusqu'ici
+jamais utilisée par l'UI — aucune seconde définition du retard. Une tâche sans échéance n'est
+structurellement jamais en retard.
+
+**État vide** : « Rien à traiter pour le moment. » affiché uniquement quand « Dossiers nécessitant
+une action » **et** « Autres tâches » sont simultanément vides — n'apparaît jamais si l'agenda ou les
+alertes ont par ailleurs du contenu.
+
+Aucune migration : toutes les données affichées existaient déjà.
+
 ## Mémoire du dossier (page de préparation de visite)
 
 **Fichier** : `src/lib/memoireDossier.ts`. Trois fonctions pures, chacune limitée et triée

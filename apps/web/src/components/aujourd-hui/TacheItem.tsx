@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { terminerTacheAction } from "@/actions/terminerTache";
 import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
-import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, type Tache } from "@/types/tache";
+import { estEnRetard } from "@/lib/tachePriority";
+import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, deriverRouteFicheCible, type Tache } from "@/types/tache";
 import type { CodeRegleAutomatisation } from "@/types/automatisation";
+import Badge from "@/components/ui/Badge";
 
 // "Sans échéance" (ADR-028) — jamais "En attente" : une tâche ouverte sans échéance n'est pas une
 // tâche "en attente" au sens métier (réservé à une future notion d'attente client/notaire/document,
@@ -14,6 +16,9 @@ export default function TacheItem({
   tache: Tache;
   redirectTo?: string;
 }) {
+  const routeFiche = deriverRouteFicheCible(tache);
+  const cible = deriverCibleTache(tache);
+
   return (
     <div className="flex items-start gap-3 py-2.5">
       <form action={terminerTacheAction} className="mt-0.5 shrink-0">
@@ -30,18 +35,24 @@ export default function TacheItem({
         {tache.contexte && (
           <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>
         )}
-        <p className="text-[11px] text-[#94a3b8] mt-0.5">
-          {tache.echeance ? (
-            <>
-              Échéance :{" "}
-              {new Date(tache.echeance).toLocaleDateString("fr-FR", {
-                day: "numeric",
-                month: "long",
-              })}
-            </>
-          ) : (
-            LABEL_ECHEANCE_ABSENTE
-          )}
+        <p className="text-[11px] text-[#94a3b8] mt-0.5 flex items-center gap-1.5 flex-wrap">
+          <span>
+            {tache.echeance ? (
+              <>
+                Échéance :{" "}
+                {new Date(tache.echeance).toLocaleDateString("fr-FR", {
+                  day: "numeric",
+                  month: "long",
+                })}
+              </>
+            ) : (
+              LABEL_ECHEANCE_ABSENTE
+            )}
+          </span>
+          {/* estEnRetard() (src/lib/tachePriority.ts) reste l'unique définition du retard — jamais
+              une seconde règle recalculée ici : ce badge ne fait qu'afficher un fait déjà déterminé
+              par le tri (ADR-039), une tâche sans échéance n'est structurellement jamais en retard. */}
+          {estEnRetard(tache) && <Badge variant="danger">En retard</Badge>}
         </p>
         {tache.origine === "automatique" && (
           <p className="text-[11px] text-[#94a3b8] mt-0.5">
@@ -51,14 +62,28 @@ export default function TacheItem({
               : "inconnue"}
           </p>
         )}
-        {deriverCibleTache(tache) && (
-          <Link
-            href={`/communications/nouveau?tacheId=${tache.id}`}
-            className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mt-1 inline-block"
-          >
-            Préparer un email
-          </Link>
-        )}
+        <div className="flex items-center gap-3 mt-1">
+          {/* Voir la fiche (ADR-039) : navigation directe vers la cible structurée de la tâche —
+              jamais une seconde cible reconstruite (ex. le bien d'un "nouveau match", qui ne cible
+              structurellement que l'acquéreur, ADR-028/037). Absent si la cible n'a aucune fiche
+              navigable (deriverRouteFicheCible), jamais un lien factice. */}
+          {routeFiche && (
+            <Link
+              href={routeFiche}
+              className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors inline-block"
+            >
+              Voir la fiche
+            </Link>
+          )}
+          {cible && (
+            <Link
+              href={`/communications/nouveau?tacheId=${tache.id}`}
+              className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors inline-block"
+            >
+              Préparer un email
+            </Link>
+          )}
+        </div>
       </div>
     </div>
   );

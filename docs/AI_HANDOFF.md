@@ -18,8 +18,9 @@ moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compat
 de recherche géographique acquéreur / critère géographique du moteur de compatibilité (ADR-035),
 détection durable des transitions de compatibilité vers un événement métier append-only (ADR-036),
 une règle d'automatisation ADR-032 exploitant cet événement pour créer une tâche commerciale
-"nouveau match", désactivée par défaut (ADR-037), et un filet générique de reprise après crash pour
-les `executions_automatisation` restées bloquées (ADR-038).
+"nouveau match", désactivée par défaut (ADR-037), un filet générique de reprise après crash pour
+les `executions_automatisation` restées bloquées (ADR-038), et un raffinement ciblé du cockpit
+commercial quotidien existant `/` — lien « Voir la fiche », badge « En retard », état vide (ADR-039).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -121,6 +122,13 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   **jamais** la source de l'idempotence. Plafond fixe `MAX_TENTATIVES_AUTOMATISATION = 5` —
   au-delà, `echouee` définitivement, jamais un retry automatique (comme pour toute autre erreur
   technique réelle).
+- **`/` est déjà le cockpit commercial quotidien (ADR-039), jamais une seconde route à créer** —
+  ne jamais construire un nouveau tableau de bord `/aujourdhui`, `/taches` ou `/cockpit` : l'audit
+  ADR-039 a confirmé que la page existante centralise déjà alertes/agenda/tâches. Le lien « Voir la
+  fiche » (`deriverRouteFicheCible()`, `src/types/tache.ts`) ne couvre que les cibles bien/acquéreur/
+  prospect vendeur ; la tâche `nouveau_match_bien_acquereur` (ADR-037) résout vers l'**acquéreur**,
+  jamais un lien Bien reconstruit par parsing du titre. Aucune priorisation par IA, aucun score
+  affiché, aucun graphique — le tri reste entièrement `tachePriority.ts`, inchangé.
 - **Géographie (ADR-035) limitée à la granularité commune/arrondissement, jamais un rayon** —
   `bien.codeInseeCommune` (citycode IGN, une chaîne, jamais un entier) est le seul identifiant
   géographique lu par le moteur ; `ville`/`codePostal` du bien ne sont **jamais** comparés à un
@@ -179,6 +187,9 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037) et `listerExecutionsATraiter()`/`incrementerTentativeExecution()` (ADR-038) |
 | `src/lib/automatisations/reprise.ts` | Filet de reprise après crash (ADR-038) — réutilise `traiterExecutionsEnAttente()` (`moteur.ts`) telle quelle, jamais une seconde implémentation |
 | `src/app/api/automatisations/reprise/route.ts` | Endpoint de reprise (ADR-038) — même patron d'authentification que `/api/automatisations/scan`, secret dédié |
+| `src/app/page.tsx` | Cockpit commercial quotidien « Aujourd'hui » (ADR-026/039) — seule route de ce type, ne jamais en dupliquer une deuxième |
+| `src/components/aujourd-hui/TacheItem.tsx` | Composant canonique de rendu d'une tâche (cockpit + fiches bien/acquéreur/prospect vendeur) — lien « Voir la fiche », badge « En retard » (ADR-039) |
+| `src/types/tache.ts` | `deriverCibleTache()` (ADR-028) et `deriverRouteFicheCible()` (ADR-039) — dérivées, jamais une requête ni un parsing de titre |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |

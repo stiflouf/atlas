@@ -109,3 +109,24 @@ export function deriverCibleTache(tache: Tache): CibleTache | undefined {
   }
   return undefined;
 }
+
+// Préfixe de route pour les seuls types de cible possédant réellement une fiche navigable dans
+// Atlas (ADR-039) — volontairement partiel : visite/offre/compromis/remuneration n'ont aucune page
+// dédiée aujourd'hui (consultables uniquement depuis la fiche bien qui les héberge), jamais un lien
+// factice construit pour elles.
+const ROUTE_FICHE_PAR_TYPE_CIBLE: Partial<Record<TypeCible, string>> = {
+  bien: "/biens",
+  acquereur: "/clients",
+  prospectVendeur: "/prospects-vendeurs",
+};
+
+// `undefined` = aucune fiche navigable pour ce type de cible (ou aucune cible du tout) — jamais un
+// lien construit à l'aveugle. Ne dit rien sur l'archivage de l'entité elle-même : une cible
+// archivée reste consultable (ADR-012, une fiche archivée s'affiche, seuls les flux actifs
+// l'excluent), la route reste donc valide dans tous les cas.
+export function deriverRouteFicheCible(tache: Tache): string | undefined {
+  const cible = deriverCibleTache(tache);
+  if (!cible) return undefined;
+  const prefixe = ROUTE_FICHE_PAR_TYPE_CIBLE[cible.type];
+  return prefixe ? `${prefixe}/${cible.id}` : undefined;
+}

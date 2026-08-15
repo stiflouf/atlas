@@ -284,6 +284,13 @@ export default async function AujourdHui() {
           </div>
         </section>
       )}
+
+      {/* État vide (ADR-039) — scopé aux seules actions/tâches : n'apparaît jamais si l'agenda ou
+          les alertes ont par ailleurs du contenu, seulement quand il n'y a structurellement rien à
+          traiter dans les deux sections ci-dessus. */}
+      {dossiersAttention.length === 0 && autresTaches.length === 0 && (
+        <p className="text-[13px] text-[#94a3b8]">Rien à traiter pour le moment.</p>
+      )}
     </div>
   );
 }

@@ -913,6 +913,29 @@ l'idempotence/reprise de cette ADR.
 concurrence réelle, `undefined`/erreur technique toujours terminaux, activation figée jamais
 contournée — suite complète du projet passante.
 
+## 39. Cockpit commercial quotidien / « À faire aujourd'hui »
+
+Un audit préalable en lecture seule a établi une correction de prémisse devenue décision
+d'architecture : la page `/` (« Aujourd'hui ») est **déjà** le cockpit commercial quotidien d'Atlas
+— alertes (ADR-026), agenda et tâches priorisées déterministiquement (`tachePriority.ts`) y
+existaient déjà. Cette passe n'a donc construit ni nouvelle route ni nouveau tableau de bord : un
+raffinement ciblé et testé de l'existant, comblant trois manques réels identifiés par l'audit.
+
+`deriverRouteFicheCible()` (nouveau, `src/types/tache.ts`) dérive un lien « Voir la fiche » depuis
+`deriverCibleTache()` (ADR-028, déjà existante) — aucune requête supplémentaire, aucun parsing de
+titre. Seuls les trois types de cible possédant une fiche navigable réelle (bien, acquéreur,
+prospect vendeur) produisent un lien ; visite/offre/compromis/rémunération n'en ont structurellement
+aucun. Pour la tâche `nouveau_match_bien_acquereur` (ADR-037), le lien résout vers l'acquéreur — sa
+seule cible structurée (`taches_une_seule_cible_check`) — jamais un lien Bien reconstruit.
+`TacheItem.tsx` (composant unique, non dupliqué) affiche désormais aussi un badge « En retard »,
+réutilisant `estEnRetard()` (`tachePriority.ts`, déjà écrite mais jusqu'ici jamais appelée par
+l'UI). `page.tsx` affiche un état vide neutre (« Rien à traiter pour le moment. »), scopé aux seules
+sections de tâches — jamais un remplacement de l'agenda ou des alertes actifs.
+
+Aucune migration : toutes les données affichées existaient déjà. `page.tsx` n'avait auparavant
+aucun test ; 20 nouveaux tests (`TacheItem.test.tsx`, 13 cas ; `page.test.tsx`, 7 cas, intégration
+Postgres réelle sans mock du repository) — suite complète du projet passante (912 tests).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,
