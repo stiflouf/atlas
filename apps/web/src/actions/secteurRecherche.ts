@@ -1,9 +1,12 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { getDb } from "@/db/client";
 import { getClientById } from "@/lib/clientRepository";
 import { ajouterSecteurRecherche, supprimerSecteurRecherche } from "@/lib/secteurRechercheRepository";
 import { verifierCommune } from "@/lib/geocodage/ignClient";
+import { enqueuerResynchronisationAcquereur } from "@/lib/compatibilite/resynchronisationRepository";
+import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import type { SecteurRecherche } from "@/types/secteurRecherche";
 
 export type ResultatActionAjoutSecteur =
@@ -44,7 +47,15 @@ export async function ajouterSecteurRechercheAction(
   }
 
   try {
-    const secteur = await ajouterSecteurRecherche(acquereurId, communeVerifiee);
+    // Ajout + enqueue de resynchronisation dans LA MÊME transaction (ADR-036) — un nouveau secteur
+    // peut rendre compatibles des paires qui ne l'étaient pas, jamais un scan de fond N×M : seul
+    // cet unique acquéreur est resynchronisé (synchroniserCompatibilitesPourAcquereur).
+    const { secteur, idDemandeResynchronisation } = await getDb().transaction(async (tx) => {
+      const secteur = await ajouterSecteurRecherche(acquereurId, communeVerifiee, tx);
+      const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereurId, tx);
+      return { secteur, idDemandeResynchronisation };
+    });
+    await traiterDemandeResynchronisation(idDemandeResynchronisation);
     return { statut: "succes", secteur };
   } catch (erreur) {
     // Contrainte UNIQUE(acquereur_id, code_insee) — code Postgres 23505. drizzle-orm/postgres-js
@@ -73,7 +84,14 @@ export async function supprimerSecteurRechercheAction(formData: FormData): Promi
     throw new Error("Identifiant de secteur manquant.");
   }
 
-  await supprimerSecteurRecherche(id, acquereurId);
+  // Suppression + enqueue de resynchronisation dans LA MÊME transaction (ADR-036) — un secteur
+  // retiré peut sortir des paires de la compatibilité géographique (0 événement, l'état technique
+  // est simplement mis à jour, voir synchronisation.ts).
+  const idDemandeResynchronisation = await getDb().transaction(async (tx) => {
+    await supprimerSecteurRecherche(id, acquereurId, tx);
+    return enqueuerResynchronisationAcquereur(acquereurId, tx);
+  });
+  await traiterDemandeResynchronisation(idDemandeResynchronisation);
 
   const redirectTo = String(formData.get("redirectTo") ?? `/clients/${acquereurId}`);
   redirect(redirectTo.startsWith("/") ? redirectTo : `/clients/${acquereurId}`);

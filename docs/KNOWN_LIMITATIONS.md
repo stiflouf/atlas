@@ -596,8 +596,40 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   de journal d'anciennes recherches, conformément au principe de minimisation (rien n'est conservé
   au-delà de "où l'acquéreur recherche actuellement").
 - **Aucune automatisation liée à un changement de compatibilité géographique** (ADR-032/033 non
-  intégrées) — ajouter un secteur ou résoudre un bien ne déclenche jamais de tâche, d'email, ni
-  d'événement.
+  intégrées jusqu'à ADR-036) — ajouter/supprimer un secteur déclenche désormais une
+  resynchronisation technique (ADR-036, voir ci-dessous) mais toujours aucune tâche ni email : la
+  détection de transition et son exploitation commerciale restent deux ADR distinctes.
+
+## Transitions de compatibilité (ADR-036)
+
+- **Aucun effet commercial encore branché, volontairement** : le nouvel événement
+  `compatibilite_bien_acquereur_devenue_compatible` existe et est émis de façon fiable, mais
+  `src/lib/automatisations/catalogueRegles.ts` n'en référence encore aucune règle — aucune tâche,
+  aucun email, aucune notification ne sont produits pour un nouveau match. C'est le périmètre exact
+  d'une ADR ultérieure, pas un oubli.
+- **Aucun snapshot des critères persisté** : l'événement ne porte que `bienId`/`acquereurId`/
+  `cycleCompatibilite` — consulter le détail des 7 critères au moment d'un événement passé implique
+  de rappeler `evaluerCompatibilite()`, dont le résultat peut avoir changé depuis (les données
+  source ont pu être modifiées entre-temps). Décision assumée de minimisation, pas une limite
+  technique à lever.
+- **Paires jamais retouchées après le déploiement restent figées sur leur baseline** : sans scan de
+  fond périodique recalculant l'ensemble du système (délibérément absent, pour ne jamais reproduire
+  un balayage N×M), une paire dont ni le bien ni l'acquéreur ne sont plus jamais modifiés ne sera
+  jamais réévaluée — y compris si une troisième entité (un nouveau secteur, par exemple) aurait pu
+  théoriquement en changer le résultat sans mutation directe de l'une des deux. Cette situation
+  n'existe pas aujourd'hui (tout critère du moteur ADR-034/035 dépend uniquement du bien et de
+  l'acquéreur eux-mêmes, jamais d'un tiers), mais deviendrait une vraie limite si un futur critère
+  en dépendait.
+- **Le balayage de reprise (`/api/compatibilite/scan`) dépend d'un cron externe**, comme
+  `/api/automatisations/scan` (ADR-033) — sans déclencheur configuré, seul le traitement synchrone
+  immédiatement après chaque mutation ferme la boucle ; une demande restée en attente après un
+  crash exact entre le commit et ce traitement synchrone ne serait alors récupérée qu'au prochain
+  appel manuel de l'endpoint.
+- **La baseline/le rebuild sont un geste manuel** (`/api/compatibilite/baseline`), jamais déclenchés
+  automatiquement par une migration ou un déploiement — un opérateur qui ne l'exécute jamais après
+  la mise en service se prive de la détection de transitions pour les paires déjà compatibles au
+  moment de l'installation (elles restent silencieusement sans ligne d'état jusqu'à leur première
+  vraie mutation).
 
 ## Limites du moteur de matching
 

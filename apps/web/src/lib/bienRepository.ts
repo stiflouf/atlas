@@ -55,6 +55,17 @@ export async function listerBiens(): Promise<Bien[]> {
   return biensDemo;
 }
 
+// Réservé aux consommateurs qui ont besoin d'entités structurellement persistées (FK-able) — ADR-036
+// (synchroniseur de compatibilité) uniquement. Même principe que listerBiensArchives() ci-dessous :
+// interroge la table réelle directement, AUCUN repli mock quel que soit le nombre de lignes réelles
+// (contrairement à listerBiens(), qui bascule entièrement sur data/biens.ts tant que la table est
+// vide). Ne remplace jamais listerBiens() : le comportement produit existant (UI, matching flou)
+// reste strictement inchangé, cette fonction n'est appelée par aucun des deux.
+export async function listerBiensActifsPersistes(): Promise<Bien[]> {
+  const lignes = await getDb().select().from(biensTable);
+  return lignes.filter((l) => !l.archiveLe).map(ligneVersBien);
+}
+
 // Réservé aux biens réels archivés — aucun repli mock (un bien mocké ne peut pas être archivé).
 export async function listerBiensArchives(): Promise<Bien[]> {
   try {
@@ -128,9 +139,13 @@ export async function creerBien(input: NouveauBien, executeur: Executeur = getDb
 // mise à jour ne le rafraîchit jamais automatiquement. Retourne undefined si id ne correspond à
 // aucune ligne réelle (id mocké ou déjà supprimé) plutôt que de supposer qu'une ligne a été
 // modifiée — l'appelant (Server Action) doit gérer ce cas explicitement, jamais un faux succès.
-export async function modifierBien(id: string, input: NouveauBien): Promise<Bien | undefined> {
+export async function modifierBien(
+  id: string,
+  input: NouveauBien,
+  executeur: Executeur = getDb()
+): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(biensTable)
     .set({
       reference: input.reference,
@@ -168,9 +183,9 @@ export async function modifierBien(id: string, input: NouveauBien): Promise<Bien
 // Archivage/désarchivage : jamais un DELETE, uniquement archiveLe qui bascule. N'affecte aucune
 // FK (notes_bien, comptes_rendus_visite) ni les colonnes text sans contrainte (actions,
 // memoire_contextuelle) — un UPDATE ne déclenche jamais ON DELETE CASCADE.
-export async function archiverBien(id: string): Promise<Bien | undefined> {
+export async function archiverBien(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(biensTable)
     .set({ archiveLe: new Date() })
     .where(eq(biensTable.id, id))
@@ -178,9 +193,9 @@ export async function archiverBien(id: string): Promise<Bien | undefined> {
   return ligne ? ligneVersBien(ligne) : undefined;
 }
 
-export async function desarchiverBien(id: string): Promise<Bien | undefined> {
+export async function desarchiverBien(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(biensTable)
     .set({ archiveLe: null })
     .where(eq(biensTable.id, id))

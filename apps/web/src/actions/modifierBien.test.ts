@@ -7,13 +7,23 @@ import { eq } from "drizzle-orm";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable } = await import("@/db/schema");
+const { biens: biensTable, compatibilitesARessynchroniser, compatibilitesBienAcquereurEtat, evenementsMetier } =
+  await import("@/db/schema");
+const { inArray } = await import("drizzle-orm");
 const { creerBien } = await import("@/lib/bienRepository");
 const { modifierBienAction } = await import("./modifierBien");
 
 const idsCrees: string[] = [];
 
+// modifierBienAction enqueue désormais une demande de resynchronisation (ADR-036) DANS LA MÊME
+// transaction que la modification — mêmes lignes techniques à purger avant le bien, même ordre que
+// creerBien.test.ts/evenementMetierRepository.test.ts.
 afterAll(async () => {
+  if (idsCrees.length > 0) {
+    await getDb().delete(evenementsMetier).where(inArray(evenementsMetier.bienId, idsCrees));
+    await getDb().delete(compatibilitesBienAcquereurEtat).where(inArray(compatibilitesBienAcquereurEtat.bienId, idsCrees));
+    await getDb().delete(compatibilitesARessynchroniser).where(inArray(compatibilitesARessynchroniser.bienId, idsCrees));
+  }
   for (const id of idsCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
 });
 

@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, check, primaryKey } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // Produit mono-conseiller pour l'instant (voir ADR-006) : une seule ligne possible,
@@ -973,6 +973,13 @@ export const envoisEmail = pgTable(
 // 'inactivite_prospect_vendeur' — porte la valeur de dernierContactLe (ou creeLe en repli) qui a
 // servi de base au calcul du seuil franchi. C'est elle, pas prospectVendeurId seul, qui distingue
 // deux cycles de silence successifs pour le même prospect (voir les deux index prospect ci-dessous).
+// `bienId`/`acquereurId`/`cycleCompatibilite` (ADR-036) : couple discriminé au même titre que les
+// trois colonnes-cible ponctuelles ci-dessus, jamais un couple `{type, id}` générique — réservés au
+// seul type 'compatibilite_bien_acquereur_devenue_compatible'. Toujours posés ENSEMBLE (jamais l'un
+// sans l'autre, voir le CHECK dédié) : la paire (bien, acquéreur) forme UNE seule cible logique,
+// pas deux. `cycleCompatibilite` (entier, jamais un timestamp comme `ancreCycle` : aucun ancrage
+// métier externe n'existe pour ce type, seulement un compteur de retours à compatible) porte la
+// même fonction d'idempotence de cycle que `ancreCycle` pour 'inactivite_prospect_vendeur'.
 export const evenementsMetier = pgTable(
   "evenements_metier",
   {
@@ -982,6 +989,9 @@ export const evenementsMetier = pgTable(
     prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id),
     compromisId: uuid("compromis_id").references(() => compromis.id),
     ancreCycle: timestamp("ancre_cycle", { withTimezone: true }),
+    bienId: uuid("bien_id").references(() => biens.id),
+    acquereurId: uuid("acquereur_id").references(() => acquereurs.id),
+    cycleCompatibilite: integer("cycle_compatibilite"),
     survenuLe: timestamp("survenu_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -989,16 +999,25 @@ export const evenementsMetier = pgTable(
       "evenements_metier_type_check",
       sql`${table.typeEvenement} IN (
         'visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe',
-        'inactivite_prospect_vendeur'
+        'inactivite_prospect_vendeur','compatibilite_bien_acquereur_devenue_compatible'
       )`
     ),
+    // Étendu par ADR-036 : le couple (bien_id, acquereur_id), posé ENSEMBLE, compte désormais comme
+    // une 4e cible logique possible — jamais une 5e/6e colonne comptée séparément (sinon un
+    // événement de compatibilité, qui pose les deux, violerait "exactement une cible"). Le second
+    // CHECK ci-dessous interdit indépendamment qu'une seule des deux colonnes soit posée seule.
     check(
       "evenements_metier_une_seule_cible_check",
       sql`(
         (case when ${table.compteRenduVisiteId} is not null then 1 else 0 end) +
         (case when ${table.prospectVendeurId} is not null then 1 else 0 end) +
-        (case when ${table.compromisId} is not null then 1 else 0 end)
+        (case when ${table.compromisId} is not null then 1 else 0 end) +
+        (case when ${table.bienId} is not null and ${table.acquereurId} is not null then 1 else 0 end)
       ) = 1`
+    ),
+    check(
+      "evenements_metier_bien_acquereur_ensemble_check",
+      sql`(${table.bienId} IS NOT NULL) = (${table.acquereurId} IS NOT NULL)`
     ),
     uniqueIndex("evenements_metier_visite_unique")
       .on(table.typeEvenement, table.compteRenduVisiteId)
@@ -1019,6 +1038,13 @@ export const evenementsMetier = pgTable(
     uniqueIndex("evenements_metier_compromis_unique")
       .on(table.typeEvenement, table.compromisId)
       .where(sql`${table.compromisId} IS NOT NULL`),
+    // Dédié au type cyclique de compatibilité (ADR-036), même principe que l'index ci-dessus pour
+    // 'inactivite_prospect_vendeur' : une occurrence par (bien, acquéreur, cycle) — le même cycle
+    // rejoué (retry exact, deux synchronisations concurrentes de la même paire) ne duplique jamais ;
+    // un retour ultérieur à compatible incrémente le cycle et ouvre donc une nouvelle occurrence.
+    uniqueIndex("evenements_metier_compatibilite_unique")
+      .on(table.typeEvenement, table.bienId, table.acquereurId, table.cycleCompatibilite)
+      .where(sql`${table.typeEvenement} = 'compatibilite_bien_acquereur_devenue_compatible'`),
   ]
 );
 
@@ -1127,5 +1153,101 @@ export const runsScanAutomatisation = pgTable(
         'inactivite_prospect_vendeur'
       )`
     ),
+  ]
+);
+
+// Mémoire technique de dernière observation par paire (ADR-036) — sert UNIQUEMENT à détecter une
+// transition, jamais à afficher ou décider qu'une paire est compatible : la source de vérité du
+// matching reste exclusivement evaluerCompatibilite() (src/lib/compatibilite/), relue à chaque
+// affichage. Clé logique = clé primaire composite (bienId, acquereurId), même précédent que
+// configurations_automatisation (regleCode en PK directe) — pas d'UUID de substitution, il n'existe
+// pas de second axe d'identité pour une paire.
+//
+// `dernierStatut` reflète la dernière sortie honnête d'evaluerCompatibilite() — jamais détourné
+// pour représenter autre chose (l'archivage, notamment, ne le touche jamais).
+// `dansPerimetreActif` est un axe TECHNIQUE orthogonal, jamais un quatrième statut ADR-034 : faux
+// uniquement lorsque le bien ou l'acquéreur de la paire est archivé. La transition vers "nouveau
+// match" se lit sur la conjonction des deux : dans_perimetre_actif ET dernier_statut = 'compatible'
+// (voir src/lib/compatibilite/synchronisation.ts).
+// `cycleCompatibilite` : compteur (jamais un timestamp, aucun ancrage métier externe n'existe ici)
+// incrémenté uniquement au moment où cette conjonction passe de faux à vrai — porte la même clé
+// d'idempotence d'événement que `ancreCycle` pour 'inactivite_prospect_vendeur' (ADR-033), voir
+// evenements_metier.cycle_compatibilite.
+// Pas de CASCADE sur les deux FK : ni biens ni acquereurs ne sont jamais supprimés physiquement
+// dans ce produit (archivage seulement, ADR-012) — NO ACTION (défaut Drizzle) suffit.
+export const compatibilitesBienAcquereurEtat = pgTable(
+  "compatibilites_bien_acquereur_etat",
+  {
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id),
+    acquereurId: uuid("acquereur_id")
+      .notNull()
+      .references(() => acquereurs.id),
+    dernierStatut: text("dernier_statut").notNull(),
+    dansPerimetreActif: boolean("dans_perimetre_actif").notNull().default(true),
+    cycleCompatibilite: integer("cycle_compatibilite").notNull().default(0),
+    observeLe: timestamp("observe_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.bienId, table.acquereurId] }),
+    check(
+      "compatibilites_bien_acquereur_etat_statut_check",
+      sql`${table.dernierStatut} IN ('compatible','incompatible','a_verifier')`
+    ),
+    check("compatibilites_bien_acquereur_etat_cycle_positif_check", sql`${table.cycleCompatibilite} >= 0`),
+  ]
+);
+
+// Handoff durable de resynchronisation (ADR-036) — garantit qu'une mutation susceptible de changer
+// des compatibilités ne peut jamais être perdue entre son commit et le traitement effectif : la
+// ligne est insérée DANS LA MÊME TRANSACTION que la mutation source (jamais après coup), donc soit
+// les deux commitent ensemble, soit ni l'une ni l'autre. Traitée normalement de façon synchrone
+// juste après le commit (même requête, aucun worker) ; le filet de sécurité pour un crash exactement
+// entre les deux est le balayage protégé (/api/compatibilite/scan), même patron que le scan
+// temporel ADR-033.
+//
+// File d'attente, PAS un registre de faits : contrairement à evenements_metier, un doublon ici est
+// inoffensif (retraiter deux fois la même source est un no-op idempotent en aval) — aucune
+// contrainte UNIQUE stricte n'est donc nécessaire. Deux index partiels (ci-dessous) activent
+// toutefois un coalescing optionnel : tant qu'une ligne pour une source donnée reste non traitée,
+// une nouvelle demande pour la MÊME source met à jour cette ligne (`ON CONFLICT ... DO UPDATE`,
+// voir resynchronisationRepository.ts) plutôt que d'en empiler une nouvelle — sans jamais risquer de
+// perdre une demande concurrente : dès qu'une ligne est marquée traitée, elle sort du prédicat
+// partiel et une demande arrivée entre-temps crée naturellement une nouvelle ligne plutôt que
+// d'entrer en conflit avec une ligne déjà verrouillée par le traitement en cours.
+//
+// Discriminée par source, même principe que evenements_metier (bienId XOR acquereurId, jamais un
+// couple générique {type, id}) — le CHECK impose exactement une des deux.
+export const compatibilitesARessynchroniser = pgTable(
+  "compatibilites_a_resynchroniser",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bienId: uuid("bien_id").references(() => biens.id),
+    acquereurId: uuid("acquereur_id").references(() => acquereurs.id),
+    demandeeLe: timestamp("demandee_le", { withTimezone: true }).notNull().defaultNow(),
+    // NULL = reste à traiter (jamais tenté, ou tentative précédente en échec — voir
+    // derniereErreur). Non-NULL = traitement terminé sans exception pour toutes les paires
+    // concernées. Contrairement à executions_automatisation.echoueeLe (terminal, une décision
+    // métier), un échec ici n'est jamais terminal : la ligne reste éligible au retraitement tant
+    // qu'elle n'a pas explicitement réussi — la correction prime, jamais de perte silencieuse.
+    traiteeLe: timestamp("traitee_le", { withTimezone: true }),
+    derniereTentativeLe: timestamp("derniere_tentative_le", { withTimezone: true }),
+    derniereErreur: text("derniere_erreur"),
+  },
+  (table) => [
+    check(
+      "compatibilites_a_resynchroniser_une_seule_source_check",
+      sql`(
+        (case when ${table.bienId} is not null then 1 else 0 end) +
+        (case when ${table.acquereurId} is not null then 1 else 0 end)
+      ) = 1`
+    ),
+    uniqueIndex("compatibilites_a_resynchroniser_bien_en_attente_unique")
+      .on(table.bienId)
+      .where(sql`${table.bienId} IS NOT NULL AND ${table.traiteeLe} IS NULL`),
+    uniqueIndex("compatibilites_a_resynchroniser_acquereur_en_attente_unique")
+      .on(table.acquereurId)
+      .where(sql`${table.acquereurId} IS NOT NULL AND ${table.traiteeLe} IS NULL`),
   ]
 );

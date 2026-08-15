@@ -8,12 +8,19 @@ import type { CibleTache, PrioriteTache, TypeTache } from "./tache";
 // fois pour le même prospectVendeurId au fil du temps) — contrairement aux quatre premiers, tous
 // ponctuels et non répétables pour une même cible. C'est pourquoi il porte `ancreCycle` (voir
 // ci-dessous) et un index d'idempotence dédié (db/schema.ts), distinct de celui des types ponctuels.
+//
+// 'compatibilite_bien_acquereur_devenue_compatible' (ADR-036) est le second type CYCLIQUE — une
+// paire (bien, acquéreur) peut redevenir compatible après avoir cessé de l'être. Porte
+// `bienId`/`acquereurId`/`cycleCompatibilite` au lieu de `ancreCycle` : aucun ancrage temporel
+// métier externe n'existe ici (contrairement au dernier contact d'un prospect), l'idempotence de
+// cycle repose donc sur un compteur entier plutôt qu'un timestamp.
 export type TypeEvenementMetier =
   | "visite_realisee"
   | "rdv_estimation_realise"
   | "mandat_signe"
   | "compromis_signe"
-  | "inactivite_prospect_vendeur";
+  | "inactivite_prospect_vendeur"
+  | "compatibilite_bien_acquereur_devenue_compatible";
 
 export type EvenementMetier = {
   id: string;
@@ -26,6 +33,15 @@ export type EvenementMetier = {
   // le moment où le FAIT a été établi (le dernier contact réel), pas le moment où Atlas l'a
   // détecté. `undefined` pour les quatre types ponctuels d'ADR-032.
   ancreCycle?: string;
+  // Cible de compatibilité (ADR-036) — toujours posés ENSEMBLE, jamais l'un sans l'autre. Aucune
+  // autre donnée du bien/de l'acquéreur (nom, budget, critères...) : ces identifiants suffisent à
+  // relire les entités au moment où elles sont réellement nécessaires (minimisation).
+  bienId?: string;
+  acquereurId?: string;
+  // Numéro de cycle de compatibilité (ADR-036) — porte la même fonction d'idempotence que
+  // `ancreCycle`, sous forme de compteur plutôt que de timestamp. `undefined` pour tous les autres
+  // types d'événement.
+  cycleCompatibilite?: number;
   survenuLe: string;
 };
 

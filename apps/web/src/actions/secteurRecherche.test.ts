@@ -6,14 +6,33 @@ import { eq } from "drizzle-orm";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { acquereurs: acquereursTable, secteursRechercheAcquereur: secteursTable } = await import("@/db/schema");
+const {
+  acquereurs: acquereursTable,
+  secteursRechercheAcquereur: secteursTable,
+  compatibilitesARessynchroniser,
+  compatibilitesBienAcquereurEtat,
+  evenementsMetier,
+} = await import("@/db/schema");
+const { inArray } = await import("drizzle-orm");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
 const { listerSecteursPourAcquereur } = await import("@/lib/secteurRechercheRepository");
 const { ajouterSecteurRechercheAction, supprimerSecteurRechercheAction } = await import("./secteurRecherche");
 
 const idsAcquereursCrees: string[] = [];
 
+// ajouterSecteurRechercheAction/supprimerSecteurRechercheAction enqueue désormais une demande de
+// resynchronisation (ADR-036) DANS LA MÊME transaction — mêmes lignes techniques à purger avant
+// l'acquéreur, même ordre que evenementMetierRepository.test.ts.
 afterAll(async () => {
+  if (idsAcquereursCrees.length > 0) {
+    await getDb().delete(evenementsMetier).where(inArray(evenementsMetier.acquereurId, idsAcquereursCrees));
+    await getDb()
+      .delete(compatibilitesBienAcquereurEtat)
+      .where(inArray(compatibilitesBienAcquereurEtat.acquereurId, idsAcquereursCrees));
+    await getDb()
+      .delete(compatibilitesARessynchroniser)
+      .where(inArray(compatibilitesARessynchroniser.acquereurId, idsAcquereursCrees));
+  }
   for (const id of idsAcquereursCrees) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
 });
 

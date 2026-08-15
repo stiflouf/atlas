@@ -1037,17 +1037,24 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `type_evenement` | text | non | `CHECK`, 5 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) |
+| `type_evenement` | text | non | `CHECK`, 6 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) |
 | `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, **`NO ACTION`**) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, **`NO ACTION`**) | oui | |
 | `ancre_cycle` | timestamptz | oui | ADR-033 — `NULL` pour les 4 types ponctuels ; pour `inactivite_prospect_vendeur`, `dernierContactLe` (ou `creeLe` si aucun contact n'a jamais eu lieu) au moment du franchissement du seuil. Voir index dédié ci-dessous |
+| `bien_id` | uuid (FK → `biens.id`, **`NO ACTION`**) | oui | ADR-036 — toujours posé avec `acquereur_id` (jamais l'un sans l'autre) |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, **`NO ACTION`**) | oui | ADR-036 — idem |
+| `cycle_compatibilite` | integer | oui | ADR-036 — compteur (jamais un timestamp : aucun ancrage métier externe n'existe ici) incrémenté à chaque retour à `compatible`. `NULL` pour tous les autres types |
 | `survenu_le` | timestamptz | non | |
 
 **Contraintes** :
-- `evenements_metier_une_seule_cible_check` — exactement une des trois colonnes cible est
-  renseignée (`= 1`, pas `<= 1` : un événement sans cible n'a pas de sens). `ancre_cycle` n'entre
-  jamais dans ce calcul (ce n'est pas une cible).
+- `evenements_metier_une_seule_cible_check` — exactement une cible logique est renseignée (`= 1`,
+  pas `<= 1`) : les trois colonnes ponctuelles/cycliques historiques comptent chacune pour une
+  cible, et le couple `(bien_id, acquereur_id)` posé **ensemble** (ADR-036) compte pour une
+  quatrième — jamais deux. `ancre_cycle`/`cycle_compatibilite` n'entrent jamais dans ce calcul (ce
+  ne sont pas des cibles).
+- `evenements_metier_bien_acquereur_ensemble_check` (ADR-036) — `bien_id` et `acquereur_id` sont
+  soit tous deux `NULL`, soit tous deux renseignés : jamais l'un sans l'autre.
 - Index unique partiel `(type_evenement, compte_rendu_visite_id) WHERE ... IS NOT NULL`, idem pour
   `compromis_id` — empêchent un double submit de la mutation métier de créer deux événements
   représentant le même fait.
@@ -1060,10 +1067,18 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
   type_evenement = 'inactivite_prospect_vendeur'` (ADR-033) — une occurrence par (prospect, ancre
   de cycle). Un nouveau contact change l'ancre et ouvre donc une nouvelle occurrence possible ; la
   même ancre rejouée (double submit, scans concurrents) ne duplique jamais.
+- Index unique partiel dédié `(type_evenement, bien_id, acquereur_id, cycle_compatibilite) WHERE
+  type_evenement = 'compatibilite_bien_acquereur_devenue_compatible'` (ADR-036) — même principe
+  que le précédent : une occurrence par (paire, cycle). Un retour ultérieur à `compatible`
+  incrémente le cycle et ouvre une nouvelle occurrence ; le même cycle rejoué (retry, deux
+  synchronisations concurrentes de la même paire) ne duplique jamais.
 
-**Aucun `ON DELETE CASCADE` depuis les entités source** (volontaire, ADR-032 correction n°5) :
-supprimer un compte rendu de visite, un prospect vendeur ou un compromis alors qu'un événement le
-référence encore est **refusé** par Postgres, jamais un effacement silencieux de la trace d'audit.
+**Aucun `ON DELETE CASCADE` depuis les entités source** (volontaire, ADR-032 correction n°5, étendu
+sans exception à `biens`/`acquereurs` par ADR-036) : supprimer un compte rendu de visite, un
+prospect vendeur, un compromis, un bien ou un acquéreur alors qu'un événement le référence encore
+est **refusé** par Postgres, jamais un effacement silencieux de la trace d'audit — cohérent avec le
+fait qu'aucune de ces entités n'est de toute façon jamais supprimée physiquement dans ce produit
+(archivage seulement, ADR-012).
 
 ## `executions_automatisation` (ADR-032)
 
@@ -1125,6 +1140,81 @@ Trois états dérivés (`deriverEtatRunScanAutomatisation`, jamais stockés) : `
 terminé) ; `erreur_technique` posé → `echoue` ; sinon → `termine`. **Aucune donnée personnelle** :
 uniquement des compteurs agrégés, jamais un identifiant de prospect.
 
+## `compatibilites_bien_acquereur_etat` (ADR-036)
+
+**Rôle** : mémoire technique de dernière observation par paire — sert **uniquement** à détecter une
+transition, jamais à afficher ou décider qu'une paire est compatible. La source de vérité du
+matching reste exclusivement `evaluerCompatibilite()` (ADR-034/035), relue à chaque affichage.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `bien_id` | uuid (FK → `biens.id`, **`NO ACTION`**) | non | avec `acquereur_id`, forme la clé primaire composite |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, **`NO ACTION`**) | non | |
+| `dernier_statut` | text | non | `CHECK IN ('compatible','incompatible','a_verifier')` — dernière sortie honnête d'`evaluerCompatibilite()`, jamais détournée pour représenter autre chose (l'archivage ne la touche jamais) |
+| `dans_perimetre_actif` | boolean | non | défaut `true` — axe **technique** distinct de `dernier_statut` : `false` uniquement lorsque le bien ou l'acquéreur de la paire est archivé |
+| `cycle_compatibilite` | integer | non | défaut `0`, `CHECK >= 0` — incrémenté uniquement quand `dans_perimetre_actif ET dernier_statut = 'compatible'` passe de faux à vrai |
+| `observe_le` | timestamptz | non | défaut `now()` |
+
+**Clé primaire composite `(bien_id, acquereur_id)`** — pas d'UUID de substitution (même précédent
+que `configurations_automatisation`, clé métier directe en PK) : il n'existe pas de second axe
+d'identité pour une paire.
+
+**Formule de transition unifiée** (`src/lib/compatibilite/synchronisation.ts`) — couvre
+`incompatible`/`a_verifier` → `compatible`, une première observation (aucun état précédent) et un
+désarchivage avec statut toujours compatible, sans branche spéciale pour aucun de ces cas :
+
+```text
+etat_effectif(ligne) = dans_perimetre_actif ET dernier_statut = 'compatible'
+émettre un événement (et incrémenter le cycle) SSI etat_effectif(avant) = faux ET etat_effectif(après) = vrai
+```
+
+**Aucun `ON DELETE CASCADE`** : mêmes raisons que `evenements_metier` ci-dessus.
+
+**Entièrement reconstructible** depuis `{biens, acquereurs, secteurs, evaluerCompatibilite()}` — si
+la table est perdue/corrompue, l'outil de baseline (voir `appliquerBaseline()`,
+`src/lib/compatibilite/baseline.ts`) la reconstruit à l'identique, silencieusement (jamais
+d'événement), en reprenant le cycle au maximum déjà observé dans `evenements_metier` pour chaque
+paire (jamais un cycle déjà utilisé historiquement).
+
+## `compatibilites_a_resynchroniser` (ADR-036)
+
+**Rôle** : handoff durable — garantit qu'aucune mutation susceptible de changer une compatibilité
+ne peut être perdue entre son commit et la synchronisation effective. La ligne est insérée **dans
+la même transaction** que la mutation source (création/modification/désarchivage d'un bien ou d'un
+acquéreur, ajout/suppression d'un secteur) ; traitée normalement de façon synchrone juste après le
+commit (même requête, aucun worker), avec `/api/compatibilite/scan` comme filet de reprise pour un
+crash exactement entre les deux.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bien_id` | uuid (FK → `biens.id`, **`NO ACTION`**) | oui | discriminé, jamais avec `acquereur_id` simultanément |
+| `acquereur_id` | uuid (FK → `acquereurs.id`, **`NO ACTION`**) | oui | idem |
+| `demandee_le` | timestamptz | non | défaut `now()` |
+| `traitee_le` | timestamptz | oui | `NULL` = reste à traiter (jamais tenté, ou tentative précédente en échec) |
+| `derniere_tentative_le` | timestamptz | oui | |
+| `derniere_erreur` | text | oui | |
+
+**File d'attente, pas un registre de faits** — contrairement à `evenements_metier`, un doublon ici
+est inoffensif (retraiter deux fois la même source est un no-op idempotent en aval) : aucune
+contrainte `UNIQUE` stricte. Deux index uniques **partiels** activent un coalescing optionnel :
+
+```sql
+CREATE UNIQUE INDEX ... ON compatibilites_a_resynchroniser (bien_id) WHERE bien_id IS NOT NULL AND traitee_le IS NULL;
+CREATE UNIQUE INDEX ... ON compatibilites_a_resynchroniser (acquereur_id) WHERE acquereur_id IS NOT NULL AND traitee_le IS NULL;
+```
+
+Tant qu'une ligne pour une source donnée reste non traitée, une nouvelle demande la rafraîchit
+(`ON CONFLICT ... DO UPDATE`) plutôt que d'en empiler une nouvelle. Dès qu'une ligne est marquée
+traitée, elle sort de ce prédicat : une demande arrivée pendant un traitement en cours ne peut donc
+jamais être silencieusement absorbée par lui, elle crée naturellement une nouvelle ligne — jamais
+perdue. La complétion (`marquerDemandeTraitee`) se fait toujours **par identité** (`id`), jamais par
+source, pour la même raison.
+
+**Échec jamais terminal** (contrairement à `executions_automatisation.echoueeLe`, ADR-032) : une
+ligne en échec reste éligible au retraitement — la correction (aucune transition perdue) prime sur
+toute notion de résolution définitive pour ce handoff technique.
+
 ## Migrations
 
 | Fichier | Tables introduites |
@@ -1152,6 +1242,7 @@ uniquement des compteurs agrégés, jamais un identifiant de prospect.
 | `0020_furry_whirlwind.sql` | ADR-032 : `evenements_metier`, `executions_automatisation`, `configurations_automatisation` ; seed des 4 règles V1, toutes `active = false` |
 | `0021_loud_jubilee.sql` | ADR-033 : `ancre_cycle` sur `evenements_metier` (+ index prospect ponctuel corrigé, index cyclique dédié) ; `seuil_jours_inactivite` sur `configurations_automatisation` ; `CHECK` étendus (`inactivite_prospect_vendeur`) ; table `runs_scan_automatisation` ; seed de la 5ᵉ règle, `active = false` |
 | `0022_dashing_speed.sql` | ADR-035 : table `secteurs_recherche_acquereur` (FK CASCADE, `UNIQUE(acquereur_id, code_insee)`) ; colonne nullable `code_insee_commune` sur `biens` |
+| `0023_milky_giant_girl.sql` | ADR-036 : tables `compatibilites_bien_acquereur_etat` (PK composite) et `compatibilites_a_resynchroniser` (index uniques partiels) ; `bien_id`/`acquereur_id`/`cycle_compatibilite` sur `evenements_metier` ; `CHECK`/index étendus pour le 6ᵉ type d'événement |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

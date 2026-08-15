@@ -14,8 +14,9 @@ via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-14 : b
 prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), notes de bien, comptes
 rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien, moteur
 d'automatisations événement → tâche (ADR-032), moteur temporel/relances programmées (ADR-033),
-moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compatibilite/`) et secteurs
-de recherche géographique acquéreur / critère géographique du moteur de compatibilité (ADR-035).
+moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compatibilite/`), secteurs
+de recherche géographique acquéreur / critère géographique du moteur de compatibilité (ADR-035) et
+détection durable des transitions de compatibilité vers un événement métier append-only (ADR-036).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -85,14 +86,23 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   ADR-033, seuil configurable en jours) — **aucun scheduler interne à Atlas** ne la déclenche : sans
   un cron externe appelant `POST /api/automatisations/scan`, elle ne s'exécute jamais spontanément.
   Relance acquéreur, relance sur offre restent des candidates non construites.
-- **Compatibilité Bien ↔ Acquéreur (ADR-034/035) sans préférences pondérées, sans persistance** —
-  `src/lib/compatibilite/` est un moteur canonique déterministe distinct de `src/lib/matching/`
-  (jamais le même module : `matching/` résout un rendez-vous Calendar par correspondance floue,
-  `compatibilite/` compare un bien et un acquéreur déjà identifiés sur des champs strictement
-  structurés). `budgetMin` n'a aucune sémantique dans ce moteur — ne jamais supposer qu'un bien
-  moins cher que `budgetMin` est signalé. Aucun score, aucune pondération, aucune automatisation
-  déclenchée (ADR-032/033 non intégrées), aucun résultat persisté — recalculé à chaque affichage.
+- **Compatibilité Bien ↔ Acquéreur (ADR-034/035) sans préférences pondérées, sans persistance du
+  résultat** — `src/lib/compatibilite/` est un moteur canonique déterministe distinct de
+  `src/lib/matching/` (jamais le même module : `matching/` résout un rendez-vous Calendar par
+  correspondance floue, `compatibilite/` compare un bien et un acquéreur déjà identifiés sur des
+  champs strictement structurés). `budgetMin` n'a aucune sémantique dans ce moteur — ne jamais
+  supposer qu'un bien moins cher que `budgetMin` est signalé. Aucun score, aucune pondération,
+  aucun résultat détaillé persisté — `evaluerCompatibilite()` reste recalculé à chaque affichage.
   Ne jamais supposer qu'un critère `a_verifier` signifie une incompatibilité.
+- **Transitions de compatibilité détectées durablement, mais aucune automatisation branchée
+  (ADR-036)** — `src/lib/compatibilite/{etatRepository,resynchronisationRepository,synchronisation,
+  baseline}.ts` détectent quand une paire *devient* compatible et émettent un événement append-only
+  (`compatibilite_bien_acquereur_devenue_compatible`, `evenements_metier`), sans jamais persister le
+  détail des 7 critères. Ne jamais confondre `compatibilites_bien_acquereur_etat` (mémoire technique
+  de dernière observation, jamais une source de vérité) avec le résultat réel du moteur
+  (`evaluerCompatibilite()`). Aucune règle `catalogueRegles.ts` ne référence encore ce type
+  d'événement — **0 tâche, 0 email pour un nouveau match**, ne pas supposer le contraire tant
+  qu'une ADR ultérieure n'a pas explicitement ajouté cette règle.
 - **Géographie (ADR-035) limitée à la granularité commune/arrondissement, jamais un rayon** —
   `bien.codeInseeCommune` (citycode IGN, une chaîne, jamais un entier) est le seul identifiant
   géographique lu par le moteur ; `ville`/`codePostal` du bien ne sont **jamais** comparés à un
@@ -143,6 +153,10 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/compatibilite/evaluerCompatibilite.ts` | Moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034/035) — distinct de `matching/` |
 | `src/lib/geocodage/ignClient.ts` | Client IGN Géoplateforme unique — géocodage adresse, recherche de communes, re-vérification serveur (ADR-035) |
 | `src/lib/secteurRechercheRepository.ts` | Secteurs de recherche acquéreur — ajout/suppression/listing simple et batché (ADR-035) |
+| `src/lib/compatibilite/synchronisation.ts` | Détecte les transitions de compatibilité (ADR-036) et émet l'événement durable — jamais appelée directement par une Server Action, uniquement via `traitementResynchronisation.ts` |
+| `src/lib/compatibilite/resynchronisationRepository.ts` | Handoff durable (file d'attente de resynchronisation) — enqueue transactionnel, coalescing, complétion par identité (ADR-036) |
+| `src/lib/compatibilite/baseline.ts` | Outil de baseline/rebuild explicite — jamais d'événement, jamais automatique (ADR-036) |
+| `src/app/api/compatibilite/scan/route.ts` | Filet de reprise du handoff (ADR-036) — même patron d'authentification que `/api/automatisations/scan` |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |

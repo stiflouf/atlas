@@ -218,6 +218,63 @@ arrondissements", ce qui produirait de faux `incompatible`.
 "Paris 10e ou 11e") n'a aucun effet tant qu'aucune ligne structurée `secteurs_recherche_acquereur`
 n'existe — `non_concerne` dans ce cas, jamais une extraction automatique (ADR-008).
 
+## Transitions de compatibilité (ADR-036)
+
+**Fichiers** : `src/lib/compatibilite/{etatRepository,resynchronisationRepository,synchronisation,
+baseline}.ts`, `src/app/api/compatibilite/{scan,baseline}/route.ts`.
+
+`evaluerCompatibilite()` (ADR-034/035) reste l'**unique** source de vérité du matching — ADR-036
+n'y ajoute rien, elle observe son résultat pour détecter une **transition** et produire un fait
+métier durable quand une paire devient réellement une nouvelle opportunité commerciale.
+
+**Trois éléments, trois rôles distincts, jamais confondus** :
+
+```text
+evaluerCompatibilite()                        = source de vérité métier (inchangée)
+compatibilites_bien_acquereur_etat             = mémoire technique de dernière observation
+evenements_metier (nouveau type)               = historique append-only des transitions
+```
+
+**Transition détectée** : `compatible → compatible` ne reproduit jamais le même événement ;
+`incompatible`/`a_verifier` → `compatible` (y compris une première observation, une paire tout
+juste créée) produit un événement ; `compatible → incompatible`/`a_verifier` ne produit jamais de
+"nouveau match" (l'état technique est tout de même mis à jour, pour qu'un retour futur à
+`compatible` soit détectable) ; `compatible → incompatible → compatible` produit un **second**
+événement (un **nouveau cycle**, `cycle_compatibilite` incrémenté) — la paire redevient une
+opportunité après avoir cessé de l'être.
+
+**Archivage/désarchivage** : une entité archivée sort du périmètre commercial actif
+(`dans_perimetre_actif = false`, jamais un détournement des statuts `compatible`/`incompatible`/
+`a_verifier` d'ADR-034) sans qu'aucun "nouveau match" ne soit produit ; un désarchivage toujours
+compatible produit un nouveau cycle, exactement comme un retour à compatible après une sortie
+temporaire — même formule de transition, aucun code spécial.
+
+**Handoff durable** : chaque mutation susceptible de changer une compatibilité (création/
+modification/désarchivage d'un bien ou d'un acquéreur, ajout/suppression d'un secteur) enqueue une
+demande de resynchronisation **dans la même transaction** que la mutation elle-même — aucune
+fenêtre où une transition pourrait être perdue si le process s'arrête juste après le commit.
+Traitée normalement de façon synchrone dans la foulée ; `/api/compatibilite/scan` (protégé par
+secret partagé, même patron que `/api/automatisations/scan` ADR-033) reprend toute demande restée
+en attente.
+
+**Baseline** : un déploiement d'ADR-036 ne doit jamais transformer les paires déjà compatibles au
+moment de l'installation en "nouveaux matchs" artificiels. `/api/compatibilite/baseline` (secret
+dédié, distinct du scan) observe l'état courant et écrit la mémoire technique **silencieusement**
+(jamais un événement, quel que soit le statut observé) — geste manuel explicite, jamais automatique
+dans une migration. Refuse par défaut d'écraser une table déjà peuplée (protection contre un
+rebuild accidentel qui remettrait à zéro les cycles d'un système déjà en fonctionnement).
+
+**Aucune donnée personnelle, aucun détail de critère persisté** : l'événement ne porte que
+`bienId`/`acquereurId`/`cycleCompatibilite` — jamais de nom, email, téléphone, ni un instantané des
+7 critères (relus depuis les entités au moment où ils sont réellement nécessaires).
+
+**Hors périmètre de cette ADR, volontairement** : aucune tâche, aucun email, aucune règle
+d'automatisation ne réagit encore à ce nouvel événement — ADR-036 s'arrête à la production d'un
+fait métier durable. Le branchement commercial (créer une tâche "nouveau bien compatible") est
+laissé à une ADR ultérieure, qui n'aura besoin d'ajouter qu'une entrée dans
+`src/lib/automatisations/catalogueRegles.ts`, exactement comme les règles ADR-032/033 existantes —
+aucune modification du moteur de compatibilité ni de la détection de transition.
+
 **Orchestration sans N+1** : `evaluerCompatibiliteBien` charge en une seule requête les secteurs de
 tous les acquéreurs candidats (`listerSecteursPourAcquereurs`, `Map` en mémoire) ;
 `evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté, réutilisés

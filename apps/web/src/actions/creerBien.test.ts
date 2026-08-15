@@ -7,13 +7,24 @@ import { eq } from "drizzle-orm";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable } = await import("@/db/schema");
+const { biens: biensTable, compatibilitesARessynchroniser, compatibilitesBienAcquereurEtat, evenementsMetier } =
+  await import("@/db/schema");
+const { inArray } = await import("drizzle-orm");
 const { creerBienAction } = await import("./creerBien");
 const { getBienById } = await import("@/lib/bienRepository");
 
 const idsCrees: string[] = [];
 
+// creerBienAction enqueue désormais une demande de resynchronisation (ADR-036) DANS LA MÊME
+// transaction que la création — ces lignes techniques (bien_id, NO ACTION, jamais CASCADE, même
+// principe que evenements_metier) doivent être purgées AVANT le bien lui-même, sinon la suppression
+// échoue (violation de clé étrangère). Même ordre que evenementMetierRepository.test.ts.
 afterAll(async () => {
+  if (idsCrees.length > 0) {
+    await getDb().delete(evenementsMetier).where(inArray(evenementsMetier.bienId, idsCrees));
+    await getDb().delete(compatibilitesBienAcquereurEtat).where(inArray(compatibilitesBienAcquereurEtat.bienId, idsCrees));
+    await getDb().delete(compatibilitesARessynchroniser).where(inArray(compatibilitesARessynchroniser.bienId, idsCrees));
+  }
   for (const id of idsCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
 });
 

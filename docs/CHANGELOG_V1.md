@@ -742,6 +742,63 @@ l'absence de `banId` a été testée puis écartée après avoir constaté qu'el
 communes rurales ordinaires) pour ne jamais produire un faux `incompatible` par confusion
 ville/arrondissements.
 
+## 36. Détection durable des transitions de compatibilité Bien ↔ Acquéreur
+
+`evaluerCompatibilite()` (ADR-034/035) reste l'unique source de vérité du matching — cette passe
+ajoute uniquement la détection **fiable** du moment où une paire *devient* compatible, sans jamais
+persister le résultat détaillé lui-même. Deux nouvelles tables, un nouveau type d'événement
+append-only, aucune tâche ni email produits.
+
+**Mémoire technique** (`compatibilites_bien_acquereur_etat`, clé composite `(bien_id, acquereur_id)`
+sans UUID de substitution, même précédent que `configurations_automatisation`) : `dernier_statut`
+(dernière sortie honnête du moteur canonique), `dans_perimetre_actif` (axe technique distinct,
+jamais un détournement des statuts ADR-034 — faux uniquement pour une entité archivée) et
+`cycle_compatibilite` (compteur, pas un timestamp — aucun ancrage métier externe n'existe ici,
+contrairement à `ancre_cycle` d'ADR-033). Formule de transition unifiée : événement + incrément de
+cycle **ssi** `(dans_perimetre_actif ET dernier_statut = compatible)` passe de faux à vrai — couvre
+sans branche spéciale `incompatible`/`a_verifier` → `compatible`, une première observation, et un
+désarchivage toujours compatible.
+
+**Handoff durable** (`compatibilites_a_resynchroniser`) : chaque mutation source
+(création/modification/désarchivage d'un bien ou d'un acquéreur, ajout/suppression de secteur)
+enqueue une demande de resynchronisation **dans la même transaction Drizzle** que la mutation elle-
+même — jamais de fenêtre où un crash entre le commit et le traitement perdrait une transition. Le
+traitement synchrone a lieu juste après (même requête), avec `/api/compatibilite/scan` (protégé,
+même patron d'authentification que `/api/automatisations/scan` ADR-033, secret dédié) comme filet
+de reprise. File d'attente, pas un registre de faits : deux index uniques partiels activent un
+coalescing des demandes non traitées sans jamais risquer de perdre une demande arrivée pendant un
+traitement en cours (complétion toujours par identité, jamais par source) ; un échec n'est jamais
+terminal, contrairement à `executions_automatisation.echoueeLe`.
+
+**Refonte transactionnelle minimale des 8 Server Actions concernées** — ajout d'un paramètre
+`executeur` optionnel à `modifierBien`/`archiverBien`/`desarchiverBien`,
+`creerAcquereur`/`modifierAcquereur`/`archiverAcquereur`/`desarchiverAcquereur`,
+`ajouterSecteurRecherche`/`supprimerSecteurRecherche` (précédent déjà établi par `creerBien`,
+ADR-019/027) — jamais une réécriture de la couche données.
+
+**`evenements_metier` étendu** (pas une nouvelle table) : `bien_id`/`acquereur_id`/
+`cycle_compatibilite`, nouveau type `compatibilite_bien_acquereur_devenue_compatible`, `CHECK`
+"une seule cible" réécrit pour traiter le couple `(bien_id, acquereur_id)` posé ensemble comme une
+cible logique unique, nouvel index unique partiel `(type, bien_id, acquereur_id,
+cycle_compatibilite)`. Payload minimal, aucune PII, aucun snapshot des 7 critères.
+
+**Aucun fallback mock dans la couche technique** : deux nouvelles fonctions
+`listerBiensActifsPersistes()`/`listerClientsActifsPersistes()` (même précédent que
+`listerBiensArchives()` — interrogent la table réelle directement, aucun repli sur `data/biens.ts`/
+`data/clients.ts`), utilisées exclusivement par le synchroniseur — `listerBiens()`/`listerClients()`
+et leur comportement UI existant restent strictement inchangés.
+
+**Baseline explicite** (`/api/compatibilite/baseline`, secret dédié distinct du scan) : dry-run
+(aucune écriture) et apply (écrit silencieusement, jamais d'événement) — refuse par défaut
+d'écraser une table déjà peuplée (protection contre un rebuild accidentel). Un rebuild reprend le
+cycle au maximum déjà observé dans `evenements_metier` pour chaque paire, jamais recalculé "à
+zéro", pour ne jamais pouvoir réémettre un cycle déjà utilisé historiquement.
+
+**Hors périmètre, volontairement** : aucune règle `catalogueRegles.ts` ne référence encore ce
+nouvel événement — 0 tâche, 0 email, 0 notification pour tout nouveau match. Une ADR ultérieure
+branchera le raccord commercial sans toucher au moteur de compatibilité ni à la détection de
+transition.
+
 **Orchestration sans N+1** : `listerSecteursPourAcquereurs()` (nouveau, batch `inArray`) charge en
 une seule requête les secteurs de tous les acquéreurs candidats pour `evaluerCompatibiliteBien` ;
 `evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté. Aucune

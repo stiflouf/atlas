@@ -16,6 +16,9 @@ function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier 
     prospectVendeurId: ligne.prospectVendeurId ?? undefined,
     compromisId: ligne.compromisId ?? undefined,
     ancreCycle: ligne.ancreCycle ? ligne.ancreCycle.toISOString() : undefined,
+    bienId: ligne.bienId ?? undefined,
+    acquereurId: ligne.acquereurId ?? undefined,
+    cycleCompatibilite: ligne.cycleCompatibilite ?? undefined,
     survenuLe: ligne.survenuLe.toISOString(),
   };
 }
@@ -30,7 +33,13 @@ export type NouvelEvenementMetier =
   | { typeEvenement: "visite_realisee"; compteRenduVisiteId: string }
   | { typeEvenement: "rdv_estimation_realise" | "mandat_signe"; prospectVendeurId: string }
   | { typeEvenement: "compromis_signe"; compromisId: string }
-  | { typeEvenement: "inactivite_prospect_vendeur"; prospectVendeurId: string; ancreCycle: Date };
+  | { typeEvenement: "inactivite_prospect_vendeur"; prospectVendeurId: string; ancreCycle: Date }
+  | {
+      typeEvenement: "compatibilite_bien_acquereur_devenue_compatible";
+      bienId: string;
+      acquereurId: string;
+      cycleCompatibilite: number;
+    };
 
 export type ResultatEmissionEvenement = {
   // undefined si l'événement existait déjà (index unique partiel, double submit) — dans ce cas,
@@ -61,6 +70,9 @@ export async function emettreEvenementEtPreparerExecutions(
     prospectVendeurId: "prospectVendeurId" in input ? input.prospectVendeurId : null,
     compromisId: "compromisId" in input ? input.compromisId : null,
     ancreCycle: "ancreCycle" in input ? input.ancreCycle : null,
+    bienId: "bienId" in input ? input.bienId : null,
+    acquereurId: "acquereurId" in input ? input.acquereurId : null,
+    cycleCompatibilite: "cycleCompatibilite" in input ? input.cycleCompatibilite : null,
   };
 
   // Le `where` DOIT correspondre exactement au prédicat de l'index visé (inférence Postgres de
@@ -71,15 +83,25 @@ export async function emettreEvenementEtPreparerExecutions(
       ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compteRenduVisiteId], where: sql`${evenementsMetier.compteRenduVisiteId} IS NOT NULL` }
       : "compromisId" in input
         ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compromisId], where: sql`${evenementsMetier.compromisId} IS NOT NULL` }
-        : input.typeEvenement === "inactivite_prospect_vendeur"
+        : input.typeEvenement === "compatibilite_bien_acquereur_devenue_compatible"
           ? {
-              colonnes: [evenementsMetier.typeEvenement, evenementsMetier.prospectVendeurId, evenementsMetier.ancreCycle],
-              where: sql`${evenementsMetier.typeEvenement} = 'inactivite_prospect_vendeur'`,
+              colonnes: [
+                evenementsMetier.typeEvenement,
+                evenementsMetier.bienId,
+                evenementsMetier.acquereurId,
+                evenementsMetier.cycleCompatibilite,
+              ],
+              where: sql`${evenementsMetier.typeEvenement} = 'compatibilite_bien_acquereur_devenue_compatible'`,
             }
-          : {
-              colonnes: [evenementsMetier.typeEvenement, evenementsMetier.prospectVendeurId],
-              where: sql`${evenementsMetier.prospectVendeurId} IS NOT NULL AND ${evenementsMetier.typeEvenement} <> 'inactivite_prospect_vendeur'`,
-            };
+          : input.typeEvenement === "inactivite_prospect_vendeur"
+            ? {
+                colonnes: [evenementsMetier.typeEvenement, evenementsMetier.prospectVendeurId, evenementsMetier.ancreCycle],
+                where: sql`${evenementsMetier.typeEvenement} = 'inactivite_prospect_vendeur'`,
+              }
+            : {
+                colonnes: [evenementsMetier.typeEvenement, evenementsMetier.prospectVendeurId],
+                where: sql`${evenementsMetier.prospectVendeurId} IS NOT NULL AND ${evenementsMetier.typeEvenement} <> 'inactivite_prospect_vendeur'`,
+              };
 
   const [ligne] = await executeur
     .insert(evenementsMetier)

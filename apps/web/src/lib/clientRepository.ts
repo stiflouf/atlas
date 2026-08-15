@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
@@ -45,6 +45,15 @@ export async function listerClients(): Promise<ProfilAcquereur[]> {
   return clientsDemo;
 }
 
+// Réservé aux consommateurs qui ont besoin d'entités structurellement persistées (FK-able) — ADR-036
+// (synchroniseur de compatibilité) uniquement. Même principe que listerBiensActifsPersistes()
+// (bienRepository.ts) : interroge la table réelle directement, AUCUN repli mock. Ne remplace jamais
+// listerClients() : le comportement produit existant (UI, matching flou) reste strictement inchangé.
+export async function listerClientsActifsPersistes(): Promise<ProfilAcquereur[]> {
+  const lignes = await getDb().select().from(acquereursTable);
+  return lignes.filter((l) => !l.archiveLe).map(ligneVersAcquereur);
+}
+
 // Réservé aux acquéreurs réels archivés — aucun repli mock.
 export async function listerClientsArchives(): Promise<ProfilAcquereur[]> {
   try {
@@ -78,8 +87,11 @@ export type NouvelAcquereur = Omit<ProfilAcquereur, "id">;
 
 // Insertion pure : la validation métier (budgetMin <= budgetMax, etc.) est de la responsabilité
 // de l'appelant (Server Action), pas de ce repository.
-export async function creerAcquereur(input: NouvelAcquereur): Promise<ProfilAcquereur> {
-  const [ligne] = await getDb()
+export async function creerAcquereur(
+  input: NouvelAcquereur,
+  executeur: Executeur = getDb()
+): Promise<ProfilAcquereur> {
+  const [ligne] = await executeur
     .insert(acquereursTable)
     .values({
       prenom: input.prenom,
@@ -105,9 +117,13 @@ export async function creerAcquereur(input: NouvelAcquereur): Promise<ProfilAcqu
 // Update pur, même principe que creerAcquereur. modifieLe posé explicitement (voir
 // bienRepository.modifierBien pour le détail). Retourne undefined si id ne correspond à aucune
 // ligne réelle plutôt que de supposer une modification effective.
-export async function modifierAcquereur(id: string, input: NouvelAcquereur): Promise<ProfilAcquereur | undefined> {
+export async function modifierAcquereur(
+  id: string,
+  input: NouvelAcquereur,
+  executeur: Executeur = getDb()
+): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(acquereursTable)
     .set({
       prenom: input.prenom,
@@ -134,9 +150,12 @@ export async function modifierAcquereur(id: string, input: NouvelAcquereur): Pro
 
 // Archivage/désarchivage : jamais un DELETE, uniquement archiveLe qui bascule (voir
 // bienRepository.archiverBien pour le détail des garanties FK).
-export async function archiverAcquereur(id: string): Promise<ProfilAcquereur | undefined> {
+export async function archiverAcquereur(
+  id: string,
+  executeur: Executeur = getDb()
+): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(acquereursTable)
     .set({ archiveLe: new Date() })
     .where(eq(acquereursTable.id, id))
@@ -144,9 +163,12 @@ export async function archiverAcquereur(id: string): Promise<ProfilAcquereur | u
   return ligne ? ligneVersAcquereur(ligne) : undefined;
 }
 
-export async function desarchiverAcquereur(id: string): Promise<ProfilAcquereur | undefined> {
+export async function desarchiverAcquereur(
+  id: string,
+  executeur: Executeur = getDb()
+): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(acquereursTable)
     .set({ archiveLe: null })
     .where(eq(acquereursTable.id, id))

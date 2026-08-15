@@ -1,5 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { secteursRechercheAcquereur as secteursTable } from "@/db/schema";
 import type { SecteurRecherche } from "@/types/secteurRecherche";
 import type { Commune } from "@/types/geocodage";
@@ -54,8 +54,12 @@ export async function listerSecteursPourAcquereurs(
 // (acquereur_id, code_insee) fait échouer l'insertion (erreur Postgres 23505) en cas de doublon —
 // à l'appelant (Server Action) de la traduire en message actionnable, jamais absorbée
 // silencieusement ici.
-export async function ajouterSecteurRecherche(acquereurId: string, commune: Commune): Promise<SecteurRecherche> {
-  const [ligne] = await getDb()
+export async function ajouterSecteurRecherche(
+  acquereurId: string,
+  commune: Commune,
+  executeur: Executeur = getDb()
+): Promise<SecteurRecherche> {
+  const [ligne] = await executeur
     .insert(secteursTable)
     .values({
       acquereurId,
@@ -74,10 +78,11 @@ export async function ajouterSecteurRecherche(acquereurId: string, commune: Comm
 // effective.
 export async function supprimerSecteurRecherche(
   id: string,
-  acquereurId: string
+  acquereurId: string,
+  executeur: Executeur = getDb()
 ): Promise<SecteurRecherche | undefined> {
   if (!UUID_REGEX.test(id) || !UUID_REGEX.test(acquereurId)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .delete(secteursTable)
     .where(and(eq(secteursTable.id, id), eq(secteursTable.acquereurId, acquereurId)))
     .returning();
