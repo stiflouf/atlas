@@ -177,7 +177,7 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
     expect(evenements).toHaveLength(1);
   });
 
-  it("règle suivi_apres_visite non régressée : toujours déclenchée par le même événement visite_realisee", async () => {
+  it("règle suivi_apres_visite non régressée (ADR-041 : cible désormais l'acquéreur, jamais le compte rendu)", async () => {
     await definirActivationAutomatisation("suivi_apres_visite", true);
     const bien = await creerBienTest("[test réel] CR-VISITE-2");
     const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-ACQ-2");
@@ -199,13 +199,13 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
       })
     ).catch(() => {});
 
-    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
     const tachesDeSuivi = await getDb()
       .select()
       .from(tachesTable)
-      .where(eq(tachesTable.visiteId, compteRendu.id));
+      .where(eq(tachesTable.acquereurId, acquereur.id));
     expect(tachesDeSuivi).toHaveLength(1);
-    expect(tachesDeSuivi[0].titre).toBe("Faire le suivi de la visite");
+    expect(tachesDeSuivi[0].visiteId).toBeNull(); // jamais posée par cette règle depuis ADR-041
+    expect(tachesDeSuivi[0].titre).toBe(`Relancer ${acquereur.prenom} ${acquereur.nom} après la visite de ${bien.reference}`);
 
     await definirActivationAutomatisation("suivi_apres_visite", false);
   });

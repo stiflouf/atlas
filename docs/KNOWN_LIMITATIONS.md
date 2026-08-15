@@ -696,20 +696,24 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Pas de statistiques commerciales sur cette page** (volume, CA, taux de conversion) — voir
   « Dashboard commercial » ci-dessus pour l'état de ce chantier séparé.
 
-## Cycle de vie d'une visite (ADR-040)
+## Cycle de vie d'une visite (ADR-040/041)
 
-- **Aucune création native indépendante de Calendar** : une visite Atlas naît uniquement en
-  passant par `/visites/[id]/preparer` pour un rendez-vous Calendar déjà résolu — aucun formulaire
-  « Nouvelle visite » indépendant. Documenté comme limite V1 assumée, pas un oubli.
-- **`taches.visite_id` référence toujours un compte rendu, jamais `visites.id`** : la tâche
-  automatique `suivi_apres_visite` (ADR-032) n'a pas été modifiée pour cibler la nouvelle entité —
-  `deriverRouteFicheCible()` (ADR-039) n'a donc pas été étendue pour ce type de cible, et une tâche
-  « Faire le suivi de la visite » n'affiche toujours aucun lien « Voir la fiche » depuis le cockpit.
-  Faire cibler `visites.id` par cette règle est un changement de modèle distinct, hors périmètre
-  ADR-040.
-- **Rien ne pointe encore vers `/visites/{id}` (identité Atlas)** : la route existe (redirige vers
-  la préparation via l'id Calendar stocké) mais aucune tâche ne la référence encore — voir le point
-  précédent.
+- **Aucune création native indépendante de Calendar** : une visite Atlas naît uniquement via
+  `materialiserVisiteAction` (Server Action, ADR-041), déclenchée depuis `/visites/[id]/preparer`
+  pour un rendez-vous Calendar déjà résolu — aucun formulaire « Nouvelle visite » indépendant.
+  Documenté comme limite V1 assumée, pas un oubli.
+- **Aucune heure/durée persistée** : `visites.date_prevue` est un simple jour civil (`date` SQL),
+  jamais un instant précis — décision assumée en ADR-041 (Calendar reste seul détenteur de
+  l'heure/durée précises en V1). La fiche `/visites/{id}` n'affiche donc jamais d'heure. À
+  réévaluer si Atlas devient un jour propriétaire de la planification ou permet une création
+  native de visites.
+- **`taches.visite_id` référence toujours un compte rendu, jamais `visites.id`, pour les tâches
+  créées avant ADR-041** : la règle `suivi_apres_visite` cible désormais l'**acquéreur** pour toute
+  nouvelle tâche (ADR-041) — mais les tâches déjà créées par son ancienne version restent inchangées,
+  toujours ciblées sur un compte rendu. `deriverRouteFicheCible()` (ADR-039) n'a jamais été étendue
+  pour le type de cible `"visite"` — ces tâches historiques n'affichent donc toujours aucun lien
+  « Voir la fiche » depuis le cockpit. Faire cibler `visites.id` par une règle est un changement de
+  modèle distinct, volontairement hors périmètre ADR-040/041.
 - **Aucune synchronisation Calendar bidirectionnelle** : reporter ou annuler une visite dans Atlas
   ne modifie jamais l'événement Google Calendar d'origine, et une modification/suppression côté
   Calendar n'est jamais répercutée activement sur une visite déjà matérialisée. Calendar reste une
@@ -720,7 +724,14 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   heuristique, conformément au principe déjà appliqué à `offre_visites` (ADR-019).
 - **Aucune suppression automatique d'une tâche « nouveau match » devenue redondante** : si une
   visite est planifiée après qu'une tâche de ce type a déjà été ouverte pour la même paire, la
-  tâche existante n'est ni terminée ni masquée automatiquement — sujet distinct, non traité ici.
+  tâche existante n'est ni terminée ni masquée automatiquement — analysé et volontairement non
+  traité en ADR-041 (bénéfice non démontré face au risque d'un couplage caché entre deux
+  mécanismes).
+- **`visite_realisee` reste construit autour du compte rendu, pas explicitement autour de la
+  Visite** : le contrat d'émission (`compteRenduVisiteId` uniquement) est inchangé depuis ADR-032 —
+  la transition `visites.statut → 'realisee'` en est aujourd'hui une conséquence systématique
+  (un seul site d'appel dans tout le code, `marquerVisiteRealisee`), jamais une garantie imposée
+  par une contrainte DB inter-tables (non exprimable en `CHECK` Postgres classique).
 
 ## Limites du moteur de matching
 

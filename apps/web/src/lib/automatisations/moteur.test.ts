@@ -153,7 +153,9 @@ describe("moteur — création de tâche + succès d'exécution atomiques", () =
     const [tache] = await getDb().select().from(tachesTable).where(eq(tachesTable.id, execution!.tacheId!));
     expect(tache.origine).toBe("automatique");
     expect(tache.origineCode).toBe("suivi_apres_visite");
-    expect(tache.visiteId).toBe(compteRendu.id);
+    // ADR-041 : la règle cible désormais l'acquéreur, jamais le compte rendu.
+    expect(tache.acquereurId).toBe(compteRendu.acquereurId);
+    expect(tache.visiteId).toBeNull();
 
     await definirActivationAutomatisation("suivi_apres_visite", false);
   });
@@ -189,8 +191,8 @@ describe("moteur — scénario crash/pending", () => {
     // Un nouveau passage sur la même exécution déjà résolue ne doit jamais créer de seconde tâche
     // (verrouillage par les gardes IS NULL — la ligne est ignorée, plus rien à retraiter).
     await traiterExecutionsEnAttente([executionId]);
-    const tachesPourVisite = await getDb().select().from(tachesTable).where(eq(tachesTable.visiteId, compteRendu.id));
-    expect(tachesPourVisite).toHaveLength(1);
+    const tachesPourAcquereur = await getDb().select().from(tachesTable).where(eq(tachesTable.acquereurId, compteRendu.acquereurId));
+    expect(tachesPourAcquereur).toHaveLength(1);
 
     await definirActivationAutomatisation("suivi_apres_visite", false);
   });
@@ -216,8 +218,8 @@ describe("moteur — échec de creerTache", () => {
     expect(execution!.tacheId).toBeUndefined();
     expect(execution!.erreurTechnique).toContain("échec simulé");
 
-    const tachesPourVisite = await getDb().select().from(tachesTable).where(eq(tachesTable.visiteId, compteRendu.id));
-    expect(tachesPourVisite).toHaveLength(0);
+    const tachesPourAcquereur = await getDb().select().from(tachesTable).where(eq(tachesTable.acquereurId, compteRendu.acquereurId));
+    expect(tachesPourAcquereur).toHaveLength(0);
 
     await definirActivationAutomatisation("suivi_apres_visite", false);
   });
@@ -243,7 +245,7 @@ describe("moteur — double-submit bout en bout, par règle", () => {
     });
     await traiterExecutionsEnAttente(seconde.idsExecutionsATraiter);
 
-    const taches = await getDb().select().from(tachesTable).where(eq(tachesTable.visiteId, compteRendu.id));
+    const taches = await getDb().select().from(tachesTable).where(eq(tachesTable.acquereurId, compteRendu.acquereurId));
     expect(taches).toHaveLength(1);
     idsTachesCrees.push(taches[0].id);
 

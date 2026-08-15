@@ -21,8 +21,10 @@ une règle d'automatisation ADR-032 exploitant cet événement pour créer une t
 "nouveau match", désactivée par défaut (ADR-037), un filet générique de reprise après crash pour
 les `executions_automatisation` restées bloquées (ADR-038), un raffinement ciblé du cockpit
 commercial quotidien existant `/` — lien « Voir la fiche », badge « En retard », état vide (ADR-039)
-—, et une entité métier minimale `visites` (statuts `planifiee`/`realisee`/`annulee`, matérialisée
-explicitement depuis la page de préparation) distincte du compte rendu après-coup (ADR-040).
+—, une entité métier minimale `visites` (statuts `planifiee`/`realisee`/`annulee`, distincte du
+compte rendu après-coup, ADR-040), et sa fiche `/visites/{id}` désormais autonome de Google
+Calendar avec matérialisation strictement par Server Action (POST), plus un suivi post-visite
+(`suivi_apres_visite`) contextuel à l'intérêt exprimé, ciblant l'acquéreur (ADR-041).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -118,12 +120,22 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
 - **`visites` (ADR-040) est une entité distincte de `comptes_rendus_visite`, jamais fusionnée** —
   `visites.statut` (`planifiee`/`realisee`/`annulee`) répond à « que s'est-il passé ? »,
   `comptesRendusVisite.interet` continue seul de répondre à « quel est le retour de l'acquéreur ? ».
-  Une visite naît **uniquement** via `/visites/[id]/preparer` (matérialisation explicite, idempotente
-  au niveau DB sur `rendez_vous_calendar_id`) — ne jamais supposer une création native indépendante
-  de Calendar, elle n'existe pas. `taches.visite_id` référence toujours un **compte rendu**, jamais
-  `visites.id` (nom trompeur hérité d'avant cette ADR) — `deriverRouteFicheCible()` n'a donc pas été
-  étendue pour ce type de cible. Aucune inférence depuis une date passée : `date_prevue < maintenant`
-  ne signifie jamais `realisee`.
+  Une visite naît **uniquement** via `materialiserVisiteAction` (Server Action, ADR-041 — **jamais**
+  dans le rendu de `/visites/[id]/preparer`, qui est purement en lecture depuis cette ADR) —
+  idempotente au niveau DB sur `rendez_vous_calendar_id`. Ne jamais supposer une création native
+  indépendante de Calendar, elle n'existe pas. Aucune inférence depuis une date passée :
+  `date_prevue < maintenant` ne signifie jamais `realisee`.
+- **`/visites/{idAtlas}` (ADR-041) est une vraie fiche, plus une redirection** — lit exclusivement
+  PostgreSQL (visite, bien, acquéreur, compte rendu lié via `visite_id`), aucune dépendance à
+  Google Calendar dans son noyau ; reste consultable si Calendar est déconnecté ou l'événement
+  d'origine supprimé. Ne jamais y ajouter d'appel Calendar « juste pour l'heure » — décision
+  assumée, `date_prevue` reste un jour civil sans heure en V1.
+- **`suivi_apres_visite` (ADR-041) cible désormais l'acquéreur, jamais la Visite ni le compte
+  rendu** — titre adapté à `interet` (intéressé/à réfléchir/inconnu produisent une tâche,
+  `pas_interesse` n'en produit aucune, `undefined` honnête ADR-032). `taches.visite_id` référence
+  toujours un **compte rendu**, jamais `visites.id`, mais uniquement pour les tâches créées **avant**
+  ADR-041 — `deriverRouteFicheCible()` (ADR-039) n'a jamais été étendue pour ce type de cible
+  (nom de colonne trompeur hérité d'avant l'entité `visites`, jamais renommé, jamais migré).
 - **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
   `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
   `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
@@ -195,7 +207,7 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/compatibilite/resynchronisationRepository.ts` | Handoff durable (file d'attente de resynchronisation) — enqueue transactionnel, coalescing, complétion par identité (ADR-036) |
 | `src/lib/compatibilite/baseline.ts` | Outil de baseline/rebuild explicite — jamais d'événement, jamais automatique (ADR-036) |
 | `src/app/api/compatibilite/scan/route.ts` | Filet de reprise du handoff (ADR-036) — même patron d'authentification que `/api/automatisations/scan` |
-| `src/lib/automatisations/catalogueRegles.ts` | Catalogue de règles ADR-032/033/037 — dont `nouveau_match_bien_acquereur` (ADR-037), désactivée par défaut |
+| `src/lib/automatisations/catalogueRegles.ts` | Catalogue de règles ADR-032/033/037/041 — dont `nouveau_match_bien_acquereur` (ADR-037) et `suivi_apres_visite` (politique par `interet`, cible acquéreur, ADR-041), toutes désactivées par défaut |
 | `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037) et `listerExecutionsATraiter()`/`incrementerTentativeExecution()` (ADR-038) |
 | `src/lib/automatisations/reprise.ts` | Filet de reprise après crash (ADR-038) — réutilise `traiterExecutionsEnAttente()` (`moteur.ts`) telle quelle, jamais une seconde implémentation |
 | `src/app/api/automatisations/reprise/route.ts` | Endpoint de reprise (ADR-038) — même patron d'authentification que `/api/automatisations/scan`, secret dédié |
@@ -203,10 +215,10 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/components/aujourd-hui/TacheItem.tsx` | Composant canonique de rendu d'une tâche (cockpit + fiches bien/acquéreur/prospect vendeur) — lien « Voir la fiche », badge « En retard » (ADR-039) |
 | `src/types/tache.ts` | `deriverCibleTache()` (ADR-028) et `deriverRouteFicheCible()` (ADR-039) — dérivées, jamais une requête ni un parsing de titre |
 | `src/lib/visiteRepository.ts` | Entité `visites` (ADR-040) — matérialisation idempotente (`materialiserVisite`), transitions gardées (`marquerVisiteRealisee`/`annulerVisite`), report (`modifierDatePrevueVisite`), signal ADR-037 (`existeVisitePlanifieePourPaire`) |
-| `src/actions/visite.ts` | `annulerVisiteAction`/`reporterVisiteAction` (ADR-040) |
-| `src/app/visites/[id]/page.tsx` | Identité URL Atlas d'une visite (ADR-040) — redirige vers `/visites/{rendezVousCalendarId}/preparer`, rien n'y pointe encore aujourd'hui |
+| `src/actions/visite.ts` | `materialiserVisiteAction` (ADR-041, POST, seul point d'écriture créant une visite) ; `annulerVisiteAction`/`reporterVisiteAction` (ADR-040, `redirectTo` optionnel depuis ADR-041) |
+| `src/app/visites/[id]/page.tsx` | Fiche Visite réelle (ADR-041) — lecture PostgreSQL exclusive, aucune dépendance Calendar, plus une redirection |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
-| `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
+| `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu ; purement en lecture depuis ADR-041 (aucune matérialisation dans son rendu) |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus

@@ -1,6 +1,7 @@
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
+import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
 import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
@@ -30,16 +31,57 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
   {
     code: "suivi_apres_visite",
     nom: "Suivi après visite",
-    description: "Crée une tâche de suivi lorsqu'une visite est marquée réalisée.",
+    description: "Crée une tâche de suivi ciblant l'acquéreur, adaptée au retour exprimé dans le compte rendu de visite.",
     typeEvenement: "visite_realisee",
+    // ADR-041 — la tâche cible désormais l'acquéreur, jamais la Visite ni le compte rendu :
+    // l'action portée est une action commerciale envers une personne ("dois-je le/la relancer ?"),
+    // même raisonnement déjà validé pour nouveau_match_bien_acquereur (ADR-037). `Voir la fiche`
+    // (ADR-039) et `Préparer un email` en bénéficient immédiatement, sans aucun changement de
+    // modèle. `taches.visite_id` (référence historique vers un compte rendu, jamais renommée)
+    // n'est plus jamais posée par cette règle — les tâches déjà créées avant cette ADR restent
+    // lisibles telles quelles, aucune migration, aucune réinterprétation.
     construireTache: async (evenement) => {
       if (!evenement.compteRenduVisiteId) return undefined;
-      return {
-        titre: "Faire le suivi de la visite",
-        type: "relance",
-        priorite: "normale",
-        cible: { type: "visite", id: evenement.compteRenduVisiteId },
-      };
+      const compteRendu = await getCompteRenduVisiteById(evenement.compteRenduVisiteId);
+      if (!compteRendu) return undefined; // introuvable — jamais de retry infini
+
+      const [bien, acquereur] = await Promise.all([
+        getBienById(compteRendu.bienId),
+        getClientById(compteRendu.acquereurId),
+      ]);
+      if (!bien || !acquereur) return undefined; // entité introuvable — jamais de retry infini
+      if (bien.archiveLe || acquereur.archiveLe) return undefined; // sorti du périmètre commercial actif
+
+      // Politique par intérêt (ADR-041) — une seule règle, contextuelle, jamais quatre
+      // automatisations distinctes. "pas_interesse" ne produit délibérément aucune tâche
+      // acquéreur : relancer une personne ayant explicitement décliné n'aide jamais le
+      // conseiller — `undefined` ici est un succès honnête (ADR-032), jamais une erreur, jamais
+      // repris par ADR-038.
+      switch (compteRendu.interet) {
+        case "interesse":
+          return {
+            titre: `Faire le point avec ${acquereur.prenom} ${acquereur.nom} sur une éventuelle offre pour ${bien.reference}`,
+            type: "relance",
+            priorite: "normale",
+            cible: { type: "acquereur", id: acquereur.id },
+          };
+        case "a_reflechir":
+          return {
+            titre: `Relancer ${acquereur.prenom} ${acquereur.nom} après la visite de ${bien.reference}`,
+            type: "relance",
+            priorite: "normale",
+            cible: { type: "acquereur", id: acquereur.id },
+          };
+        case "inconnu":
+          return {
+            titre: `Recueillir le retour de ${acquereur.prenom} ${acquereur.nom} après la visite de ${bien.reference}`,
+            type: "relance",
+            priorite: "normale",
+            cible: { type: "acquereur", id: acquereur.id },
+          };
+        case "pas_interesse":
+          return undefined;
+      }
     },
   },
   {

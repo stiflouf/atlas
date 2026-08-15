@@ -18,8 +18,8 @@ import {
   selectionnerHistoriqueRecent,
 } from "@/lib/memoireDossier";
 import { enregistrerCompteRenduVisiteAction } from "@/actions/enregistrerCompteRenduVisite";
-import { annulerVisiteAction, reporterVisiteAction } from "@/actions/visite";
-import { materialiserVisite } from "@/lib/visiteRepository";
+import { annulerVisiteAction, materialiserVisiteAction, reporterVisiteAction } from "@/actions/visite";
+import { getVisiteParRendezVousCalendarId } from "@/lib/visiteRepository";
 import { LABEL_STATUT_VISITE, type Visite } from "@/types/visite";
 import { LABEL_INTERET, type Interet } from "@/types/compteRenduVisite";
 import { formatDateISO } from "@/lib/temps";
@@ -128,24 +128,49 @@ export default async function PreparerVisite({ params }: PageProps) {
   const acquereur = await getClientById(contexte.client.clientId);
   if (!bien || !acquereur) notFound();
 
-  // Matérialisation explicite de la Visite Atlas (ADR-040) : le conseiller vient d'atteindre cette
-  // page avec un bien/acquéreur résolus sans ambiguïté (le seul garde-fou déjà en place ci-dessus,
-  // "réutilise-la plutôt que créer un second écran") — c'est le geste explicite qui fait entrer ce
-  // rendez-vous Calendar dans Atlas comme une vraie visite, jamais un import silencieux de tout le
-  // calendrier. Idempotent au niveau DB (UNIQUE sur rendez_vous_calendar_id) : ouvrir cette page
-  // plusieurs fois pour le même rendez-vous ne matérialise jamais deux visites. Aucun fallback
-  // mock : si bien/acquéreur ne sont pas de vrais UUID persistés (base entièrement vide, tout
-  // repose encore sur les mocks), aucune visite n'est créée — le reste de la page continue de
-  // fonctionner exactement comme avant ADR-040 (comportement déjà existant, jamais régressé).
+  // Lecture seule (ADR-041, correction du défaut GET-mutant d'ADR-040) : cette page ne matérialise
+  // plus jamais de Visite Atlas dans son propre rendu — un GET (navigation, rafraîchissement,
+  // aperçu de lien, prefetch éventuel) reste sans aucun effet de bord métier. Aucun fallback mock :
+  // si bien/acquéreur ne sont pas de vrais UUID persistés, aucune visite ne pourra jamais exister
+  // pour ce rendez-vous — comportement identique à avant ADR-040 dans ce cas.
   const visite: Visite | undefined =
     UUID_REGEX.test(bien.id) && UUID_REGEX.test(acquereur.id)
-      ? await materialiserVisite({
-          bienId: bien.id,
-          acquereurId: acquereur.id,
-          datePrevue: rdv.date ?? formatDateISO(new Date()),
-          rendezVousCalendarId: rdv.id,
-        })
+      ? await getVisiteParRendezVousCalendarId(rdv.id)
       : undefined;
+
+  // Aucune Visite Atlas matérialisée pour ce rendez-vous pourtant résolu sans ambiguïté : plutôt
+  // que d'engager silencieusement tous les appels externes ci-dessous (géocodage, transports,
+  // écoles, patrimoine, marché) pour un rendez-vous que le conseiller n'a peut-être fait
+  // qu'entrouvrir, on s'arrête ici avec une action explicite unique — le seul point d'écriture
+  // possible désormais (`materialiserVisiteAction`, POST, jamais un GET).
+  if (UUID_REGEX.test(bien.id) && UUID_REGEX.test(acquereur.id) && !visite) {
+    return (
+      <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
+        <EnTeteRetour />
+        <div className="mb-6">
+          <Badge variant="accent">Rendez-vous résolu</Badge>
+          <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mt-2">
+            {bien.titre}
+          </h1>
+          <p className="text-[14px] text-[#64748b] mt-0.5">
+            {bien.adresse}, {bien.codePostal} {bien.ville}
+          </p>
+          <p className="text-[14px] text-[#0f172a] mt-3">
+            Acquéreur : {acquereur.prenom} {acquereur.nom}
+          </p>
+        </div>
+        <form action={materialiserVisiteAction}>
+          <input type="hidden" name="rendezVousCalendarId" value={rdv.id} />
+          <button
+            type="submit"
+            className="text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+          >
+            Enregistrer et préparer cette visite
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   // Mémoire du dossier — uniquement ce que le conseiller a déjà lui-même enregistré (comptes
   // rendus, notes, tâches), jamais interprété ni résumé. N'alimente ni pointsAttention ni

@@ -47,6 +47,17 @@ export async function getCompteRenduVisiteById(id: string): Promise<CompteRenduV
   return ligne ? ligneVersCompteRendu(ligne) : undefined;
 }
 
+// Lecture pour la fiche Visite (ADR-041) : un compte rendu créé sur une visite planifiee la
+// référence via visite_id (ADR-040) — au plus un compte rendu par visite dans tous les chemins
+// d'écriture actuels (une visite ne transite vers 'realisee' qu'une seule fois, gardée). `undefined`
+// si aucun compte rendu n'a encore été créé (visite planifiee/annulee) ou si visiteId n'est pas un
+// vrai UUID.
+export async function getCompteRenduVisiteParVisiteId(visiteId: string): Promise<CompteRenduVisite | undefined> {
+  if (!UUID_REGEX.test(visiteId)) return undefined;
+  const [ligne] = await getDb().select().from(comptesRendusVisiteTable).where(eq(comptesRendusVisiteTable.visiteId, visiteId));
+  return ligne ? ligneVersCompteRendu(ligne) : undefined;
+}
+
 // Validation (retour non vide après trim, interet dans le vocabulaire contrôlé) déjà faite par
 // l'appelant (server action) — insertion pure ici, même principe que les autres repositories.
 export type NouveauCompteRendu = Omit<CompteRenduVisite, "id" | "creeLe">;

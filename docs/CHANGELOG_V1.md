@@ -977,6 +977,43 @@ rendus déjà présents restent avec `visite_id` absent, sans aucun backfill par
 `enregistrerCompteRenduVisite.test.ts` et `catalogueRegles.nouveauMatch.test.ts`, +4 cas chacun) —
 suite complète du projet passante (934 tests).
 
+## 41. Fiche Visite Atlas autonome et suivi post-visite exploitable
+
+Un audit préalable en lecture seule a confirmé deux défauts réels introduits par ADR-040. D'abord,
+`/visites/[id]/preparer` matérialisait une Visite Atlas directement dans le rendu de sa page — un
+simple `GET` (navigation, rafraîchissement, aperçu de lien) pouvait donc muter l'état, exactement
+l'anti-pattern déjà évité ailleurs dans le code (`api/auth/google/logout`, POST plutôt que GET).
+Ensuite, `/visites/{idAtlas}` redirigeait inconditionnellement vers la préparation dépendante de
+Google Calendar : une visite persistée, avec compte rendu complet en base, devenait totalement
+inconsultable dès que Calendar était déconnecté ou l'événement d'origine supprimé côté Google —
+alors que toutes ses données pertinentes n'avaient structurellement besoin d'aucun appel externe.
+
+Les deux sont corrigés. La matérialisation vit désormais exclusivement dans une nouvelle Server
+Action (`materialiserVisiteAction`, POST) — la page de préparation est purement en lecture,
+affichant un unique bouton explicite (« Enregistrer et préparer cette visite ») quand une visite
+n'existe pas encore, avant tout appel externe coûteux. `/visites/{idAtlas}` devient une vraie fiche
+lisant exclusivement PostgreSQL (visite, bien, acquéreur, compte rendu lié) — aucune dépendance à
+Calendar dans son noyau, reste consultable même OAuth expiré ou événement d'origine supprimé.
+Calendar n'intervient plus qu'en enrichissement secondaire, via un lien conditionnel vers la
+préparation (visite encore planifiée uniquement). L'onglet « Visites → À venir » de la fiche bien
+(ADR-040) lie désormais chaque entrée vers cette nouvelle fiche.
+
+`suivi_apres_visite` (toujours désactivée par défaut) devient réellement utile : elle lisait
+jusqu'ici seulement l'identifiant du compte rendu sans jamais consulter `interet`, produisant
+systématiquement la même tâche générique. Elle adapte désormais le titre à l'intérêt exprimé —
+intéressé → orienté vers une éventuelle offre, à réfléchir → relance, intérêt non précisé →
+recueillir le retour — et ne produit plus aucune tâche si l'acquéreur n'est pas intéressé (succès
+honnête, jamais une erreur). Les nouvelles tâches ciblent désormais l'**acquéreur**, jamais la
+Visite ni le compte rendu — même raisonnement déjà validé pour `nouveau_match_bien_acquereur`
+(ADR-037) : `Voir la fiche` et `Préparer un email` en bénéficient immédiatement, sans aucun
+changement de modèle. `taches.visite_id` (référence historique vers un compte rendu, jamais
+renommée) reste strictement inchangée pour les tâches déjà créées — aucune migration, aucune
+réinterprétation.
+
+Aucune migration de schéma dans cette ADR. 12 nouveaux tests (page de préparation en lecture seule,
+fiche Visite autonome sans Calendar, politique `suivi_apres_visite` par intérêt) et 6 assertions
+mises à jour dans les tests ADR-032 déjà existants — suite complète du projet passante (948 tests).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

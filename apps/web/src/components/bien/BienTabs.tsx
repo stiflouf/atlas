@@ -387,7 +387,11 @@ export default function BienTabs({
                 {visitesAVenirReelles.map((v) => {
                   const acquereur = acquereursParId.get(v.acquereurId);
                   return (
-                    <div key={v.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                    <Link
+                      key={v.id}
+                      href={`/visites/${v.id}`}
+                      className="block bg-white rounded-lg border border-[#f1f5f9] p-4 hover:border-[#4338ca] transition-colors"
+                    >
                       <div className="flex items-center gap-2 mb-0.5">
                         <p className="text-[13px] font-medium text-[#64748b]">{formatDate(v.datePrevue)}</p>
                         <span className="text-[11px] text-[#94a3b8]">·</span>
@@ -396,7 +400,7 @@ export default function BienTabs({
                       <p className="text-[14px] font-medium text-[#0f172a]">
                         {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                       </p>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>

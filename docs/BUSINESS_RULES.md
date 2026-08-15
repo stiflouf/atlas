@@ -453,9 +453,10 @@ Tri final par date décroissante sur l'ensemble combiné. **Jamais** le texte li
 compte rendu n'apparaît dans l'historique — seulement le label court dérivé du champ structuré
 `interet`.
 
-## Cycle de vie d'une visite (ADR-040)
+## Cycle de vie d'une visite (ADR-040/041)
 
-**Fichiers** : `src/types/visite.ts`, `src/lib/visiteRepository.ts`, `src/actions/visite.ts`.
+**Fichiers** : `src/types/visite.ts`, `src/lib/visiteRepository.ts`, `src/actions/visite.ts`,
+`src/app/visites/[id]/page.tsx` (fiche), `src/app/visites/[id]/preparer/page.tsx` (préparation).
 
 Entité métier minimale `visites` — une rencontre planifiée entre UN Bien et UN Acquéreur, distincte
 à la fois du rendez-vous Google Calendar (jamais persisté comme fait métier) et du compte rendu
@@ -467,22 +468,35 @@ une écrasement depuis un état terminal. **Invariant absolu** : `date_prevue` d
 signifie jamais `realisee` — aucune inférence depuis le temps calendaire seul, seule une action
 explicite du conseiller transitionne le statut.
 
-**Matérialisation explicite, jamais un import de calendrier** : une visite naît uniquement lorsque
-le conseiller atteint `/visites/[id]/preparer` pour un rendez-vous dont le bien et l'acquéreur sont
-résolus sans ambiguïté (garde déjà existant de cette page). Idempotente au niveau DB (`UNIQUE` sur
-`rendez_vous_calendar_id`, pas seulement un find-before-insert) — deux accès concurrents à la même
-page ne créent jamais deux visites. Aucune matérialisation si bien/acquéreur ne sont pas de vrais
+**Matérialisation explicite, jamais un GET, jamais un import de calendrier** (ADR-041) : une visite
+naît **uniquement** via `materialiserVisiteAction` (Server Action, POST) — jamais dans le rendu de
+la page de préparation elle-même, qui reste purement en lecture. Le conseiller doit soumettre le
+formulaire `Enregistrer et préparer cette visite`, affiché seulement quand bien/acquéreur sont
+résolus sans ambiguïté et qu'aucune visite n'existe encore pour ce rendez-vous. Idempotente au
+niveau DB (`UNIQUE` sur `rendez_vous_calendar_id`, pas seulement un find-before-insert) — un double
+submit ne crée jamais deux visites. Aucune matérialisation si bien/acquéreur ne sont pas de vrais
 UUID persistés (cas mock).
 
 **Report** (`modifierDatePrevueVisite`, `reporterVisiteAction`) : modifie `date_prevue` sur la même
 ligne, même id — jamais annulée puis recréée. **Annulation** (`annulerVisite`,
 `annulerVisiteAction`) : aucun motif structuré, aucune raison obligatoire. Les deux sont restreints
-aux visites encore `planifiee`.
+aux visites encore `planifiee`, et acceptent un `redirectTo` optionnel (ADR-041, même patron que
+`terminerTacheAction`) — la fiche Visite y redirige vers elle-même, la page de préparation garde
+son comportement par défaut.
 
 **Transition vers `realisee`** : posée dans la même transaction que l'enregistrement du compte
 rendu (voir ci-dessous), jamais un bouton "Marquer réalisée" séparé — remplir le compte rendu EST
 le geste qui réalise la visite. Une visite déjà tranchée (`realisee`/`annulee`) n'affiche plus le
-formulaire de compte rendu.
+formulaire de compte rendu. Fait métier exact de l'événement `visite_realisee` : *« un compte rendu
+vient d'être créé »* — la transition de statut en est une conséquence systématique de ce même
+geste (un seul site d'appel à `marquerVisiteRealisee` dans tout le code), pas une garantie imposée
+par une contrainte DB.
+
+**Fiche `/visites/{id}` autonome (ADR-041)** : lit exclusivement PostgreSQL (visite, bien,
+acquéreur, compte rendu lié) — aucun appel à Google Calendar dans son noyau, reste consultable si
+Calendar est déconnecté, l'OAuth expiré, ou l'événement d'origine supprimé côté Google. Calendar
+n'intervient qu'en enrichissement secondaire, via un lien conditionnel vers la préparation
+(visite `planifiee` uniquement) — jamais une condition d'existence de la fiche.
 
 ## Comptes rendus de visite
 
@@ -502,6 +516,35 @@ formulaire de compte rendu.
   **uniquement** sur le compte rendu, jamais dupliqué sur `visites.statut` : le premier répond à
   "quel est le retour de l'acquéreur ?", le second à "que s'est-il passé ?".
 
+## Suivi après visite — politique par intérêt (ADR-041)
+
+**Fichier** : règle `suivi_apres_visite` dans `src/lib/automatisations/catalogueRegles.ts`,
+déclenchée par `visite_realisee` (désactivée par défaut, comme les autres règles ADR-032).
+
+Une seule règle, contextuelle sur `interet` (relu depuis le compte rendu référencé par
+l'événement) — jamais quatre automatisations distinctes :
+
+| `interet` | Titre produit | Cible |
+|---|---|---|
+| `interesse` | `Faire le point avec {Prénom Nom} sur une éventuelle offre pour {référenceBien}` | Acquéreur |
+| `a_reflechir` | `Relancer {Prénom Nom} après la visite de {référenceBien}` | Acquéreur |
+| `inconnu` | `Recueillir le retour de {Prénom Nom} après la visite de {référenceBien}` | Acquéreur |
+| `pas_interesse` | Aucune tâche (`undefined`) | — |
+
+**Cible = acquéreur, jamais la Visite ni le compte rendu** (changement ADR-041, remplace l'ancienne
+cible `{ type: "visite", id: compteRenduVisiteId }`) — même raisonnement déjà validé pour
+`nouveau_match_bien_acquereur` (ADR-037) : l'action portée est une action commerciale envers une
+personne. Conséquence directe et déjà fonctionnelle sans changement de modèle : `Voir la fiche`
+(ADR-039) résout vers `/clients/{acquereurId}`, `Préparer un email` résout le bon destinataire.
+
+**Même garde d'archivage que `nouveau_match_bien_acquereur`** : bien ou acquéreur archivé au moment
+du traitement → aucune tâche. `pas_interesse` → `undefined` est un résultat honnête (ADR-032),
+jamais une erreur — l'exécution reste `reussie` sans tâche, jamais reprise par le filet ADR-038.
+
+**Legacy non touché** : `taches.visite_id` continue de référencer un `comptes_rendus_visite.id`
+pour les tâches créées par l'ancienne version de cette règle (avant ADR-041) — aucune migration,
+aucune réinterprétation. Ces tâches historiques restent lisibles exactement comme avant.
+
 ## Onglet Visites → Effectuées de la fiche bien
 
 **Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section
@@ -510,7 +553,9 @@ mélangée au mock (`dossier.visitesEffectuees` reste affiché tel quel si un do
 
 **« À venir » (ADR-040)** : pour un bien réel, dérivée désormais de `visites` (statut `planifiee`,
 triées par `datePrevue`) — remplace un mock statique qui n'affichait jamais rien de vrai pour un
-bien réel avant cette ADR. Comportement mock inchangé pour un bien avec `dossier`.
+bien réel avant cette ADR. Comportement mock inchangé pour un bien avec `dossier`. Chaque entrée
+lie désormais vers sa fiche Visite (`/visites/{id}`, ADR-041) — premier point d'entrée réel vers
+cette fiche depuis l'interface.
 
 | Champ affiché | Source | Traitement |
 |---|---|---|
