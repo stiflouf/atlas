@@ -15,8 +15,10 @@ prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), note
 rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien, moteur
 d'automatisations événement → tâche (ADR-032), moteur temporel/relances programmées (ADR-033),
 moteur canonique de compatibilité Bien ↔ Acquéreur (ADR-034, `src/lib/compatibilite/`), secteurs
-de recherche géographique acquéreur / critère géographique du moteur de compatibilité (ADR-035) et
-détection durable des transitions de compatibilité vers un événement métier append-only (ADR-036).
+de recherche géographique acquéreur / critère géographique du moteur de compatibilité (ADR-035),
+détection durable des transitions de compatibilité vers un événement métier append-only (ADR-036)
+et une règle d'automatisation ADR-032 exploitant cet événement pour créer une tâche commerciale
+"nouveau match", désactivée par défaut (ADR-037).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -94,15 +96,20 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   supposer qu'un bien moins cher que `budgetMin` est signalé. Aucun score, aucune pondération,
   aucun résultat détaillé persisté — `evaluerCompatibilite()` reste recalculé à chaque affichage.
   Ne jamais supposer qu'un critère `a_verifier` signifie une incompatibilité.
-- **Transitions de compatibilité détectées durablement, mais aucune automatisation branchée
-  (ADR-036)** — `src/lib/compatibilite/{etatRepository,resynchronisationRepository,synchronisation,
-  baseline}.ts` détectent quand une paire *devient* compatible et émettent un événement append-only
+- **Transitions de compatibilité détectées durablement (ADR-036)** —
+  `src/lib/compatibilite/{etatRepository,resynchronisationRepository,synchronisation,baseline}.ts`
+  détectent quand une paire *devient* compatible et émettent un événement append-only
   (`compatibilite_bien_acquereur_devenue_compatible`, `evenements_metier`), sans jamais persister le
   détail des 7 critères. Ne jamais confondre `compatibilites_bien_acquereur_etat` (mémoire technique
   de dernière observation, jamais une source de vérité) avec le résultat réel du moteur
-  (`evaluerCompatibilite()`). Aucune règle `catalogueRegles.ts` ne référence encore ce type
-  d'événement — **0 tâche, 0 email pour un nouveau match**, ne pas supposer le contraire tant
-  qu'une ADR ultérieure n'a pas explicitement ajouté cette règle.
+  (`evaluerCompatibilite()`).
+- **Une règle ADR-032 exploite désormais cet événement, mais désactivée par défaut (ADR-037)** —
+  `nouveau_match_bien_acquereur` (`catalogueRegles.ts`) crée une tâche ciblant l'**acquéreur**
+  (jamais le bien — `taches` impose au plus une cible) tant que l'événement reste `compatible` au
+  moment du traitement, l'entité non archivée, et qu'aucune offre `en_cours`/compromis
+  `en_cours`/`realise`/tâche déjà ouverte n'existe pour cette paire précise. **Tant que cette règle
+  n'est pas activée explicitement depuis `/automatisations`, 0 tâche est créée** — ne jamais
+  supposer le contraire. Aucun email, aucun Gmail dans cette ADR.
 - **Géographie (ADR-035) limitée à la granularité commune/arrondissement, jamais un rayon** —
   `bien.codeInseeCommune` (citycode IGN, une chaîne, jamais un entier) est le seul identifiant
   géographique lu par le moteur ; `ville`/`codePostal` du bien ne sont **jamais** comparés à un
@@ -157,6 +164,8 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/compatibilite/resynchronisationRepository.ts` | Handoff durable (file d'attente de resynchronisation) — enqueue transactionnel, coalescing, complétion par identité (ADR-036) |
 | `src/lib/compatibilite/baseline.ts` | Outil de baseline/rebuild explicite — jamais d'événement, jamais automatique (ADR-036) |
 | `src/app/api/compatibilite/scan/route.ts` | Filet de reprise du handoff (ADR-036) — même patron d'authentification que `/api/automatisations/scan` |
+| `src/lib/automatisations/catalogueRegles.ts` | Catalogue de règles ADR-032/033/037 — dont `nouveau_match_bien_acquereur` (ADR-037), désactivée par défaut |
+| `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037) — anti-spam inter-cycle via la provenance ADR-032, jamais une analyse de texte |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |

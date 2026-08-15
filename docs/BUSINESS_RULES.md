@@ -218,6 +218,14 @@ arrondissements", ce qui produirait de faux `incompatible`.
 "Paris 10e ou 11e") n'a aucun effet tant qu'aucune ligne structurée `secteurs_recherche_acquereur`
 n'existe — `non_concerne` dans ce cas, jamais une extraction automatique (ADR-008).
 
+**Orchestration sans N+1** : `evaluerCompatibiliteBien` charge en une seule requête les secteurs de
+tous les acquéreurs candidats (`listerSecteursPourAcquereurs`, `Map` en mémoire) ;
+`evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté, réutilisés
+pour chaque bien comparé. Aucune requête IGN dans le moteur de compatibilité lui-même.
+
+**UX** : section dédiée "Secteurs de recherche" sur la fiche acquéreur (voir/ajouter/supprimer) —
+volontairement pas dans `AcquereurFormulaire`.
+
 ## Transitions de compatibilité (ADR-036)
 
 **Fichiers** : `src/lib/compatibilite/{etatRepository,resynchronisationRepository,synchronisation,
@@ -268,20 +276,54 @@ rebuild accidentel qui remettrait à zéro les cycles d'un système déjà en fo
 `bienId`/`acquereurId`/`cycleCompatibilite` — jamais de nom, email, téléphone, ni un instantané des
 7 critères (relus depuis les entités au moment où ils sont réellement nécessaires).
 
-**Hors périmètre de cette ADR, volontairement** : aucune tâche, aucun email, aucune règle
-d'automatisation ne réagit encore à ce nouvel événement — ADR-036 s'arrête à la production d'un
-fait métier durable. Le branchement commercial (créer une tâche "nouveau bien compatible") est
-laissé à une ADR ultérieure, qui n'aura besoin d'ajouter qu'une entrée dans
-`src/lib/automatisations/catalogueRegles.ts`, exactement comme les règles ADR-032/033 existantes —
-aucune modification du moteur de compatibilité ni de la détection de transition.
+**Hors périmètre de cette ADR** : aucune tâche, aucun email n'était produit lors de la sortie
+d'ADR-036 — ADR-037 (ci-dessous) branche désormais cet événement sur le moteur ADR-032.
 
-**Orchestration sans N+1** : `evaluerCompatibiliteBien` charge en une seule requête les secteurs de
-tous les acquéreurs candidats (`listerSecteursPourAcquereurs`, `Map` en mémoire) ;
-`evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté, réutilisés
-pour chaque bien comparé. Aucune requête IGN dans le moteur de compatibilité lui-même.
+## Automatisation commerciale du nouveau match (ADR-037)
 
-**UX** : section dédiée "Secteurs de recherche" sur la fiche acquéreur (voir/ajouter/supprimer) —
-volontairement pas dans `AcquereurFormulaire`.
+**Fichier** : règle `nouveau_match_bien_acquereur` dans `src/lib/automatisations/catalogueRegles.ts`,
+déclenchée par `compatibilite_bien_acquereur_devenue_compatible` (ADR-036). Séquence complète :
+`evaluerCompatibilite()` (ADR-034/035) → transition + événement durable (ADR-036) → règle ADR-032 →
+tâche (ADR-037) — le synchroniseur ADR-036 reste totalement ignorant de cette règle.
+
+**Désactivée par défaut**, comme les 5 règles précédentes. L'activation figée ADR-032 garantit
+qu'aucun événement antérieur à l'existence/activation de cette règle ne produit jamais de tâche
+rétroactive, quelle que soit la date d'activation ultérieure.
+
+**Cible = acquéreur, jamais une double cible** : `taches` impose au plus une cible parmi ses sept
+colonnes dédiées (ADR-028) — le bien apparaît uniquement dans le contenu opérationnel de la tâche
+(`contexte`), jamais comme seconde cible en base. Conséquence directe et vérifiée : l'action
+"Préparer un email" existante (ADR-031, `resoudreContexteCommunicationDepuisTache`) résout alors
+exactement et sans ambiguïté le bon acquéreur.
+
+```text
+titre    = "Nouveau match — contacter {Prénom Nom} pour {référenceBien}"
+contexte = "Atlas a détecté une nouvelle compatibilité avec ce bien. Vérifier les critères puis contacter l'acquéreur si pertinent."
+type     = "appel" ; priorité = "normale" ; aucune échéance (ChampsTacheAutomatique n'en a jamais porté)
+```
+
+**Revalidation complète au moment de l'exécution** — l'événement signifie *"cette paire est devenue
+compatible à un instant donné"*, jamais *"produire une tâche quelle que soit la situation
+actuelle"*. Aucune tâche si, au moment du traitement : le bien ou l'acquéreur est introuvable ou
+archivé ; `evaluerCompatibilite()` n'est plus `compatible` (redevenu incompatible ou à vérifier) ;
+une offre `en_cours` ou un compromis `en_cours`/`realise` existe déjà pour cette paire précise (un
+compromis `annule` ne bloque jamais indéfiniment) ; une tâche de cette règle est déjà ouverte pour
+cette même paire (voir ci-dessous). Chaque cas retourne le résultat honnête "rien à produire",
+jamais une erreur — une vraie panne technique continue, elle, à suivre le mécanisme d'échec/retry
+ADR-032 existant.
+
+**Anti-spam inter-cycle, distinct de l'idempotence ADR-032** : `UNIQUE(regle_code, evenement_id)`
+garantit qu'un même événement ne produit jamais plus d'une exécution — mais un **nouveau cycle**
+(nouvel événement) pour une paire dont la tâche précédente est encore ouverte ne crée **pas** de
+seconde tâche (jamais une réouverture/modification de la première non plus) ; un nouveau cycle après
+qu'une tâche précédente a été **terminée** produit, lui, normalement une nouvelle tâche. Identité de
+la paire retrouvée via la provenance déjà réelle du moteur ADR-032
+(`executions_automatisation.evenementId → evenements_metier.bienId/acquereurId`,
+`executions_automatisation.tacheId → taches`), jamais une analyse de texte de tâche.
+
+**Aucun snapshot, aucun email** : ni score, ni détail de critère, ni code INSEE dans la tâche — le
+conseiller remonte à l'explication à jour depuis la fiche acquéreur (ADR-034). Aucun Gmail, aucune
+notification : ADR-037 s'arrête à la tâche.
 
 ## Tâches (ADR-028)
 

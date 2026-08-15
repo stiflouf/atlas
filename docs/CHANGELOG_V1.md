@@ -707,6 +707,14 @@ libre (`notes`/`criteres`/`caracteristiques`/`description`) — testé explicite
 mentionnant "parking obligatoire", "cherche terrasse", "5e sans ascenseur" sans effet sur le
 résultat tant que les champs structurés correspondants restent absents.
 
+Orchestration symétrique (`evaluerCompatibiliteBien`/`evaluerCompatibiliteAcquereur`, toutes deux
+appuyées sur la même fonction pure `evaluerCompatibilite`), au-dessus des repositories existants —
+aucun nouveau repository, aucune table, aucun cache. Nouvel onglet "Acquéreurs compatibles" sur la
+fiche bien, nouvelle section "Biens compatibles" sur la fiche acquéreur : statut global + détail
+critère par critère toujours disponible, `a_verifier` jamais présenté comme une incompatibilité,
+aucun score sur 100. Géographie et préférences pondérées explicitement hors périmètre V1 —
+documentées, pas construites.
+
 ## 35. Secteurs de recherche géographique acquéreur / compatibilité géographique
 
 Nouvelle table `secteurs_recherche_acquereur` (`acquereur_id` FK CASCADE, `code_insee` texte,
@@ -741,6 +749,19 @@ générique "ville entière" (`75056`/`69123`/`13055`) est explicitement exclue 
 l'absence de `banId` a été testée puis écartée après avoir constaté qu'elle excluait aussi des
 communes rurales ordinaires) pour ne jamais produire un faux `incompatible` par confusion
 ville/arrondissements.
+
+**Orchestration sans N+1** : `listerSecteursPourAcquereurs()` (nouveau, batch `inArray`) charge en
+une seule requête les secteurs de tous les acquéreurs candidats pour `evaluerCompatibiliteBien` ;
+`evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté. Aucune
+requête IGN dans le moteur de compatibilité.
+
+**Backfill** (`scripts/backfill-code-insee-commune.mjs`, script `.mjs` autonome — les alias `@/`
+n'étant pas résolubles hors du build Next.js) : dry-run par défaut, `--apply` pour écrire ; ne lit que
+les champs d'adresse structurés du bien, jamais de texte libre ; idempotent (ne retouche jamais un
+bien déjà résolu) ; aucune écriture sur un résultat ambigu ou un échec IGN.
+
+Documentation : `docs/adr/035-secteurs-recherche-acquereur.md` (nouveau), mise à jour de
+`DATA_MODEL.md`, `BUSINESS_RULES.md`, `KNOWN_LIMITATIONS.md`, `AI_HANDOFF.md`.
 
 ## 36. Détection durable des transitions de compatibilité Bien ↔ Acquéreur
 
@@ -794,31 +815,64 @@ d'écraser une table déjà peuplée (protection contre un rebuild accidentel). 
 cycle au maximum déjà observé dans `evenements_metier` pour chaque paire, jamais recalculé "à
 zéro", pour ne jamais pouvoir réémettre un cycle déjà utilisé historiquement.
 
-**Hors périmètre, volontairement** : aucune règle `catalogueRegles.ts` ne référence encore ce
-nouvel événement — 0 tâche, 0 email, 0 notification pour tout nouveau match. Une ADR ultérieure
-branchera le raccord commercial sans toucher au moteur de compatibilité ni à la détection de
-transition.
+**Hors périmètre, volontairement (à l'origine)** : aucune règle `catalogueRegles.ts` ne référençait
+encore ce nouvel événement — 0 tâche, 0 email, 0 notification pour tout nouveau match. Branché
+depuis par ADR-037 (voir ci-dessous), sans toucher au moteur de compatibilité ni à la détection de
+transition elle-même.
 
-**Orchestration sans N+1** : `listerSecteursPourAcquereurs()` (nouveau, batch `inArray`) charge en
-une seule requête les secteurs de tous les acquéreurs candidats pour `evaluerCompatibiliteBien` ;
-`evaluerCompatibiliteAcquereur` charge une seule fois les secteurs de l'acquéreur consulté. Aucune
-requête IGN dans le moteur de compatibilité.
+## 37. Automatisation commerciale du nouveau match Bien ↔ Acquéreur
 
-**Backfill** (`scripts/backfill-code-insee-commune.mjs`, script `.mjs` autonome — les alias `@/`
-n'étant pas résolubles hors du build Next.js) : dry-run par défaut, `--apply` pour écrire ; ne lit que
-les champs d'adresse structurés du bien, jamais de texte libre ; idempotent (ne retouche jamais un
-bien déjà résolu) ; aucune écriture sur un résultat ambigu ou un échec IGN.
+Une seule règle ADR-032, `nouveau_match_bien_acquereur`
+(`src/lib/automatisations/catalogueRegles.ts`), consommant l'événement ADR-036
+`compatibilite_bien_acquereur_devenue_compatible` — le synchroniseur ADR-036 reste totalement
+ignorant de cette règle. Migration `0024_blue_roland_deschain.sql` : extension des `CHECK` de
+`configurations_automatisation`/`executions_automatisation` pour le 6ᵉ code de règle, seed
+`active = false` (même convention que les 5 règles précédentes) — aucune modification du schéma
+`taches`.
 
-Documentation : `docs/adr/035-secteurs-recherche-acquereur.md` (nouveau), mise à jour de
-`DATA_MODEL.md`, `BUSINESS_RULES.md`, `KNOWN_LIMITATIONS.md`, `AI_HANDOFF.md`.
+**Activation figée, sans rattrapage rétroactif** : comportement déjà garanti par le moteur ADR-032
+existant, vérifié explicitement — un événement survenu avant l'existence/l'activation de la règle
+ne produit jamais de tâche, quelle que soit la date d'activation ultérieure.
 
-Orchestration symétrique (`evaluerCompatibiliteBien`/`evaluerCompatibiliteAcquereur`, toutes deux
-appuyées sur la même fonction pure `evaluerCompatibilite`), au-dessus des repositories existants —
-aucun nouveau repository, aucune table, aucun cache, aucune automatisation déclenchée (ADR-032/033
-non intégrées ici). Nouvel onglet "Acquéreurs compatibles" sur la fiche bien, nouvelle section
-"Biens compatibles" sur la fiche acquéreur : statut global + détail critère par critère toujours
-disponible, `a_verifier` jamais présenté comme une incompatibilité, aucun score sur 100. Géographie
-et préférences pondérées explicitement hors périmètre V1 — documentées, pas construites.
+**Cible = acquéreur, jamais une double cible** : `taches` impose au plus une cible parmi ses sept
+colonnes dédiées (ADR-028, contrainte non modifiée) — le bien apparaît uniquement dans le
+`contexte` de la tâche. Preuve directe trouvée dans le code existant (ADR-031,
+`resoudreContexteCommunicationDepuisTache`) : une cible `bien` aurait résolu le vendeur ou un
+acquéreur en compromis pour l'action "Préparer un email", jamais le bon acquéreur — la cible
+`acquereur` résout, elle, exactement et sans ambiguïté le destinataire attendu (testé
+explicitement).
+
+**Revalidation complète au moment de l'exécution**, jamais dans le synchroniseur ADR-036 :
+`evaluerCompatibilite()` (ADR-034/035) rappelée fraîchement (jamais `compatibilites_bien_acquereur_etat`,
+mémoire technique, jamais une vérité métier) ; aucune tâche si le bien/l'acquéreur est introuvable
+ou archivé, si le statut n'est plus `compatible`, si une offre `en_cours` ou un compromis
+`en_cours`/`realise` existe déjà pour cette paire (un compromis `annule` ne bloque jamais
+indéfiniment), ou si une tâche de cette règle est déjà ouverte pour cette même paire. Chaque cas
+retourne `undefined` (résultat métier honnête), jamais une erreur — une vraie panne technique
+continue de suivre le mécanisme d'échec/retry ADR-032 existant, jamais confondue avec ces cas.
+Aucune vérification sur les comptes rendus de visite (aucune notion de visite "programmée/en cours"
+dans le modèle actuel, uniquement des rapports déjà réalisés) — limite assumée et documentée
+plutôt qu'un état inventé.
+
+**Anti-spam inter-cycle, distinct de l'idempotence ADR-032** (`UNIQUE(regle_code, evenement_id)`,
+inchangée) : nouvelle fonction `existeExecutionAvecTacheOuvertePourPaire()`
+(`executionAutomatisationRepository.ts`) — réutilise la provenance déjà réelle du moteur ADR-032
+(`executions_automatisation.evenementId → evenements_metier.bienId/acquereurId`,
+`.tacheId → taches`) pour retrouver une tâche encore ouverte de cette règle sur la même paire,
+**jamais une analyse de texte de tâche, jamais une nouvelle colonne**. Un cycle suivant avec une
+tâche précédente encore ouverte ne crée jamais de seconde tâche (jamais une réouverture/modification
+de la première) ; un cycle suivant après une tâche **terminée** en crée normalement une nouvelle.
+
+Titre `"Nouveau match — contacter {Prénom Nom} pour {référenceBien}"`, contexte court, type
+`"appel"`, priorité `"normale"`, **aucune échéance** (`ChampsTacheAutomatique` n'en a jamais porté,
+aucune des 6 règles n'en fixe une — cohérence stricte avec l'existant plutôt qu'une extension de
+contrat pour cette seule règle). Provenance affichée automatiquement par le composant `TacheItem.tsx`
+déjà existant, aucun nouveau composant UI. Aucun snapshot des 7 critères, aucun email, aucun Gmail.
+
+17 nouveaux tests (`catalogueRegles.nouveauMatch.test.ts`) : activation figée, cible, contenu,
+idempotence/concurrence, revalidation complète, archivage, entité absente, relation commerciale
+avancée, anti-spam inter-cycle, résolution "Préparer un email", non-régression append-only — suite
+complète du projet passante (879 tests).
 
 ---
 

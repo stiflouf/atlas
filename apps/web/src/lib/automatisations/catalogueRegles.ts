@@ -1,4 +1,11 @@
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
+import { getBienById } from "@/lib/bienRepository";
+import { getClientById } from "@/lib/clientRepository";
+import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
+import { listerOffresPourBien } from "@/lib/offreRepository";
+import { listerCompromisPourBien } from "@/lib/compromisRepository";
+import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
+import { existeExecutionAvecTacheOuvertePourPaire } from "./executionAutomatisationRepository";
 import type { ChampsTacheAutomatique, CodeRegleAutomatisation, EvenementMetier, TypeEvenementMetier } from "@/types/automatisation";
 
 // Catalogue de règles déterministes (ADR-032) — versionné et testé en code (pas de constructeur
@@ -101,6 +108,66 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
         type: "relance",
         priorite: "normale",
         cible: { type: "prospectVendeur", id: evenement.prospectVendeurId },
+      };
+    },
+  },
+  {
+    code: "nouveau_match_bien_acquereur",
+    nom: "Nouveau match Bien × Acquéreur",
+    description: "Crée une tâche de contact lorsqu'une paire bien/acquéreur devient compatible (ADR-036/037).",
+    typeEvenement: "compatibilite_bien_acquereur_devenue_compatible",
+    // Revalidation complète au moment de l'exécution (ADR-037) — jamais dans le synchroniseur
+    // ADR-036, qui reste totalement indépendant de toute conséquence commerciale. L'événement
+    // signifie uniquement "cette paire est devenue compatible à un instant donné", jamais "produire
+    // une tâche quelle que soit la situation actuelle" : chaque garde ci-dessous retourne
+    // `undefined` pour un cas métier honnête ("l'effet n'est plus pertinent"), jamais une erreur —
+    // seule une exception réellement inattendue (DB indisponible, etc.) continue de remonter et de
+    // faire échouer l'exécution (ADR-032, marquée `echouee`), jamais confondue avec ces cas.
+    // `evaluerCompatibilite()` (ADR-034/035) reste l'unique source de vérité relue ici — jamais
+    // `compatibilites_bien_acquereur_etat` (mémoire technique ADR-036, jamais une vérité métier).
+    construireTache: async (evenement) => {
+      if (!evenement.bienId || !evenement.acquereurId) return undefined;
+      const { bienId, acquereurId } = evenement;
+
+      const [bien, acquereur] = await Promise.all([getBienById(bienId), getClientById(acquereurId)]);
+      if (!bien || !acquereur) return undefined; // entité introuvable — jamais de retry infini
+      if (bien.archiveLe || acquereur.archiveLe) return undefined; // sorti du périmètre commercial actif
+
+      const secteurs = await listerSecteursPourAcquereur(acquereurId);
+      const resultat = evaluerCompatibilite(bien, acquereur, secteurs);
+      if (resultat.statutGlobal !== "compatible") return undefined; // redevenu incompatible/à vérifier
+
+      // Relation commerciale déjà avancée pour cette paire précise (ADR-037) — règle minimale sûre,
+      // jamais une machine d'état inventée : une offre encore "en_cours", ou un compromis
+      // "en_cours"/"realise", représentent une opportunité déjà activement engagée par un autre
+      // chemin ; un compromis "annule" ne bloque jamais indéfiniment un futur cycle légitime.
+      // Aucune vérification sur les comptes rendus de visite : ce modèle ne porte aucune notion de
+      // visite "programmée/en cours" (uniquement des rapports déjà réalisés, après coup) — bloquer
+      // sur un ancien rapport créerait une interdiction éternelle non voulue, sans signal fiable
+      // pour la borner. Limite assumée et documentée (docs/KNOWN_LIMITATIONS.md), jamais un état
+      // inventé.
+      const [offres, compromisListe] = await Promise.all([listerOffresPourBien(bienId), listerCompromisPourBien(bienId)]);
+      const offreEnCours = offres.some((o) => o.acquereurId === acquereurId && o.statut === "en_cours");
+      if (offreEnCours) return undefined;
+      const compromisAvance = compromisListe.some(
+        (c) => c.acquereurId === acquereurId && (c.statut === "en_cours" || c.statut === "realise")
+      );
+      if (compromisAvance) return undefined;
+
+      // Anti-spam inter-cycle — distinct de l'idempotence ADR-032 (UNIQUE(regle_code,
+      // evenement_id), déjà garantie par ailleurs) : ne crée jamais une seconde tâche ouverte pour
+      // la même paire tant qu'une précédente (d'un cycle antérieur) n'a pas été résolue par le
+      // conseiller. Jamais une analyse de texte de tâche — uniquement la provenance structurée
+      // ADR-032 déjà réelle (executions_automatisation -> evenements_metier/taches).
+      const dejaUneTacheOuverte = await existeExecutionAvecTacheOuvertePourPaire("nouveau_match_bien_acquereur", bienId, acquereurId);
+      if (dejaUneTacheOuverte) return undefined;
+
+      return {
+        titre: `Nouveau match — contacter ${acquereur.prenom} ${acquereur.nom} pour ${bien.reference}`,
+        contexte: "Atlas a détecté une nouvelle compatibilité avec ce bien. Vérifier les critères puis contacter l'acquéreur si pertinent.",
+        type: "appel",
+        priorite: "normale",
+        cible: { type: "acquereur", id: acquereurId },
       };
     },
   },

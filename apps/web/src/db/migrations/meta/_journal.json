@@ -169,6 +169,13 @@
       "when": 1786775927633,
       "tag": "0023_milky_giant_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786791626978,
+      "tag": "0024_blue_roland_deschain",
+      "breakpoints": true
     }
   ]
 }

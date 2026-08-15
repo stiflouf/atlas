@@ -561,8 +561,11 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   acquéreur — aucune table `resultats_matching`, aucun `matching_score`, rien à synchroniser. Un
   nouveau bien ou une nouvelle exigence acquéreur n'a donc aucun effet différé à surveiller : le
   résultat est déjà à jour dès le prochain chargement de la page.
-- **Aucune automatisation déclenchée** : un couple compatible ne crée jamais de tâche, d'email ni
-  d'événement — aucune intégration avec le moteur d'automatisations (ADR-032/033) dans cette V1.
+- **Le moteur canonique lui-même ne déclenche toujours rien** : `evaluerCompatibilite()` reste une
+  pure fonction de lecture, jamais un événement ni un effet de bord. La détection de *transition*
+  vers `compatible` (ADR-036) et son exploitation commerciale optionnelle (tâche "nouveau match",
+  ADR-037, désactivée par défaut) vivent entièrement en dehors de ce moteur — voir les sections
+  dédiées ci-dessous.
 - **Aucune édition ni suppression d'un critère individuel** : le moteur est une pure lecture, il n'y
   a rien à éditer — seuls les champs structurés du bien/acquéreur eux-mêmes (formulaires existants)
   influencent le résultat.
@@ -595,18 +598,18 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Aucun historique des secteurs recherchés** : supprimer un secteur ne laisse aucune trace — pas
   de journal d'anciennes recherches, conformément au principe de minimisation (rien n'est conservé
   au-delà de "où l'acquéreur recherche actuellement").
-- **Aucune automatisation liée à un changement de compatibilité géographique** (ADR-032/033 non
-  intégrées jusqu'à ADR-036) — ajouter/supprimer un secteur déclenche désormais une
-  resynchronisation technique (ADR-036, voir ci-dessous) mais toujours aucune tâche ni email : la
-  détection de transition et son exploitation commerciale restent deux ADR distinctes.
+- **Automatisation liée à un changement de compatibilité géographique** : ajouter/supprimer un
+  secteur déclenche une resynchronisation technique (ADR-036) qui peut, si la règle
+  `nouveau_match_bien_acquereur` (ADR-037) est activée, produire une tâche "nouveau match" — jamais
+  d'email ni de notification dans tous les cas (ADR-037 s'arrête à la tâche).
 
 ## Transitions de compatibilité (ADR-036)
 
-- **Aucun effet commercial encore branché, volontairement** : le nouvel événement
-  `compatibilite_bien_acquereur_devenue_compatible` existe et est émis de façon fiable, mais
-  `src/lib/automatisations/catalogueRegles.ts` n'en référence encore aucune règle — aucune tâche,
-  aucun email, aucune notification ne sont produits pour un nouveau match. C'est le périmètre exact
-  d'une ADR ultérieure, pas un oubli.
+- **Effet commercial désormais branché, mais désactivé par défaut (ADR-037)** : l'événement
+  `compatibilite_bien_acquereur_devenue_compatible` est consommé par la règle
+  `nouveau_match_bien_acquereur` (`src/lib/automatisations/catalogueRegles.ts`) — voir la section
+  dédiée ci-dessous pour son comportement et ses limites propres. Tant qu'elle n'est pas activée
+  explicitement depuis `/automatisations`, aucune tâche n'est produite.
 - **Aucun snapshot des critères persisté** : l'événement ne porte que `bienId`/`acquereurId`/
   `cycleCompatibilite` — consulter le détail des 7 critères au moment d'un événement passé implique
   de rappeler `evaluerCompatibilite()`, dont le résultat peut avoir changé depuis (les données
@@ -630,6 +633,27 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   la mise en service se prive de la détection de transitions pour les paires déjà compatibles au
   moment de l'installation (elles restent silencieusement sans ligne d'état jusqu'à leur première
   vraie mutation).
+
+## Automatisation commerciale du nouveau match (ADR-037)
+
+- **Aucune vérification de visite existante pour la paire** : `comptesRendusVisite` ne représente
+  que des rapports déjà réalisés (jamais une notion de visite programmée/en cours) — la règle
+  `nouveau_match_bien_acquereur` ne bloque donc jamais la création d'une tâche au prétexte qu'une
+  ancienne visite existe pour cette paire, même récente. Limite assumée (bloquer indéfiniment sur un
+  rapport ancien aurait été pire) plutôt qu'un état inventé faute de signal fiable dans le modèle
+  actuel pour distinguer une visite "encore pertinente" d'une visite historique.
+- **Aucun filet de reprise générique pour une exécution ADR-032 restée bloquée `a_traiter` après un
+  crash** — dette préexistante à ADR-032/033 (aucune des 6 règles, y compris `nouveau_match_bien_acquereur`,
+  n'en bénéficie), non corrigée par ADR-037 : un crash entre le commit de l'événement et le
+  traitement synchrone de l'exécution ne serait récupéré que par un rappel manuel de
+  `traiterExecutionsEnAttente()`, jamais un balayage automatique comme `/api/compatibilite/scan`
+  (ADR-036) ou `/api/automatisations/scan` (ADR-033, réservé au seul type cyclique).
+- **Anti-spam inter-cycle simple** : au plus une tâche ouverte à la fois par paire pour cette règle —
+  si le conseiller laisse une tâche ouverte indéfiniment, un nouveau cycle réel ne relance jamais de
+  rappel supplémentaire tant que celle-ci n'est pas résolue (terminée ou annulée).
+- **Aucune échéance automatique** : cohérent avec toutes les règles ADR-032/033 existantes
+  (`ChampsTacheAutomatique` ne porte aucun champ d'échéance) — une tâche "nouveau match" reste "Sans
+  échéance" jusqu'à ce que le conseiller en fixe une manuellement.
 
 ## Limites du moteur de matching
 

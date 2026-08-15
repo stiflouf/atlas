@@ -1086,7 +1086,7 @@ export const executionsAutomatisation = pgTable(
       sql`${table.regleCode} IN (
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
-        'inactivite_prospect_vendeur'
+        'inactivite_prospect_vendeur','nouveau_match_bien_acquereur'
       )`
     ),
     unique("executions_automatisation_regle_evenement_unique").on(table.regleCode, table.evenementId),
@@ -1117,7 +1117,7 @@ export const configurationsAutomatisation = pgTable(
       sql`${table.regleCode} IN (
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
-        'inactivite_prospect_vendeur'
+        'inactivite_prospect_vendeur','nouveau_match_bien_acquereur'
       )`
     ),
     check(
@@ -1145,6 +1145,9 @@ export const runsScanAutomatisation = pgTable(
     erreurTechnique: text("erreur_technique"),
   },
   (table) => [
+    // 'nouveau_match_bien_acquereur' (ADR-037) volontairement absent : cette règle ne réagit qu'à
+    // un événement direct, jamais à un scan temporel — aucune ligne de ce journal ne la concernera
+    // jamais.
     check(
       "runs_scan_automatisation_regle_code_check",
       sql`${table.regleCode} IN (
