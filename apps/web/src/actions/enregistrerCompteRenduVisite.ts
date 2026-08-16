@@ -9,6 +9,7 @@ import { getVisiteById, marquerVisiteRealisee } from "@/lib/visiteRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { Interet } from "@/types/compteRenduVisite";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 const INTERETS_VALIDES: Interet[] = ["interesse", "a_reflechir", "pas_interesse", "inconnu"];
 
@@ -32,6 +33,7 @@ function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefi
 // moins un bien réel existe, voir bienRepository.getBienById) — le compte rendu s'enregistre
 // alors exactement comme avant ADR-040, sans transition de statut associée.
 export async function enregistrerCompteRenduVisiteAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const visiteIdSoumis = String(formData.get("visiteId") ?? "");

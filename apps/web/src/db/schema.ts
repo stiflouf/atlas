@@ -491,6 +491,17 @@ export const compromis = pgTable(
       "compromis_motif_annulation_check",
       sql`${table.motifAnnulation} IS NULL OR ${table.motifAnnulation} IN ('financement_refuse','acquereur_se_retire','vendeur_se_retire','desaccord_prix','juridique_administratif','delai_calendrier','autre')`
     ),
+    // ADR-047 — défense en profondeur : "une Offre acceptée, origine d'au plus un Compromis"
+    // (ADR-045) n'était portée que par ajouterCompromisAction. offreId nullable : plusieurs
+    // compromis directs (sans offre structurée) coexistent légitimement avec plusieurs NULL,
+    // comportement standard PostgreSQL sous UNIQUE classique.
+    unique("compromis_offre_id_unique").on(table.offreId),
+    // Un seul Compromis "en_cours" par Bien — jamais UNIQUE(bienId) classique (des compromis
+    // "realise"/"annule" historiques coexistent légitimement) : même patron d'index unique
+    // partiel déjà utilisé par compatibilites_a_resynchroniser_bien_en_attente_unique.
+    uniqueIndex("compromis_bien_id_en_cours_unique")
+      .on(table.bienId)
+      .where(sql`${table.statut} = 'en_cours'`),
   ]
 );
 
@@ -1141,6 +1152,12 @@ export const executionsAutomatisation = pgTable(
     ),
     check("executions_automatisation_nombre_tentatives_positif_check", sql`${table.nombreTentatives} >= 0`),
     unique("executions_automatisation_regle_evenement_unique").on(table.regleCode, table.evenementId),
+    // ADR-047 — défense en profondeur avant exposition Internet : la garantie "au plus une
+    // exécution automatique par tâche" était jusqu'ici portée uniquement par la discipline du
+    // moteur (traiterUneExecution) et la lecture fail-closed (getExecutionAutomatisationParTacheId).
+    // NULL autorisé (plusieurs exécutions sans tacheId coexistent légitimement — construireTache()
+    // retournant undefined est un succès honnête, pas une erreur, voir ADR-032).
+    unique("executions_automatisation_tache_id_unique").on(table.tacheId),
   ]
 );
 

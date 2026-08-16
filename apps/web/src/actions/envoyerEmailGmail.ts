@@ -15,6 +15,7 @@ import {
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { deriverEtatEnvoiEmail } from "@/types/envoiEmail";
 import type { IntentionCommunication } from "@/lib/communications/contexteCommunication";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 export type ResultatActionEnvoiEmail =
   | { statut: "idle" }
@@ -73,6 +74,7 @@ export async function envoyerEmailGmailAction(
   _etatPrecedent: ResultatActionEnvoiEmail | null,
   formData: FormData
 ): Promise<ResultatActionEnvoiEmail> {
+  await exigerSessionAtlas();
   const idempotencyKey = texteOptionnel(formData.get("idempotencyKey"));
   const destinataireEmail = texteOptionnel(formData.get("destinataireEmail"));
   const objet = String(formData.get("objet") ?? "");

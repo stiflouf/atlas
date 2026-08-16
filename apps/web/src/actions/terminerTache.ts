@@ -5,6 +5,7 @@ import { getTacheById, terminerTache } from "@/lib/tacheRepository";
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { TYPES_NOTE_INTERACTION } from "@/types/noteProspectVendeur";
 import type { TypeNoteProspectVendeur } from "@/types/noteProspectVendeur";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Terminer une tâche ne signifie jamais silencieusement "contact réalisé" (ADR-028) : par défaut,
 // terminerTache() ne touche à rien d'autre. Exception opt-in unique, réservée aux tâches rattachées
@@ -16,6 +17,7 @@ import type { TypeNoteProspectVendeur } from "@/types/noteProspectVendeur";
 // laisse la tâche terminée avec l'interaction non journalisée, un état mineur et récupérable, pas
 // une incohérence grave comparable à un bien orphelin.
 export async function terminerTacheAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) {
     throw new Error("Identifiant de tâche manquant.");

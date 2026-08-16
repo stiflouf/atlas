@@ -25,6 +25,7 @@ import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import { MOTIFS_PERTE_PROSPECT_VENDEUR, type MotifPerteProspectVendeur } from "@/types/motifPerteProspectVendeur";
 import { TYPES_NOTE_PROSPECT_VENDEUR, type TypeNoteProspectVendeur } from "@/types/noteProspectVendeur";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 function parseDateOptionnelle(valeur: FormDataEntryValue | null): string | undefined {
   const date = String(valeur ?? "").trim();
@@ -52,11 +53,13 @@ async function chargerProspectPourJalon(id: string): Promise<ProspectVendeur> {
 }
 
 export async function creerProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const prospect = await creerProspectVendeur(parseProspectVendeurFormData(formData));
   redirect(`/prospects-vendeurs/${prospect.id}`);
 }
 
 export async function modifierProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   const prospect = await modifierProspectVendeur(id, parseProspectVendeurFormData(formData));
@@ -65,6 +68,7 @@ export async function modifierProspectVendeurAction(formData: FormData): Promise
 }
 
 export async function qualifierProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   await chargerProspectPourJalon(id);
@@ -73,6 +77,7 @@ export async function qualifierProspectVendeurAction(formData: FormData): Promis
 }
 
 export async function enregistrerEstimationProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   await chargerProspectPourJalon(id);
@@ -89,6 +94,7 @@ export async function enregistrerEstimationProspectVendeurAction(formData: FormD
 }
 
 export async function planifierRdvEstimationProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   await chargerProspectPourJalon(id);
@@ -101,6 +107,7 @@ export async function planifierRdvEstimationProspectVendeurAction(formData: Form
 }
 
 export async function marquerRdvEstimationRealiseProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   const prospectAvant = await chargerProspectPourJalon(id);
@@ -127,6 +134,7 @@ export async function marquerRdvEstimationRealiseProspectVendeurAction(formData:
 }
 
 export async function proposerMandatProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   await chargerProspectPourJalon(id);
@@ -139,6 +147,7 @@ export async function proposerMandatProspectVendeurAction(formData: FormData): P
 // non. Transaction atomique portée par le repository (signerMandatProspectVendeur) : bien créé et
 // mandatSigneLe/bienId posés ensemble, ou aucun des deux.
 export async function signerMandatProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   await chargerProspectPourJalon(id);
@@ -155,6 +164,7 @@ export async function signerMandatProspectVendeurAction(formData: FormData): Pro
 }
 
 export async function marquerProspectVendeurPerduAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
@@ -174,6 +184,7 @@ export async function marquerProspectVendeurPerduAction(formData: FormData): Pro
 }
 
 export async function archiverProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   const prospect = await archiverProspectVendeur(id);
@@ -182,6 +193,7 @@ export async function archiverProspectVendeurAction(formData: FormData): Promise
 }
 
 export async function desarchiverProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   const prospect = await desarchiverProspectVendeur(id);
@@ -192,6 +204,7 @@ export async function desarchiverProspectVendeurAction(formData: FormData): Prom
 // ADR-027, correction n° 2 : le type choisi détermine si dernier_contact_le avance (voir
 // noteProspectVendeurRepository.ajouterNoteProspectVendeur) — aucune logique dupliquée ici.
 export async function ajouterNoteProspectVendeurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 

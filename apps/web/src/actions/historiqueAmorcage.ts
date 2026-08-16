@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
 import { enregistrerHistoriqueAmorcage } from "@/lib/historiqueAmorcageRepository";
 import { parseMontantCentimes } from "@/types/remuneration";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Refuse explicitement une année hors bornes, un montant invalide, ou une date de fin de
 // couverture absente/hors de l'année pour l'année en cours. Pour une année révolue, la couverture
@@ -11,6 +12,7 @@ import { parseMontantCentimes } from "@/types/remuneration";
 // demandée (voir schema.ts, historique_amorcage) — seul le formulaire de l'année en cours expose
 // réellement le champ.
 export async function enregistrerHistoriqueAmorcageAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const anneeEnCours = new Date().getFullYear();
   const annee = Number(formData.get("annee"));
   if (!Number.isInteger(annee) || annee < 2000 || annee > anneeEnCours) {

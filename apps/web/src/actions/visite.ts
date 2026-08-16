@@ -6,6 +6,7 @@ import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { formatDateISO } from "@/lib/temps";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,6 +19,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // `acquereurId` client fourni sans revalidation. Idempotente au niveau DB (UNIQUE sur
 // `rendez_vous_calendar_id`, `materialiserVisite`) : un double submit ne crée jamais deux visites.
 export async function materialiserVisiteAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
 
   if (rendezVousCalendarId) {
@@ -51,6 +53,7 @@ export async function materialiserVisiteAction(formData: FormData): Promise<void
 // jamais une erreur utilisateur bloquante pour un contournement de formulaire déjà impossible
 // depuis l'UI normale.
 export async function annulerVisiteAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
   // redirectTo optionnel (ADR-041, même patron que terminerTacheAction) : la fiche Visite
@@ -69,6 +72,7 @@ export async function annulerVisiteAction(formData: FormData): Promise<void> {
 // Restreint aux visites encore 'planifiee' (modifierDatePrevueVisite) — reporter une visite déjà
 // réalisée ou annulée n'a pas de sens métier, silencieusement sans effet dans ce cas.
 export async function reporterVisiteAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
   const nouvelleDatePrevue = String(formData.get("nouvelleDatePrevue") ?? "").trim();

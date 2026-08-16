@@ -1,8 +1,15 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
+
+// ADR-047 : cette route exige désormais une session Atlas. Le comportement métier (génération du
+// ZIP) est testé ici en mockant exigerSessionAtlas() comme une session valide — le refus anonyme
+// réel est couvert séparément par route.securite.test.ts, qui utilise le vrai helper.
+vi.mock("@/lib/auth/sessionAtlas", () => ({
+  exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
+}));
 
 const { getDb } = await import("@/db/client");
 const {

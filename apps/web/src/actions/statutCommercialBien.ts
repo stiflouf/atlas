@@ -8,6 +8,7 @@ import {
   marquerOffreEnCours,
   retirerOffre,
 } from "@/lib/bienRepository";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Refus explicite (throw) si le bien est archivé — un jalon commercial est un nouveau fait
 // métier sur le dossier, jamais posé sur une entité sortie des flux actifs (ADR-012), même
@@ -23,6 +24,7 @@ async function verifierBienNonArchive(id: string) {
 }
 
 export async function marquerOffreEnCoursAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
@@ -35,6 +37,7 @@ export async function marquerOffreEnCoursAction(formData: FormData): Promise<voi
 // Refus explicite si un compromis est déjà signé — retirer l'offre créerait une incohérence
 // (compromis signé sans offre sous-jacente). ADR-014.
 export async function retirerOffreAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
@@ -49,6 +52,7 @@ export async function retirerOffreAction(formData: FormData): Promise<void> {
 
 // Ne pose jamais offreEnCoursLe automatiquement : un compromis peut être marqué directement.
 export async function marquerCompromisSigneAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
@@ -59,6 +63,7 @@ export async function marquerCompromisSigneAction(formData: FormData): Promise<v
 }
 
 export async function annulerCompromisAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 

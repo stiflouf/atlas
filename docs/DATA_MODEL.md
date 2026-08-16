@@ -614,7 +614,7 @@ statut, lien optionnel vers l'offre acceptée d'origine. Voir ADR-016, ADR-017 e
 | `id` | uuid (PK) | non | |
 | `bien_id` | uuid (FK → `biens.id`, `ON DELETE CASCADE`) | non | vraie FK |
 | `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE CASCADE`) | non | vraie FK |
-| `offre_id` | uuid (FK → `offres.id`, `ON DELETE SET NULL`) | **oui** | optionnel — un compromis peut être marqué directement sans offre structurée préalable |
+| `offre_id` | uuid (FK → `offres.id`, `ON DELETE SET NULL`, **`UNIQUE`**) | **oui** | optionnel — un compromis peut être marqué directement sans offre structurée préalable ; `UNIQUE` (ADR-047) plusieurs `NULL` restent valides |
 | `prix_convenu` | integer | non | immuable après création |
 | `date_signature` | date | non | immuable après création |
 | `date_acte` | date | **oui** | **prévue**, saisie à la création, jamais modifiée ensuite (ADR-017) |
@@ -631,7 +631,11 @@ liée (même bien, même acquéreur, statut `acceptee`), obligation de `date_act
 `realise`, et obligation de `date_annulation`/`motif_annulation` pour `annule` — toutes validées
 côté Server Action, pas en `CHECK` SQL (même raison qu'`offres.date_decision`/`motif_perte` :
 aucun backfill possible sur une contrainte corrélée au statut). Un seul compromis `en_cours` par
-bien à la fois : garde applicative, pas une contrainte SQL d'unicité.
+bien à la fois : garde applicative ET, depuis ADR-047, un index unique partiel
+`compromis_bien_id_en_cours_unique` sur `(bien_id) WHERE statut = 'en_cours'` — jamais un
+`UNIQUE(bien_id)` classique, qui interdirait l'historique légitime de plusieurs compromis
+`realise`/`annule` par bien. De même, `UNIQUE(offre_id)` (ci-dessus) durcit en base la garantie
+« une Offre acceptée, origine d'au plus un Compromis » (ADR-045), jusqu'ici seulement applicative.
 
 Pas de `modifie_le` distinct. Relation fonctionnelle : lue par
 `listerCompromisPourBien()`/`listerCompromisPourAcquereur()`/`getCompromisById()`
@@ -1132,7 +1136,7 @@ code TypeScript, pas une table) à un événement donné — traçable, jamais r
 | `id` | uuid (PK) | non | |
 | `regle_code` | text | non | `CHECK`, 7 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`, ADR-042 ajoute `retour_vendeur_apres_visite`) |
 | `evenement_id` | uuid (FK → `evenements_metier.id`, **`NO ACTION`**) | non | |
-| `tache_id` | uuid (FK → `taches.id`, `SET NULL`) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche |
+| `tache_id` | uuid (FK → `taches.id`, `SET NULL`, **`UNIQUE`**) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche ; `UNIQUE` (ADR-047) plusieurs `NULL` restent valides |
 | `demarree_le` | timestamptz | non | posée à la création de la ligne (dans la transaction métier — ADR-032 correction n°2, jamais après coup) |
 | `reussie_le` / `echouee_le` | timestamptz | oui | mutuellement exclusifs par construction applicative (gel concurrent), jamais un `CHECK` SQL |
 | `erreur_technique` | text | oui | message court (`.slice(0,200)`), jamais un dump brut |
@@ -1140,7 +1144,10 @@ code TypeScript, pas une table) à un événement donné — traçable, jamais r
 | `derniere_tentative_le` | timestamptz | oui | ADR-038 — posée dans une petite transaction séparée, avant chaque tentative de traitement |
 
 **Contrainte `UNIQUE(regle_code, evenement_id)`** : une règle ne s'exécute jamais deux fois pour le
-même événement déjà enregistré.
+même événement déjà enregistré. **`UNIQUE(tache_id)`** (ADR-047) : durcit en base, en défense en
+profondeur, la garantie « au plus une exécution automatique par tâche » (ADR-043) — jusqu'ici
+portée uniquement par la discipline du moteur et la lecture fail-closed
+(`getExecutionAutomatisationParTacheId`).
 
 État jamais stocké séparément : dérivé de `reussie_le`/`echouee_le` (`deriverEtatEnvoiEmail`-like
 `deriverEtatExecutionAutomatisation`, `src/types/automatisation.ts`) — `a_traiter` (les deux `NULL`,
@@ -1301,6 +1308,8 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0024_blue_roland_deschain.sql` | ADR-037 : `CHECK` étendus (`configurations_automatisation`, `executions_automatisation`) pour la 6ᵉ règle `nouveau_match_bien_acquereur` ; seed `active = false` |
 | `0025_wide_mindworm.sql` | ADR-038 : `nombre_tentatives`/`derniere_tentative_le` sur `executions_automatisation`, `CHECK` associé — aucune nouvelle table |
 | `0026_flowery_mephisto.sql` | ADR-040 : table `visites` (entité métier minimale, `CHECK`/`UNIQUE`) ; colonne nullable `visite_id` sur `comptes_rendus_visite` (`ON DELETE SET NULL`) |
+| `0027_abandoned_red_wolf.sql` | ADR-042 : `CHECK` étendus (`configurations_automatisation`, `envois_email`, `executions_automatisation`) pour la 7ᵉ règle `retour_vendeur_apres_visite` ; seed `active = false` |
+| `0028_mixed_lorna_dane.sql` | ADR-047 : `UNIQUE(executions_automatisation.tache_id)`, `UNIQUE(compromis.offre_id)`, index unique partiel `compromis_bien_id_en_cours_unique` — trois invariants jusqu'ici seulement applicatifs, désormais garantis en base |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -7,6 +7,7 @@ import { parseBienFormData } from "@/lib/bienFormulaire";
 import { resoudreCommuneBien } from "@/lib/geocodage/resolutionBien";
 import { enqueuerResynchronisationBien } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // id absent/invalide/inexistant -> notFound(), jamais une redirection de succès après une
 // modification qui n'a en réalité touché aucune ligne.
@@ -21,6 +22,7 @@ import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementR
 // Modification + enqueue de resynchronisation dans LA MÊME transaction (ADR-036) — voir
 // creerBienAction pour le raisonnement complet (handoff durable, addendum de l'audit §6).
 export async function modifierBienAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 

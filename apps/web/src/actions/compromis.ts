@@ -18,6 +18,7 @@ import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/even
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { StatutCompromis } from "@/types/compromis";
 import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 const TRANSITIONS_VALIDES: StatutCompromis[] = ["realise", "annule"];
 
@@ -50,6 +51,7 @@ function parseOffreIdOptionnel(valeur: FormDataEntryValue | null): string | unde
 // d'atomicité préexistante entre les deux premières écritures (auparavant deux appels séquentiels
 // non transactionnels) en même temps qu'elle y accroche le moteur d'automatisations.
 export async function ajouterCompromisAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const prixConvenu = parseMontant(formData.get("prixConvenu"));
@@ -111,6 +113,7 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
 // Ne modifie jamais compromisSigneLe, l'archivage du bien, ni stadeProjet de l'acquéreur —
 // gestes commerciaux volontairement séparés (ADR-014/ADR-016/ADR-017).
 export async function changerStatutCompromisAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const compromisId = String(formData.get("compromisId") ?? "");
   const statut = String(formData.get("statut") ?? "") as StatutCompromis;
 
@@ -163,6 +166,7 @@ export async function changerStatutCompromisAction(formData: FormData): Promise<
 // seulement masquée côté UI. `dateActe` reste nullable : un champ vide efface explicitement la
 // date (report sans nouvelle date connue) — jamais remplacé par une estimation inventée.
 export async function modifierDateActeAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const compromisId = String(formData.get("compromisId") ?? "");
   const dateActe = parseDateOptionnelle(formData.get("dateActe"));
 

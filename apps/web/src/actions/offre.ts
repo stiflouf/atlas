@@ -7,6 +7,7 @@ import { enregistrerOffreAvecLiensEtJalon, getOffreById, changerStatutOffre, lis
 import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import type { StatutOffre } from "@/types/offre";
 import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 const TRANSITIONS_VALIDES: StatutOffre[] = ["acceptee", "refusee", "retiree"];
 
@@ -40,6 +41,7 @@ function parseDateOptionnelle(valeur: FormDataEntryValue | null): string | undef
 // aveugle dans un avertissement déjà affiché côté client : recontrôlé ici à chaque appel, y
 // compris pour un POST qui contournerait l'UI.
 export async function ajouterOffreAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const montant = parseMontant(formData.get("montant"));
@@ -90,6 +92,7 @@ export async function ajouterOffreAction(formData: FormData): Promise<void> {
 // jamais déduit, jamais laissé sur une offre acceptée. Aucune inférence d'acteur : seul le motif
 // choisi par le conseiller fait foi.
 export async function changerStatutOffreAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const offreId = String(formData.get("offreId") ?? "");
   const statut = String(formData.get("statut") ?? "") as StatutOffre;
   const dateDecision = String(formData.get("dateDecision") ?? "").trim();

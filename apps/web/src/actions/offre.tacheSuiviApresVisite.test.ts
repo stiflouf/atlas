@@ -1,4 +1,13 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// ADR-047 : ces Server Actions exigent désormais une session Atlas. Le comportement métier
+// (garde-fous existants, transactions) est testé ici en mockant exigerSessionAtlas() comme une
+// session valide — la couverture exhaustive du refus anonyme est assurée séparément et
+// structurellement par src/actions/gardeSessionAtlas.structurel.test.ts (chaque fonction exportée
+// est vérifiée), jamais réintroduite ici fonction par fonction.
+vi.mock("@/lib/auth/sessionAtlas", () => ({
+  exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
+}));
 import { eq, inArray, or } from "drizzle-orm";
 
 // Test d'intégration réel (ADR-044 §25/§39/§44) : la création d'une Offre depuis le parcours

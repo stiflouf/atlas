@@ -9,6 +9,7 @@ import {
   getLienOffreVisite,
   getLienOffreVisiteById,
 } from "@/lib/offreVisiteRepository";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Rattachement rétroactif (ADR-019) : contrairement au rattachement fait à la création d'une
 // offre (voir ajouterOffreAction), ce chemin permet de lier une visite à une offre déjà
@@ -18,6 +19,7 @@ import {
 // pas la création d'un nouveau fait commercial sur une entité active (même principe qu'ADR-018,
 // l'historique inclut les entités archivées).
 export async function lierVisiteAOffreAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const offreId = String(formData.get("offreId") ?? "");
   const compteRenduVisiteId = String(formData.get("compteRenduVisiteId") ?? "");
 
@@ -46,6 +48,7 @@ export async function lierVisiteAOffreAction(formData: FormData): Promise<void> 
 // partir du lien puis de son offre — jamais depuis un bienId fourni par le formulaire, qui ne
 // serait qu'une donnée de confort côté navigateur, pas une source fiable.
 export async function delierVisiteAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const lienId = String(formData.get("lienId") ?? "");
 
   const lien = await getLienOffreVisiteById(lienId);

@@ -1188,7 +1188,8 @@ Contrôle documentaire pré-transmission et export ZIP — entièrement dérivé
 | Nom d'export | Toujours | Dérivé uniquement de données structurées, jamais un renommage du fichier stocké (ADR-013) |
 
 **Hors périmètre V1** : envoi email/notaire, OCR/LLM, création automatique de tâches, PDF serveur,
-authentification, journalisation d'audit persistante.
+journalisation d'audit persistante. Authentification résolue par ADR-047 (session Atlas exigée sur
+cette route) — reste hors périmètre : traçabilité de qui a généré quel pack.
 
 ## Communications / emails assistés (ADR-031)
 

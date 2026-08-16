@@ -6,6 +6,7 @@ import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import type { CibleTache, PrioriteTache, TypeTache } from "@/types/tache";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefined {
   const texte = String(valeur ?? "").trim();
@@ -16,6 +17,7 @@ function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefi
 // même style que l'ancien creerActionAction. bien/acquéreur/prospect vendeur archivé -> refus
 // explicite (ADR-012/027).
 export async function creerTacheAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const titre = String(formData.get("titre") ?? "").trim();
   if (!titre) {
     throw new Error("Titre requis.");

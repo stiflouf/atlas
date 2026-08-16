@@ -6,6 +6,7 @@ import { archiverAcquereur, desarchiverAcquereur } from "@/lib/clientRepository"
 import { marquerHorsPerimetrePourAcquereur } from "@/lib/compatibilite/etatRepository";
 import { enqueuerResynchronisationAcquereur } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // id absent/invalide/inexistant -> notFound(), jamais une redirection de succès silencieuse
 // (même garde que modifierAcquereurAction).
@@ -14,6 +15,7 @@ import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementR
 // de cet acquéreur, DANS LA MÊME transaction — voir archiverBienAction pour le raisonnement
 // symétrique complet.
 export async function archiverAcquereurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
@@ -30,6 +32,7 @@ export async function archiverAcquereurAction(formData: FormData): Promise<void>
 // Désarchivage : enqueue une resynchronisation complète — voir desarchiverBienAction pour le
 // raisonnement symétrique complet (aucune bascule inline de dans_perimetre_actif ici).
 export async function desarchiverAcquereurAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 

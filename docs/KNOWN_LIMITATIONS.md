@@ -123,18 +123,17 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   génération échoue en cours de route (fichier illisible, ex. suppression concurrente du fichier
   physique entre le chargement des métadonnées et la lecture), le conseiller doit relancer
   l'export depuis le début — aucune reprise partielle.
-- **Aucune authentification n'existe dans Atlas aujourd'hui** (ADR-006). Le pack notaire agrège
-  des pièces d'identité et données sensibles de plusieurs documents en un seul point d'accès — une
-  agrégation plus sensible que la consultation d'un document isolé. Ce point n'est **pas résolu**
-  par ADR-030 et doit être traité avant toute exposition à un tiers (envoi effectif au notaire) ou
-  tout usage multi-utilisateur — ADR-030 ne doit pas être considéré prêt pour un usage au-delà du
-  poste local du conseiller tant que ce n'est pas fait.
+- **Résolu par ADR-047** : `POST /api/biens/[id]/pack-notaire` exige désormais une session Atlas
+  (`exigerSessionAtlas()`) — l'agrégation de pièces sensibles en un seul point d'accès n'est plus
+  atteignable anonymement. Reste vrai : cette protection est mono-conseiller (une seule identité
+  autorisée), pas un contrôle d'accès par destinataire/tiers — l'envoi effectif à un notaire externe
+  reste hors périmètre.
 - **`MAX_TAILLE_PACK_OCTETS` (200 Mo) est une contrainte technique Atlas V1**, pas une règle
   métier ni légale — un dossier légitimement plus volumineux (nombreuses pièces copropriété par
   exemple) devra être exporté en plusieurs packs, aucun découpage automatique n'existe.
 - **Aucune journalisation persistante** des générations/transmissions de pack — une vraie
-  traçabilité (qui, quand, quel pack, quels documents) reste une évolution future, à traiter
-  conjointement avec l'authentification.
+  traçabilité (qui, quand, quel pack, quels documents) reste une évolution future ; l'authentification
+  minimale existe désormais (ADR-047) mais rien n'enregistre encore qui a généré quel pack.
 - **`REGLES_CHECKLIST` non exhaustive** (voir "Dossier documentaire (ADR-029)" ci-dessus) se
   répercute directement sur le pack : un type de document non couvert par une exigence n'apparaît
   jamais dans `selectionProposee`/`documentsDisponibles` via la checklist, mais reste listé comme
@@ -850,11 +849,30 @@ non commencé à ce jour.
 
 ## Pas de multi-utilisateur
 
-Produit mono-conseiller assumé (ADR-006) : aucune table utilisateur, aucune session, aucune
-notion de "qui a fait quoi". `connexions_google` et le nom affiché dans `Sidebar.tsx`
-("Steven Gausset", codé en dur) le confirment. Introduire un second conseiller nécessiterait une
-refonte de plusieurs tables (au minimum `connexions_google`, `memoire_contextuelle`, et
-potentiellement `taches`/`notes_bien`/`comptes_rendus_visite` pour savoir qui a écrit quoi).
+Produit mono-conseiller assumé (ADR-006). Depuis ADR-047, Atlas a une vraie authentification
+(identité Google + allowlist à **une seule** adresse, session cookie chiffrée) — mais ceci ne
+constitue toujours pas du multi-utilisateur : aucune table utilisateur, aucun `userId`/`tenantId`,
+aucune notion de "qui a fait quoi" au-delà de l'identifiant Google unique posé en session.
+`connexions_google` (une seule ligne possible) et le nom affiché dans `Sidebar.tsx`
+("Steven Gausset", codé en dur) le confirment toujours. Introduire un second conseiller
+nécessiterait une refonte de plusieurs tables (au minimum `connexions_google`,
+`memoire_contextuelle`, et potentiellement `taches`/`notes_bien`/`comptes_rendus_visite` pour
+savoir qui a écrit quoi) — ADR-047 rend Atlas raisonnablement exposable pour **un** conseiller,
+pas pour plusieurs sur la même instance.
+
+## Sécurisation du pilote mono-conseiller (ADR-047)
+
+- **Aucune validation réelle du flux OAuth de bout en bout** n'a été possible dans l'environnement
+  de développement où cette ADR a été implémentée (pas de vraies credentials Google Cloud
+  Console) : le flux `/connexion` → Google → `/api/auth/atlas/callback` → session doit être validé
+  manuellement en conditions réelles avant le premier jour de pilote.
+- **`ATLAS_ALLOWED_EMAIL` reste une allowlist à une seule adresse, jamais un annuaire** — décision
+  explicite (ADR-047) pour ne pas donner l'illusion d'un support multi-utilisateur qui n'existe pas
+  réellement (voir "Pas de multi-utilisateur" ci-dessus).
+- **Aucune UI de gestion de session** (liste des connexions actives, révocation à distance) — la
+  seule action possible est se connecter/se déconnecter soi-même.
+- **Aucun mécanisme RGPD outillé** (export/suppression/anonymisation automatisés) — seule une
+  procédure manuelle documentée existe à ce stade (voir l'audit ADR-047).
 
 ## Dette technique identifiée dans le code
 

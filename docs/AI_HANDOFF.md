@@ -57,9 +57,14 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   progressive. Vérifié par recherche exhaustive dans le code : zéro dépendance, zéro appel réseau
   vers un service de génération. Tous les moteurs (points d'attention, points forts, historique,
   sélection Mérimée) sont des règles déterministes sur champs structurés (ADR-008).
-- **Aucun multi-utilisateur, aucune session, aucune authentification conseiller** — produit
-  mono-conseiller assumé (ADR-006). `connexions_google` est une table à une seule ligne
-  (`id = 'default'`). Le nom affiché dans `Sidebar.tsx` est codé en dur.
+- **Authentification Atlas mono-conseiller depuis ADR-047** — identité Google (OIDC) + allowlist à
+  une seule adresse (`ATLAS_ALLOWED_EMAIL`), session cookie chiffrée (`iron-session`,
+  `src/lib/auth/sessionAtlas.ts`), `src/proxy.ts` en PRIVATE BY DEFAULT + `exigerSessionAtlas()`
+  dans chaque Server Action/Route Handler utilisateur. **Toujours aucun multi-utilisateur** : une
+  seule identité autorisée, aucun `userId`/`tenantId`, aucune notion de "qui a fait quoi" au-delà de
+  l'identifiant Google unique posé en session — produit mono-conseiller assumé (ADR-006).
+  `connexions_google` (autorisations Calendar/Gmail, distinctes de l'authentification Atlas) reste
+  une table à une seule ligne (`id = 'default'`). Le nom affiché dans `Sidebar.tsx` est codé en dur.
 - **Jamais de mélange mocks/données réelles** — chaque catalogue (biens, acquéreurs, tâches)
   bascule intégralement sur Postgres dès qu'une ligne réelle existe pour lui ; ne jamais écrire de
   code qui suppose qu'un mock et une donnée réelle puissent coexister dans une même liste
@@ -317,6 +322,10 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/components/compromis/CompromisFormulaire.tsx` | Formulaire Compromis partagé (ADR-045) — utilisé par `/compromis/nouveau` ET l'onglet « Compromis » de `BienTabs`, même Server Action `ajouterCompromisAction` |
 | `src/lib/compromisRepository.ts` | Dont `getCompromisParOffreId()` (garde offre-déjà-utilisée, fail-closed, ADR-045) et `modifierDateActeCompromis()` (report/effacement de la date d'acte prévue, ADR-046) |
 | `src/lib/statutCommercialBien.ts` | `deriverStatutCommercial()` — modèle structuré prioritaire sur le jalon legacy `bien.compromisSigneLe` depuis ADR-046 |
+| `src/proxy.ts` | Proxy Next.js 16 (ADR-047, remplace `middleware.ts` déprécié) — PRIVATE BY DEFAULT, ne protège JAMAIS les Server Actions à lui seul |
+| `src/lib/auth/sessionAtlas.ts` | Session Atlas (ADR-047) — `exigerSessionAtlas()` à appeler en première ligne de CHAQUE Server Action/Route Handler utilisateur, distincte de `src/lib/google/connexion.ts` (autorisations Calendar/Gmail) |
+| `src/lib/auth/googleIdentite.ts` | Flux d'identité Atlas (OIDC, ADR-047) — distinct de `src/lib/google/oauth.ts` (scopes métier) |
+| `src/actions/gardeSessionAtlas.structurel.test.ts` | Garantit par analyse AST que TOUTE Server Action exportée sous `src/actions/` commence par `await exigerSessionAtlas()` — échoue si une nouvelle action oublie la garde |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus
@@ -334,6 +343,10 @@ IO Postgres) → `redirect()` → page re-render.
 - Les tests de repository (`*Repository.test.ts`) sont des tests d'intégration qui exigent un
   Postgres local démarré et migré — ils échoueront, pas seulement seront lents, sans base
   disponible.
+- **Toute nouvelle Server Action exportée sous `src/actions/*.ts` doit commencer par
+  `await exigerSessionAtlas();`** (ADR-047) — `src/actions/gardeSessionAtlas.structurel.test.ts`
+  échoue sinon (analyse AST, pas un simple grep). Le Proxy (`src/proxy.ts`) ne protège jamais les
+  Server Actions à lui seul.
 
 ## Décisions déjà prises — ne pas rouvrir sans nouvelle ADR
 

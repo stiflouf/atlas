@@ -1218,6 +1218,50 @@ reflétant un report sans donnée stale (1 test), wording tâche notarial + non-
 legacy resté visible, passage à « Vendu » confirmé, nouveau titre/contexte de tâche confirmé au
 cockpit avec « Préparer un email » résolvant l'acquéreur.
 
+## 47. Sécurisation et garde-fous du pilote mono-conseiller
+
+Un audit global avait identifié deux blockers avant tout pilote réel : deux endpoints (documents,
+pack notaire) servaient des fichiers sensibles sans aucune protection, et Atlas n'avait aucune
+authentification applicative. Un audit ciblé complémentaire a corrigé une confusion de l'audit
+initial : les routes OAuth Google existantes autorisent Atlas à accéder à Calendar/Gmail, elles
+n'authentifient jamais un humain auprès d'Atlas. Mono-utilisateur ne signifie pas application
+publique.
+
+Nouvelle authentification Atlas, strictement séparée des autorisations métier Calendar/Gmail :
+identité Google (OIDC, scope `openid email` uniquement, jamais d'accès offline ni de refresh_token
+conservé), id_token validé cryptographiquement via `google-auth-library` (jamais un décodage JWT
+non vérifié), email comparé à une allowlist volontairement réduite à **une seule adresse**
+(`ATLAS_ALLOWED_EMAIL`) — plusieurs identités autorisées auraient donné l'illusion d'un
+multi-utilisateur qui n'existe toujours pas. Session posée par cookie chiffré (`iron-session`,
+TTL 7 jours, aucun mot de passe Atlas, aucune crypto réimplémentée à la main).
+
+Défense à deux couches, conforme à la documentation Next.js elle-même : `src/proxy.ts` (convention
+Next 16, remplace `middleware.ts` déprécié) filtre la navigation en PRIVATE BY DEFAULT ; et
+`exigerSessionAtlas()` est appelée en première ligne de **chaque** Server Action exportée (26
+fichiers, une cinquantaine de fonctions) et de chaque Route Handler utilisateur — jamais une
+confiance dans le Proxy seul, qui ne protège structurellement pas les Server Actions. Couverture
+vérifiée exhaustivement par un test qui parse l'AST TypeScript de chaque fichier `"use server"`.
+
+Les deux endpoints documents restent appelés par un lien/formulaire HTML brut (jamais de
+JavaScript) : protégés par la session cookie, jamais par un Bearer (structurellement incompatible
+avec ce point d'appel) — correction explicite d'une conclusion initiale de l'audit global.
+
+Trois invariants métier jusqu'ici seulement applicatifs sont désormais garantis en base, en défense
+en profondeur : `UNIQUE(executions_automatisation.tache_id)`, `UNIQUE(compromis.offre_id)`, et un
+index unique partiel limitant à un seul compromis `en_cours` par bien (jamais un `UNIQUE(bien_id)`
+classique, qui aurait interdit l'historique légitime de compromis `realise`/`annule`).
+
+**1 migration** (additive uniquement). Tests ajoutés : garde de session sur l'ensemble des Server
+Actions (test structurel AST), session Atlas (absente/valide/détruite/fail-closed), allowlist,
+identité Google (nonce/audience/email invalides rejetés, Google mocké), Proxy (redirection anonyme,
+401 API, endpoints techniques toujours atteignables), sécurité documents/pack-notaire/geocodage
+(anonyme refusé avant toute lecture/mutation, session valide inchangée) — comble au passage les
+tests manquants identifiés par l'audit (`creerAcquereurAction`, `modifierAcquereurAction`,
+`annulerVisiteAction`, `reporterVisiteAction`) ; suite complète du projet passante. Validation
+réelle : build de production propre. Le flux OAuth de bout en bout n'a pas pu être validé en
+navigateur avec de vraies credentials Google dans cet environnement de développement — à faire
+manuellement avant le premier jour de pilote.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

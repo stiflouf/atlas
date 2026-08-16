@@ -8,6 +8,7 @@ import { verifierCommune } from "@/lib/geocodage/ignClient";
 import { enqueuerResynchronisationAcquereur } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import type { SecteurRecherche } from "@/types/secteurRecherche";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 export type ResultatActionAjoutSecteur =
   | { statut: "idle" }
@@ -26,6 +27,7 @@ export async function ajouterSecteurRechercheAction(
   _etatPrecedent: ResultatActionAjoutSecteur | null,
   formData: FormData
 ): Promise<ResultatActionAjoutSecteur> {
+  await exigerSessionAtlas();
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const codeInsee = String(formData.get("codeInsee") ?? "").trim();
   const nomCommune = String(formData.get("nomCommune") ?? "").trim();
@@ -78,6 +80,7 @@ export async function ajouterSecteurRechercheAction(
 // redirect()/formulaire natif classique de l'app (comme annulerTacheAction), pas besoin de
 // useActionState ici.
 export async function supprimerSecteurRechercheAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   if (!id || !acquereurId) {

@@ -107,6 +107,11 @@ describe("compromisRepository (intégration Postgres)", () => {
     expect(ancien.offreId).toBeUndefined();
     expect(ancien.dateActe).toBeUndefined();
 
+    // ADR-047 : un seul compromis 'en_cours' par bien est désormais imposé en base (index unique
+    // partiel) — bascule le premier avant d'en créer un second, comme un vrai dossier réel où le
+    // premier tomberait avant qu'un second ne soit signé.
+    await marquerCompromisAnnule(ancien.id, "2026-08-05", "desaccord_prix");
+
     const recent = await enregistrerCompromis({
       bienId: bien.id,
       acquereurId: acquereur.id,
@@ -250,9 +255,13 @@ describe("compromisRepository (intégration Postgres)", () => {
     expect(resultat?.id).toBe(compromisCree.id);
   });
 
-  it("getCompromisParOffreId() lève une exception explicite si plusieurs compromis référencent la même offre (incohérence historique, ADR-045)", async () => {
-    // Construit artificiellement le scénario impossible en usage normal (aucun UNIQUE(offre_id)
-    // en base, décision explicite ADR-045) : deux compromis distincts pointant vers la MÊME offre.
+  // ADR-047 : UNIQUE(offre_id) a été ajoutée en défense en profondeur avant exposition Internet — le
+  // scénario "plusieurs compromis pour la même offre" est désormais rejeté dès l'écriture par la
+  // contrainte elle-même, plus tôt que la lecture fail-closed qui protégeait ce cas auparavant.
+  // Réécrit pour vérifier cette garantie plus forte (le premier compromis est basculé 'annule' pour
+  // isoler la contrainte testée ici de l'index partiel "un seul en_cours par bien", couvert séparément
+  // dans ce fichier).
+  it("UNIQUE(offre_id) empêche désormais qu'un second compromis référence la même offre (ADR-047)", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("008");
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 320000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
@@ -260,10 +269,23 @@ describe("compromisRepository (intégration Postgres)", () => {
 
     const c1 = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, offreId: offre.id, prixConvenu: 320000, dateSignature: "2026-08-05" });
     idsCompromisCrees.push(c1.id);
-    const c2 = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, offreId: offre.id, prixConvenu: 320000, dateSignature: "2026-08-06" });
-    idsCompromisCrees.push(c2.id);
+    await marquerCompromisAnnule(c1.id, "2026-08-06", "desaccord_prix");
 
-    await expect(getCompromisParOffreId(offre.id)).rejects.toThrow(/Incohérence/);
+    // drizzle-orm/postgres-js enveloppe l'erreur Postgres d'origine dans `cause` — le message de
+    // haut niveau ne contient jamais le nom de la contrainte (vérifié empiriquement, même
+    // observation que secteurRecherche.ts, ADR-028).
+    let erreurCapturee: unknown;
+    try {
+      await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, offreId: offre.id, prixConvenu: 320000, dateSignature: "2026-08-06" });
+    } catch (erreur) {
+      erreurCapturee = erreur;
+    }
+    expect(erreurCapturee).toBeInstanceOf(Error);
+    const cause = (erreurCapturee as Error).cause as { constraint_name?: string } | undefined;
+    expect(cause?.constraint_name).toBe("compromis_offre_id_unique");
+
+    const resultat = await getCompromisParOffreId(offre.id);
+    expect(resultat?.id).toBe(c1.id);
   });
 
   it("modifierDateActeCompromis() retourne undefined pour un id non-UUID, sans erreur de cast", async () => {

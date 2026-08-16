@@ -7,6 +7,7 @@ import {
   getConfigurationAutomatisation,
 } from "@/lib/automatisations/configurationAutomatisationRepository";
 import { CODES_REGLE_AUTOMATISATION, type CodeRegleAutomatisation } from "@/types/automatisation";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Règles dont l'activation exige un paramètre produit explicite (ADR-033, point 4) — seule
 // 'inactivite_prospect_vendeur' aujourd'hui. Vérifié ici (Server Action), jamais dans le
@@ -18,6 +19,7 @@ const REGLES_AVEC_SEUIL_OBLIGATOIRE: CodeRegleAutomatisation[] = ["inactivite_pr
 // un seuil tant qu'aucun seuil valide n'est configuré — jamais un repli silencieux vers une valeur
 // par défaut.
 export async function basculerAutomatisationAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const regleCode = String(formData.get("regleCode") ?? "");
   if (!CODES_REGLE_AUTOMATISATION.includes(regleCode as CodeRegleAutomatisation)) {
     throw new Error("Règle inconnue.");
@@ -38,6 +40,7 @@ export async function basculerAutomatisationAction(formData: FormData): Promise<
 // Seuil produit explicite (ADR-033, point 4) — ne touche jamais l'activation. Un nombre de jours
 // entier strictement positif, refusé sinon (aucune valeur implicite, aucun repli silencieux).
 export async function definirSeuilAutomatisationAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const regleCode = String(formData.get("regleCode") ?? "");
   if (!CODES_REGLE_AUTOMATISATION.includes(regleCode as CodeRegleAutomatisation)) {
     throw new Error("Règle inconnue.");

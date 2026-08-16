@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
 import { enregistrerRfrFoyer } from "@/lib/rfrFoyerRepository";
 import { parseMontantCentimes } from "@/types/remuneration";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Parts saisies en usage courant (1,5 part) converties en centièmes exacts (150) par manipulation
 // de chaîne, jamais une multiplication flottante — même principe que parseMontantCentimes
@@ -20,6 +21,7 @@ function parsePartsCentiemes(valeur: FormDataEntryValue | null): number | undefi
 // automatiquement, seulement si le conseiller choisit explicitement de renseigner son RFR pour
 // suivre son éligibilité au versement libératoire.
 export async function enregistrerRfrFoyerAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const anneeRfr = Number(formData.get("anneeRfr"));
   if (!Number.isInteger(anneeRfr) || anneeRfr < 2000 || anneeRfr > new Date().getFullYear()) {
     throw new Error("Année de RFR invalide.");

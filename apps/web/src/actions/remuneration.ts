@@ -11,6 +11,7 @@ import {
   modifierRemunerationPrevisionnelle,
 } from "@/lib/remunerationRepository";
 import { parseMontantCentimes } from "@/types/remuneration";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // undefined = absent (champ optionnel non renseigné), null n'est jamais retourné par ce helper —
 // distinct de parseMontantCentimesOuNull utilisé par la correction (§ modifierRemunerationAction).
@@ -44,6 +45,7 @@ function parseDateOuNull(valeur: FormDataEntryValue | null): string | null {
 // conseiller est absent/≤0, si les honoraires totaux sont renseignés mais ≤0, ou si une rémunération
 // existe déjà pour ce compromis (contrainte UNIQUE en base, vérifiée ici pour un message clair).
 export async function ajouterRemunerationAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const compromisId = String(formData.get("compromisId") ?? "");
 
   const compromisActuel = await getCompromisById(compromisId);
@@ -100,6 +102,7 @@ export async function ajouterRemunerationAction(formData: FormData): Promise<voi
 // modifierRemunerationPrevisionnelle retourne undefined, la rémunération vient d'être marquée
 // encaissée entre la lecture et l'écriture (gel concurrent, ADR-021) — throw dédié.
 export async function modifierRemunerationAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const compromisId = String(formData.get("compromisId") ?? "");
 
   const remunerationActuelle = await getRemunerationParCompromis(compromisId);
@@ -163,6 +166,7 @@ export async function modifierRemunerationAction(formData: FormData): Promise<vo
 // Si marquerRemunerationEncaissee retourne undefined, la rémunération est déjà encaissée (gel
 // concurrent) — throw dédié.
 export async function marquerRemunerationEncaisseeAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const compromisId = String(formData.get("compromisId") ?? "");
 
   const remunerationActuelle = await getRemunerationParCompromis(compromisId);

@@ -16,6 +16,7 @@ import {
   type EtatVerificationDocument,
   type TypeDocument,
 } from "@/types/documentBien";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 const CATEGORIES_VALIDES: CategorieDocument[] = [
   "mandat",
@@ -63,6 +64,7 @@ function parseTexteOuNull(valeur: FormDataEntryValue | null): string | null {
 // ne suffisent pas). Le fichier n'est écrit sur disque qu'après validation complète — jamais
 // avant, jamais si l'insertion DB qui suit pourrait échouer sur un bien/rattachement invalide.
 export async function ajouterDocumentBienAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const bienId = String(formData.get("bienId") ?? "");
   const nom = String(formData.get("nom") ?? "").trim();
   const categorie = parseCategorie(formData.get("categorie"));
@@ -123,6 +125,7 @@ export async function ajouterDocumentBienAction(formData: FormData): Promise<voi
 // bien cible est introuvable/archivé, ou si un rattachement renseigné est incohérent avec le bien
 // cible.
 export async function corrigerClassementDocumentBienAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   const documentActuel = await getDocumentBienById(id);
   if (!documentActuel) throw new Error("Document introuvable.");

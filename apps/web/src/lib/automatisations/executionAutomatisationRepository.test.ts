@@ -140,9 +140,14 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
     await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
   });
 
-  it("plus d'1 ligne : incohérence de données détectée explicitement, jamais un rows[0] silencieux", async () => {
-    // Construit artificiellement le scénario impossible en usage normal (aucun UNIQUE(tache_id) en
-    // base, décision explicite ADR-043) : deux exécutions distinctes pointant vers la MÊME tâche.
+  // ADR-047 : UNIQUE(tache_id) a été ajoutée en défense en profondeur avant exposition Internet — le
+  // scénario "plus d'1 ligne" que ce test vérifiait auparavant côté lecture (rejeté explicitement par
+  // getExecutionAutomatisationParTacheId) est désormais rejeté plus tôt encore, dès l'écriture, par la
+  // contrainte elle-même. Le test est réécrit pour vérifier cette garantie plus forte plutôt que
+  // supprimé : la lecture fail-closed (getExecutionAutomatisationParTacheId) reste un filet légitime
+  // pour toute donnée antérieure à cette migration, mais ne peut plus être déclenchée par une nouvelle
+  // écriture normale.
+  it("UNIQUE(tache_id) empêche désormais qu'une deuxième exécution cible la même tâche (ADR-047)", async () => {
     const bien = await creerBienDeTest("MULTI1");
     const acquereur = await creerAcquereurDeTest("MULTI1");
     const cr1 = await enregistrerCompteRenduVisite({
@@ -179,12 +184,26 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
       .insert(executionsAutomatisation)
       .values({ regleCode: "retour_vendeur_apres_visite", evenementId: evt1.id, tacheId: tache.id, reussieLe: new Date() })
       .returning();
-    const [exec2] = await getDb()
-      .insert(executionsAutomatisation)
-      .values({ regleCode: "retour_vendeur_apres_visite", evenementId: evt2.id, tacheId: tache.id, reussieLe: new Date() })
-      .returning();
-    idsExecutions.push(exec1.id, exec2.id);
+    idsExecutions.push(exec1.id);
 
-    await expect(getExecutionAutomatisationParTacheId(tache.id)).rejects.toThrow(/Incohérence/);
+    // drizzle-orm/postgres-js enveloppe l'erreur Postgres d'origine dans `cause` — le message de
+    // haut niveau ne contient jamais le nom de la contrainte (même observation que
+    // secteurRecherche.ts, ADR-028).
+    let erreurCapturee: unknown;
+    try {
+      await getDb()
+        .insert(executionsAutomatisation)
+        .values({ regleCode: "retour_vendeur_apres_visite", evenementId: evt2.id, tacheId: tache.id, reussieLe: new Date() });
+    } catch (erreur) {
+      erreurCapturee = erreur;
+    }
+    expect(erreurCapturee).toBeInstanceOf(Error);
+    const cause = (erreurCapturee as Error).cause as { constraint_name?: string } | undefined;
+    expect(cause?.constraint_name).toBe("executions_automatisation_tache_id_unique");
+
+    // La première exécution reste lisible normalement — la contrainte a bloqué la seconde écriture,
+    // jamais corrompu la première.
+    const resultat = await getExecutionAutomatisationParTacheId(tache.id);
+    expect(resultat?.id).toBe(exec1.id);
   });
 });

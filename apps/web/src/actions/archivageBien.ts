@@ -6,6 +6,7 @@ import { archiverBien, desarchiverBien } from "@/lib/bienRepository";
 import { marquerHorsPerimetrePourBien } from "@/lib/compatibilite/etatRepository";
 import { enqueuerResynchronisationBien } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // id absent/invalide/inexistant -> notFound(), jamais une redirection de succès silencieuse
 // (même garde que modifierBienAction).
@@ -15,6 +16,7 @@ import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementR
 // appel à evaluerCompatibilite() (aucun fan-out, rien à isoler, donc pas de passage par le handoff
 // ici, voir etatRepository.ts). Aucun événement "nouveau match" n'est bien sûr émis dans ce sens.
 export async function archiverBienAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
@@ -36,6 +38,7 @@ export async function archiverBienAction(formData: FormData): Promise<void> {
 // était exclu de listerBiensActifsPersistes()) — d'où la resynchronisation complète, pas un simple
 // flip.
 export async function desarchiverBienAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 

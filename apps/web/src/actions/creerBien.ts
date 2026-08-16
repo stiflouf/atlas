@@ -7,6 +7,7 @@ import { parseBienFormData } from "@/lib/bienFormulaire";
 import { resoudreCommuneBien } from "@/lib/geocodage/resolutionBien";
 import { enqueuerResynchronisationBien } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Résolution IGN best-effort (ADR-035) : jamais bloquante — une panne/ambiguïté produit
 // codeInseeCommune undefined, le bien est tout de même créé.
@@ -16,6 +17,7 @@ import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementR
 // baseline) — voir l'addendum de l'audit, §5. Le traitement immédiat après commit n'est qu'une
 // optimisation de délai ; la fiabilité vient de la ligne déjà durablement écrite avant lui.
 export async function creerBienAction(formData: FormData): Promise<void> {
+  await exigerSessionAtlas();
   const donnees = parseBienFormData(formData);
   const commune = await resoudreCommuneBien(donnees.adresse, donnees.ville, donnees.codePostal);
 
