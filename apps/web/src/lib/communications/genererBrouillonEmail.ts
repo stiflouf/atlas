@@ -32,6 +32,7 @@ const OBJET_PAR_INTENTION: Record<IntentionCommunication, (faits: FaitsCommunica
   relance_piece_a_verifier: (f) => `Pièce à vérifier pour votre dossier${f.documentLabel ? ` — ${f.documentLabel}` : ""}`,
   message_compromis: (f) => `Votre compromis de vente${f.bienAdresse ? ` — ${f.bienAdresse}` : ""}`,
   message_notaire: (f) => `Dossier de vente${f.bienAdresse ? ` — ${f.bienAdresse}` : ""}`,
+  retour_vendeur_apres_visite: (f) => `Retour de visite${f.bienAdresse ? ` — ${f.bienAdresse}` : ""}`,
 };
 
 type ConstructeurParagraphes = (faits: FaitsCommunication, ton: TonMessage) => (string | undefined)[];
@@ -115,6 +116,44 @@ const PARAGRAPHES_PAR_INTENTION: Record<IntentionCommunication, ConstructeurPara
       : undefined;
     if (ton === "court") return [`Message concernant le dossier de vente${lieu}.`, aObtenir];
     return [`Je vous transmets ce message concernant le dossier de vente${lieu}.`, aObtenir];
+  },
+
+  // ADR-042 — whitelist stricte : uniquement bienAdresse/dateVisite/interetVisiteValeur (déjà
+  // structurés). Ne lit JAMAIS retour/prochaineEtape (notes internes du conseiller, ADR-011) ni
+  // aucune donnée nominative/de contact de l'acquéreur — jamais nommé, jamais son email/téléphone/
+  // budget/critères, cohérent avec l'absence de tout tiers nommé dans les 8 autres intentions déjà
+  // existantes ci-dessus. `interetVisiteValeur` absent (compte rendu introuvable, cas défensif) est
+  // traité exactement comme `inconnu` — jamais une affirmation non fondée (ADR-008).
+  retour_vendeur_apres_visite: (f, ton) => {
+    const date = f.dateVisite ? ` le ${f.dateVisite}` : "";
+    const bien = f.bienAdresse ? ` de votre bien situé ${f.bienAdresse}` : " de votre bien";
+    switch (f.interetVisiteValeur) {
+      case "interesse":
+        return ton === "court"
+          ? [`Retour de la visite${date}${bien} : l'acquéreur a manifesté son intérêt.`]
+          : [
+              `Je souhaitais vous faire un retour à la suite de la visite${date}${bien}.`,
+              "L'acquéreur ayant visité le bien a manifesté son intérêt.",
+            ];
+      case "a_reflechir":
+        return ton === "court"
+          ? [`Retour de la visite${date}${bien} : l'acquéreur souhaite prendre le temps de réfléchir.`]
+          : [`À la suite de la visite${date}${bien}, l'acquéreur souhaite prendre le temps de réfléchir avant de se positionner.`];
+      case "pas_interesse":
+        return ton === "court"
+          ? [`Retour de la visite${date}${bien} : l'acquéreur ne souhaite pas donner suite.`]
+          : [
+              `Je souhaitais vous faire un retour à la suite de la visite${date}${bien}.`,
+              "L'acquéreur ne souhaite pas donner suite à cette visite.",
+            ];
+      default:
+        return ton === "court"
+          ? [`La visite prévue${date}${bien} a bien eu lieu ; le retour de l'acquéreur n'est pas encore établi.`]
+          : [
+              `Je souhaitais vous informer que la visite prévue${date}${bien} a bien eu lieu.`,
+              "Le retour précis de l'acquéreur n'est pas encore établi à ce stade.",
+            ];
+    }
   },
 };
 

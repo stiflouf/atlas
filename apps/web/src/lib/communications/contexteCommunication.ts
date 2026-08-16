@@ -4,6 +4,8 @@
 // conseiller, hors périmètre du moteur — voir mailto.ts). Aucun LLM dans cette passe (ADR-008 :
 // toute règle exprimable sur des champs structurés l'est, jamais une extraction de texte libre).
 
+import type { Interet } from "@/types/compteRenduVisite";
+
 export type IntentionCommunication =
   | "relance_prospect_vendeur"
   | "suivi_rdv_estimation"
@@ -12,7 +14,8 @@ export type IntentionCommunication =
   | "demande_document_manquant"
   | "relance_piece_a_verifier"
   | "message_compromis"
-  | "message_notaire";
+  | "message_notaire"
+  | "retour_vendeur_apres_visite";
 
 export const LABEL_INTENTION_COMMUNICATION: Record<IntentionCommunication, string> = {
   relance_prospect_vendeur: "Relance prospect vendeur",
@@ -23,6 +26,7 @@ export const LABEL_INTENTION_COMMUNICATION: Record<IntentionCommunication, strin
   relance_piece_a_verifier: "Relance d'une pièce à vérifier",
   message_compromis: "Message lié au compromis",
   message_notaire: "Message destiné au notaire",
+  retour_vendeur_apres_visite: "Retour vendeur après visite",
 };
 
 // Quatre tons explicites (ADR-031) : varient la formulation du MÊME contenu factuel, jamais les
@@ -58,6 +62,10 @@ export type FaitsCommunication = {
   bienAdresse?: string;
   dateVisite?: string;
   interetVisite?: string;
+  // Valeur technique brute de l'intérêt (ADR-042), distincte d'`interetVisite` (déjà un libellé
+  // formaté pour `suivi_visite`, acquéreur) — nécessaire pour que `retour_vendeur_apres_visite`
+  // choisisse une formulation dédiée par valeur, jamais un texte affirmatif pour `inconnu`.
+  interetVisiteValeur?: Interet;
   dateRdvEstimation?: string;
   montantOffre?: number;
   dateOffre?: string;

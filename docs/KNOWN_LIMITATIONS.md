@@ -733,6 +733,28 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   (un seul site d'appel dans tout le code, `marquerVisiteRealisee`), jamais une garantie imposée
   par une contrainte DB inter-tables (non exprimable en `CHECK` Postgres classique).
 
+## Retour vendeur après visite (ADR-042)
+
+- **Aucune tâche vendeur si le vendeur n'est pas structurellement identifié** : un bien créé
+  directement (`/biens/nouveau`, hors conversion d'un prospect vendeur) n'a aucun vendeur
+  résolvable — `retour_vendeur_apres_visite` ne produit alors jamais de tâche, jamais de fallback
+  vers l'acquéreur, jamais d'erreur. Limite V1 assumée : aucun mécanisme de rattachement a
+  posteriori d'un vendeur à un bien existant n'a été ajouté par cette ADR.
+- **Faits de visite dérivés du compte rendu le plus récent du bien, pas du compte rendu précis
+  ayant déclenché la tâche** : une tâche `retour_vendeur_apres_visite` est mono-cible (ADR-028,
+  cible = prospect vendeur) et ne porte donc aucune référence structurée vers le compte rendu
+  exact qui l'a produite. Si une nouvelle visite du même bien survient entre la création de la
+  tâche et la préparation de l'email (« Préparer un email »), le brouillon reflète la visite la
+  plus récente au moment de la préparation, pas nécessairement celle qui a déclenché la tâche.
+  Cas limite jugé rare et sans conséquence grave (le retour reste honnête, seulement potentiellement
+  décalé d'une visite).
+- **Aucun nettoyage automatique de la tâche** si une offre ou un compromis survient ensuite sur le
+  même bien — le conseiller la termine manuellement s'il la juge dépassée, même choix que pour les
+  tâches `nouveau_match_bien_acquereur` (ADR-041).
+- **Plusieurs visites du même bien produisent chacune leur propre tâche vendeur** : aucune
+  déduplication au-delà de l'idempotence standard ADR-032 (`UNIQUE(regle_code, evenement_id)`) —
+  chaque `visite_realisee` est un fait métier distinct légitimement porteur de son propre retour.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

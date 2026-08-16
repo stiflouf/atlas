@@ -52,7 +52,8 @@ export type CodeRegleAutomatisation =
   | "preparation_apres_mandat"
   | "preparation_dossier_notaire_apres_compromis"
   | "inactivite_prospect_vendeur"
-  | "nouveau_match_bien_acquereur";
+  | "nouveau_match_bien_acquereur"
+  | "retour_vendeur_apres_visite";
 
 export const CODES_REGLE_AUTOMATISATION: CodeRegleAutomatisation[] = [
   "suivi_apres_visite",
@@ -61,6 +62,7 @@ export const CODES_REGLE_AUTOMATISATION: CodeRegleAutomatisation[] = [
   "preparation_dossier_notaire_apres_compromis",
   "inactivite_prospect_vendeur",
   "nouveau_match_bien_acquereur",
+  "retour_vendeur_apres_visite",
 ];
 
 // Snapshot d'exécution d'une règle pour un événement précis. Trois états dérivés, jamais un

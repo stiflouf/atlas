@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray, or } from "drizzle-orm";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -13,6 +13,8 @@ const {
   remuneration: remunerationTable,
   taches: tachesTable,
   prospectsVendeurs: prospectsVendeursTable,
+  evenementsMetier,
+  executionsAutomatisation,
 } = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
@@ -38,6 +40,18 @@ const idsTaches: string[] = [];
 const idsProspects: string[] = [];
 
 afterAll(async () => {
+  // evenements_metier référence prospectVendeurId/bienId en NO ACTION (append-only, ADR-032) —
+  // purgé AVANT les entités source (signerMandatProspectVendeur émet mandat_signe), même patron
+  // que catalogueRegles.nouveauMatch.test.ts.
+  if (idsProspects.length > 0 || idsBiens.length > 0) {
+    const filtre = or(inArray(evenementsMetier.prospectVendeurId, idsProspects), inArray(evenementsMetier.bienId, idsBiens));
+    const evts = await getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(filtre);
+    const idsEvts = evts.map((e) => e.id);
+    if (idsEvts.length > 0) {
+      await getDb().delete(executionsAutomatisation).where(inArray(executionsAutomatisation.evenementId, idsEvts));
+      await getDb().delete(evenementsMetier).where(filtre);
+    }
+  }
   for (const id of idsTaches) await getDb().delete(tachesTable).where(eq(tachesTable.id, id));
   for (const id of idsRemunerations) await getDb().delete(remunerationTable).where(eq(remunerationTable.id, id));
   for (const id of idsOffres) await getDb().delete(offresTable).where(eq(offresTable.id, id));
@@ -212,6 +226,112 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(resultat.candidats).toEqual([]);
   });
 
+  it("tâche -> prospectVendeur, origineCode retour_vendeur_apres_visite : faits de la visite la plus récente, jamais l'acquéreur comme candidat (ADR-042)", async () => {
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-042" });
+    idsProspects.push(prospect.id);
+    const resultatMandat = await signerMandatProspectVendeur(prospect.id, {
+      reference: "[test réel] RESOL-RV-1",
+      titre: "Bien vendeur ADR-042",
+      type: "appartement",
+      adresse: "9 rue du Vendeur",
+      ville: "Testville",
+      codePostal: "00000",
+      surface: 40,
+      pieces: 2,
+      prix: 250000,
+      statutMandat: "actif",
+      dateMandat: "2026-01-01",
+      caracteristiques: [],
+      description: "",
+    });
+    const bien = resultatMandat!.bien;
+    idsBiens.push(bien.id);
+
+    const acquereur = await creerAcquereurTest("resol6@test.local");
+    const ancienneVisite = await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      dateVisite: "2026-02-01",
+      retour: "Ancienne visite",
+      interet: "pas_interesse",
+    });
+    idsVisites.push(ancienneVisite.id);
+    const visiteRecente = await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      dateVisite: "2026-03-10",
+      retour: "[MARQUEUR_INTERNE_NE_DOIT_JAMAIS_SORTIR]",
+      interet: "interesse",
+      prochaineEtape: "[PROCHAINE_ETAPE_INTERNE_NE_DOIT_JAMAIS_SORTIR]",
+    });
+    idsVisites.push(visiteRecente.id);
+
+    const tache = await creerTache({
+      titre: "Faire le retour de visite au vendeur",
+      type: "autre",
+      priorite: "normale",
+      origine: "automatique",
+      origineCode: "retour_vendeur_apres_visite",
+      cible: { type: "prospectVendeur", id: prospect.id },
+    });
+    idsTaches.push(tache.id);
+
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    expect(resultat.candidats).toHaveLength(1);
+    expect(resultat.candidats[0].type).toBe("prospectVendeur");
+    expect(resultat.faits.bienAdresse).toBe(bien.adresse);
+    expect(resultat.faits.dateVisite).toBeDefined();
+    expect(resultat.faits.interetVisiteValeur).toBe("interesse"); // celle de la visite la PLUS RÉCENTE
+    // Jamais les notes internes ni l'acquéreur dans les faits transmis.
+    expect(JSON.stringify(resultat.faits)).not.toContain("MARQUEUR_INTERNE");
+    expect(JSON.stringify(resultat.faits)).not.toContain("PROCHAINE_ETAPE_INTERNE");
+    expect(JSON.stringify(resultat.candidats)).not.toContain(acquereur.email);
+  });
+
+  it("tâche -> prospectVendeur sans origineCode retour_vendeur_apres_visite : comportement générique inchangé même si des visites existent", async () => {
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur générique ADR-042" });
+    idsProspects.push(prospect.id);
+    const resultatMandat2 = await signerMandatProspectVendeur(prospect.id, {
+      reference: "[test réel] RESOL-RV-2",
+      titre: "Bien vendeur générique",
+      type: "appartement",
+      adresse: "10 rue du Vendeur",
+      ville: "Testville",
+      codePostal: "00000",
+      surface: 40,
+      pieces: 2,
+      prix: 250000,
+      statutMandat: "actif",
+      dateMandat: "2026-01-01",
+      caracteristiques: [],
+      description: "",
+    });
+    const bien = resultatMandat2!.bien;
+    idsBiens.push(bien.id);
+    const acquereur = await creerAcquereurTest("resol7@test.local");
+    const visite = await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      dateVisite: "2026-03-10",
+      retour: "Visite",
+      interet: "interesse",
+    });
+    idsVisites.push(visite.id);
+
+    const tache = await creerTache({
+      titre: "Tâche manuelle sur le prospect vendeur",
+      type: "appel",
+      priorite: "normale",
+      origine: "manuelle",
+      cible: { type: "prospectVendeur", id: prospect.id },
+    });
+    idsTaches.push(tache.id);
+
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    expect(resultat.faits.interetVisiteValeur).toBeUndefined();
+    expect(resultat.faits.dateVisite).toBeUndefined();
+  });
+
   it("tâche -> remuneration : aucune relation structurée câblée, jamais une erreur", async () => {
     const bien = await creerBienTest("[test réel] RESOL-REMUN");
     const acquereur = await creerAcquereurTest("resol5@test.local");
@@ -251,5 +371,23 @@ describe("determinerIntentionParDefaut", () => {
     expect(determinerIntentionParDefaut("bien", "prospectVendeur", { dateRdvEstimation: "3 mars 2026" })).toBe(
       "suivi_rdv_estimation"
     );
+  });
+
+  it("origineCode retour_vendeur_apres_visite (ADR-042) l'emporte sur tout le reste", () => {
+    expect(determinerIntentionParDefaut("prospectVendeur", "prospectVendeur", {}, "retour_vendeur_apres_visite")).toBe(
+      "retour_vendeur_apres_visite"
+    );
+    // Même avec un rdv d'estimation présent dans les faits, ou un autre cibleType : l'origineCode
+    // reste prioritaire, jamais "toute tâche prospectVendeur" (ADR-042, §25).
+    expect(
+      determinerIntentionParDefaut("prospectVendeur", "prospectVendeur", { dateRdvEstimation: "3 mars 2026" }, "retour_vendeur_apres_visite")
+    ).toBe("retour_vendeur_apres_visite");
+  });
+
+  it("un autre origineCode (ex. mandat_signe, inactivite_prospect_vendeur) ne déclenche jamais retour_vendeur_apres_visite", () => {
+    expect(determinerIntentionParDefaut("prospectVendeur", "prospectVendeur", {}, "preparation_apres_mandat")).toBe(
+      "relance_prospect_vendeur"
+    );
+    expect(determinerIntentionParDefaut("prospectVendeur", "prospectVendeur", {}, undefined)).toBe("relance_prospect_vendeur");
   });
 });

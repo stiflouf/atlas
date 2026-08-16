@@ -10,7 +10,7 @@ valeurs.
 ## État actuel du projet
 
 Produit mono-conseiller en construction active, 100% TypeScript/Next.js (`apps/web`), PostgreSQL
-via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-14 : biens, acquéreurs,
+via Drizzle. Fonctionnalités réelles (persistées, testées) au 2026-08-16 : biens, acquéreurs,
 prospects vendeurs, tâches (ADR-028, remplace l'ancienne table `actions`), notes de bien, comptes
 rendus de visite, mémoire de matching Google Calendar, historique dérivé du bien, moteur
 d'automatisations événement → tâche (ADR-032), moteur temporel/relances programmées (ADR-033),
@@ -24,7 +24,10 @@ commercial quotidien existant `/` — lien « Voir la fiche », badge « En reta
 —, une entité métier minimale `visites` (statuts `planifiee`/`realisee`/`annulee`, distincte du
 compte rendu après-coup, ADR-040), et sa fiche `/visites/{id}` désormais autonome de Google
 Calendar avec matérialisation strictement par Server Action (POST), plus un suivi post-visite
-(`suivi_apres_visite`) contextuel à l'intérêt exprimé, ciblant l'acquéreur (ADR-041).
+(`suivi_apres_visite`) contextuel à l'intérêt exprimé, ciblant l'acquéreur (ADR-041), et une règle
+indépendante `retour_vendeur_apres_visite` créant une tâche vendeur (résolution exclusive par
+`getProspectVendeurParBien`, jamais de fallback acquéreur) avec brouillon d'email déterministe à
+whitelist stricte, désactivée par défaut (ADR-042).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -136,6 +139,20 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   toujours un **compte rendu**, jamais `visites.id`, mais uniquement pour les tâches créées **avant**
   ADR-041 — `deriverRouteFicheCible()` (ADR-039) n'a jamais été étendue pour ce type de cible
   (nom de colonne trompeur hérité d'avant l'entité `visites`, jamais renommé, jamais migré).
+- **`retour_vendeur_apres_visite` (ADR-042) est une règle indépendante de `suivi_apres_visite`,
+  jamais fusionnée** — même événement déclencheur (`visite_realisee`), mais cible le **vendeur**,
+  résolu **exclusivement** via `getProspectVendeurParBien()` (jamais
+  `resoudreDestinatairesDepuisBien()`, qui peut retourner l'acquéreur d'un compromis en cours).
+  Désactivée par défaut, aucun fallback : bien sans vendeur structuré → 0 tâche, jamais une erreur.
+  Contrairement à `suivi_apres_visite`, les **quatre** valeurs d'`interet` produisent une tâche
+  (y compris `pas_interesse`). **L'acquéreur n'est jamais nommé** dans aucun contenu généré (titre,
+  contexte, objet/corps d'email). Le brouillon (`IntentionCommunication =
+  "retour_vendeur_apres_visite"`) ne lit jamais `retour`/`prochaineEtape` (notes internes,
+  `FaitsCommunication` ne porte structurellement pas ces champs) — uniquement adresse du bien, date
+  de visite, valeur d'`interet`. `origineCode` (posé par le moteur ADR-032) distingue cette tâche de
+  toute autre tâche `prospectVendeur` avant toute résolution de contexte de communication — ne
+  jamais supposer que « toute tâche prospectVendeur » porte cette intention. Gmail inchangé
+  (ADR-031-bis) : aucun envoi automatique nulle part.
 - **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
   `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
   `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
@@ -207,7 +224,7 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/compatibilite/resynchronisationRepository.ts` | Handoff durable (file d'attente de resynchronisation) — enqueue transactionnel, coalescing, complétion par identité (ADR-036) |
 | `src/lib/compatibilite/baseline.ts` | Outil de baseline/rebuild explicite — jamais d'événement, jamais automatique (ADR-036) |
 | `src/app/api/compatibilite/scan/route.ts` | Filet de reprise du handoff (ADR-036) — même patron d'authentification que `/api/automatisations/scan` |
-| `src/lib/automatisations/catalogueRegles.ts` | Catalogue de règles ADR-032/033/037/041 — dont `nouveau_match_bien_acquereur` (ADR-037) et `suivi_apres_visite` (politique par `interet`, cible acquéreur, ADR-041), toutes désactivées par défaut |
+| `src/lib/automatisations/catalogueRegles.ts` | Catalogue de règles ADR-032/033/037/041/042 — dont `nouveau_match_bien_acquereur` (ADR-037), `suivi_apres_visite` (politique par `interet`, cible acquéreur, ADR-041) et `retour_vendeur_apres_visite` (cible vendeur via `getProspectVendeurParBien` uniquement, ADR-042), toutes désactivées par défaut |
 | `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037) et `listerExecutionsATraiter()`/`incrementerTentativeExecution()` (ADR-038) |
 | `src/lib/automatisations/reprise.ts` | Filet de reprise après crash (ADR-038) — réutilise `traiterExecutionsEnAttente()` (`moteur.ts`) telle quelle, jamais une seconde implémentation |
 | `src/app/api/automatisations/reprise/route.ts` | Endpoint de reprise (ADR-038) — même patron d'authentification que `/api/automatisations/scan`, secret dédié |

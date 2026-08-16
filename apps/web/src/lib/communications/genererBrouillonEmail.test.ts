@@ -11,6 +11,7 @@ const TOUTES_INTENTIONS: IntentionCommunication[] = [
   "relance_piece_a_verifier",
   "message_compromis",
   "message_notaire",
+  "retour_vendeur_apres_visite",
 ];
 
 const TOUS_TONS: TonMessage[] = ["professionnel", "cordial", "court", "relance_douce"];
@@ -99,6 +100,54 @@ describe("genererBrouillonEmail — aucune donnée inventée", () => {
       "professionnel"
     );
     expect(brouillon.corps).toContain("Rappel suite à notre échange téléphonique du 2 mars");
+  });
+
+  it("retour_vendeur_apres_visite (ADR-042) : objet contient l'adresse du bien, jamais un nom d'acquéreur", () => {
+    const brouillon = genererBrouillonEmail(
+      "retour_vendeur_apres_visite",
+      { bienAdresse: "5 rue de la Vente", dateVisite: "10 mars 2026", interetVisiteValeur: "interesse" },
+      "professionnel"
+    );
+    expect(brouillon.objet).toBe("Retour de visite — 5 rue de la Vente");
+    expect(brouillon.objet).not.toMatch(/[A-Z][a-zé]+ [A-Z][a-zé]+/); // aucun "Prénom Nom" de tiers
+  });
+
+  it("retour_vendeur_apres_visite : contenu déterministe distinct par valeur d'intérêt, jamais affirmatif pour inconnu/absent", () => {
+    const base: FaitsCommunication = { bienAdresse: "5 rue de la Vente", dateVisite: "10 mars 2026" };
+
+    const interesse = genererBrouillonEmail("retour_vendeur_apres_visite", { ...base, interetVisiteValeur: "interesse" }, "professionnel");
+    expect(interesse.corps).toContain("a manifesté son intérêt");
+
+    const aReflechir = genererBrouillonEmail("retour_vendeur_apres_visite", { ...base, interetVisiteValeur: "a_reflechir" }, "professionnel");
+    expect(aReflechir.corps).toContain("prendre le temps de réfléchir");
+
+    const pasInteresse = genererBrouillonEmail("retour_vendeur_apres_visite", { ...base, interetVisiteValeur: "pas_interesse" }, "professionnel");
+    expect(pasInteresse.corps).toContain("ne souhaite pas donner suite");
+
+    const inconnu = genererBrouillonEmail("retour_vendeur_apres_visite", { ...base, interetVisiteValeur: "inconnu" }, "professionnel");
+    expect(inconnu.corps).toContain("n'est pas encore établi");
+    expect(inconnu.corps).not.toContain("a manifesté son intérêt");
+    expect(inconnu.corps).not.toContain("ne souhaite pas donner suite");
+
+    // interetVisiteValeur absent (défensif, ex. compte rendu introuvable) : même prudence que "inconnu".
+    const absent = genererBrouillonEmail("retour_vendeur_apres_visite", base, "professionnel");
+    expect(absent.corps).toContain("n'est pas encore établi");
+  });
+
+  it("retour_vendeur_apres_visite : jamais retour/prochaineEtape (champs inexistants sur FaitsCommunication, structurellement exclus)", () => {
+    // FaitsCommunication ne porte structurellement aucun champ `retour`/`prochaineEtape` — la
+    // whitelist est donc garantie par le système de types lui-même, pas seulement par convention.
+    // Ce test documente explicitement l'invariant (ADR-042 §31) plutôt que de le supposer.
+    const faits: FaitsCommunication = {
+      bienAdresse: "5 rue de la Vente",
+      dateVisite: "10 mars 2026",
+      interetVisiteValeur: "interesse",
+      tacheContexte: "[MARQUEUR_NE_DOIT_JAMAIS_SORTIR_SI_NON_ATTENDU]",
+    };
+    const brouillon = genererBrouillonEmail("retour_vendeur_apres_visite", faits, "professionnel");
+    // tacheContexte n'est délibérément pas lu par ce builder (contrairement à d'autres intentions)
+    // : le contenu reste entièrement déterministe, jamais un texte libre injecté.
+    expect(brouillon.corps).not.toContain("MARQUEUR_NE_DOIT_JAMAIS_SORTIR");
   });
 
   it("le destinataireEmail transmis se retrouve tel quel dans le brouillon, jamais deviné", () => {

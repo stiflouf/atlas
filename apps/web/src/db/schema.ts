@@ -986,7 +986,8 @@ export const envoisEmail = pgTable(
       "envois_email_origine_intention_check",
       sql`${table.origineIntention} IS NULL OR ${table.origineIntention} IN (
         'relance_prospect_vendeur','suivi_rdv_estimation','suivi_acquereur','suivi_visite',
-        'demande_document_manquant','relance_piece_a_verifier','message_compromis','message_notaire'
+        'demande_document_manquant','relance_piece_a_verifier','message_compromis','message_notaire',
+        'retour_vendeur_apres_visite'
       )`
     ),
   ]
@@ -1134,7 +1135,8 @@ export const executionsAutomatisation = pgTable(
       sql`${table.regleCode} IN (
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
-        'inactivite_prospect_vendeur','nouveau_match_bien_acquereur'
+        'inactivite_prospect_vendeur','nouveau_match_bien_acquereur',
+        'retour_vendeur_apres_visite'
       )`
     ),
     check("executions_automatisation_nombre_tentatives_positif_check", sql`${table.nombreTentatives} >= 0`),
@@ -1166,7 +1168,8 @@ export const configurationsAutomatisation = pgTable(
       sql`${table.regleCode} IN (
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
-        'inactivite_prospect_vendeur','nouveau_match_bien_acquereur'
+        'inactivite_prospect_vendeur','nouveau_match_bien_acquereur',
+        'retour_vendeur_apres_visite'
       )`
     ),
     check(

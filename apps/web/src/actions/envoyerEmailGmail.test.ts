@@ -170,6 +170,32 @@ describe("envoyerEmailGmailAction", () => {
     expect(notes).toHaveLength(0);
   });
 
+  it("retour_vendeur_apres_visite (ADR-042) : intention acceptée, persistée, interaction ADR-027 ajoutée pour le vendeur", async () => {
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur envoi ADR-042" });
+    idsProspects.push(prospect.id);
+    mockFetchRoute(() => new Response(JSON.stringify({ id: "gmail-msg-retour-vendeur" }), { status: 200 }));
+
+    const id = randomUUID();
+    idsEnvois.push(id);
+    const resultat = await envoyerEmailGmailAction(null, formulaire({
+      idempotencyKey: id,
+      destinataireEmail: "vendeur-adr042@test.local",
+      objet: "Retour de visite — 5 rue de la Vente",
+      corps: "Bonjour,\n\nRetour de visite.\n\nCordialement,",
+      destinataireType: "prospectVendeur",
+      destinataireId: prospect.id,
+      origineIntention: "retour_vendeur_apres_visite",
+    }));
+
+    expect(resultat.statut).toBe("envoye");
+    const envoi = await getEnvoiEmailById(id);
+    expect(envoi!.origineIntention).toBe("retour_vendeur_apres_visite");
+    // Même mécanisme générique ADR-027 que toute autre intention envoyée à un prospect vendeur —
+    // aucune nouvelle table/booléen "retour effectué" nécessaire (ADR-042 §29/34).
+    const notes = await listerNotesProspectVendeur(prospect.id);
+    expect(notes.some((n) => n.type === "email")).toBe(true);
+  });
+
   it("double soumission avec la même clé d'idempotence : un seul appel Gmail réellement déclenché", async () => {
     const compteur = mockFetchRoute(() => new Response(JSON.stringify({ id: "gmail-msg-double" }), { status: 200 }));
 

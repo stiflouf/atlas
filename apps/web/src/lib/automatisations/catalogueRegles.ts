@@ -1,4 +1,4 @@
-import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
+import { getProspectVendeurById, getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
@@ -82,6 +82,53 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
         case "pas_interesse":
           return undefined;
       }
+    },
+  },
+  {
+    code: "retour_vendeur_apres_visite",
+    nom: "Retour vendeur après visite",
+    description: "Crée une tâche ciblant le vendeur du bien pour l'informer du retour de la visite, uniquement si un vendeur est structurellement identifié.",
+    typeEvenement: "visite_realisee",
+    // ADR-042 — audience distincte de `suivi_apres_visite` ci-dessus (acquéreur) : deux obligations
+    // commerciales différentes, jamais fusionnées. Résolution vendeur exclusivement via
+    // `getProspectVendeurParBien()` (contrainte UNIQUE, au plus un résultat) — jamais
+    // `resoudreDestinatairesDepuisBien()`, qui peut légitimement retourner l'acquéreur d'un
+    // compromis en cours, incompatible avec une action nommément "retour vendeur". Un bien créé
+    // directement (hors conversion d'un prospect vendeur, ex. /biens/nouveau) n'a structurellement
+    // aucun vendeur résolvable — `undefined` ici, jamais un fallback vers l'acquéreur ni un
+    // destinataire inventé (invariant ADR-042 : destinataire vendeur certain, ou aucun effet).
+    construireTache: async (evenement) => {
+      if (!evenement.compteRenduVisiteId) return undefined;
+      const compteRendu = await getCompteRenduVisiteById(evenement.compteRenduVisiteId);
+      if (!compteRendu) return undefined; // introuvable — jamais de retry infini
+
+      const bien = await getBienById(compteRendu.bienId);
+      if (!bien || bien.archiveLe) return undefined;
+
+      const prospectVendeur = await getProspectVendeurParBien(bien.id);
+      if (!prospectVendeur || prospectVendeur.archiveLe) return undefined; // aucun vendeur structuré
+
+      // Contrairement à suivi_apres_visite (acquéreur), le vendeur reste informé quelle que soit
+      // l'issue — y compris "pas_interesse" : le retour de visite a une valeur d'information pour
+      // le vendeur indépendamment de la suite commerciale côté acquéreur (ADR-042, décision
+      // produit distincte du suivi acquéreur). Le titre ne varie jamais avec `interet` — seul le
+      // contenu du futur email (genererBrouillonEmail.ts) en dépend ; `interet` lui-même n'est
+      // jamais dupliqué ici.
+      const nomVendeur = [prospectVendeur.prenom, prospectVendeur.nom].filter(Boolean).join(" ");
+      const contextePar: Record<typeof compteRendu.interet, string> = {
+        interesse: "La visite a suscité un intérêt. Faire le retour au vendeur.",
+        a_reflechir: "L'acquéreur souhaite prendre le temps de réfléchir. Faire le retour au vendeur.",
+        pas_interesse: "L'acquéreur ne souhaite pas donner suite à cette visite. Faire le retour au vendeur.",
+        inconnu: "La visite a eu lieu, mais le retour précis de l'acquéreur n'est pas encore établi.",
+      };
+
+      return {
+        titre: `Faire le retour de visite à ${nomVendeur} pour ${bien.reference}`,
+        contexte: contextePar[compteRendu.interet],
+        type: "autre",
+        priorite: "normale",
+        cible: { type: "prospectVendeur", id: prospectVendeur.id },
+      };
     },
   },
   {

@@ -1061,7 +1061,7 @@ Le corps complet du message n'y est jamais stocké.
 | `contenu_hash` | text | non | SHA-256(destinataire+objet+corps) — diagnostic uniquement, jamais utilisé pour bloquer un envoi |
 | `fournisseur` | text | non | défaut `"gmail"`, `CHECK` |
 | `bien_id` (FK → `biens`, SET NULL), `tache_id` (FK → `taches`, SET NULL) | uuid | **oui** | contexte d'origine |
-| `origine_intention` | text | **oui** | `CHECK`, les 8 valeurs `IntentionCommunication` (ADR-031) |
+| `origine_intention` | text | **oui** | `CHECK`, les 9 valeurs `IntentionCommunication` (ADR-031, `retour_vendeur_apres_visite` ajoutée en ADR-042) |
 | `gmail_message_id` | text | **oui** | posé uniquement au succès |
 | `demarre_le` | timestamptz | non | |
 | `reussi_le` / `echoue_le` / `incertain_le` | timestamptz | **oui** | mutuellement exclusifs par construction applicative (gel concurrent), jamais un `CHECK` SQL — voir `deriverEtatEnvoiEmail` |
@@ -1130,7 +1130,7 @@ code TypeScript, pas une table) à un événement donné — traçable, jamais r
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK`, 6 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`) |
+| `regle_code` | text | non | `CHECK`, 7 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`, ADR-042 ajoute `retour_vendeur_apres_visite`) |
 | `evenement_id` | uuid (FK → `evenements_metier.id`, **`NO ACTION`**) | non | |
 | `tache_id` | uuid (FK → `taches.id`, `SET NULL`) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche |
 | `demarree_le` | timestamptz | non | posée à la création de la ligne (dans la transaction métier — ADR-032 correction n°2, jamais après coup) |
@@ -1164,7 +1164,7 @@ catalogue reste TypeScript, versionné et testé, pas un constructeur no-code).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
-| `regle_code` | text (PK) | non | `CHECK`, une des 5 valeurs `CodeRegleAutomatisation` |
+| `regle_code` | text (PK) | non | `CHECK`, une des 7 valeurs `CodeRegleAutomatisation` |
 | `active` | boolean | non | défaut `false` — une règle absente de cette table est traitée comme inactive par l'appelant, jamais supposée active |
 | `seuil_jours_inactivite` | integer | oui | ADR-033 — paramètre produit explicite, n'a de sens que pour `inactivite_prospect_vendeur` (`NULL` pour les autres). `CHECK > 0` si renseigné. Activer la règle sans seuil valide configuré est refusé (Server Action), jamais une valeur implicite |
 | `modifie_le` | timestamptz | non | |
@@ -1183,7 +1183,7 @@ même quand il ne trouve rien de nouveau (aucune ligne `evenements_metier` n'est
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK`, une des 5 valeurs `CodeRegleAutomatisation` |
+| `regle_code` | text | non | `CHECK`, une des 7 valeurs `CodeRegleAutomatisation` |
 | `demarre_le` | timestamptz | non | posé à l'insertion, au tout début du scan |
 | `termine_le` | timestamptz | oui | posé à la complétion (succès ou échec) — absent si le process a crashé pendant le scan |
 | `nombre_candidats` | integer | oui | prospects actifs analysés |

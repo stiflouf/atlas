@@ -66,7 +66,8 @@ async function resoudreDepuisTache(tacheId: string): Promise<ResultatContexte | 
   const { cibleType, candidats, faits } = await resoudreContexteCommunicationDepuisTache(tache);
   return {
     titre: tache.titre,
-    determinerIntention: (typeCandidatChoisi) => determinerIntentionParDefaut(cibleType, typeCandidatChoisi, faits),
+    determinerIntention: (typeCandidatChoisi) =>
+      determinerIntentionParDefaut(cibleType, typeCandidatChoisi, faits, tache.origineCode),
     candidats,
     faits,
     retourHref: "/",

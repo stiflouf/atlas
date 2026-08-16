@@ -1,6 +1,6 @@
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
-import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
+import { getCompteRenduVisiteById, listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import { getCompromisById } from "@/lib/compromisRepository";
 import { getOffreById } from "@/lib/offreRepository";
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
@@ -37,6 +37,29 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Pr
       const p = await getProspectVendeurById(cible.id);
       if (!p) return { cibleType: cible.type, candidats: [], faits: base };
       const bien = p.bienId ? await getBienById(p.bienId) : undefined;
+
+      // ADR-042 — distingué par origineCode (identifiant machine stable, ADR-028), jamais par le
+      // seul cibleType : une tâche prospectVendeur manuelle ou issue d'une autre règle (mandat
+      // signé, inactivité) garde son comportement générique ci-dessous, inchangé. Seule la tâche
+      // produite par `retour_vendeur_apres_visite` porte les faits d'une visite (date, intérêt) —
+      // dérivés du compte rendu le plus RÉCENT du bien (aucune seconde cible structurée possible
+      // sur une tâche mono-cible, ADR-028 ; limite documentée si une autre visite survient entre
+      // la création de la tâche et sa résolution ici).
+      if (tache.origineCode === "retour_vendeur_apres_visite" && bien) {
+        const comptesRendus = await listerComptesRendusPourBien(bien.id);
+        const compteRenduRecent = comptesRendus[0];
+        return {
+          cibleType: cible.type,
+          candidats: [versCandidatProspectVendeur(p)],
+          faits: {
+            ...base,
+            bienAdresse: bien.adresse,
+            dateVisite: compteRenduRecent ? formatDateFr(compteRenduRecent.dateVisite) : undefined,
+            interetVisiteValeur: compteRenduRecent?.interet,
+          },
+        };
+      }
+
       return {
         cibleType: cible.type,
         candidats: [versCandidatProspectVendeur(p)],
@@ -115,11 +138,18 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Pr
 // Intention par défaut UNIQUEMENT une fois le destinataire choisi (auto si unique, sinon après le
 // choix humain) — jamais fixée avant, car pour une cible `bien` le candidat retenu (vendeur ou
 // acquéreur) détermine seul quel message a du sens.
+//
+// `origineCode` (ADR-042) tranche AVANT tout le reste pour une cible prospectVendeur : seule la
+// tâche produite par la règle `retour_vendeur_apres_visite` doit recevoir cette intention dédiée —
+// jamais "toute tâche prospectVendeur" (une tâche manuelle ou issue de mandat_signe/inactivité
+// garde son intention générique existante, inchangée).
 export function determinerIntentionParDefaut(
   cibleType: TypeCible | undefined,
   typeCandidat: DestinataireCandidat["type"] | undefined,
-  faits: Omit<FaitsCommunication, "destinataireNom" | "destinatairePrenom">
+  faits: Omit<FaitsCommunication, "destinataireNom" | "destinatairePrenom">,
+  origineCode?: string
 ): IntentionCommunication {
+  if (origineCode === "retour_vendeur_apres_visite") return "retour_vendeur_apres_visite";
   if (cibleType === "visite") return "suivi_visite";
   if (cibleType === "offre") return "suivi_acquereur";
   if (cibleType === "compromis") return "message_compromis";

@@ -545,6 +545,50 @@ jamais une erreur — l'exécution reste `reussie` sans tâche, jamais reprise p
 pour les tâches créées par l'ancienne version de cette règle (avant ADR-041) — aucune migration,
 aucune réinterprétation. Ces tâches historiques restent lisibles exactement comme avant.
 
+## Retour vendeur après visite (ADR-042)
+
+**Fichier** : règle `retour_vendeur_apres_visite` dans `src/lib/automatisations/catalogueRegles.ts`,
+déclenchée par le même événement `visite_realisee` que `suivi_apres_visite`, mais **règle
+indépendante, jamais fusionnée** — audience distincte (vendeur, pas acquéreur), désactivée par
+défaut.
+
+**Résolution du vendeur** : exclusivement `getProspectVendeurParBien(bienId)` (au plus un résultat,
+`prospects_vendeurs.bien_id` nullable + `UNIQUE` → relation `0..1`) — **jamais**
+`resoudreDestinatairesDepuisBien()`, qui peut retourner l'acquéreur d'un compromis en cours.
+Invariant : destinataire vendeur certain, ou aucun effet (`undefined`, jamais de fallback, jamais
+une erreur). Aucune tâche si : compte rendu introuvable, bien introuvable/archivé, aucun prospect
+vendeur lié, prospect vendeur archivé.
+
+**Les quatre valeurs d'`interet` produisent une tâche** (contrairement à `suivi_apres_visite`, qui
+exclut `pas_interesse`) — le vendeur est informé quelle que soit l'issue :
+
+| `interet` | Contexte de la tâche |
+|---|---|
+| `interesse` | `La visite a suscité un intérêt. Faire le retour au vendeur.` |
+| `a_reflechir` | `L'acquéreur souhaite prendre le temps de réfléchir. Faire le retour au vendeur.` |
+| `pas_interesse` | `L'acquéreur ne souhaite pas donner suite à cette visite. Faire le retour au vendeur.` |
+| `inconnu` | `La visite a eu lieu, mais le retour précis de l'acquéreur n'est pas encore établi.` |
+
+Titre fixe, ne varie jamais avec `interet` : `Faire le retour de visite à {Vendeur} pour
+{référenceBien}`. **L'acquéreur n'est jamais nommé**, dans aucun contenu généré.
+
+**Whitelist stricte pour le brouillon d'email** (`IntentionCommunication =
+"retour_vendeur_apres_visite"`, sujet `Retour de visite — {adresse du bien}`) : uniquement adresse
+du bien, date de visite, valeur technique d'`interet` — jamais `retour`/`prochaineEtape` (notes
+internes, ADR-011), jamais aucune donnée de contact ou nominative de l'acquéreur.
+`FaitsCommunication` ne porte structurellement aucun champ `retour`/`prochaineEtape` : la garantie
+est portée par le système de types.
+
+**`origineCode` distingue la tâche** : `resoudreContexteCommunicationDepuisTache()` et
+`determinerIntentionParDefaut()` branchent sur `tache.origineCode === "retour_vendeur_apres_visite"`
+avant toute autre logique — seule une tâche produite par cette règle précise reçoit les faits de
+visite et l'intention dédiée, jamais toute tâche ciblant un prospect vendeur.
+
+**Gmail inchangé** : `Préparer un email` → `/communications/nouveau` (ADR-031, aucun nouveau
+resolver) → confirmation explicite → envoi réel via `envoyerEmailGmailAction` (ADR-031-bis). Aucun
+envoi automatique. À l'envoi réussi, la note d'interaction ADR-027 est créée par le mécanisme
+générique déjà existant (aucun nouveau code, aucune nouvelle table).
+
 ## Onglet Visites → Effectuées de la fiche bien
 
 **Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section
@@ -1085,10 +1129,13 @@ TypeScript) / EXÉCUTION (`executions_automatisation`) / ACTION PRODUITE (`tache
 | Règle décidant de ne rien produire | `construireTache()` retourne `undefined` | Exécution marquée `reussie` sans `tacheId` — un résultat honnête, pas un échec |
 | Provenance d'une tâche automatique | `tache.origine = 'automatique'` | Affichée ("Créée automatiquement — Règle : {nom}") sur toutes les listes de tâches |
 
-**Les 4 règles V1** (`src/lib/automatisations/catalogueRegles.ts`) : `suivi_apres_visite`
-(→ `visite_realisee`), `suivi_apres_rdv_estimation` (→ `rdv_estimation_realise`),
-`preparation_apres_mandat` (→ `mandat_signe`), `preparation_dossier_notaire_apres_compromis`
-(→ `compromis_signe`). Chacune produit au plus une tâche, jamais d'échéance artificielle.
+**Les 7 règles** (`src/lib/automatisations/catalogueRegles.ts`) : `suivi_apres_visite`
+(→ `visite_realisee`), `retour_vendeur_apres_visite` (→ `visite_realisee`, ADR-042),
+`suivi_apres_rdv_estimation` (→ `rdv_estimation_realise`), `preparation_apres_mandat`
+(→ `mandat_signe`), `preparation_dossier_notaire_apres_compromis` (→ `compromis_signe`),
+`inactivite_prospect_vendeur` (→ `inactivite_prospect_vendeur`, scan temporel, ADR-033),
+`nouveau_match_bien_acquereur` (→ `compatibilite_bien_acquereur_devenue_compatible`, ADR-037).
+Chacune produit au plus une tâche, jamais d'échéance artificielle.
 
 **Hors périmètre V1** : toute action externe à conséquence, scheduler/échéances artificielles,
 règles fondées sur un constat de checklist documentaire (ADR-029), retry automatique, constructeur

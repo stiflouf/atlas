@@ -1014,6 +1014,43 @@ Aucune migration de schéma dans cette ADR. 12 nouveaux tests (page de préparat
 fiche Visite autonome sans Calendar, politique `suivi_apres_visite` par intérêt) et 6 assertions
 mises à jour dans les tests ADR-032 déjà existants — suite complète du projet passante (948 tests).
 
+## 42. Retour vendeur après visite
+
+Après une visite, `suivi_apres_visite` (ADR-041) informe l'acquéreur mais rien ne rappelle au
+conseiller de faire un retour, même minimal, au **vendeur** — alors que celui-ci attend légitimement
+de savoir comment sa visite s'est déroulée, quelle que soit l'issue. Nouvelle règle ADR-032
+indépendante, `retour_vendeur_apres_visite`, déclenchée par le même événement `visite_realisee`,
+jamais fusionnée avec `suivi_apres_visite` — désactivée par défaut, comme toute règle V1.
+
+Le vendeur est résolu exclusivement via `getProspectVendeurParBien()` (au plus un résultat,
+`prospects_vendeurs.bien_id` nullable + `UNIQUE`) — jamais `resoudreDestinatairesDepuisBien()`, qui
+peut légitimement retourner l'acquéreur d'un compromis en cours. Invariant respecté : destinataire
+vendeur certain, ou aucun effet, jamais un fallback. Contrairement à `suivi_apres_visite`, les
+**quatre** valeurs d'`interet` produisent une tâche, y compris `pas_interesse` : un refus a autant de
+valeur d'information pour le vendeur qu'un intérêt manifesté. Le titre ne varie jamais avec
+`interet`, seul le contexte de la tâche puis le corps du futur email en dépendent — l'acquéreur n'est
+jamais nommé, dans aucun contenu généré.
+
+Nouvelle intention de communication `retour_vendeur_apres_visite`, brouillon déterministe (aucun
+LLM) avec whitelist stricte de faits (adresse du bien, date de visite, valeur d'`interet`
+uniquement) — les notes internes du conseiller (`retour`, `prochaineEtape`) ne sont jamais lues par
+ce chemin, garantie portée par le système de types (`FaitsCommunication` ne porte structurellement
+aucun champ correspondant). `origineCode` (identifiant machine posé par le moteur ADR-032) distingue
+la tâche produite par cette règle de toute autre tâche ciblant un prospect vendeur, avant toute
+autre logique de résolution du contexte de communication. Le parcours Gmail reste strictement
+inchangé (ADR-031-bis) : aucun envoi automatique, confirmation explicite requise ; à l'envoi réussi,
+la note d'interaction ADR-027 est créée par le mécanisme générique déjà existant, sans aucun nouveau
+code de suivi.
+
+Une seule migration additive (extension de la contrainte CHECK sur `envois_email.origine_intention`,
+même mouvement que l'extension habituelle pour la 7ᵉ règle du catalogue). Aucune nouvelle table,
+aucun nouveau champ métier. 13 nouveaux tests dédiés (politique par intérêt, aucun fallback vendeur
+absent, jamais l'acquéreur même en présence d'un compromis, activation figée, idempotence/reprise
+ADR-038) et 6 assertions ajoutées aux suites existantes (communications, envoi Gmail) — suite
+complète du projet passante (969 tests). Validation réelle en navigateur : cockpit, fiche prospect
+vendeur, brouillon d'email pour les trois issues `interesse`/`pas_interesse`/`inconnu`, confirmation
+structurelle qu'aucun envoi Gmail n'est jamais déclenché automatiquement.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

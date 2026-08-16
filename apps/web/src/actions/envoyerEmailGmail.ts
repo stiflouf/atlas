@@ -32,6 +32,7 @@ const INTENTIONS_VALIDES: IntentionCommunication[] = [
   "relance_piece_a_verifier",
   "message_compromis",
   "message_notaire",
+  "retour_vendeur_apres_visite",
 ];
 
 function texteOptionnel(valeur: FormDataEntryValue | null): string | undefined {
