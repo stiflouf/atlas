@@ -1,7 +1,9 @@
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
-import { getCompteRenduVisiteById, listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
+import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import { getCompromisById } from "@/lib/compromisRepository";
+import { getEvenementMetierById } from "@/lib/automatisations/evenementMetierRepository";
+import { getExecutionAutomatisationParTacheId } from "@/lib/automatisations/executionAutomatisationRepository";
 import { getOffreById } from "@/lib/offreRepository";
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import { LABEL_INTERET } from "@/types/compteRenduVisite";
@@ -38,24 +40,34 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Pr
       if (!p) return { cibleType: cible.type, candidats: [], faits: base };
       const bien = p.bienId ? await getBienById(p.bienId) : undefined;
 
-      // ADR-042 — distingué par origineCode (identifiant machine stable, ADR-028), jamais par le
-      // seul cibleType : une tâche prospectVendeur manuelle ou issue d'une autre règle (mandat
+      // ADR-042/043 — distingué par origineCode (identifiant machine stable, ADR-028), jamais par
+      // le seul cibleType : une tâche prospectVendeur manuelle ou issue d'une autre règle (mandat
       // signé, inactivité) garde son comportement générique ci-dessous, inchangé. Seule la tâche
-      // produite par `retour_vendeur_apres_visite` porte les faits d'une visite (date, intérêt) —
-      // dérivés du compte rendu le plus RÉCENT du bien (aucune seconde cible structurée possible
-      // sur une tâche mono-cible, ADR-028 ; limite documentée si une autre visite survient entre
-      // la création de la tâche et sa résolution ici).
+      // produite par `retour_vendeur_apres_visite` porte les faits d'une visite (date, intérêt).
+      //
+      // Pour une communication issue d'une tâche automatique événementielle, les faits historiques
+      // sont résolus depuis l'ÉVÉNEMENT EXACT ayant créé la tâche (tache -> execution -> evenement
+      // -> compte rendu), jamais depuis « l'objet le plus récent » de la cible (ADR-043 — corrige
+      // ADR-042, qui listait les comptes rendus du bien et prenait le plus récent : deux visites
+      // successives du même bien contaminaient alors la tâche la plus ancienne avec les faits de la
+      // plus récente). Fail-closed : tout maillon manquant (aucune exécution retrouvée, événement
+      // d'un type différent, compte rendu introuvable) laisse les faits de visite absents — jamais
+      // un repli sur un autre compte rendu du bien.
       if (tache.origineCode === "retour_vendeur_apres_visite" && bien) {
-        const comptesRendus = await listerComptesRendusPourBien(bien.id);
-        const compteRenduRecent = comptesRendus[0];
+        const execution = await getExecutionAutomatisationParTacheId(tache.id);
+        const evenement = execution ? await getEvenementMetierById(execution.evenementId) : undefined;
+        const compteRenduExact =
+          evenement?.typeEvenement === "visite_realisee" && evenement.compteRenduVisiteId
+            ? await getCompteRenduVisiteById(evenement.compteRenduVisiteId)
+            : undefined;
         return {
           cibleType: cible.type,
           candidats: [versCandidatProspectVendeur(p)],
           faits: {
             ...base,
             bienAdresse: bien.adresse,
-            dateVisite: compteRenduRecent ? formatDateFr(compteRenduRecent.dateVisite) : undefined,
-            interetVisiteValeur: compteRenduRecent?.interet,
+            dateVisite: compteRenduExact ? formatDateFr(compteRenduExact.dateVisite) : undefined,
+            interetVisiteValeur: compteRenduExact?.interet,
           },
         };
       }

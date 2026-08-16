@@ -122,6 +122,26 @@ export async function existeExecutionAvecTacheOuvertePourPaire(
   return ligne !== undefined;
 }
 
+// Provenance exacte d'une tâche automatique (ADR-043) : par construction du moteur
+// (traiterUneExecution, moteur.ts), une tâche automatique porte au plus une exécution qui l'a
+// produite — chaque creerTache() génère un id frais (defaultRandom()), jamais réutilisé par une
+// seconde exécution (marquerExecutionReussie n'est appelée qu'une fois, dans la même transaction
+// que la création de la tâche). Cette garantie n'est imposée par aucun UNIQUE SQL aujourd'hui
+// (ADR-043, décision explicite : pas de durcissement dans cette ADR) — lecture fail-closed : ne
+// choisit jamais arbitrairement une ligne parmi plusieurs. 0 ligne -> `undefined` (tâche manuelle,
+// ou automatique dont l'exécution a été purgée) ; exactement 1 -> retournée ; plus d'1 -> exception
+// explicite, jamais un `rows[0]` silencieux.
+export async function getExecutionAutomatisationParTacheId(tacheId: string): Promise<ExecutionAutomatisation | undefined> {
+  const lignes = await getDb().select().from(executionsAutomatisation).where(eq(executionsAutomatisation.tacheId, tacheId));
+  if (lignes.length === 0) return undefined;
+  if (lignes.length > 1) {
+    throw new Error(
+      `Incohérence de données : ${lignes.length} exécutions référencent la tâche ${tacheId} (attendu au plus une).`
+    );
+  }
+  return ligneVersExecution(lignes[0]);
+}
+
 // Écriture SÉPARÉE, volontairement hors de la transaction qui vient d'échouer (elle a déjà été
 // annulée par Postgres à ce stade, impossible d'y écrire quoi que ce soit) — gel concurrent par
 // les mêmes gardes IS NULL, même si en pratique une seule tentative de traitement existe par ligne

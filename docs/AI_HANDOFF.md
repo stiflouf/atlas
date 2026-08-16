@@ -27,7 +27,9 @@ Calendar avec matérialisation strictement par Server Action (POST), plus un sui
 (`suivi_apres_visite`) contextuel à l'intérêt exprimé, ciblant l'acquéreur (ADR-041), et une règle
 indépendante `retour_vendeur_apres_visite` créant une tâche vendeur (résolution exclusive par
 `getProspectVendeurParBien`, jamais de fallback acquéreur) avec brouillon d'email déterministe à
-whitelist stricte, désactivée par défaut (ADR-042).
+whitelist stricte, désactivée par défaut (ADR-042), et une correction de la provenance des faits
+historiques d'une communication automatique — résolution désormais exacte via
+`tache → exécution → événement`, fail-closed, jamais « le compte rendu le plus récent » (ADR-043).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -153,6 +155,17 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   toute autre tâche `prospectVendeur` avant toute résolution de contexte de communication — ne
   jamais supposer que « toute tâche prospectVendeur » porte cette intention. Gmail inchangé
   (ADR-031-bis) : aucun envoi automatique nulle part.
+- **La date/`interet` du brouillon `retour_vendeur_apres_visite` viennent de l'événement EXACT
+  ayant créé la tâche, jamais du compte rendu le plus récent du bien (ADR-043)** —
+  `getExecutionAutomatisationParTacheId(tache.id)` (`executionAutomatisationRepository.ts`, lecture
+  fail-closed : 0 ligne → `undefined`, 1 → utilisée, plus d'1 → exception explicite, jamais un choix
+  arbitraire) → `getEvenementMetierById(execution.evenementId)` → `evenement.compteRenduVisiteId` →
+  compte rendu exact. Aucun `UNIQUE(tache_id)` en base (décision explicite ADR-043) — la garantie
+  « au plus une exécution par tâche automatique » vient uniquement de la discipline du moteur
+  (`traiterUneExecution`, `moteur.ts`). Ne jamais réintroduire `listerComptesRendusPourBien(bien.id)[0]`
+  ni une autre heuristique « le plus récent » pour une communication issue d'une tâche automatique
+  événementielle — vérifié : `suivi_apres_visite` n'a pas ce problème (sa cible acquéreur est une FK
+  directe, aucune liste jamais interrogée).
 - **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
   `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
   `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
@@ -225,7 +238,7 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/compatibilite/baseline.ts` | Outil de baseline/rebuild explicite — jamais d'événement, jamais automatique (ADR-036) |
 | `src/app/api/compatibilite/scan/route.ts` | Filet de reprise du handoff (ADR-036) — même patron d'authentification que `/api/automatisations/scan` |
 | `src/lib/automatisations/catalogueRegles.ts` | Catalogue de règles ADR-032/033/037/041/042 — dont `nouveau_match_bien_acquereur` (ADR-037), `suivi_apres_visite` (politique par `interet`, cible acquéreur, ADR-041) et `retour_vendeur_apres_visite` (cible vendeur via `getProspectVendeurParBien` uniquement, ADR-042), toutes désactivées par défaut |
-| `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037) et `listerExecutionsATraiter()`/`incrementerTentativeExecution()` (ADR-038) |
+| `src/lib/automatisations/executionAutomatisationRepository.ts` | Dont `existeExecutionAvecTacheOuvertePourPaire()` (ADR-037), `listerExecutionsATraiter()`/`incrementerTentativeExecution()` (ADR-038) et `getExecutionAutomatisationParTacheId()` (provenance exacte tache → exécution, fail-closed, ADR-043) |
 | `src/lib/automatisations/reprise.ts` | Filet de reprise après crash (ADR-038) — réutilise `traiterExecutionsEnAttente()` (`moteur.ts`) telle quelle, jamais une seconde implémentation |
 | `src/app/api/automatisations/reprise/route.ts` | Endpoint de reprise (ADR-038) — même patron d'authentification que `/api/automatisations/scan`, secret dédié |
 | `src/app/page.tsx` | Cockpit commercial quotidien « Aujourd'hui » (ADR-026/039) — seule route de ce type, ne jamais en dupliquer une deuxième |

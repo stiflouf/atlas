@@ -1051,6 +1051,42 @@ complète du projet passante (969 tests). Validation réelle en navigateur : coc
 vendeur, brouillon d'email pour les trois issues `interesse`/`pas_interesse`/`inconnu`, confirmation
 structurelle qu'aucun envoi Gmail n'est jamais déclenché automatiquement.
 
+## 43. Provenance exacte d'une communication issue d'une automatisation
+
+Le rapport final d'ADR-042 documentait une limite : le brouillon d'email vendeur dérivait ses faits
+de visite (date, `interet`) du compte rendu **le plus récent du bien**
+(`listerComptesRendusPourBien(bien.id)[0]`), pas du compte rendu ayant réellement déclenché la tâche
+ouverte. Une visite ultérieure sur le même bien contaminait alors, à tort, le brouillon d'une tâche
+plus ancienne.
+
+Un audit préalable en lecture seule a tranché : la provenance exacte existait déjà en base,
+inexploitée — un bug de résolution, jamais une donnée manquante. Le moteur ADR-032 garantit par
+construction (`traiterUneExecution`, `moteur.ts`) qu'une tâche automatique porte au plus une
+exécution qui l'a produite, elle-même reliée à l'événement métier exact via
+`executions_automatisation.evenement_id`. Correctif : nouvelle fonction
+`getExecutionAutomatisationParTacheId()` (lecture fail-closed — 0 ligne, exactement 1, ou une
+exception explicite si plus d'une, jamais un choix arbitraire), réutilisant `getEvenementMetierById()`
+déjà existante. `resoudreContexteCommunicationDepuisTache()` suit désormais
+`tache → exécution → événement → compte rendu exact` pour `retour_vendeur_apres_visite`, avec un
+principe fail-closed strict : tout maillon manquant laisse les faits de visite absents, jamais un
+repli vers un autre compte rendu du bien.
+
+Audit ciblé confirmant qu'aucun autre cas identique n'existait : `suivi_apres_visite` (ADR-041) ne
+dérive aucun fait depuis une liste (sa cible acquéreur est une FK directe, déjà exacte) — vérifié et
+documenté, aucun changement de code. Une seconde occurrence d'heuristique « le plus récent »
+(`resoudreDestinatairesDepuisBien`, sélection du compromis pertinent) a été examinée et jugée non
+concernée : elle résout des destinataires actuels, jamais des faits historiques rattachés à un
+événement précis.
+
+**0 migration** — aucune nouvelle table, colonne, ni `UNIQUE(tache_id)` (décision explicite : la
+garantie du moteur suffit, la lecture reste fail-closed côté application). 4 nouveaux tests
+dédiés à la provenance repository (0/1/plus d'1 exécution) et 4 tests étendus/ajoutés au resolver de
+communication (provenance absente, deux visites du même bien avec test de régression principal,
+indépendance à l'ordre d'insertion/à la date la plus tardive, vérification `suivi_apres_visite`) —
+suite complète du projet passante (975 tests). Validation réelle en base + navigateur : scénario
+Visite A (ancienne, `pas_interesse`) / Visite B (récente, `interesse`) sur le même bien, confirmant
+que chaque tâche reste reliée à sa visite exacte, sans aucune contamination croisée.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

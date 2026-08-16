@@ -584,6 +584,17 @@ est portée par le système de types.
 avant toute autre logique — seule une tâche produite par cette règle précise reçoit les faits de
 visite et l'intention dédiée, jamais toute tâche ciblant un prospect vendeur.
 
+**Provenance exacte, pas « le plus récent » (ADR-043)** : les faits de visite (date, `interet`) sont
+résolus depuis l'ÉVÉNEMENT EXACT ayant créé la tâche —
+`tache.id → executions_automatisation.tache_id → execution.evenement_id → evenements_metier.compteRenduVisiteId
+→ compte rendu exact` (`getExecutionAutomatisationParTacheId()`, fail-closed : 0 ligne → aucune
+provenance, exactement 1 → utilisée, plus d'1 → exception explicite, jamais un choix arbitraire) —
+**jamais** `listerComptesRendusPourBien(bien.id)[0]` (le plus récent du bien). Deux visites
+successives du même bien produisent chacune leur propre tâche, chacune reste reliée à SA visite
+précise, quelle que soit la chronologie des autres visites du bien. Tout maillon manquant
+(exécution/événement/compte rendu introuvable) laisse les faits de visite absents, jamais un repli
+vers un autre compte rendu.
+
 **Gmail inchangé** : `Préparer un email` → `/communications/nouveau` (ADR-031, aucun nouveau
 resolver) → confirmation explicite → envoi réel via `envoyerEmailGmailAction` (ADR-031-bis). Aucun
 envoi automatique. À l'envoi réussi, la note d'interaction ADR-027 est créée par le mécanisme

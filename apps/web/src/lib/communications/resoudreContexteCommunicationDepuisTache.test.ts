@@ -25,7 +25,12 @@ const { enregistrerRemuneration } = await import("@/lib/remunerationRepository")
 const { creerProspectVendeur, marquerRdvEstimationRealiseProspectVendeur, signerMandatProspectVendeur } = await import(
   "@/lib/prospectVendeurRepository"
 );
-const { creerTache } = await import("@/lib/tacheRepository");
+const { creerTache, getTacheById } = await import("@/lib/tacheRepository");
+const { emettreEvenementEtPreparerExecutions } = await import("@/lib/automatisations/evenementMetierRepository");
+const { traiterExecutionsEnAttente } = await import("@/lib/automatisations/moteur");
+const { definirActivationAutomatisation } = await import("@/lib/automatisations/configurationAutomatisationRepository");
+const { getExecutionAutomatisationById } = await import("@/lib/automatisations/executionAutomatisationRepository");
+type Interet = "interesse" | "a_reflechir" | "pas_interesse" | "inconnu";
 const { resoudreContexteCommunicationDepuisTache, determinerIntentionParDefaut } = await import(
   "./resoudreContexteCommunicationDepuisTache"
 );
@@ -40,11 +45,18 @@ const idsTaches: string[] = [];
 const idsProspects: string[] = [];
 
 afterAll(async () => {
-  // evenements_metier référence prospectVendeurId/bienId en NO ACTION (append-only, ADR-032) —
-  // purgé AVANT les entités source (signerMandatProspectVendeur émet mandat_signe), même patron
-  // que catalogueRegles.nouveauMatch.test.ts.
-  if (idsProspects.length > 0 || idsBiens.length > 0) {
-    const filtre = or(inArray(evenementsMetier.prospectVendeurId, idsProspects), inArray(evenementsMetier.bienId, idsBiens));
+  await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
+
+  // evenements_metier référence prospectVendeurId/bienId/compteRenduVisiteId en NO ACTION
+  // (append-only, ADR-032) — purgé AVANT les entités source (signerMandatProspectVendeur émet
+  // mandat_signe, les tests ADR-043 émettent visite_realisee via le vrai moteur), même patron que
+  // catalogueRegles.nouveauMatch.test.ts / catalogueRegles.retourVendeur.test.ts.
+  if (idsProspects.length > 0 || idsBiens.length > 0 || idsVisites.length > 0) {
+    const filtre = or(
+      inArray(evenementsMetier.prospectVendeurId, idsProspects),
+      inArray(evenementsMetier.bienId, idsBiens),
+      inArray(evenementsMetier.compteRenduVisiteId, idsVisites)
+    );
     const evts = await getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(filtre);
     const idsEvts = evts.map((e) => e.id);
     if (idsEvts.length > 0) {
@@ -97,6 +109,38 @@ async function creerAcquereurTest(email: string) {
   });
   idsAcquereurs.push(acquereur.id);
   return acquereur;
+}
+
+// Fait passer une visite par le VRAI moteur (émission de l'événement + traitement synchrone de
+// l'exécution, ADR-032) — jamais un appel direct à construireTache() ni une tâche fabriquée à la
+// main : les tests de provenance exacte (ADR-043) doivent exercer la chaîne réelle
+// tâche -> exécution -> événement, pas la simuler.
+async function creerVisiteRealiseeEtTraiter(
+  bienId: string,
+  acquereurId: string,
+  params: { dateVisite: string; interet: Interet; retour?: string; prochaineEtape?: string }
+) {
+  const cr = await enregistrerCompteRenduVisite({
+    bienId,
+    acquereurId,
+    dateVisite: params.dateVisite,
+    retour: params.retour ?? "Retour de test",
+    interet: params.interet,
+    prochaineEtape: params.prochaineEtape,
+  });
+  idsVisites.push(cr.id);
+
+  const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
+    emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+  );
+  await traiterExecutionsEnAttente(idsExecutionsATraiter);
+  const [executionId] = idsExecutionsATraiter;
+  const execution = executionId ? await getExecutionAutomatisationById(executionId) : undefined;
+  if (!execution?.tacheId) throw new Error("Test ADR-043 : aucune tâche vendeur produite pour cette visite.");
+  const tache = await getTacheById(execution.tacheId);
+  if (!tache) throw new Error("Test ADR-043 : tâche introuvable après création.");
+  idsTaches.push(tache.id);
+  return { cr, tache };
 }
 
 describe("resoudreContexteCommunicationDepuisTache", () => {
@@ -226,12 +270,16 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(resultat.candidats).toEqual([]);
   });
 
-  it("tâche -> prospectVendeur, origineCode retour_vendeur_apres_visite : faits de la visite la plus récente, jamais l'acquéreur comme candidat (ADR-042)", async () => {
-    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-042" });
+  it("tâche -> prospectVendeur, origineCode retour_vendeur_apres_visite : sans provenance automatisation réelle, aucun fait de visite, jamais un repli (ADR-043)", async () => {
+    // Tâche "automatique" fabriquée à la main (aucune exécution réelle ne la référence) — reproduit
+    // le seul cas réaliste de provenance cassée compte tenu des FK NO ACTION (un événement/CR ne
+    // peut pas être supprimé tant qu'une exécution le référence encore, §29). Fail-closed attendu :
+    // aucun repli vers un autre compte rendu du bien, les faits de visite restent simplement absents.
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 sans provenance" });
     idsProspects.push(prospect.id);
     const resultatMandat = await signerMandatProspectVendeur(prospect.id, {
-      reference: "[test réel] RESOL-RV-1",
-      titre: "Bien vendeur ADR-042",
+      reference: "[test réel] RESOL-RV-SANSPROV",
+      titre: "Bien vendeur ADR-043",
       type: "appartement",
       adresse: "9 rue du Vendeur",
       ville: "Testville",
@@ -248,23 +296,14 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     idsBiens.push(bien.id);
 
     const acquereur = await creerAcquereurTest("resol6@test.local");
-    const ancienneVisite = await enregistrerCompteRenduVisite({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      dateVisite: "2026-02-01",
-      retour: "Ancienne visite",
-      interet: "pas_interesse",
-    });
-    idsVisites.push(ancienneVisite.id);
-    const visiteRecente = await enregistrerCompteRenduVisite({
+    const visite = await enregistrerCompteRenduVisite({
       bienId: bien.id,
       acquereurId: acquereur.id,
       dateVisite: "2026-03-10",
-      retour: "[MARQUEUR_INTERNE_NE_DOIT_JAMAIS_SORTIR]",
+      retour: "Visite non liée à la tâche (aucune exécution ne pointe vers elle)",
       interet: "interesse",
-      prochaineEtape: "[PROCHAINE_ETAPE_INTERNE_NE_DOIT_JAMAIS_SORTIR]",
     });
-    idsVisites.push(visiteRecente.id);
+    idsVisites.push(visite.id);
 
     const tache = await creerTache({
       titre: "Faire le retour de visite au vendeur",
@@ -280,12 +319,134 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.candidats[0].type).toBe("prospectVendeur");
     expect(resultat.faits.bienAdresse).toBe(bien.adresse);
-    expect(resultat.faits.dateVisite).toBeDefined();
-    expect(resultat.faits.interetVisiteValeur).toBe("interesse"); // celle de la visite la PLUS RÉCENTE
-    // Jamais les notes internes ni l'acquéreur dans les faits transmis.
-    expect(JSON.stringify(resultat.faits)).not.toContain("MARQUEUR_INTERNE");
-    expect(JSON.stringify(resultat.faits)).not.toContain("PROCHAINE_ETAPE_INTERNE");
-    expect(JSON.stringify(resultat.candidats)).not.toContain(acquereur.email);
+    // Aucune provenance automatisation réelle -> aucun fait de visite, jamais le compte rendu du
+    // bien pris "au hasard"/le plus récent.
+    expect(resultat.faits.dateVisite).toBeUndefined();
+    expect(resultat.faits.interetVisiteValeur).toBeUndefined();
+  });
+
+  it("tâche -> prospectVendeur, origineCode retour_vendeur_apres_visite : deux visites du même bien, chaque tâche garde EXACTEMENT le compte rendu qui l'a produite (ADR-043, test de régression principal)", async () => {
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 provenance exacte" });
+    idsProspects.push(prospect.id);
+    const resultatMandat = await signerMandatProspectVendeur(prospect.id, {
+      reference: "[test réel] RESOL-RV-PROVEXACTE",
+      titre: "Bien vendeur ADR-043",
+      type: "appartement",
+      adresse: "11 rue du Vendeur",
+      ville: "Testville",
+      codePostal: "00000",
+      surface: 40,
+      pieces: 2,
+      prix: 250000,
+      statutMandat: "actif",
+      dateMandat: "2026-01-01",
+      caracteristiques: [],
+      description: "",
+    });
+    const bien = resultatMandat!.bien;
+    idsBiens.push(bien.id);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", true);
+
+    // Visite A : plus ANCIENNE, acquéreur A, pas_interesse. Marqueurs internes distincts de B pour
+    // le test de confidentialité ci-dessous.
+    const acquereurA = await creerAcquereurTest("resol-provA@test.local");
+    const { tache: TA } = await creerVisiteRealiseeEtTraiter(bien.id, acquereurA.id, {
+      dateVisite: "2026-02-01",
+      interet: "pas_interesse",
+      retour: "[MARQUEUR_INTERNE_A_NE_DOIT_JAMAIS_SORTIR]",
+      prochaineEtape: "[ETAPE_INTERNE_A_NE_DOIT_JAMAIS_SORTIR]",
+    });
+
+    // Visite B : plus RÉCENTE, même bien, même vendeur, acquéreur DIFFÉRENT, interesse — exactement
+    // le scénario où l'ancien code (listerComptesRendusPourBien(bien.id)[0]) contaminait TA.
+    const acquereurB = await creerAcquereurTest("resol-provB@test.local");
+    const { tache: TB } = await creerVisiteRealiseeEtTraiter(bien.id, acquereurB.id, {
+      dateVisite: "2026-03-10",
+      interet: "interesse",
+      retour: "[MARQUEUR_INTERNE_B_NE_DOIT_JAMAIS_SORTIR]",
+      prochaineEtape: "[ETAPE_INTERNE_B_NE_DOIT_JAMAIS_SORTIR]",
+    });
+
+    expect(TA.id).not.toBe(TB.id);
+
+    // TA, résolue APRÈS que B existe : doit rester reliée à A, jamais contaminée par B.
+    const resultatTA = await resoudreContexteCommunicationDepuisTache(TA);
+    expect(resultatTA.candidats).toHaveLength(1);
+    expect(resultatTA.candidats[0].type).toBe("prospectVendeur");
+    expect(resultatTA.faits.bienAdresse).toBe(bien.adresse);
+    expect(resultatTA.faits.interetVisiteValeur).toBe("pas_interesse");
+    expect(resultatTA.faits.dateVisite).toMatch(/février/); // date de A, jamais celle de B (mars)
+    // Confidentialité : ni les notes internes de A, ni celles de B, ni les coordonnées des deux
+    // acquéreurs ne sortent jamais dans les faits/candidats transmis.
+    const empreinteTA = JSON.stringify({ faits: resultatTA.faits, candidats: resultatTA.candidats });
+    expect(empreinteTA).not.toContain("MARQUEUR_INTERNE_A");
+    expect(empreinteTA).not.toContain("ETAPE_INTERNE_A");
+    expect(empreinteTA).not.toContain("MARQUEUR_INTERNE_B");
+    expect(empreinteTA).not.toContain("ETAPE_INTERNE_B");
+    expect(empreinteTA).not.toContain(acquereurA.email);
+    expect(empreinteTA).not.toContain(acquereurB.email);
+    expect(empreinteTA).not.toContain(acquereurA.prenom);
+    expect(empreinteTA).not.toContain(acquereurB.prenom);
+
+    // TB, symétriquement : reste reliée à B, jamais contaminée par A.
+    const resultatTB = await resoudreContexteCommunicationDepuisTache(TB);
+    expect(resultatTB.faits.interetVisiteValeur).toBe("interesse");
+    expect(resultatTB.faits.dateVisite).toMatch(/mars|2026/);
+    const empreinteTB = JSON.stringify({ faits: resultatTB.faits, candidats: resultatTB.candidats });
+    expect(empreinteTB).not.toContain("MARQUEUR_INTERNE_A");
+    expect(empreinteTB).not.toContain("MARQUEUR_INTERNE_B");
+    expect(empreinteTB).not.toContain(acquereurA.email);
+    expect(empreinteTB).not.toContain(acquereurB.email);
+
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
+  });
+
+  it("tâche -> prospectVendeur, origineCode retour_vendeur_apres_visite : la résolution suit l'événement, jamais l'ordre d'insertion ni la date de visite la plus tardive (ADR-043 §25)", async () => {
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 ordre inversé" });
+    idsProspects.push(prospect.id);
+    const resultatMandat = await signerMandatProspectVendeur(prospect.id, {
+      reference: "[test réel] RESOL-RV-ORDRE",
+      titre: "Bien vendeur ADR-043 ordre",
+      type: "appartement",
+      adresse: "13 rue du Vendeur",
+      ville: "Testville",
+      codePostal: "00000",
+      surface: 40,
+      pieces: 2,
+      prix: 250000,
+      statutMandat: "actif",
+      dateMandat: "2026-01-01",
+      caracteristiques: [],
+      description: "",
+    });
+    const bien = resultatMandat!.bien;
+    idsBiens.push(bien.id);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", true);
+
+    // Première visite traitée par le moteur (creeLe le plus ancien), mais avec la date de visite la
+    // plus TARDIVE dans le calendrier — inverse volontairement date/ordre d'insertion pour prouver
+    // que ni l'un ni l'autre ne pilote la résolution, seul l'événement exact compte.
+    const acquereur1 = await creerAcquereurTest("resol-ordre1@test.local");
+    const { tache: premiereTache } = await creerVisiteRealiseeEtTraiter(bien.id, acquereur1.id, {
+      dateVisite: "2026-05-01", // date de visite la plus tardive
+      interet: "interesse",
+    });
+
+    const acquereur2 = await creerAcquereurTest("resol-ordre2@test.local");
+    const { tache: secondeTache } = await creerVisiteRealiseeEtTraiter(bien.id, acquereur2.id, {
+      dateVisite: "2026-01-15", // date de visite la plus ancienne, mais insérée/traitée en second
+      interet: "a_reflechir",
+    });
+
+    const resultatPremiere = await resoudreContexteCommunicationDepuisTache(premiereTache);
+    expect(resultatPremiere.faits.interetVisiteValeur).toBe("interesse");
+    expect(resultatPremiere.faits.dateVisite).toMatch(/mai/);
+
+    const resultatSeconde = await resoudreContexteCommunicationDepuisTache(secondeTache);
+    expect(resultatSeconde.faits.interetVisiteValeur).toBe("a_reflechir");
+    expect(resultatSeconde.faits.dateVisite).toMatch(/janvier/);
+
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
   });
 
   it("tâche -> prospectVendeur sans origineCode retour_vendeur_apres_visite : comportement générique inchangé même si des visites existent", async () => {
@@ -351,6 +512,60 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
     expect(resultat.candidats).toEqual([]);
+  });
+
+  it("tâche -> acquereur (issue de suivi_apres_visite, ADR-041) : aucun fait de visite n'est jamais lu depuis une liste de comptes rendus, donc aucun bug de « CR le plus récent » possible (ADR-043 §26)", async () => {
+    // Vérification demandée par ADR-043 §10/§26 : suivi_apres_visite cible l'acquéreur (ADR-041),
+    // et le cas "acquereur" du resolver ne dérive aucun fait depuis une liste de comptes rendus —
+    // il retourne uniquement `base` (tacheContexte). Il n'y a donc structurellement rien à corriger
+    // ici : ce test documente/prouve ce constat plutôt que de le supposer, conformément à §11
+    // ("si le code démontre que c'est déjà exact, ne rien changer, documenter la vérification").
+    const bien = await creerBienTest("[test réel] RESOL-SUIVI-VISITE-PROVENANCE");
+    const acquereur = await creerAcquereurTest("resol-suivivisite@test.local");
+    await definirActivationAutomatisation("suivi_apres_visite", true);
+
+    // Deux visites du même acquéreur sur le même bien, avec des faits bien distincts : si le moindre
+    // fait de visite fuitait via une liste "la plus récente", ce test le détecterait.
+    const crAncien = await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      dateVisite: "2026-01-05",
+      retour: "Première visite",
+      interet: "a_reflechir",
+    });
+    idsVisites.push(crAncien.id);
+    const { idsExecutionsATraiter: exec1 } = await getDb().transaction((tx) =>
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: crAncien.id }, tx)
+    );
+    await traiterExecutionsEnAttente(exec1);
+
+    const crRecent = await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      dateVisite: "2026-04-20",
+      retour: "[MARQUEUR_SUIVI_VISITE_NE_DOIT_JAMAIS_SORTIR]",
+      interet: "interesse",
+    });
+    idsVisites.push(crRecent.id);
+    const { idsExecutionsATraiter: exec2 } = await getDb().transaction((tx) =>
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: crRecent.id }, tx)
+    );
+    await traiterExecutionsEnAttente(exec2);
+
+    const executionAncienne = await getExecutionAutomatisationById(exec1[0]);
+    const tacheAncienne = executionAncienne?.tacheId ? await getTacheById(executionAncienne.tacheId) : undefined;
+    expect(tacheAncienne).toBeDefined();
+    idsTaches.push(tacheAncienne!.id);
+
+    const resultat = await resoudreContexteCommunicationDepuisTache(tacheAncienne!);
+    expect(resultat.cibleType).toBe("acquereur");
+    expect(resultat.candidats).toEqual([{ type: "acquereur", id: acquereur.id, nom: acquereur.nom, prenom: acquereur.prenom, email: acquereur.email }]);
+    // Aucun fait de visite n'est jamais renvoyé pour une cible acquéreur — rien à contaminer.
+    expect(resultat.faits.dateVisite).toBeUndefined();
+    expect(resultat.faits.interetVisite).toBeUndefined();
+    expect(JSON.stringify(resultat.faits)).not.toContain("MARQUEUR_SUIVI_VISITE");
+
+    await definirActivationAutomatisation("suivi_apres_visite", false);
   });
 });
 

@@ -740,20 +740,30 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   résolvable — `retour_vendeur_apres_visite` ne produit alors jamais de tâche, jamais de fallback
   vers l'acquéreur, jamais d'erreur. Limite V1 assumée : aucun mécanisme de rattachement a
   posteriori d'un vendeur à un bien existant n'a été ajouté par cette ADR.
-- **Faits de visite dérivés du compte rendu le plus récent du bien, pas du compte rendu précis
-  ayant déclenché la tâche** : une tâche `retour_vendeur_apres_visite` est mono-cible (ADR-028,
-  cible = prospect vendeur) et ne porte donc aucune référence structurée vers le compte rendu
-  exact qui l'a produite. Si une nouvelle visite du même bien survient entre la création de la
-  tâche et la préparation de l'email (« Préparer un email »), le brouillon reflète la visite la
-  plus récente au moment de la préparation, pas nécessairement celle qui a déclenché la tâche.
-  Cas limite jugé rare et sans conséquence grave (le retour reste honnête, seulement potentiellement
-  décalé d'une visite).
 - **Aucun nettoyage automatique de la tâche** si une offre ou un compromis survient ensuite sur le
   même bien — le conseiller la termine manuellement s'il la juge dépassée, même choix que pour les
   tâches `nouveau_match_bien_acquereur` (ADR-041).
 - **Plusieurs visites du même bien produisent chacune leur propre tâche vendeur** : aucune
   déduplication au-delà de l'idempotence standard ADR-032 (`UNIQUE(regle_code, evenement_id)`) —
   chaque `visite_realisee` est un fait métier distinct légitimement porteur de son propre retour.
+
+## Provenance des communications automatiques (ADR-043)
+
+- **Pas de `UNIQUE(executions_automatisation.tache_id)` en base** : la garantie « au plus une
+  exécution par tâche automatique » repose sur la discipline du moteur (`traiterUneExecution`),
+  jamais sur une contrainte SQL — décision explicite de ne pas durcir dans cette ADR. La lecture de
+  provenance (`getExecutionAutomatisationParTacheId`) reste fail-closed (lève une exception explicite
+  si plus d'une ligne est trouvée) plutôt que de s'appuyer aveuglément sur cette garantie.
+- **Aucun mécanisme de modification d'un compte rendu de visite** n'existe aujourd'hui
+  (`compteRenduVisiteRepository.ts` n'expose aucune fonction de mise à jour) — le principe « état
+  actuel de l'objet historique exact » posé par ADR-043 n'a donc aucun scénario réel à couvrir en
+  V1 : à réévaluer si une modification de compte rendu est un jour ajoutée.
+- **Seule `retour_vendeur_apres_visite` bénéficie de la provenance exacte tache → exécution →
+  événement** : les autres intentions automatiques (`suivi_apres_visite` notamment) ne dérivent
+  aujourd'hui aucun fait depuis une liste d'entités — n'ont donc structurellement aucun bug
+  équivalent à corriger (vérifié, pas supposé). Si une future intention automatique dérive un jour
+  des faits depuis une liste triée, appliquer le même principe de provenance exacte plutôt que
+  « le plus récent ».
 
 ## Limites du moteur de matching
 
