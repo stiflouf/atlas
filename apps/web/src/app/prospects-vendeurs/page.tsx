@@ -1,14 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { User, Plus } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
-import {
-  listerProspectsVendeurs,
-  listerProspectsVendeursPerdus,
-  listerProspectsVendeursConvertis,
-  listerProspectsVendeursArchives,
-} from "@/lib/prospectVendeurRepository";
+import ChampRecherche from "@/components/ui/ChampRecherche";
+import Pagination from "@/components/ui/Pagination";
+import { rechercherProspectsVendeurs, type VueProspectVendeur } from "@/lib/prospectVendeurRepository";
 import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { deriverStatutProspectVendeur, LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
@@ -16,12 +14,12 @@ import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 import type { Tache } from "@/types/tache";
 
+const PAR_PAGE = 25;
+
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx).
 export const dynamic = "force-dynamic";
 
-type Vue = "en_cours" | "perdus" | "convertis" | "archives";
-
-const TITRE_VUE: Record<Vue, string> = {
+const TITRE_VUE: Record<VueProspectVendeur, string> = {
   en_cours: "Prospects vendeurs",
   perdus: "Prospects perdus",
   convertis: "Prospects convertis",
@@ -34,7 +32,10 @@ function formatDate(iso: string): string {
 
 // Échéances dépassées et proches en premier (tri ascendant simple), aucune échéance en dernier —
 // basé sur l'échéance de la tâche la plus prioritaire de chaque prospect (ADR-028, remplace
-// l'ancien champ simple prochaineActionLe).
+// l'ancien champ simple prochaineActionLe). Inchangé depuis avant ADR-048 : appliqué sur
+// l'ENSEMBLE des prospects "en_cours" correspondant à la recherche, AVANT la pagination — pour
+// que la page 2 montre bien les 25 prospects suivants par urgence, jamais les 25 suivants par
+// creeLe avec un tri d'urgence limité à la seule page courante.
 function comparerParEcheance(tachesParProspect: Map<string, Tache[]>) {
   return (a: ProspectVendeur, b: ProspectVendeur): number => {
     const echeanceA = tachePrioritaire(tachesParProspect.get(a.id) ?? [])?.echeance;
@@ -46,24 +47,45 @@ function comparerParEcheance(tachesParProspect: Map<string, Tache[]>) {
   };
 }
 
-type PageProps = { searchParams: Promise<{ vue?: string }> };
+type PageProps = { searchParams: Promise<{ vue?: string; q?: string; page?: string }> };
+
+function construireHref(params: { vue?: VueProspectVendeur; q?: string; page?: number }): string {
+  const sp = new URLSearchParams();
+  if (params.vue && params.vue !== "en_cours") sp.set("vue", params.vue);
+  if (params.q) sp.set("q", params.q);
+  if (params.page && params.page > 1) sp.set("page", String(params.page));
+  const qs = sp.toString();
+  return qs ? `/prospects-vendeurs?${qs}` : "/prospects-vendeurs";
+}
 
 export default async function ProspectsVendeursPage({ searchParams }: PageProps) {
-  const { vue: vueBrute } = await searchParams;
-  const vue: Vue = vueBrute === "perdus" || vueBrute === "convertis" || vueBrute === "archives" ? vueBrute : "en_cours";
+  const { vue: vueBrute, q, page: pageBrut } = await searchParams;
+  const vue: VueProspectVendeur =
+    vueBrute === "perdus" || vueBrute === "convertis" || vueBrute === "archives" ? vueBrute : "en_cours";
+  const texte = q?.trim() || undefined;
+  const pageDemandee = Math.max(1, Number(pageBrut) || 1);
 
-  const prospects = await (vue === "perdus"
-    ? listerProspectsVendeursPerdus()
-    : vue === "convertis"
-      ? listerProspectsVendeursConvertis()
-      : vue === "archives"
-        ? listerProspectsVendeursArchives()
-        : listerProspectsVendeurs());
+  // ADR-048 : recherche + ordre déterministe côté serveur (creeLe DESC, id DESC), filtrage par vue
+  // via le prédicat métier partagé (predicatVue, prospectVendeurRepository.ts — zéro divergence
+  // avec listerProspectsVendeurs*()). Retourne l'ensemble correspondant, pas encore paginé : voir
+  // rechercherProspectsVendeurs() pour la raison (tri par échéance de tâche à appliquer avant
+  // pagination, une donnée que ce repository n'a délibérément pas vocation à connaître).
+  const correspondants = await rechercherProspectsVendeurs({ q: texte, vue });
 
-  const listesTaches = await Promise.all(prospects.map((p) => getTachesPourProspectVendeur(p.id)));
-  const tachesParProspect = new Map<string, Tache[]>(prospects.map((p, i) => [p.id, listesTaches[i]]));
+  const listesTaches = await Promise.all(correspondants.map((p) => getTachesPourProspectVendeur(p.id)));
+  const tachesParProspect = new Map<string, Tache[]>(correspondants.map((p, i) => [p.id, listesTaches[i]]));
 
-  if (vue === "en_cours") prospects.sort(comparerParEcheance(tachesParProspect));
+  if (vue === "en_cours") correspondants.sort(comparerParEcheance(tachesParProspect));
+
+  const total = correspondants.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAR_PAGE));
+
+  if (total > 0 && pageDemandee > totalPages) {
+    redirect(construireHref({ vue, q: texte, page: totalPages }));
+  }
+
+  const debut = (pageDemandee - 1) * PAR_PAGE;
+  const prospects = correspondants.slice(debut, debut + PAR_PAGE);
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -72,7 +94,7 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
           <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">
             {TITRE_VUE[vue]}
           </h1>
-          <p className="text-[14px] text-[#94a3b8] mt-1">{prospects.length} prospect{prospects.length > 1 ? "s" : ""}</p>
+          <p className="text-[14px] text-[#94a3b8] mt-1">{total} prospect{total > 1 ? "s" : ""}</p>
         </div>
         {vue === "en_cours" && (
           <Link
@@ -87,31 +109,41 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
 
       <div className="flex flex-wrap gap-4 mb-6">
         {vue !== "en_cours" && (
-          <Link href="/prospects-vendeurs" className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
             ← Voir les prospects en cours
           </Link>
         )}
         {vue !== "perdus" && (
-          <Link href="/prospects-vendeurs?vue=perdus" className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ vue: "perdus", q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
             Voir les perdus →
           </Link>
         )}
         {vue !== "convertis" && (
-          <Link href="/prospects-vendeurs?vue=convertis" className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ vue: "convertis", q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
             Voir les convertis →
           </Link>
         )}
         {vue !== "archives" && (
-          <Link href="/prospects-vendeurs?vue=archives" className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ vue: "archives", q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
             Voir les archivés →
           </Link>
         )}
       </div>
 
+      <ChampRecherche
+        action="/prospects-vendeurs"
+        q={texte}
+        placeholder="Rechercher par nom, prénom…"
+        champsCaches={vue !== "en_cours" ? { vue } : undefined}
+        hrefEffacer={construireHref({ vue })}
+      />
+
       <section>
         <SectionTitle>{TITRE_VUE[vue]}</SectionTitle>
         {prospects.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">Aucun prospect dans cette vue.</p>
+          <p className="text-[14px] text-[#94a3b8]">
+            {texte ? `Aucun résultat pour « ${texte} ».` : "Aucun prospect dans cette vue."}
+          </p>
         ) : (
           <div className="flex flex-col gap-2">
             {prospects.map((prospect) => {
@@ -149,6 +181,12 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
             })}
           </div>
         )}
+
+        <Pagination
+          page={pageDemandee}
+          totalPages={totalPages}
+          construireHref={(p) => construireHref({ vue, q: texte, page: p })}
+        />
       </section>
     </div>
   );

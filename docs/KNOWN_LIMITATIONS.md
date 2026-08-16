@@ -881,8 +881,13 @@ pas pour plusieurs sur la même instance.
   bien corse n'est traité (commentaire explicite dans le code).
 - **API DVF (`lib/marche/dvfClient.ts`)** hébergée en préprod par le Cerema (`apidf-preprod.cerema.fr`)
   — testée fiable en usage réel mais sans garantie de disponibilité annoncée par le fournisseur.
-- **Aucune pagination** sur les listes actuelles (biens, acquéreurs, tâches, notes, comptes
-  rendus) — chaque liste est chargée intégralement. Non problématique au volume de données actuel.
+- **Recherche + pagination serveur résolues sur `/biens`, `/clients`, `/prospects-vendeurs`
+  (ADR-048)** — `q`/`page` en plus des filtres `archives`/`vue` existants, ordre déterministe
+  `creeLe DESC, id DESC`. **Toujours sans pagination** : tâches (aucune page de liste n'existe),
+  notes, comptes rendus (listes toujours scopées à un bien/acquéreur, volume naturellement borné),
+  et les `<select>` de contexte sur `/offres/nouveau`/`/compromis/nouveau`/`/taches/nouveau`
+  (friction réelle déjà observée — pollution par des lignes de test dans le sélecteur — mais un
+  problème de sélection contextuelle distinct d'une page de liste, hors périmètre ADR-048).
 - **`NavItems.tsx`** (navigation principale) ne référence ni `/taches/nouveau` ni
   `/visites/[id]/preparer` — accès uniquement contextuel (liens depuis une fiche ou l'accueil),
   cohérent avec leur usage mais à garder en tête si un futur audit UX cherche ces routes dans le

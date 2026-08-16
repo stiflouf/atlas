@@ -1,8 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { biens as biensTable } from "@/db/schema";
 import { biens as biensDemo, getBienById as getBienDemoById } from "@/data/biens";
 import type { Bien, TypeBien, StatutMandat, Exterieur, ChargeHonoraires } from "@/types/bien";
+import type { PageResultat } from "@/types/pagination";
 
 type LigneBien = typeof biensTable.$inferSelect;
 
@@ -75,6 +76,47 @@ export async function listerBiensArchives(): Promise<Bien[]> {
     console.error("[biens] lecture Postgres indisponible :", erreur);
     return [];
   }
+}
+
+// ADR-048 — recherche + pagination serveur, réservée à la page /biens. Ne remplace jamais
+// listerBiens() : cockpit, dashboard et <select> de contexte continuent d'appeler la fonction
+// existante, intégralement, sans pagination. Aucun repli mock (contrairement à listerBiens()) : la
+// recherche/pagination n'a pas de sens sur le jeu de démonstration.
+//
+// Ordre déterministe explicite (ADR-048) : `creeLe DESC, id DESC` — voir clientRepository.ts pour
+// la justification complète (aucun repository de ce projet n'avait d'ORDER BY avant cette ADR).
+export async function rechercherBiensPage(params: {
+  q?: string;
+  archives: boolean;
+  page: number;
+  parPage: number;
+}): Promise<PageResultat<Bien>> {
+  const texte = params.q?.trim();
+  const conditionArchive = params.archives ? isNotNull(biensTable.archiveLe) : isNull(biensTable.archiveLe);
+  const conditionTexte: SQL | undefined = texte
+    ? or(
+        ilike(biensTable.reference, `%${texte}%`),
+        ilike(biensTable.adresse, `%${texte}%`),
+        ilike(biensTable.ville, `%${texte}%`)
+      )
+    : undefined;
+  const conditions = conditionTexte ? and(conditionArchive, conditionTexte) : conditionArchive;
+
+  const page = Math.max(1, Math.floor(params.page) || 1);
+  const offset = (page - 1) * params.parPage;
+
+  const [lignes, [{ total }]] = await Promise.all([
+    getDb()
+      .select()
+      .from(biensTable)
+      .where(conditions)
+      .orderBy(desc(biensTable.creeLe), desc(biensTable.id))
+      .limit(params.parPage)
+      .offset(offset),
+    getDb().select({ total: count() }).from(biensTable).where(conditions),
+  ]);
+
+  return { lignes: lignes.map(ligneVersBien), total };
 }
 
 // Suit le même état global que listerBiens() : si au moins un bien réel existe, le repli mock
