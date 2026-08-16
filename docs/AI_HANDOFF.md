@@ -30,9 +30,14 @@ indépendante `retour_vendeur_apres_visite` créant une tâche vendeur (résolut
 whitelist stricte, désactivée par défaut (ADR-042), une correction de la provenance des faits
 historiques d'une communication automatique — résolution désormais exacte via
 `tache → exécution → événement`, fail-closed, jamais « le compte rendu le plus récent » (ADR-043),
-et une route canonique `/offres/nouveau` avec formulaire Offre partagé (`OffreFormulaire`) permettant
+une route canonique `/offres/nouveau` avec formulaire Offre partagé (`OffreFormulaire`) permettant
 un préremplissage Bien/Acquéreur/compte rendu verrouillé et revalidé depuis la fiche Visite —
-`interet = interesse` ne crée jamais automatiquement une Offre (ADR-044).
+`interet = interesse` ne crée jamais automatiquement une Offre (ADR-044), et une route canonique
+`/compromis/nouveau` avec formulaire Compromis partagé (`CompromisFormulaire`) permettant un
+préremplissage Bien/Acquéreur/Offre verrouillé et revalidé depuis une Offre acceptée, prix convenu
+jamais copié depuis le montant de l'offre — `offre.statut = "acceptee"` ne crée jamais
+automatiquement un Compromis, et une Offre acceptée ne peut être l'origine que d'au plus un
+Compromis (ADR-045).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -183,6 +188,22 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   revalidée côté serveur). Relation Offre ↔ Visite exclusivement via `offre_visites` (ADR-019,
   déjà existante) — ne jamais ajouter `offres.visite_id`. `TacheItem` reste générique, aucun bouton
   Offre n'y a été ajouté (décision explicite).
+- **`/compromis/nouveau` (ADR-045) est LA route canonique de création de Compromis, même patron
+  qu'`/offres/nouveau`** — `CompromisFormulaire` (`src/components/compromis/CompromisFormulaire.tsx`)
+  est partagé entre cette route et l'onglet « Compromis » de `BienTabs`, même Server Action
+  `ajouterCompromisAction`. Rappel de modèle important : créer un Compromis EST déjà l'acte de
+  signature dans Atlas V1 (`dateSignature` obligatoire, `compromis_signe` émis à la création) — ne
+  jamais chercher un état « compromis non signé ». Ne jamais supposer qu'`offre.statut = "acceptee"`
+  crée un compromis : action explicite obligatoire. Verrouillage Acquéreur+Offre uniquement si
+  bienId/acquereurId/offreId forment une chaîne cohérente (offre correspondant exactement au bien
+  et à l'acquéreur, `acceptee`) — jamais une substitution devinée. Le montant de l'offre n'est
+  **jamais** copié dans `prixConvenu` (référence affichée seulement) — le prix peut légitimement
+  différer entre acceptation et signature. `getCompromisParOffreId()` (`compromisRepository.ts`,
+  fail-closed 0/1/plus d'1, aucun `UNIQUE(offre_id)` en base) refuse toute réutilisation d'une Offre
+  déjà associée à un compromis — **sans confirmation possible pour contourner**, contrairement au
+  doublon Offre×Offre d'ADR-044 (ici une provenance structurée unique, pas une nouvelle proposition
+  commerciale). La garde historique « un seul compromis `en_cours` par bien » reste un blocage dur
+  inchangé.
 - **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
   `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
   `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
@@ -269,6 +290,9 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/app/offres/nouveau/page.tsx` | Route canonique de création d'Offre (ADR-044) — préremplissage Bien/Acquéreur/CR revalidé serveur, verrouillage uniquement si tout le contexte est cohérent |
 | `src/components/offre/OffreFormulaire.tsx` | Formulaire Offre partagé (ADR-044) — utilisé par `/offres/nouveau` ET l'onglet « Offres » de `BienTabs`, même Server Action `ajouterOffreAction` |
 | `src/lib/offreRepository.ts` | Dont `listerOffresEnCoursPourPaire()` (avertissement doublon, ADR-044) |
+| `src/app/compromis/nouveau/page.tsx` | Route canonique de création de Compromis (ADR-045) — préremplissage Bien/Acquéreur/Offre revalidé serveur, verrouillage uniquement si tout le contexte est cohérent |
+| `src/components/compromis/CompromisFormulaire.tsx` | Formulaire Compromis partagé (ADR-045) — utilisé par `/compromis/nouveau` ET l'onglet « Compromis » de `BienTabs`, même Server Action `ajouterCompromisAction` |
+| `src/lib/compromisRepository.ts` | Dont `getCompromisParOffreId()` (garde offre-déjà-utilisée, fail-closed, ADR-045) |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus

@@ -48,7 +48,8 @@ import { ajouterDocumentBienAction, corrigerClassementDocumentBienAction } from 
 import { changerStatutOffreAction } from "@/actions/offre";
 import OffreFormulaire from "@/components/offre/OffreFormulaire";
 import { lierVisiteAOffreAction, delierVisiteAction } from "@/actions/offreVisite";
-import { ajouterCompromisAction, changerStatutCompromisAction } from "@/actions/compromis";
+import { changerStatutCompromisAction } from "@/actions/compromis";
+import CompromisFormulaire from "@/components/compromis/CompromisFormulaire";
 import {
   ajouterRemunerationAction,
   marquerRemunerationEncaisseeAction,
@@ -234,6 +235,9 @@ export default function BienTabs({
   const comptesRendusTries = [...comptesRendus].sort((a, b) => (a.dateVisite < b.dateVisite ? 1 : -1));
   const offresTriees = [...offres].sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
   const offresAccepteesDuBien = offres.filter((o) => o.statut === "acceptee");
+  // ADR-045 — évite une requête dédiée pour savoir si une offre est déjà l'origine d'un compromis :
+  // `compromis` est déjà chargé pour cet onglet, un simple Set suffit (solution minimale, §20).
+  const idsOffresDejaUtiliseesParCompromis = new Set(compromis.filter((c) => c.offreId).map((c) => c.offreId));
   const compromisTries = [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1));
   const compromisEnCours = compromis.some((c) => c.statut === "en_cours");
 
@@ -910,6 +914,27 @@ export default function BienTabs({
                       </div>
                     )}
 
+                    {/* Créer le compromis (ADR-045) — uniquement pour une offre acceptée, jamais
+                        en_cours/refusee/retiree. Masqué si le bien est archivé, si un compromis est
+                        déjà en_cours pour ce bien (la page cible afficherait de toute façon un état
+                        bloqué honnête), ou si cette offre précise est déjà l'origine d'un compromis
+                        — connu ici sans requête supplémentaire (`compromis` déjà chargé). La Server
+                        Action revalide de toute façon tout, ce contrôle n'est qu'un confort évitant
+                        un lien menant systématiquement à un état bloqué. */}
+                    {offre.statut === "acceptee" &&
+                      !bien.archiveLe &&
+                      !compromisEnCours &&
+                      !idsOffresDejaUtiliseesParCompromis.has(offre.id) && (
+                        <div className="mt-3 pt-3 border-t border-[#f1f5f9]">
+                          <Link
+                            href={`/compromis/nouveau?bienId=${bien.id}&acquereurId=${offre.acquereurId}&offreId=${offre.id}`}
+                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                          >
+                            Créer le compromis
+                          </Link>
+                        </div>
+                      )}
+
                     {/* Rattachement rétroactif de visites (ADR-019) — pas seulement à la création
                         de l'offre : correspondance bien/acquéreur/date toujours revalidée côté
                         serveur, jamais d'inférence, aucune garde d'archivage (documentation d'un
@@ -998,71 +1023,12 @@ export default function BienTabs({
               Un compromis est déjà en cours pour ce bien — résolvez-le avant d'en ajouter un nouveau.
             </p>
           ) : (
-            <form action={ajouterCompromisAction} className="flex flex-col gap-2">
-              <input type="hidden" name="bienId" value={bien.id} />
-              <select
-                name="acquereurId"
-                required
-                defaultValue=""
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-              >
-                <option value="" disabled>
-                  Acquéreur
-                </option>
-                {acquereursActifs.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.prenom} {a.nom}
-                  </option>
-                ))}
-              </select>
-              <select
-                name="offreId"
-                defaultValue=""
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-              >
-                <option value="">Aucune (compromis direct)</option>
-                {offresAccepteesDuBien.map((o) => {
-                  const acq = acquereursParId.get(o.acquereurId);
-                  return (
-                    <option key={o.id} value={o.id}>
-                      {formatPrix(o.montant)} — {acq ? `${acq.prenom} ${acq.nom}` : "Acquéreur indisponible"} —{" "}
-                      {formatDate(o.dateOffre)}
-                    </option>
-                  );
-                })}
-              </select>
-              <input
-                type="number"
-                name="prixConvenu"
-                required
-                min={1}
-                placeholder="Prix convenu (€)"
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-              />
-              <label className="text-[11px] text-[#94a3b8]">
-                Date de signature
-                <input
-                  type="date"
-                  name="dateSignature"
-                  required
-                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-                />
-              </label>
-              <label className="text-[11px] text-[#94a3b8]">
-                Date d'acte prévue (optionnelle)
-                <input
-                  type="date"
-                  name="dateActe"
-                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-                />
-              </label>
-              <button
-                type="submit"
-                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
-              >
-                Ajouter le compromis
-              </button>
-            </form>
+            <CompromisFormulaire
+              bienId={bien.id}
+              verrouille={false}
+              acquereurs={acquereursActifs}
+              offresAcceptees={offresAccepteesDuBien}
+            />
           )}
 
           {compromisTries.length === 0 ? (

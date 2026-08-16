@@ -71,6 +71,23 @@ export async function getCompromisById(id: string): Promise<Compromis | undefine
   }
 }
 
+// Provenance Offre -> Compromis (ADR-045) : en V1, une Offre acceptée ne peut être l'origine
+// structurée d'au plus un Compromis — garde purement applicative, aucun UNIQUE(offre_id) en base
+// (décision explicite ADR-045, même choix qu'ADR-043 pour tache_id : la garantie vit dans
+// ajouterCompromisAction, pas dans une contrainte SQL). Lecture fail-closed, jamais un `rows[0]`
+// silencieux : 0 ligne -> `undefined` (offre disponible) ; exactement 1 -> retournée ; plus d'1 ->
+// exception explicite (incohérence historique, ne devrait structurellement jamais arriver tant que
+// la garde applicative est respectée, mais ne doit jamais être masquée si elle survient).
+export async function getCompromisParOffreId(offreId: string): Promise<Compromis | undefined> {
+  if (!UUID_REGEX.test(offreId)) return undefined;
+  const lignes = await getDb().select().from(compromisTable).where(eq(compromisTable.offreId, offreId));
+  if (lignes.length === 0) return undefined;
+  if (lignes.length > 1) {
+    throw new Error(`Incohérence de données : ${lignes.length} compromis référencent l'offre ${offreId} (attendu au plus un).`);
+  }
+  return ligneVersCompromis(lignes[0]);
+}
+
 // Validation (bien/acquéreur non archivés, cohérence de l'offre liée, un seul en_cours par bien)
 // déjà faite par l'appelant (server action) — insertion pure ici, même principe que les autres
 // repositories.

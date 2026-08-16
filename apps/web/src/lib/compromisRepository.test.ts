@@ -22,6 +22,7 @@ const {
   listerCompromisPourBien,
   listerCompromisPourAcquereur,
   getCompromisById,
+  getCompromisParOffreId,
   enregistrerCompromis,
   marquerCompromisAnnule,
   marquerCompromisRealise,
@@ -216,5 +217,51 @@ describe("compromisRepository (intégration Postgres)", () => {
     await expect(
       marquerCompromisRealise("00000000-0000-0000-0000-000000000000", "2026-09-20")
     ).resolves.toBeUndefined();
+  });
+
+  it("getCompromisParOffreId() retourne undefined pour un id non-UUID, sans erreur de cast", async () => {
+    await expect(getCompromisParOffreId("offre-mock")).resolves.toBeUndefined();
+  });
+
+  it("getCompromisParOffreId() retourne undefined quand aucun compromis ne référence l'offre (ADR-045)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("006");
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(offre.id);
+
+    await expect(getCompromisParOffreId(offre.id)).resolves.toBeUndefined();
+  });
+
+  it("getCompromisParOffreId() retourne le compromis exact quand un seul le référence (ADR-045)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("007");
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 310000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(offre.id);
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      offreId: offre.id,
+      prixConvenu: 310000,
+      dateSignature: "2026-08-05",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    const resultat = await getCompromisParOffreId(offre.id);
+    expect(resultat?.id).toBe(compromisCree.id);
+  });
+
+  it("getCompromisParOffreId() lève une exception explicite si plusieurs compromis référencent la même offre (incohérence historique, ADR-045)", async () => {
+    // Construit artificiellement le scénario impossible en usage normal (aucun UNIQUE(offre_id)
+    // en base, décision explicite ADR-045) : deux compromis distincts pointant vers la MÊME offre.
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("008");
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 320000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(offre.id);
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+
+    const c1 = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, offreId: offre.id, prixConvenu: 320000, dateSignature: "2026-08-05" });
+    idsCompromisCrees.push(c1.id);
+    const c2 = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, offreId: offre.id, prixConvenu: 320000, dateSignature: "2026-08-06" });
+    idsCompromisCrees.push(c2.id);
+
+    await expect(getCompromisParOffreId(offre.id)).rejects.toThrow(/Incohérence/);
   });
 });

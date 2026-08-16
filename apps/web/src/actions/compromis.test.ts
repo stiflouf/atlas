@@ -288,6 +288,77 @@ describe("ajouterCompromisAction — garde-fous", () => {
   });
 });
 
+describe("ajouterCompromisAction — offre déjà utilisée par un compromis (ADR-045 §16-17)", () => {
+  it("refuse explicitement (throw) une offre déjà associée à un compromis, aucune confirmation possible pour contourner", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("OFFRE-DEJA-UTILISEE");
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(offre.id);
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+
+    const premierCompromis = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      offreId: offre.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-05",
+    });
+    idsCompromisCrees.push(premierCompromis.id);
+    // Passé à 'realise' pour isoler précisément la garde offre-déjà-utilisée de la garde
+    // "en_cours par bien" (distincte, déjà testée séparément ci-dessus) — sans cela, la garde
+    // bien-level bloquerait la création en premier et masquerait celle testée ici.
+    const { marquerCompromisRealise } = await import("@/lib/compromisRepository");
+    await marquerCompromisRealise(premierCompromis.id, "2026-09-01");
+
+    await expect(
+      ajouterCompromisAction(
+        formData({
+          bienId: bien.id,
+          acquereurId: acquereur.id,
+          offreId: offre.id,
+          prixConvenu: "300000",
+          dateSignature: "2026-08-06",
+        })
+      )
+    ).rejects.toThrow(/déjà associée à un compromis/);
+
+    // Un seul compromis référence cette offre — aucun second créé.
+    const compromisListe = await listerCompromisPourBien(bien.id);
+    expect(compromisListe).toHaveLength(1);
+  });
+
+  it("refuse même si le compromis existant référençant l'offre n'est plus en_cours (garde offre distincte de la garde en_cours par bien)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("OFFRE-DEJA-UTILISEE-ANNULE");
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(offre.id);
+    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+
+    const premierCompromis = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      offreId: offre.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-05",
+    });
+    idsCompromisCrees.push(premierCompromis.id);
+    const { marquerCompromisAnnule } = await import("@/lib/compromisRepository");
+    await marquerCompromisAnnule(premierCompromis.id, "2026-08-07", "desaccord_prix");
+
+    // Le compromis annulé ne bloque plus la garde "en_cours par bien", mais l'offre reste
+    // structurellement déjà utilisée — garde distincte, toujours appliquée.
+    await expect(
+      ajouterCompromisAction(
+        formData({
+          bienId: bien.id,
+          acquereurId: acquereur.id,
+          offreId: offre.id,
+          prixConvenu: "300000",
+          dateSignature: "2026-08-08",
+        })
+      )
+    ).rejects.toThrow(/déjà associée à un compromis/);
+  });
+});
+
 describe("changerStatutCompromisAction — garde-fous", () => {
   it("refuse explicitement (throw) sur un compromis introuvable", async () => {
     await expect(

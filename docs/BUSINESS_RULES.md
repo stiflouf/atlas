@@ -641,6 +641,46 @@ manuelle). Aucun événement métier Offre, aucune automatisation ADR-032 liée 
 **Relation Offre ↔ Visite** : exclusivement via `offre_visites` (ADR-019, déjà existante,
 many-to-many avec `comptes_rendus_visite`) — aucune FK `offres.visite_id` ajoutée.
 
+## De l'Offre acceptée au Compromis — création contextuelle (ADR-045)
+
+**Modèle V1** : créer un Compromis Atlas **est** l'acte de signature — `dateSignature` obligatoire
+dès la création, événement `compromis_signe` émis dans la même transaction. Aucun état
+« brouillon ». **Invariant ferme** : `offre.statut = "acceptee"` ne crée jamais automatiquement un
+Compromis — toujours une action explicite « Créer le compromis ».
+
+**Route canonique** : `/compromis/nouveau` (`src/app/compromis/nouveau/page.tsx`), même patron que
+`/offres/nouveau`/`/taches/nouveau`. **Formulaire unique et partagé** : `CompromisFormulaire`,
+utilisé par cette route ET l'onglet « Compromis » de `BienTabs` (comportement historique inchangé
+en mode non verrouillé : Acquéreur et Offre restent deux sélections indépendantes, compromis direct
+sans offre toujours autorisé).
+
+**Verrouillage total, jamais partiel** : Acquéreur et Offre ne sont verrouillés (texte non
+modifiable, hidden inputs) que si toute la chaîne bienId/acquereurId/offreId est cohérente
+(offre existante, correspondant exactement au bien et à l'acquéreur, `statut === "acceptee"`). Tout
+maillon cassé retombe sur la sélection libre, jamais une substitution devinée.
+
+**Prix convenu jamais préempli** : le montant de l'offre est affiché en simple référence, jamais
+copié dans `prixConvenu` (aucun `defaultValue`) — le prix peut légitimement différer entre
+acceptation et signature.
+
+**Bouton « Créer le compromis »** sur la carte Offre `acceptee` de `BienTabs` uniquement — jamais
+pour `en_cours`/`refusee`/`retiree`, masqué si le bien est archivé, si un compromis est déjà
+`en_cours` pour le bien, ou si cette offre est déjà l'origine d'un compromis existant (connu sans
+requête supplémentaire, `compromis` déjà chargé pour l'onglet).
+
+**Nouvelle garde V1 — une Offre acceptée, origine d'au plus un Compromis** :
+`getCompromisParOffreId(offreId)` (`compromisRepository.ts`, fail-closed : 0/1/plus d'1 ligne, aucun
+`UNIQUE(offre_id)` en base) — si l'offre est déjà associée à un compromis, la création est
+**refusée sans confirmation possible** (contrairement au doublon Offre×Offre d'ADR-044 : ici une
+provenance structurée unique, pas une nouvelle proposition commerciale légitime).
+
+**Garde « compromis déjà en cours » inchangée** : blocage dur par bien (pré-existant), détecté par
+`/compromis/nouveau` avant d'afficher le formulaire (état honnête).
+
+**Aucun couplage automatique nouveau** : le statut de l'offre reste `acceptee` après création du
+compromis, aucune tâche n'est terminée automatiquement, `compromis_signe` et l'automatisation
+`preparation_dossier_notaire_apres_compromis` restent strictement inchangés.
+
 ## Onglet Visites → Effectuées de la fiche bien
 
 **Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section

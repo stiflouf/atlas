@@ -775,12 +775,6 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   reste générique (Terminer/Voir la fiche/Préparer un email pour toutes les règles), le point
   d'entrée contextuel reste la fiche Visite (`/visites/{id}`), qui possède déjà tout le contexte
   structuré nécessaire.
-- **Offre acceptée → Compromis reste un parcours manuel non préchargé** : le formulaire Compromis
-  (onglet « Compromis » de la fiche Bien) propose un `<select>` d'offres acceptées et un `<select>`
-  d'acquéreur indépendants, jamais synchronisés côté client — un couple incohérent échoue
-  seulement côté serveur. Rupture UX de même nature que celle corrigée entre Visite et compte rendu
-  (ADR-040), non corrigée par ADR-044 (hors périmètre explicite), documentée comme dette pour une
-  ADR ultérieure.
 - **Pas de garde DB contre les offres `en_cours` multiples pour la même paire** — la politique
   « avertir + confirmation explicite » vit uniquement dans `ajouterOffreAction` (application), pas
   dans une contrainte `UNIQUE` : cohérent avec la décision explicite de ne pas modifier le schéma
@@ -788,6 +782,26 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   doublon sans avertissement.
 - **`dateValidite` reste purement informative** — aucune expiration automatique, aucun rappel
   cockpit lorsqu'elle est dépassée (limite déjà présente avant ADR-044, non traitée ici).
+
+## De l'Offre acceptée au Compromis (ADR-045)
+
+- **Le parcours manuel depuis le formulaire Compromis « direct » (`<select>` Acquéreur et Offre
+  indépendants, sans passer par la carte Offre acceptée) reste non synchronisé côté client** — un
+  couple incohérent échoue toujours seulement côté serveur, comportement historique délibérément
+  conservé (le préremplissage/verrouillage ne s'applique qu'au parcours contextuel via
+  `/compromis/nouveau`). La rupture UX notée dans ADR-044 est résolue pour le point d'entrée
+  recommandé (carte Offre acceptée → « Créer le compromis »), pas pour la sélection manuelle libre.
+- **Aucune fiche Compromis navigable** (`/compromis/{id}` n'existe pas) — un compromis reste
+  toujours affiché en carte inline, dans l'onglet « Compromis » de la fiche Bien ou sur la fiche
+  Acquéreur (lecture seule). Limite V1 assumée, cohérente avec l'absence de fiche Offre (ADR-044).
+- **Pas de garde DB contre la réutilisation d'une Offre par plusieurs Compromis** — la politique
+  « une Offre acceptée, origine d'au plus un Compromis » vit uniquement dans `ajouterCompromisAction`
+  (application), pas dans une contrainte `UNIQUE(offre_id)` : décision explicite ADR-045, un accès
+  direct à la base pourrait toujours créer une incohérence. `getCompromisParOffreId()` détecterait
+  alors plusieurs lignes et lèverait une exception explicite plutôt que de choisir arbitrairement.
+- **Aucun suivi post-compromis** (signature → suivi dossier notaire au-delà de la tâche automatique
+  déjà existante `preparation_dossier_notaire_apres_compromis`) — chantier potentiel non traité par
+  cette ADR.
 
 ## Limites du moteur de matching
 

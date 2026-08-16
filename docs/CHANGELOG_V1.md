@@ -1131,6 +1131,49 @@ Visite → offre créée avec Bien/Acquéreur/CR corrects, lien `offre_visites` 
 doublon affiché et bouton désactivé jusqu'à confirmation, deuxième offre créée après confirmation
 explicite, tâche `suivi_apres_visite` toujours ouverte après création.
 
+## 45. De l'Offre acceptée au Compromis
+
+Un audit préalable a confirmé que le modèle Compromis existant (`compromis.offreId` nullable,
+ADR-016) était déjà suffisant — même diagnostic qu'ADR-044 : le problème était uniquement UX. Depuis
+une Offre acceptée, le formulaire Compromis (inline dans l'onglet « Compromis » de la fiche Bien)
+obligeait à ressaisir Bien/Acquéreur/Offre via deux `<select>` indépendants, jamais synchronisés
+côté client. L'audit a aussi clarifié le modèle : dans Atlas V1, créer un Compromis EST l'acte de
+signature (`dateSignature` obligatoire, événement `compromis_signe` émis à la création même) — il
+n'existe pas de « brouillon ». Invariant maintenu : `offre.statut = "acceptee"` ne crée jamais
+automatiquement un Compromis.
+
+Même patron qu'ADR-044 : nouvelle route canonique `/compromis/nouveau`, formulaire extrait en
+composant partagé (`CompromisFormulaire`) réutilisé par cette route et l'onglet Compromis de
+`BienTabs` (comportement historique du mode non verrouillé strictement inchangé — compromis direct
+sans offre toujours possible). Le verrouillage (Acquéreur + Offre affichés en texte, hidden inputs)
+ne s'active que si bienId/acquereurId/offreId forment une chaîne entièrement cohérente (offre
+existante, correspondant exactement au bien et à l'acquéreur, `acceptee`) — tout maillon cassé
+retombe sur la sélection libre. Le montant de l'offre est affiché en simple référence, **jamais**
+copié dans `prixConvenu` : le prix convenu reste une donnée explicitement saisie, pouvant
+légitimement différer entre acceptation et signature. Bouton « Créer le compromis » ajouté sur la
+carte Offre `acceptee` de `BienTabs`, jamais pour les autres statuts.
+
+Nouvelle garde V1, absente d'ADR-044 : une Offre acceptée ne peut être l'origine structurée que
+d'au plus un Compromis. `getCompromisParOffreId()` (lecture fail-closed, aucun `UNIQUE(offre_id)`
+en base — décision explicite) détecte une réutilisation et refuse la création **sans confirmation
+possible** (contrairement au doublon Offre×Offre d'ADR-044 — ici une provenance structurée unique,
+pas une nouvelle proposition commerciale légitime). La garde historique « un seul compromis
+`en_cours` par bien » reste un blocage dur inchangé, détecté par `/compromis/nouveau` avant
+affichage du formulaire (état honnête). Aucun couplage automatique nouveau : le statut de l'offre
+reste `acceptee`, aucune tâche n'est terminée, `compromis_signe` et l'automatisation
+`preparation_dossier_notaire_apres_compromis` restent inchangés.
+
+**0 migration.** Tests ajoutés : `getCompromisParOffreId` (0/1/plus d'1 ligne, repository), garde
+offre-déjà-utilisée (2 tests Server Action, dont l'isolation de cette garde de la garde
+`en_cours`-par-bien historique), route `/compromis/nouveau` (11 tests : contexte absent/inexistant/
+archivé, compromis en_cours détecté avant affichage, compromis historique non bloquant,
+verrouillage complet, préremplissage ignoré pour acquéreur/offre invalide, offre déjà utilisée) —
+suite complète du projet passante (1009 tests). Validation réelle en base + navigateur : parcours
+complet Offre acceptée → compromis créé avec Bien/Acquéreur/Offre corrects et prix convenu
+distinct du montant de l'offre, blocage dur confirmé une fois le compromis en cours (bouton masqué
+sur l'autre offre acceptée du même bien), état honnête « offre déjà associée » confirmé après
+avoir débloqué le compromis, jalon `compromisSigneLe` posé.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

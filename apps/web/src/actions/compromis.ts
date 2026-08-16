@@ -8,6 +8,7 @@ import { getOffreById } from "@/lib/offreRepository";
 import {
   enregistrerCompromis,
   getCompromisById,
+  getCompromisParOffreId,
   marquerCompromisAnnule,
   marquerCompromisRealise,
   listerCompromisPourBien,
@@ -75,6 +76,14 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
     if (offre.bienId !== bienId) throw new Error("Cette offre ne concerne pas ce bien.");
     if (offre.acquereurId !== acquereurId) throw new Error("Cette offre ne concerne pas cet acquéreur.");
     if (offre.statut !== "acceptee") throw new Error("Cette offre n'est pas acceptée.");
+    // ADR-045 — en V1, une Offre acceptée ne peut être l'origine structurée que d'au plus un
+    // Compromis. Garde applicative stricte, sans confirmation possible pour la contourner
+    // (contrairement au doublon Offre×Offre d'ADR-044) : recontrôlée ici à chaque appel, jamais
+    // une confiance dans un état affiché au GET.
+    const compromisExistantPourOffre = await getCompromisParOffreId(offreId);
+    if (compromisExistantPourOffre) {
+      throw new Error("Cette offre est déjà associée à un compromis.");
+    }
   }
 
   const idsExecutionsATraiter = await getDb().transaction(async (tx) => {
