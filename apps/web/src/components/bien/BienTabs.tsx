@@ -45,7 +45,8 @@ import { terminerTacheAction } from "@/actions/terminerTache";
 import { annulerTacheAction } from "@/actions/annulerTache";
 import { ajouterNoteBienAction } from "@/actions/ajouterNoteBien";
 import { ajouterDocumentBienAction, corrigerClassementDocumentBienAction } from "@/actions/ajouterDocumentBien";
-import { ajouterOffreAction, changerStatutOffreAction } from "@/actions/offre";
+import { changerStatutOffreAction } from "@/actions/offre";
+import OffreFormulaire from "@/components/offre/OffreFormulaire";
 import { lierVisiteAOffreAction, delierVisiteAction } from "@/actions/offreVisite";
 import { ajouterCompromisAction, changerStatutCompromisAction } from "@/actions/compromis";
 import {
@@ -171,7 +172,6 @@ export default function BienTabs({
   compatibilites?: ResultatCompatibilite[];
 }) {
   const [active, setActive] = useState<Tab>("contexte");
-  const [acquereurOffreSelectionne, setAcquereurOffreSelectionne] = useState("");
 
   const liensParOffre = new Map<string, { lienId: string; visite: CompteRenduVisite }[]>();
   for (const lien of liens) {
@@ -831,79 +831,13 @@ export default function BienTabs({
               Ce bien est archivé — impossible d'ajouter une nouvelle offre.
             </p>
           ) : (
-            <form action={ajouterOffreAction} className="flex flex-col gap-2">
-              <input type="hidden" name="bienId" value={bien.id} />
-              <select
-                name="acquereurId"
-                required
-                defaultValue=""
-                onChange={(e) => setAcquereurOffreSelectionne(e.target.value)}
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-              >
-                <option value="" disabled>
-                  Acquéreur
-                </option>
-                {acquereursActifs.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.prenom} {a.nom}
-                  </option>
-                ))}
-              </select>
-              {acquereurOffreSelectionne && (
-                <div>
-                  <p className="text-[11px] font-medium text-[#64748b] mb-1">
-                    Visites à lier à cette offre (optionnel)
-                  </p>
-                  {/* Filtrage indicatif côté client (acquéreur sélectionné) — ne remplace jamais
-                      la validation serveur (bien/acquéreur/date), qui revérifie tout (ADR-019). */}
-                  {comptesRendus.filter((cr) => cr.acquereurId === acquereurOffreSelectionne).length === 0 ? (
-                    <p className="text-[12px] text-[#94a3b8]">Aucune visite enregistrée avec cet acquéreur.</p>
-                  ) : (
-                    <div className="flex flex-col gap-1.5">
-                      {comptesRendus
-                        .filter((cr) => cr.acquereurId === acquereurOffreSelectionne)
-                        .map((cr) => (
-                          <label key={cr.id} className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
-                            <input type="checkbox" name="compteRenduVisiteIds" value={cr.id} />
-                            {formatDate(cr.dateVisite)} — {LABEL_INTERET[cr.interet]}
-                          </label>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <input
-                type="number"
-                name="montant"
-                required
-                min={1}
-                placeholder="Montant de l'offre (€)"
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-              />
-              <label className="text-[11px] text-[#94a3b8]">
-                Date de l'offre
-                <input
-                  type="date"
-                  name="dateOffre"
-                  required
-                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-                />
-              </label>
-              <label className="text-[11px] text-[#94a3b8]">
-                Date de validité (optionnelle)
-                <input
-                  type="date"
-                  name="dateValidite"
-                  className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
-                />
-              </label>
-              <button
-                type="submit"
-                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
-              >
-                Ajouter l'offre
-              </button>
-            </form>
+            <OffreFormulaire
+              bienId={bien.id}
+              comptesRendus={comptesRendus}
+              offresEnCoursDuBien={offresTriees.filter((o) => o.statut === "en_cours")}
+              verrouille={false}
+              acquereurs={acquereursActifs}
+            />
           )}
 
           {offresTriees.length === 0 ? (

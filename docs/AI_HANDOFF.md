@@ -27,9 +27,12 @@ Calendar avec matérialisation strictement par Server Action (POST), plus un sui
 (`suivi_apres_visite`) contextuel à l'intérêt exprimé, ciblant l'acquéreur (ADR-041), et une règle
 indépendante `retour_vendeur_apres_visite` créant une tâche vendeur (résolution exclusive par
 `getProspectVendeurParBien`, jamais de fallback acquéreur) avec brouillon d'email déterministe à
-whitelist stricte, désactivée par défaut (ADR-042), et une correction de la provenance des faits
+whitelist stricte, désactivée par défaut (ADR-042), une correction de la provenance des faits
 historiques d'une communication automatique — résolution désormais exacte via
-`tache → exécution → événement`, fail-closed, jamais « le compte rendu le plus récent » (ADR-043).
+`tache → exécution → événement`, fail-closed, jamais « le compte rendu le plus récent » (ADR-043),
+et une route canonique `/offres/nouveau` avec formulaire Offre partagé (`OffreFormulaire`) permettant
+un préremplissage Bien/Acquéreur/compte rendu verrouillé et revalidé depuis la fiche Visite —
+`interet = interesse` ne crée jamais automatiquement une Offre (ADR-044).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -166,6 +169,20 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   ni une autre heuristique « le plus récent » pour une communication issue d'une tâche automatique
   événementielle — vérifié : `suivi_apres_visite` n'a pas ce problème (sa cible acquéreur est une FK
   directe, aucune liste jamais interrogée).
+- **`/offres/nouveau` (ADR-044) est LA route canonique de création d'Offre, jamais un second
+  formulaire** — `OffreFormulaire` (`src/components/offre/OffreFormulaire.tsx`) est partagé entre
+  cette route et l'onglet « Offres » de `BienTabs` : même Server Action (`ajouterOffreAction`), même
+  contrat. Le verrouillage Bien/Acquéreur/compte rendu ne s'active QUE si toute la chaîne de
+  `searchParams` est cohérente (revalidée serveur, même patron que `/taches/nouveau`) — un maillon
+  cassé retombe sur le mode non verrouillé, jamais une substitution devinée. Ne jamais supposer
+  qu'`interet = interesse` crée une offre : aucun couplage automatique n'existe, ni dans un sens ni
+  dans l'autre (la création d'une offre ne modifie jamais `interet`, ne termine jamais la tâche
+  `suivi_apres_visite`). `listerOffresEnCoursPourPaire()` (`offreRepository.ts`) alimente un
+  avertissement de doublon (jamais un blocage définitif — plusieurs offres `en_cours` pour la même
+  paire restent autorisées après confirmation explicite `confirmerNouvelleOffreMalgreExistante`,
+  revalidée côté serveur). Relation Offre ↔ Visite exclusivement via `offre_visites` (ADR-019,
+  déjà existante) — ne jamais ajouter `offres.visite_id`. `TacheItem` reste générique, aucun bouton
+  Offre n'y a été ajouté (décision explicite).
 - **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
   `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
   `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
@@ -246,9 +263,12 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/types/tache.ts` | `deriverCibleTache()` (ADR-028) et `deriverRouteFicheCible()` (ADR-039) — dérivées, jamais une requête ni un parsing de titre |
 | `src/lib/visiteRepository.ts` | Entité `visites` (ADR-040) — matérialisation idempotente (`materialiserVisite`), transitions gardées (`marquerVisiteRealisee`/`annulerVisite`), report (`modifierDatePrevueVisite`), signal ADR-037 (`existeVisitePlanifieePourPaire`) |
 | `src/actions/visite.ts` | `materialiserVisiteAction` (ADR-041, POST, seul point d'écriture créant une visite) ; `annulerVisiteAction`/`reporterVisiteAction` (ADR-040, `redirectTo` optionnel depuis ADR-041) |
-| `src/app/visites/[id]/page.tsx` | Fiche Visite réelle (ADR-041) — lecture PostgreSQL exclusive, aucune dépendance Calendar, plus une redirection |
+| `src/app/visites/[id]/page.tsx` | Fiche Visite réelle (ADR-041) — lecture PostgreSQL exclusive, aucune dépendance Calendar, plus une redirection ; lien contextuel « Créer une offre » (ADR-044, jamais conditionné à `interet`) |
 | `src/lib/memoireDossier.ts` | Sélection des éléments affichés dans la Mémoire du dossier |
 | `src/app/visites/[id]/preparer/page.tsx` | Page la plus riche de l'app — préparation + compte rendu ; purement en lecture depuis ADR-041 (aucune matérialisation dans son rendu) |
+| `src/app/offres/nouveau/page.tsx` | Route canonique de création d'Offre (ADR-044) — préremplissage Bien/Acquéreur/CR revalidé serveur, verrouillage uniquement si tout le contexte est cohérent |
+| `src/components/offre/OffreFormulaire.tsx` | Formulaire Offre partagé (ADR-044) — utilisé par `/offres/nouveau` ET l'onglet « Offres » de `BienTabs`, même Server Action `ajouterOffreAction` |
+| `src/lib/offreRepository.ts` | Dont `listerOffresEnCoursPourPaire()` (avertissement doublon, ADR-044) |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus

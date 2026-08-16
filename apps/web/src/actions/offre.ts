@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
-import { enregistrerOffreAvecLiensEtJalon, getOffreById, changerStatutOffre } from "@/lib/offreRepository";
+import { enregistrerOffreAvecLiensEtJalon, getOffreById, changerStatutOffre, listerOffresEnCoursPourPaire } from "@/lib/offreRepository";
 import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import type { StatutOffre } from "@/types/offre";
 import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
@@ -32,6 +32,13 @@ function parseDateOptionnelle(valeur: FormDataEntryValue | null): string | undef
 // correspondent réellement. L'offre, ses liens de visite et le jalon offreEnCoursLe sont écrits
 // en une seule transaction (enregistrerOffreAvecLiensEtJalon) : un seul geste conseiller, tout ou
 // rien.
+//
+// Doublon accidentel (ADR-044 §17-21) : si une offre 'en_cours' existe déjà pour EXACTEMENT cette
+// paire bien/acquéreur, la création est refusée (throw) sauf confirmation explicite
+// (`confirmerNouvelleOffreMalgreExistante`) — jamais un blocage définitif (une nouvelle
+// proposition à un montant différent reste un scénario métier supporté), et jamais une confiance
+// aveugle dans un avertissement déjà affiché côté client : recontrôlé ici à chaque appel, y
+// compris pour un POST qui contournerait l'UI.
 export async function ajouterOffreAction(formData: FormData): Promise<void> {
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
@@ -39,6 +46,7 @@ export async function ajouterOffreAction(formData: FormData): Promise<void> {
   const dateOffre = String(formData.get("dateOffre") ?? "").trim();
   const dateValidite = parseDateOptionnelle(formData.get("dateValidite"));
   const compteRenduVisiteIds = formData.getAll("compteRenduVisiteIds").map(String).filter((id) => id !== "");
+  const confirmerMalgreExistante = formData.get("confirmerNouvelleOffreMalgreExistante") != null;
 
   if (!montant) throw new Error("Le montant de l'offre doit être un nombre positif.");
   if (!dateOffre) throw new Error("La date de l'offre est obligatoire.");
@@ -48,6 +56,15 @@ export async function ajouterOffreAction(formData: FormData): Promise<void> {
   if (bien.archiveLe) throw new Error("Impossible d'ajouter une offre sur un bien archivé.");
   if (!acquereur) throw new Error("Acquéreur introuvable.");
   if (acquereur.archiveLe) throw new Error("Impossible d'ajouter une offre pour un acquéreur archivé.");
+
+  if (!confirmerMalgreExistante) {
+    const offresEnCoursExistantes = await listerOffresEnCoursPourPaire(bienId, acquereurId);
+    if (offresEnCoursExistantes.length > 0) {
+      throw new Error(
+        "Une offre en cours existe déjà pour cet acquéreur sur ce bien — confirmez explicitement pour en créer une nouvelle."
+      );
+    }
+  }
 
   for (const compteRenduVisiteId of compteRenduVisiteIds) {
     const compteRendu = await getCompteRenduVisiteById(compteRenduVisiteId);

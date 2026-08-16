@@ -148,6 +148,21 @@ export default async function VisitePage({ params }: PageProps) {
               </p>
             )}
           </div>
+          {/* Créer une offre (ADR-044) — jamais conditionné à `interet` : un acquéreur peut
+              formuler explicitement une offre quelle que soit la valeur actuelle de `interet`
+              (§5). `visite.statut === "realisee"` revérifié explicitement (défensif, même si un
+              compte rendu implique déjà ce statut par construction ADR-041). Ne crée jamais
+              l'offre elle-même ici, seulement un lien contextuel vers la route canonique
+              /offres/nouveau, préchargé avec les IDs structurés de cette visite — jamais un
+              titre/texte libre parsé. */}
+          {visite.statut === "realisee" && (
+            <Link
+              href={`/offres/nouveau?bienId=${bien.id}&acquereurId=${acquereur.id}&compteRenduVisiteId=${compteRendu.id}`}
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg mt-4"
+            >
+              Créer une offre
+            </Link>
+          )}
         </section>
       ) : visite.statut === "realisee" ? (
         // Théoriquement impossible aujourd'hui (une visite ne transite vers `realisee` que dans la

@@ -89,6 +89,8 @@ describe("Fiche Visite /visites/{id} — consultable sans Google Calendar (ADR-0
     expect(html).toContain("Annuler la visite");
     expect(html).toContain("Reporter");
     expect(html).not.toContain("Compte rendu");
+    // ADR-044 — aucun compte rendu tant que la visite n'est pas réalisée.
+    expect(html).not.toContain("Créer une offre");
   });
 
   it("visite realisee : compte rendu affiché avec intérêt, aucune action de planification", async () => {
@@ -118,6 +120,36 @@ describe("Fiche Visite /visites/{id} — consultable sans Google Calendar (ADR-0
     expect(html).toContain("Envoyer une contre-proposition");
     expect(html).not.toContain("Annuler la visite");
     expect(html).not.toContain("Préparer / renseigner le compte rendu");
+
+    // ADR-044 — lien contextuel "Créer une offre" vers la route canonique, préchargé avec les IDs
+    // structurés exacts de cette visite (bien/acquéreur/compte rendu), jamais un texte parsé.
+    expect(html).toContain("Créer une offre");
+    expect(html).toMatch(
+      new RegExp(`/offres/nouveau\\?bienId=${bien.id}&amp;acquereurId=${acquereur.id}&amp;compteRenduVisiteId=`)
+    );
+  });
+
+  it("visite realisee, interet = pas_interesse : le lien Créer une offre reste affiché (ADR-044 §5, jamais conditionné à interet)", async () => {
+    const bien = await creerBienDeTest("REALPASINT1");
+    const acquereur = await creerAcquereurDeTest("REALPASINT1");
+    const visite = await materialiserVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-08-01",
+      rendezVousCalendarId: `gcal-fiche-pasint-${bien.id}`,
+    });
+    await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      visiteId: visite.id,
+      dateVisite: "2026-08-01",
+      retour: "[test réel] Ne correspond pas, mais l'acquéreur a changé d'avis en repartant.",
+      interet: "pas_interesse",
+    });
+    await marquerVisiteRealisee(visite.id);
+
+    const html = renderToStaticMarkup(await VisitePage({ params: Promise.resolve({ id: visite.id }) }));
+    expect(html).toContain("Créer une offre");
   });
 
   it("visite annulee : statut affiché, aucun compte rendu, aucune action de planification", async () => {
@@ -136,5 +168,7 @@ describe("Fiche Visite /visites/{id} — consultable sans Google Calendar (ADR-0
     expect(html).not.toContain("Compte rendu");
     expect(html).not.toContain("Annuler la visite");
     expect(html).not.toContain("Préparer / renseigner le compte rendu");
+    // ADR-044 — aucun compte rendu, aucune provenance structurée : le lien n'a pas de sens ici.
+    expect(html).not.toContain("Créer une offre");
   });
 });

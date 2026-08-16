@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { offres as offresTable } from "@/db/schema";
 import type { Offre, StatutOffre } from "@/types/offre";
@@ -51,6 +51,27 @@ export async function listerOffresPourAcquereur(acquereurId: string): Promise<Of
       .select()
       .from(offresTable)
       .where(eq(offresTable.acquereurId, acquereurId))
+      .orderBy(desc(offresTable.dateOffre));
+    return lignes.map(ligneVersOffre);
+  } catch (erreur) {
+    console.error("[offres] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
+// Détection de doublon accidentel (ADR-044 §17-21) : offres 'en_cours' pour EXACTEMENT cette paire
+// bien/acquéreur — jamais un blocage définitif (le modèle autorise plusieurs offres 'en_cours'
+// pour la même paire après confirmation explicite du conseiller, une nouvelle proposition restant
+// toujours une nouvelle ligne, jamais une modification de l'ancienne). Utilisée à la fois pour
+// l'avertissement affiché côté client et pour la revalidation côté serveur dans
+// ajouterOffreAction — jamais une confiance aveugle dans le résultat client.
+export async function listerOffresEnCoursPourPaire(bienId: string, acquereurId: string): Promise<Offre[]> {
+  if (!UUID_REGEX.test(bienId) || !UUID_REGEX.test(acquereurId)) return [];
+  try {
+    const lignes = await getDb()
+      .select()
+      .from(offresTable)
+      .where(and(eq(offresTable.bienId, bienId), eq(offresTable.acquereurId, acquereurId), eq(offresTable.statut, "en_cours")))
       .orderBy(desc(offresTable.dateOffre));
     return lignes.map(ligneVersOffre);
   } catch (erreur) {

@@ -12,8 +12,14 @@ const { getDb } = await import("@/db/client");
 const { biens: biensTable, acquereurs: acquereursTable, offres: offresTable } = await import("@/db/schema");
 const { creerBien } = await import("./bienRepository");
 const { creerAcquereur } = await import("./clientRepository");
-const { listerOffresPourBien, listerOffresPourAcquereur, getOffreById, enregistrerOffre, changerStatutOffre } =
-  await import("./offreRepository");
+const {
+  listerOffresPourBien,
+  listerOffresPourAcquereur,
+  listerOffresEnCoursPourPaire,
+  getOffreById,
+  enregistrerOffre,
+  changerStatutOffre,
+} = await import("./offreRepository");
 
 const idsOffresCrees: string[] = [];
 const idsBiensCrees: string[] = [];
@@ -154,5 +160,25 @@ describe("offreRepository (intégration Postgres)", () => {
     expect(refusee?.statut).toBe("refusee");
     expect(refusee?.dateDecision).toBe("2026-08-12");
     expect(refusee?.motifPerte).toBe("desaccord_prix");
+  });
+
+  it("listerOffresEnCoursPourPaire() retourne [] pour un id non-UUID, sans erreur de cast", async () => {
+    await expect(listerOffresEnCoursPourPaire("bien-mock", "acquereur-mock")).resolves.toEqual([]);
+  });
+
+  it("listerOffresEnCoursPourPaire() ne retourne que les offres 'en_cours' de la paire exacte (ADR-044)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("004");
+    const { acquereur: autreAcquereur } = await creerBienEtAcquereurDeTest("005");
+
+    const enCours = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(enCours.id);
+    const refuseeAvant = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 280000, dateOffre: "2026-07-01" });
+    idsOffresCrees.push(refuseeAvant.id);
+    await changerStatutOffre(refuseeAvant.id, { statut: "refusee", dateDecision: "2026-07-05", motifPerte: "desaccord_prix" });
+    const autrePaire = await enregistrerOffre({ bienId: bien.id, acquereurId: autreAcquereur.id, montant: 310000, dateOffre: "2026-08-02" });
+    idsOffresCrees.push(autrePaire.id);
+
+    const resultat = await listerOffresEnCoursPourPaire(bien.id, acquereur.id);
+    expect(resultat.map((o) => o.id)).toEqual([enCours.id]);
   });
 });

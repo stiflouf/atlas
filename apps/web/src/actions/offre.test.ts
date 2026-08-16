@@ -222,6 +222,101 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
   });
 });
 
+describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
+  it("refuse explicitement (throw) une deuxième offre en_cours pour la même paire sans confirmation", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DOUBLON-SANS-CONFIRM");
+    const premiere = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(premiere.id);
+
+    await expect(
+      ajouterOffreAction(
+        formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" })
+      )
+    ).rejects.toThrow(/offre en cours existe déjà/);
+
+    const offres = await listerOffresPourBien(bien.id);
+    expect(offres).toHaveLength(1); // aucune deuxième offre créée
+  });
+
+  it("accepte une deuxième offre en_cours pour la même paire avec confirmation explicite — les deux coexistent", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DOUBLON-AVEC-CONFIRM");
+    const premiere = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(premiere.id);
+
+    await ajouterOffreAction(
+      formData({
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        montant: "320000",
+        dateOffre: "2026-08-10",
+        confirmerNouvelleOffreMalgreExistante: "oui",
+      })
+    ).catch(() => {});
+
+    const offres = await listerOffresPourBien(bien.id);
+    idsOffresCrees.push(...offres.filter((o) => o.id !== premiere.id).map((o) => o.id));
+    expect(offres).toHaveLength(2);
+    expect(offres.every((o) => o.statut === "en_cours")).toBe(true);
+    // La première offre reste totalement inchangée (jamais un UPDATE, jamais un retrait
+    // automatique — ADR-044 §22-23).
+    const premiereApres = await getOffreById(premiere.id);
+    expect(premiereApres?.montant).toBe(300000);
+    expect(premiereApres?.statut).toBe("en_cours");
+  });
+
+  it("n'exige aucune confirmation si l'offre existante pour la paire n'est plus en_cours", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DOUBLON-STATUT-FINAL");
+    const premiere = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(premiere.id);
+    await changerStatutOffreAction(
+      formData({ offreId: premiere.id, statut: "refusee", dateDecision: "2026-08-05", motifPerte: "desaccord_prix" })
+    ).catch(() => {});
+
+    await ajouterOffreAction(
+      formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" })
+    ).catch(() => {});
+
+    const offres = await listerOffresPourBien(bien.id);
+    idsOffresCrees.push(...offres.filter((o) => o.id !== premiere.id).map((o) => o.id));
+    expect(offres.filter((o) => o.statut === "en_cours")).toHaveLength(1);
+  });
+
+  it("n'exige aucune confirmation pour un acquéreur différent sur le même bien", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DOUBLON-AUTRE-ACQUEREUR-A");
+    const { acquereur: autreAcquereur } = await creerBienEtAcquereurDeTest("DOUBLON-AUTRE-ACQUEREUR-B");
+    const premiere = await enregistrerOffre({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      montant: 300000,
+      dateOffre: "2026-08-01",
+    });
+    idsOffresCrees.push(premiere.id);
+
+    await ajouterOffreAction(
+      formData({ bienId: bien.id, acquereurId: autreAcquereur.id, montant: "310000", dateOffre: "2026-08-10" })
+    ).catch(() => {});
+
+    const offres = await listerOffresPourBien(bien.id);
+    idsOffresCrees.push(...offres.filter((o) => o.id !== premiere.id).map((o) => o.id));
+    expect(offres).toHaveLength(2);
+  });
+});
+
 describe("changerStatutOffreAction — garde-fous", () => {
   it("refuse explicitement (throw) sur une offre introuvable", async () => {
     await expect(

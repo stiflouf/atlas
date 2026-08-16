@@ -600,6 +600,47 @@ resolver) → confirmation explicite → envoi réel via `envoyerEmailGmailActio
 envoi automatique. À l'envoi réussi, la note d'interaction ADR-027 est créée par le mécanisme
 générique déjà existant (aucun nouveau code, aucune nouvelle table).
 
+## De la visite à l'offre — création contextuelle (ADR-044)
+
+**Invariant ferme** : `interet = interesse` ne crée jamais automatiquement une Offre — une Offre
+reste toujours un fait explicitement saisi par le conseiller.
+
+**Route canonique** : `/offres/nouveau` (`src/app/offres/nouveau/page.tsx`), même patron que
+`/taches/nouveau` — lit `?bienId=&acquereurId=&compteRenduVisiteId=`, revalide chaque id contre les
+entités réellement chargées. Sans `bienId` valide et non archivé : état honnête, lien vers `/biens`,
+jamais un formulaire incomplet.
+
+**Formulaire unique et partagé** : `OffreFormulaire` (`src/components/offre/OffreFormulaire.tsx`)
+est le seul point d'écriture UI vers `ajouterOffreAction` — utilisé à la fois par l'onglet « Offres »
+de `BienTabs` (acquéreur choisi dans la liste complète, comme avant ADR-044) et par
+`/offres/nouveau` (Bien/Acquéreur verrouillés si tout le contexte est cohérent).
+
+**Verrouillage jamais partiel ni deviné** : le contexte n'est verrouillé (acquéreur affiché en texte
+non modifiable, compte rendu source pré-associé en hidden input) que si bien+acquéreur+CR sont
+TOUS cohérents entre eux (CR appartenant exactement à ce bien et cet acquéreur, entités non
+archivées). Tout maillon manquant retombe sur le comportement non verrouillé — jamais une
+substitution silencieuse par un autre compte rendu/acquéreur.
+
+**Lien contextuel depuis `/visites/{id}`** : « Créer une offre » affiché dès que la visite est
+`realisee` avec un compte rendu, **jamais conditionné à `interet`** (un acquéreur peut formuler une
+offre après `a_reflechir`/`inconnu`/`pas_interesse`). `TacheItem` reste volontairement générique,
+aucune branche `origineCode` ajoutée.
+
+**Doublon accidentel, jamais un blocage définitif** : `listerOffresEnCoursPourPaire(bienId,
+acquereurId)` détecte une offre `en_cours` déjà existante pour la paire exacte — la création est
+refusée (`ajouterOffreAction`) sauf `confirmerNouvelleOffreMalgreExistante` explicite, revalidé côté
+serveur à chaque appel (jamais une confiance dans l'avertissement déjà affiché côté client). Une
+nouvelle proposition à un montant différent reste un scénario supporté : plusieurs offres `en_cours`
+peuvent coexister pour la même paire après confirmation, sans qu'aucune ancienne offre ne soit
+retirée automatiquement.
+
+**Aucun couplage automatique** : la création d'une offre ne modifie jamais `interet`, ne termine ni
+n'annule jamais la tâche `suivi_apres_visite` existante (reste ouverte jusqu'à terminaison
+manuelle). Aucun événement métier Offre, aucune automatisation ADR-032 liée à l'Offre.
+
+**Relation Offre ↔ Visite** : exclusivement via `offre_visites` (ADR-019, déjà existante,
+many-to-many avec `comptes_rendus_visite`) — aucune FK `offres.visite_id` ajoutée.
+
 ## Onglet Visites → Effectuées de la fiche bien
 
 **Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section

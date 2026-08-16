@@ -1087,6 +1087,50 @@ suite complète du projet passante (975 tests). Validation réelle en base + nav
 Visite A (ancienne, `pas_interesse`) / Visite B (récente, `interesse`) sur le même bien, confirmant
 que chaque tâche reste reliée à sa visite exacte, sans aucune contamination croisée.
 
+## 44. De la visite à l'offre — création contextuelle sans ressaisie
+
+Un audit préalable a confirmé que le modèle Offre existant (`offres`, `offre_visites`, ADR-015/
+ADR-019) était déjà suffisant : la seule friction identifiée était UX — après une visite
+intéressante, le formulaire de création (inline dans l'onglet « Offres » de la fiche Bien) obligeait
+le conseiller à retrouver l'acquéreur dans une liste globale non filtrée puis à recocher
+manuellement le compte rendu source. Invariant ferme maintenu : `interet = interesse` ne crée
+jamais automatiquement une Offre, qui reste toujours un fait explicitement saisi.
+
+Nouvelle route canonique `/offres/nouveau`, même patron que `/taches/nouveau` déjà en production :
+lit `?bienId=&acquereurId=&compteRenduVisiteId=`, revalide chaque id contre les entités réellement
+chargées, jamais une confiance dans le query param. Le formulaire de création lui-même a été extrait
+en un composant partagé unique (`OffreFormulaire`), réutilisé à l'identique par l'onglet « Offres »
+de `BienTabs` (mode non verrouillé, inchangé pour le conseiller) et par la nouvelle route (mode
+verrouillé si tout le contexte — bien, acquéreur, compte rendu — est cohérent) : même formulaire,
+même Server Action, jamais deux implémentations divergentes. Le verrouillage ne s'active que si la
+chaîne entière est valide ; tout maillon manquant ou incohérent (acquéreur archivé, compte rendu
+d'un autre acquéreur) retombe sur le comportement non verrouillé, jamais une substitution
+silencieuse.
+
+La fiche `/visites/{id}` (ADR-041) affiche désormais un lien « Créer une offre » dès qu'une visite
+est `realisee` avec un compte rendu — jamais conditionné à `interet`, un acquéreur pouvant formuler
+une offre après `a_reflechir`/`inconnu`/`pas_interesse`. `TacheItem` (cockpit) reste volontairement
+générique, aucune branche par règle ajoutée.
+
+Nouvelle garde anti-doublon dans `ajouterOffreAction` : une offre `en_cours` déjà existante pour la
+paire bien/acquéreur exacte bloque une nouvelle création sauf confirmation explicite
+(`confirmerNouvelleOffreMalgreExistante`), revalidée côté serveur à chaque appel — jamais un blocage
+définitif, une nouvelle proposition à un montant différent restant un scénario métier supporté ;
+plusieurs offres `en_cours` peuvent coexister pour la même paire après confirmation. Aucun couplage
+automatique ajouté : `interet` n'est jamais modifié, la tâche `suivi_apres_visite` reste ouverte
+après création d'une offre, aucun événement métier ni automatisation Offre.
+
+**0 migration** — le schéma est strictement inchangé, la relation Offre ↔ Visite reste
+exclusivement portée par `offre_visites` (déjà existante). Tests ajoutés : nouvelle fonction
+`listerOffresEnCoursPourPaire` (repository), garde doublon (4 tests Server Action), route
+`/offres/nouveau` (9 tests : contexte absent/inexistant/archivé, verrouillage complet, préremplissage
+ignoré pour un acquéreur invalide, CR incohérent ignoré, avertissement doublon), non-régression
+`suivi_apres_visite` (1 test dédié), extensions du lien contextuel sur la fiche Visite — suite
+complète du projet passante (992 tests). Validation réelle en base + navigateur : parcours complet
+Visite → offre créée avec Bien/Acquéreur/CR corrects, lien `offre_visites` confirmé, avertissement de
+doublon affiché et bouton désactivé jusqu'à confirmation, deuxième offre créée après confirmation
+explicite, tâche `suivi_apres_visite` toujours ouverte après création.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

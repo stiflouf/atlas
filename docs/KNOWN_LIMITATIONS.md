@@ -765,6 +765,30 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   des faits depuis une liste triée, appliquer le même principe de provenance exacte plutôt que
   « le plus récent ».
 
+## De la visite à l'offre (ADR-044)
+
+- **Aucune fiche Offre navigable** (`/offres/{id}` n'existe pas) — une offre reste toujours affichée
+  en carte inline, dans l'onglet « Offres » de la fiche Bien ou sur la fiche Acquéreur (lecture
+  seule). Limite V1 assumée, non nécessaire pour l'objectif de cette ADR (préremplissage
+  contextuel, pas navigation).
+- **Aucun bouton « Créer une offre » dans `TacheItem`** — décision explicite ADR-044 : le composant
+  reste générique (Terminer/Voir la fiche/Préparer un email pour toutes les règles), le point
+  d'entrée contextuel reste la fiche Visite (`/visites/{id}`), qui possède déjà tout le contexte
+  structuré nécessaire.
+- **Offre acceptée → Compromis reste un parcours manuel non préchargé** : le formulaire Compromis
+  (onglet « Compromis » de la fiche Bien) propose un `<select>` d'offres acceptées et un `<select>`
+  d'acquéreur indépendants, jamais synchronisés côté client — un couple incohérent échoue
+  seulement côté serveur. Rupture UX de même nature que celle corrigée entre Visite et compte rendu
+  (ADR-040), non corrigée par ADR-044 (hors périmètre explicite), documentée comme dette pour une
+  ADR ultérieure.
+- **Pas de garde DB contre les offres `en_cours` multiples pour la même paire** — la politique
+  « avertir + confirmation explicite » vit uniquement dans `ajouterOffreAction` (application), pas
+  dans une contrainte `UNIQUE` : cohérent avec la décision explicite de ne pas modifier le schéma
+  dans cette ADR, mais un accès direct à la base (hors Server Action) pourrait toujours créer un
+  doublon sans avertissement.
+- **`dateValidite` reste purement informative** — aucune expiration automatique, aucun rappel
+  cockpit lorsqu'elle est dépassée (limite déjà présente avant ADR-044, non traitée ici).
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —
