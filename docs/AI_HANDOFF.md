@@ -326,6 +326,8 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/auth/sessionAtlas.ts` | Session Atlas (ADR-047) — `exigerSessionAtlas()` à appeler en première ligne de CHAQUE Server Action/Route Handler utilisateur, distincte de `src/lib/google/connexion.ts` (autorisations Calendar/Gmail) |
 | `src/lib/auth/googleIdentite.ts` | Flux d'identité Atlas (OIDC, ADR-047) — distinct de `src/lib/google/oauth.ts` (scopes métier) |
 | `src/actions/gardeSessionAtlas.structurel.test.ts` | Garantit par analyse AST que TOUTE Server Action exportée sous `src/actions/` commence par `await exigerSessionAtlas()` — échoue si une nouvelle action oublie la garde |
+| `src/lib/prospectVendeurRepository.ts` | `predicatVue()` (ADR-048) — prédicat métier UNIQUE actif/perdu/converti/archivé, partagé par `listerProspectsVendeurs*()` ET `rechercherProspectsVendeurs()` ; ne jamais dupliquer cette logique ailleurs |
+| `src/types/pagination.ts` | Type `PageResultat<T>` (ADR-048), partagé par `rechercherBiensPage()`/`rechercherAcquereursPage()` |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus

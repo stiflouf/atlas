@@ -1262,6 +1262,30 @@ réelle : build de production propre. Le flux OAuth de bout en bout n'a pas pu �
 navigateur avec de vraies credentials Google dans cet environnement de développement — à faire
 manuellement avant le premier jour de pilote.
 
+## 48. Recherche et pagination serveur (biens, acquéreurs, prospects vendeurs)
+
+Un audit préalable a confirmé que les quatre repositories de liste chargeaient systématiquement
+toute la table en mémoire, sans `ORDER BY` ni `LIMIT` — sans conséquence au volume de développement
+actuel, mais pas à l'échelle réaliste d'un conseiller sur plusieurs années. Nouvelles fonctions de
+recherche paginée (`rechercherBiensPage`, `rechercherAcquereursPage`, `rechercherProspectsVendeurs`)
+réservées aux 3 pages de liste — les fonctions existantes (`listerBiens`, `listerClients`,
+`listerProspectsVendeurs` et leurs variantes) restent strictement inchangées, toujours utilisées par
+le cockpit, le dashboard et les `<select>` de contexte, qui ont besoin de l'intégralité des données.
+
+Ordre déterministe explicite sur les trois entités (`creeLe DESC, id DESC` — aucun repository
+n'avait d'`ORDER BY` avant cette ADR), recherche `ILIKE` sur les champs déjà visibles en liste, 25
+résultats par page, page hors bornes redirigée explicitement vers la dernière page valide. Pour les
+prospects vendeurs, la vue actif/perdu/converti/archivé n'étant jamais stockée (dérivée à la
+lecture), le prédicat de filtrage a été factorisé (`predicatVue()`) plutôt que dupliqué — les
+fonctions existantes l'utilisent désormais aussi, comportement strictement inchangé, vérifié par la
+suite de tests existante sans modification.
+
+**0 migration.** Tests ajoutés : recherche/pagination/ordre/hors-bornes pour les 3 repositories (13
+tests), rendu des 3 pages (recherche filtrante, message honnête sans résultat, redirection hors
+bornes, rétrocompatibilité des liens `archives`/`vue` existants, 12 tests) — suite complète du
+projet passante (1128 tests), build de production propre. Implémenté sur une branche dédiée
+(`feat/adr-048-recherche-pagination`), jamais poussé directement sur `main`.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

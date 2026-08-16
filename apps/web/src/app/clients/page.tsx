@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { User, Plus } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { listerClients, listerClientsArchives } from "@/lib/clientRepository";
+import ChampRecherche from "@/components/ui/ChampRecherche";
+import Pagination from "@/components/ui/Pagination";
+import { listerClients, rechercherAcquereursPage } from "@/lib/clientRepository";
+
+const PAR_PAGE = 25;
 
 const stadeLabel: Record<string, string> = {
   decouverte: "Découverte",
@@ -25,14 +30,46 @@ function formatDate(iso: string): string {
 // flag, la liste figerait au moment du build.
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams: Promise<{ archives?: string }> };
+type PageProps = { searchParams: Promise<{ archives?: string; q?: string; page?: string }> };
+
+function construireHref(params: { archives?: boolean; q?: string; page?: number }): string {
+  const sp = new URLSearchParams();
+  if (params.archives) sp.set("archives", "1");
+  if (params.q) sp.set("q", params.q);
+  if (params.page && params.page > 1) sp.set("page", String(params.page));
+  const qs = sp.toString();
+  return qs ? `/clients?${qs}` : "/clients";
+}
 
 // Liste volontairement minimale (nom, budget, stade projet) — la fiche vers laquelle elle
 // pointe (/clients/[id]) l'est tout autant : pas d'historique, hors périmètre.
 export default async function ClientsPage({ searchParams }: PageProps) {
-  const { archives } = await searchParams;
+  const { archives, q, page: pageBrut } = await searchParams;
   const modeArchives = archives === "1";
-  const clients = modeArchives ? await listerClientsArchives() : await listerClients();
+  const texte = q?.trim() || undefined;
+  const pageDemandee = Math.max(1, Number(pageBrut) || 1);
+
+  const { lignes: clientsPage, total } = await rechercherAcquereursPage({
+    q: texte,
+    archives: modeArchives,
+    page: pageDemandee,
+    parPage: PAR_PAGE,
+  });
+
+  // Page hors bornes : jamais une page vide silencieuse, toujours une redirection explicite vers
+  // la dernière page valide (ADR-048).
+  if (clientsPage.length === 0 && total > 0 && pageDemandee > 1) {
+    const totalPagesReel = Math.max(1, Math.ceil(total / PAR_PAGE));
+    redirect(construireHref({ archives: modeArchives, q: texte, page: totalPagesReel }));
+  }
+
+  // Fallback démo (ADR-048) : préserve le comportement historique de listerClients() quand aucun
+  // acquéreur réel n'existe encore.
+  const aucunClientReel = total === 0 && !texte && !modeArchives;
+  const clientsDemo = aucunClientReel ? await listerClients() : undefined;
+  const clients = clientsDemo ?? clientsPage;
+  const totalAffiche = clientsDemo ? clientsDemo.length : total;
+  const totalPages = Math.max(1, Math.ceil(totalAffiche / PAR_PAGE));
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -42,7 +79,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
             {modeArchives ? "Acquéreurs archivés" : "Clients"}
           </h1>
           <p className="text-[14px] text-[#94a3b8] mt-1">
-            {clients.length} {modeArchives ? "acquéreurs archivés" : "acquéreurs"}
+            {totalAffiche} {modeArchives ? "acquéreurs archivés" : "acquéreurs"}
           </p>
         </div>
         {!modeArchives && (
@@ -57,17 +94,29 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       </div>
 
       <Link
-        href={modeArchives ? "/clients" : "/clients?archives=1"}
+        href={construireHref({ archives: !modeArchives, q: texte })}
         className="inline-block text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mb-6"
       >
         {modeArchives ? "← Voir les acquéreurs actifs" : "Voir les archives →"}
       </Link>
 
+      <ChampRecherche
+        action="/clients"
+        q={texte}
+        placeholder="Rechercher par nom, prénom…"
+        champsCaches={modeArchives ? { archives: "1" } : undefined}
+        hrefEffacer={construireHref({ archives: modeArchives })}
+      />
+
       <section>
         <SectionTitle>{modeArchives ? "Acquéreurs archivés" : "Acquéreurs"}</SectionTitle>
         {clients.length === 0 ? (
           <p className="text-[14px] text-[#94a3b8]">
-            {modeArchives ? "Aucun acquéreur archivé." : "Aucun acquéreur actif."}
+            {texte
+              ? `Aucun résultat pour « ${texte} ».`
+              : modeArchives
+                ? "Aucun acquéreur archivé."
+                : "Aucun acquéreur actif."}
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -97,6 +146,14 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               </Link>
             ))}
           </div>
+        )}
+
+        {!clientsDemo && (
+          <Pagination
+            page={pageDemandee}
+            totalPages={totalPages}
+            construireHref={(p) => construireHref({ archives: modeArchives, q: texte, page: p })}
+          />
         )}
       </section>
     </div>

@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Building2, ChevronRight, Plus } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
-import { listerBiens, listerBiensArchives } from "@/lib/bienRepository";
+import ChampRecherche from "@/components/ui/ChampRecherche";
+import Pagination from "@/components/ui/Pagination";
+import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
+
+const PAR_PAGE = 25;
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
@@ -17,12 +22,45 @@ function formatDate(iso: string): string {
 // flag, la liste figerait au moment du build.
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams: Promise<{ archives?: string }> };
+type PageProps = { searchParams: Promise<{ archives?: string; q?: string; page?: string }> };
+
+function construireHref(params: { archives?: boolean; q?: string; page?: number }): string {
+  const sp = new URLSearchParams();
+  if (params.archives) sp.set("archives", "1");
+  if (params.q) sp.set("q", params.q);
+  if (params.page && params.page > 1) sp.set("page", String(params.page));
+  const qs = sp.toString();
+  return qs ? `/biens?${qs}` : "/biens";
+}
 
 export default async function BiensPage({ searchParams }: PageProps) {
-  const { archives } = await searchParams;
+  const { archives, q, page: pageBrut } = await searchParams;
   const modeArchives = archives === "1";
-  const biens = modeArchives ? await listerBiensArchives() : await listerBiens();
+  const texte = q?.trim() || undefined;
+  const pageDemandee = Math.max(1, Number(pageBrut) || 1);
+
+  const { lignes: biensPage, total } = await rechercherBiensPage({
+    q: texte,
+    archives: modeArchives,
+    page: pageDemandee,
+    parPage: PAR_PAGE,
+  });
+
+  // Page hors bornes (ex. ?page=99 sur 2 pages de résultats) : jamais une page vide silencieuse,
+  // toujours une redirection explicite vers la dernière page valide (ADR-048).
+  if (biensPage.length === 0 && total > 0 && pageDemandee > 1) {
+    const totalPagesReel = Math.max(1, Math.ceil(total / PAR_PAGE));
+    redirect(construireHref({ archives: modeArchives, q: texte, page: totalPagesReel }));
+  }
+
+  // Fallback démo (ADR-048) : préserve le comportement historique de listerBiens() quand aucun
+  // bien réel n'existe encore — recherche/pagination n'a jamais de sens sur ce jeu figé, affiché
+  // uniquement sur la vue par défaut (pas de recherche, page 1, biens actifs).
+  const aucunBienReel = total === 0 && !texte && !modeArchives;
+  const biensDemo = aucunBienReel ? await listerBiens() : undefined;
+  const biens = biensDemo ?? biensPage;
+  const totalAffiche = biensDemo ? biensDemo.length : total;
+  const totalPages = Math.max(1, Math.ceil(totalAffiche / PAR_PAGE));
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -32,7 +70,7 @@ export default async function BiensPage({ searchParams }: PageProps) {
             {modeArchives ? "Biens archivés" : "Biens"}
           </h1>
           <p className="text-[14px] text-[#94a3b8] mt-1">
-            {biens.length} {modeArchives ? "biens archivés" : "mandats actifs"}
+            {totalAffiche} {modeArchives ? "biens archivés" : "mandats actifs"}
           </p>
         </div>
         {!modeArchives && (
@@ -47,17 +85,29 @@ export default async function BiensPage({ searchParams }: PageProps) {
       </div>
 
       <Link
-        href={modeArchives ? "/biens" : "/biens?archives=1"}
+        href={construireHref({ archives: !modeArchives, q: texte })}
         className="inline-block text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mb-6"
       >
         {modeArchives ? "← Voir les biens actifs" : "Voir les archives →"}
       </Link>
 
+      <ChampRecherche
+        action="/biens"
+        q={texte}
+        placeholder="Rechercher par référence, adresse, ville…"
+        champsCaches={modeArchives ? { archives: "1" } : undefined}
+        hrefEffacer={construireHref({ archives: modeArchives })}
+      />
+
       <section>
         <SectionTitle>{modeArchives ? "Biens archivés" : "Mandats en cours"}</SectionTitle>
         {biens.length === 0 ? (
           <p className="text-[14px] text-[#94a3b8]">
-            {modeArchives ? "Aucun bien archivé." : "Aucun bien actif."}
+            {texte
+              ? `Aucun résultat pour « ${texte} ».`
+              : modeArchives
+                ? "Aucun bien archivé."
+                : "Aucun bien actif."}
           </p>
         ) : (
           <div className="flex flex-col gap-2">
@@ -88,6 +138,14 @@ export default async function BiensPage({ searchParams }: PageProps) {
               </Link>
             ))}
           </div>
+        )}
+
+        {!biensDemo && (
+          <Pagination
+            page={pageDemandee}
+            totalPages={totalPages}
+            construireHref={(p) => construireHref({ archives: modeArchives, q: texte, page: p })}
+          />
         )}
       </section>
     </div>

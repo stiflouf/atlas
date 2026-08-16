@@ -1,8 +1,9 @@
-import { eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
+import type { PageResultat } from "@/types/pagination";
 
 type LigneAcquereur = typeof acquereursTable.$inferSelect;
 
@@ -63,6 +64,47 @@ export async function listerClientsArchives(): Promise<ProfilAcquereur[]> {
     console.error("[acquereurs] lecture Postgres indisponible :", erreur);
     return [];
   }
+}
+
+// ADR-048 — recherche + pagination serveur, réservée à la page /clients. Ne remplace jamais
+// listerClients() : le cockpit, le dashboard et les <select> de contexte continuent d'appeler la
+// fonction existante, intégralement, sans pagination (voir docs/adr/048-...). Aucun repli mock ici
+// (contrairement à listerClients()) : la recherche/pagination n'a pas de sens sur un jeu de
+// démonstration figé, exposé uniquement avant toute création réelle.
+//
+// Ordre déterministe explicite (ADR-048) : aucun repository de ce projet n'avait d'ORDER BY avant
+// cette ADR, l'ordre observé n'était donc jamais une garantie. `creeLe DESC` (le plus récent en
+// premier, cohérent avec la lecture habituelle d'une liste), `id DESC` en tie-breaker pour deux
+// lignes insérées à la même transaction/même timestamp — jamais un ordre implicite non déterministe
+// qui déplacerait silencieusement des lignes d'une page à l'autre.
+export async function rechercherAcquereursPage(params: {
+  q?: string;
+  archives: boolean;
+  page: number;
+  parPage: number;
+}): Promise<PageResultat<ProfilAcquereur>> {
+  const texte = params.q?.trim();
+  const conditionArchive = params.archives ? isNotNull(acquereursTable.archiveLe) : isNull(acquereursTable.archiveLe);
+  const conditionTexte: SQL | undefined = texte
+    ? or(ilike(acquereursTable.nom, `%${texte}%`), ilike(acquereursTable.prenom, `%${texte}%`))
+    : undefined;
+  const conditions = conditionTexte ? and(conditionArchive, conditionTexte) : conditionArchive;
+
+  const page = Math.max(1, Math.floor(params.page) || 1);
+  const offset = (page - 1) * params.parPage;
+
+  const [lignes, [{ total }]] = await Promise.all([
+    getDb()
+      .select()
+      .from(acquereursTable)
+      .where(conditions)
+      .orderBy(desc(acquereursTable.creeLe), desc(acquereursTable.id))
+      .limit(params.parPage)
+      .offset(offset),
+    getDb().select({ total: count() }).from(acquereursTable).where(conditions),
+  ]);
+
+  return { lignes: lignes.map(ligneVersAcquereur), total };
 }
 
 // Même règle de repli que getBienById() : dataset réel non vide => lookup DB uniquement, même

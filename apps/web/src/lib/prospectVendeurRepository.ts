@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq, ilike, or } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
@@ -52,33 +52,72 @@ async function listerToutesLesLignes(): Promise<ProspectVendeur[]> {
   return lignes.map(ligneVersProspectVendeur);
 }
 
-// Vue par défaut : non archivés, statut en cours (ni perdu, ni déjà converti). Le statut n'étant
-// jamais stocké (voir deriverStatutProspectVendeur), le filtrage se fait en mémoire après lecture
-// — volume attendu faible (produit mono-conseiller), pas besoin d'un CASE SQL.
-export async function listerProspectsVendeurs(): Promise<ProspectVendeur[]> {
-  const tous = await listerToutesLesLignes();
-  return tous.filter((p) => {
+export type VueProspectVendeur = "en_cours" | "perdus" | "convertis" | "archives";
+
+// Prédicat métier UNIQUE (ADR-048) : factorisé pour que listerProspectsVendeurs*() et la future
+// recherche paginée appliquent strictement les mêmes règles actif/perdu/converti/archivé — jamais
+// une seconde définition qui pourrait diverger. Le statut n'étant jamais stocké (voir
+// deriverStatutProspectVendeur), le filtrage reste en mémoire après lecture, inchangé depuis avant
+// cette ADR — seul le point d'appel est désormais partagé plutôt que dupliqué quatre fois.
+function predicatVue(vue: VueProspectVendeur): (p: ProspectVendeur) => boolean {
+  return (p) => {
+    if (vue === "archives") return Boolean(p.archiveLe);
     if (p.archiveLe) return false;
     const statut = deriverStatutProspectVendeur(p);
-    return statut !== "perdu" && statut !== "mandat_signe";
-  });
+    if (vue === "perdus") return statut === "perdu";
+    if (vue === "convertis") return statut === "mandat_signe";
+    return statut !== "perdu" && statut !== "mandat_signe"; // en_cours
+  };
+}
+
+// Vue par défaut : non archivés, statut en cours (ni perdu, ni déjà converti).
+export async function listerProspectsVendeurs(): Promise<ProspectVendeur[]> {
+  const tous = await listerToutesLesLignes();
+  return tous.filter(predicatVue("en_cours"));
 }
 
 export async function listerProspectsVendeursPerdus(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
-  return tous.filter((p) => !p.archiveLe && deriverStatutProspectVendeur(p) === "perdu");
+  return tous.filter(predicatVue("perdus"));
 }
 
 export async function listerProspectsVendeursConvertis(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
-  return tous.filter((p) => !p.archiveLe && deriverStatutProspectVendeur(p) === "mandat_signe");
+  return tous.filter(predicatVue("convertis"));
 }
 
 // Réservé aux prospects archivés — orthogonal au statut (un prospect archivé peut être dans
 // n'importe quel état, y compris perdu ou converti).
 export async function listerProspectsVendeursArchives(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
-  return tous.filter((p) => p.archiveLe);
+  return tous.filter(predicatVue("archives"));
+}
+
+// ADR-048 — recherche serveur (ILIKE nom/prénom) + ordre déterministe (`creeLe DESC, id DESC`,
+// voir bienRepository/clientRepository pour la justification), réservée à la page
+// /prospects-vendeurs. Le filtrage par vue réutilise EXACTEMENT predicatVue() ci-dessus — jamais
+// une seconde définition métier.
+//
+// Ne pagine PAS elle-même (contrairement à rechercherBiensPage()/rechercherAcquereursPage()) :
+// la page /prospects-vendeurs trie déjà la vue "en_cours" par échéance de tâche la plus proche
+// (comparerParEcheance, dépendant de tacheRepository — une donnée que ce repository n'a
+// délibérément pas vocation à connaître, ADR-007) avant de paginer. Retourner ici la liste complète
+// déjà filtrée/recherchée/ordonnée permet à la page d'appliquer ce tri métier existant sur
+// l'ensemble des résultats avant de découper la page demandée, sans le dupliquer ni le déplacer.
+// Volume réaliste mono-conseiller (quelques centaines de lignes) : sans coût mesurable.
+export async function rechercherProspectsVendeurs(params: { q?: string; vue: VueProspectVendeur }): Promise<ProspectVendeur[]> {
+  const texte = params.q?.trim();
+  const conditionTexte = texte
+    ? or(ilike(prospectsVendeursTable.nom, `%${texte}%`), ilike(prospectsVendeursTable.prenom, `%${texte}%`))
+    : undefined;
+
+  const lignes = await getDb()
+    .select()
+    .from(prospectsVendeursTable)
+    .where(conditionTexte)
+    .orderBy(desc(prospectsVendeursTable.creeLe), desc(prospectsVendeursTable.id));
+
+  return lignes.map(ligneVersProspectVendeur).filter(predicatVue(params.vue));
 }
 
 export async function getProspectVendeurById(id: string): Promise<ProspectVendeur | undefined> {
