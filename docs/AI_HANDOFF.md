@@ -37,7 +37,11 @@ un préremplissage Bien/Acquéreur/compte rendu verrouillé et revalidé depuis 
 préremplissage Bien/Acquéreur/Offre verrouillé et revalidé depuis une Offre acceptée, prix convenu
 jamais copié depuis le montant de l'offre — `offre.statut = "acceptee"` ne crée jamais
 automatiquement un Compromis, et une Offre acceptée ne peut être l'origine que d'au plus un
-Compromis (ADR-045).
+Compromis (ADR-045), et enfin `dateActe` désormais modifiable (report/effacement) tant que le
+compromis reste `en_cours`, un statut commercial du Bien où le modèle structuré (`compromis.statut`)
+prévaut désormais sur le jalon legacy `bien.compromisSigneLe` (corrige un badge « Compromis signé »
+fantôme possible après annulation structurée), et un wording clarifié pour la tâche automatique de
+préparation du dossier notarial (ADR-046).
 Détail complet : `docs/ARCHITECTURE.md`, chronologie : `docs/CHANGELOG_V1.md`.
 
 ## Ne pas supposer
@@ -204,6 +208,25 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
   doublon Offre×Offre d'ADR-044 (ici une provenance structurée unique, pas une nouvelle proposition
   commerciale). La garde historique « un seul compromis `en_cours` par bien » reste un blocage dur
   inchangé.
+- **`dateActe` (prévue) est modifiable uniquement pour un compromis `en_cours` (ADR-046)** —
+  `modifierDateActeAction`/`modifierDateActeCompromis`, volontairement séparées de
+  `changerStatutCompromisAction`/`marquerCompromisRealise` : un report de date n'est jamais une
+  transition de statut, et `dateActeReelle` (constatée) reste la seule posée par la transition
+  `realise`, toujours immuable ensuite. `dateActe` reste nullable et effaçable — jamais une
+  estimation inventée pour combler un report sans nouvelle date connue.
+- **`deriverStatutCommercial()` (`statutCommercialBien.ts`) donne priorité au modèle structuré sur
+  le jalon legacy depuis ADR-046** — dès qu'un compromis structuré non `annule` existe pour un bien,
+  il détermine seul `"compromis_signe"`, indépendamment de `bien.compromisSigneLe` (qui n'est
+  **jamais** effacé par `changerStatutCompromisAction`, transition `annule` — comportement
+  volontairement inchangé, la correction vit entièrement dans la dérivation). Le jalon legacy reste
+  un fallback, consulté **uniquement** en l'absence totale de compromis structuré pour ce bien —
+  ne jamais le supposer fiable dès qu'au moins un compromis structuré existe. `"vendu"` reste
+  toujours prioritaire, inchangé.
+- **Tâche `preparation_dossier_notaire_apres_compromis` : titre « Préparer le dossier notarial »
+  depuis ADR-046** (auparavant « … pour le notaire ») — wording uniquement, aucun changement de
+  comportement. Ne jamais supposer qu'Atlas contacte un notaire : aucun contact notaire structuré
+  n'existe, « Préparer un email » sur cette tâche résout toujours l'**acquéreur**, jamais un
+  notaire ni un vendeur inventé.
 - **Reprise après crash des `executions_automatisation` bloquées (ADR-038)** —
   `POST /api/automatisations/reprise` (secret `AUTOMATISATIONS_REPRISE_SECRET`, distinct de
   `AUTOMATISATIONS_SCAN_SECRET`) rejoue les exécutions restées `a_traiter`, sûr par construction
@@ -292,7 +315,8 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/offreRepository.ts` | Dont `listerOffresEnCoursPourPaire()` (avertissement doublon, ADR-044) |
 | `src/app/compromis/nouveau/page.tsx` | Route canonique de création de Compromis (ADR-045) — préremplissage Bien/Acquéreur/Offre revalidé serveur, verrouillage uniquement si tout le contexte est cohérent |
 | `src/components/compromis/CompromisFormulaire.tsx` | Formulaire Compromis partagé (ADR-045) — utilisé par `/compromis/nouveau` ET l'onglet « Compromis » de `BienTabs`, même Server Action `ajouterCompromisAction` |
-| `src/lib/compromisRepository.ts` | Dont `getCompromisParOffreId()` (garde offre-déjà-utilisée, fail-closed, ADR-045) |
+| `src/lib/compromisRepository.ts` | Dont `getCompromisParOffreId()` (garde offre-déjà-utilisée, fail-closed, ADR-045) et `modifierDateActeCompromis()` (report/effacement de la date d'acte prévue, ADR-046) |
+| `src/lib/statutCommercialBien.ts` | `deriverStatutCommercial()` — modèle structuré prioritaire sur le jalon legacy `bien.compromisSigneLe` depuis ADR-046 |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus

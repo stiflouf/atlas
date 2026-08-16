@@ -799,9 +799,25 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   (application), pas dans une contrainte `UNIQUE(offre_id)` : décision explicite ADR-045, un accès
   direct à la base pourrait toujours créer une incohérence. `getCompromisParOffreId()` détecterait
   alors plusieurs lignes et lèverait une exception explicite plutôt que de choisir arbitrairement.
-- **Aucun suivi post-compromis** (signature → suivi dossier notaire au-delà de la tâche automatique
-  déjà existante `preparation_dossier_notaire_apres_compromis`) — chantier potentiel non traité par
-  cette ADR.
+## Suivi du Compromis jusqu'à l'acte authentique (ADR-046)
+
+- **Aucun rappel/alerte temporel sur `dateActe`** (approche, dépassée, absente) — décision explicite :
+  aucun délai métier n'est établi dans le produit, et le scan temporel ADR-033 n'est aujourd'hui pas
+  un framework générique déjà prêt pour Compromis (il n'expose qu'une seule fonction, dédiée à
+  l'inactivité prospect vendeur). `dateActe` reste une donnée affichée et désormais modifiable, mais
+  purement informative — aucun signal si elle passe inaperçue.
+- **Aucune fiche Compromis navigable** (inchangé depuis ADR-045) — un compromis reste toujours
+  affiché en carte inline.
+- **Aucune communication vendeur après la signature d'un compromis** — la chaîne de communication
+  vendeur s'arrête au retour de visite (ADR-042) ; un vendeur n'est jamais notifié automatiquement,
+  ni même via une tâche suggérée, que son bien est sous compromis, réalisé, ou que le compromis est
+  tombé.
+- **Aucun événement métier pour `realise`/`annule`** — le tunnel événementiel ADR-032 s'arrête
+  structurellement à `compromis_signe`. Aucune automatisation n'en dépend aujourd'hui, donc aucun
+  besoin démontré, mais toute future automatisation post-signature nécessiterait ce chantier au
+  préalable.
+- **Pas de garde DB contre la réutilisation d'une Offre par plusieurs Compromis** (inchangé depuis
+  ADR-045) — politique purement applicative, aucun `UNIQUE(offre_id)`.
 
 ## Limites du moteur de matching
 

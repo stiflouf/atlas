@@ -168,10 +168,18 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
     nom: "Préparation du dossier notaire après compromis",
     description: "Crée une tâche de préparation du dossier notaire lorsqu'un compromis est signé.",
     typeEvenement: "compromis_signe",
+    // ADR-046 — titre/contexte reformulés : "Préparer le dossier pour le notaire" laissait
+    // entendre un envoi/contact direct vers un notaire, alors qu'Atlas ne connaît structurellement
+    // aucun contact notaire (aucune table, aucun champ, ADR-045). L'action réelle disponible
+    // ("Préparer un email") ne résout d'ailleurs jamais qu'un email vers l'ACQUÉREUR
+    // (resoudreContexteCommunicationDepuisTache, cas "compromis"), jamais un notaire. Nouveau
+    // wording décrivant une action interne au conseiller, sans laisser entendre un destinataire
+    // automatique. Aucune tâche déjà créée n'est renommée (ADR-032, non-rétroactif).
     construireTache: async (evenement) => {
       if (!evenement.compromisId) return undefined;
       return {
-        titre: "Préparer le dossier pour le notaire",
+        titre: "Préparer le dossier notarial",
+        contexte: "Rassembler les éléments nécessaires au suivi du compromis et à la préparation du dossier notarial.",
         type: "document",
         priorite: "normale",
         cible: { type: "compromis", id: evenement.compromisId },

@@ -1174,6 +1174,50 @@ distinct du montant de l'offre, blocage dur confirmé une fois le compromis en c
 sur l'autre offre acceptée du même bien), état honnête « offre déjà associée » confirmé après
 avoir débloqué le compromis, jalon `compromisSigneLe` posé.
 
+## 46. Suivi fiable du Compromis jusqu'à l'acte authentique
+
+Un audit préalable a écarté toute automatisation temporelle (aucun délai métier établi dans le
+produit, `dateActe` même pas modifiable) et ciblé deux problèmes réels. Premièrement, `dateActe`
+(date d'acte prévue), exploitée par la projection mensuelle du pipeline sur `/dashboard`, était
+immuable après création du compromis — alors qu'un report d'acte est un scénario courant.
+Deuxièmement, le statut commercial affiché du Bien pouvait devenir faux après l'annulation d'un
+compromis structuré : le jalon legacy `bien.compromisSigneLe` (ADR-014, antérieur aux entités
+Offre/Compromis) n'est jamais effacé par la transition structurée `annule`, laissant potentiellement
+un badge « Compromis signé » fantôme.
+
+Nouvelle Server Action `modifierDateActeAction`, volontairement distincte de
+`changerStatutCompromisAction` — un report de date n'est jamais une transition de statut. Autorisée
+uniquement pour un compromis `en_cours`, relit systématiquement l'état réel à chaque appel (protège
+contre une course entre l'affichage du formulaire et sa soumission). `dateActe` reste nullable et
+effaçable : un champ vide efface explicitement une date devenue inconnue, jamais remplacée par une
+estimation inventée — l'onglet Compromis affiche alors honnêtement « Date d'acte à définir » plutôt
+qu'une ancienne date fausse.
+
+`deriverStatutCommercial()` fait désormais basculer vers « compromis_signe » dès qu'un compromis
+structuré non `annule` existe pour le bien, indépendamment du jalon legacy — et surtout, si tous
+les compromis structurés d'un bien sont `annule`, le jalon legacy n'est plus jamais consulté pour ce
+statut. Le jalon reste un pur fallback de compatibilité pour les biens sans aucun compromis
+structuré, jamais touché par cette ADR (aucune synchronisation destructive, aucune migration). Le
+statut « vendu » reste inchangé, toujours prioritaire.
+
+Clarification de wording, sans changement de comportement : la tâche automatique générée par
+`preparation_dossier_notaire_apres_compromis` s'intitule désormais « Préparer le dossier notarial »
+(contexte : « Rassembler les éléments nécessaires au suivi du compromis et à la préparation du
+dossier notarial. ») plutôt que « … pour le notaire », qui laissait entendre un contact direct
+alors qu'Atlas ne connaît aucun contact notaire structuré et que la seule action disponible
+(« Préparer un email ») résout exclusivement l'acquéreur.
+
+**0 migration.** Tests ajoutés : `modifierDateActeCompromis` (repository, 4 tests), garde
+`modifierDateActeAction` (7 tests : renseigner/reporter/effacer, refus realise/annule, race
+GET-POST, bien archivé), dérivation statut commercial (6 tests purs + 2 tests d'intégration
+reproduisant précisément le parcours legacy et le parcours structuré annulé), pipeline dashboard
+reflétant un report sans donnée stale (1 test), wording tâche notarial + non-régression cible/email
+(2 tests) — suite complète du projet passante (1031 tests). Validation réelle en base + navigateur :
+« Date d'acte à définir » → renseignée → reportée → effacée, badge Bien passant correctement de
+« Compromis signé » à « En commercialisation » après une annulation structurée malgré le bouton
+legacy resté visible, passage à « Vendu » confirmé, nouveau titre/contexte de tâche confirmé au
+cockpit avec « Préparer un email » résolvant l'acquéreur.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

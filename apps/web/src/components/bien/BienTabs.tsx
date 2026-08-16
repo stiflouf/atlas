@@ -48,7 +48,7 @@ import { ajouterDocumentBienAction, corrigerClassementDocumentBienAction } from 
 import { changerStatutOffreAction } from "@/actions/offre";
 import OffreFormulaire from "@/components/offre/OffreFormulaire";
 import { lierVisiteAOffreAction, delierVisiteAction } from "@/actions/offreVisite";
-import { changerStatutCompromisAction } from "@/actions/compromis";
+import { changerStatutCompromisAction, modifierDateActeAction } from "@/actions/compromis";
 import CompromisFormulaire from "@/components/compromis/CompromisFormulaire";
 import {
   ajouterRemunerationAction,
@@ -1049,6 +1049,35 @@ export default function BienTabs({
                     </p>
                     {c.dateActe && (
                       <p className="text-[13px] text-[#94a3b8] mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
+                    )}
+                    {/* Date prévue modifiable tant que le compromis reste en_cours (ADR-046) —
+                        un report d'acte est courant et ne doit jamais laisser une date fausse.
+                        Formulaire volontairement minimal (un seul champ date, effaçable) : le
+                        champ vide au submit efface `dateActe` (NULL), jamais une estimation
+                        inventée. Pas d'action équivalente pour realise/annule : ces statuts
+                        terminaux représentent l'historique constaté, jamais rétrospectivement
+                        modifié via ce chemin. */}
+                    {c.statut === "en_cours" && !bien.archiveLe && (
+                      <div className="mt-1.5">
+                        {!c.dateActe && (
+                          <p className="text-[13px] text-[#94a3b8]">Date d&apos;acte à définir</p>
+                        )}
+                        <form action={modifierDateActeAction} className="flex items-end gap-2 mt-1">
+                          <input type="hidden" name="compromisId" value={c.id} />
+                          <input
+                            type="date"
+                            name="dateActe"
+                            defaultValue={c.dateActe ?? ""}
+                            className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                          />
+                          <button
+                            type="submit"
+                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
+                          >
+                            {c.dateActe ? "Modifier la date" : "Renseigner la date"}
+                          </button>
+                        </form>
+                      </div>
                     )}
                     {c.dateActeReelle && (
                       <p className="text-[13px] text-[#16a34a] mt-1">Acte signé le {formatDate(c.dateActeReelle)}</p>

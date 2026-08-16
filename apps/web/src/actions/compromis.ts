@@ -11,6 +11,7 @@ import {
   getCompromisParOffreId,
   marquerCompromisAnnule,
   marquerCompromisRealise,
+  modifierDateActeCompromis,
   listerCompromisPourBien,
 } from "@/lib/compromisRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
@@ -147,6 +148,38 @@ export async function changerStatutCompromisAction(formData: FormData): Promise<
     }
     await marquerCompromisAnnule(compromisId, dateAnnulation, motifAnnulation);
   }
+
+  redirect(`/biens/${compromisActuel.bienId}`);
+}
+
+// Modification de la date d'acte PRÉVUE (ADR-046) — jamais une transition de statut, action
+// séparée et volontairement distincte de changerStatutCompromisAction. Refus explicite (throw) si
+// le compromis est introuvable, si le bien ou l'acquéreur est archivé, ou si le compromis n'est
+// plus 'en_cours' — les statuts terminaux (realise/annule) représentent l'historique constaté,
+// jamais rétrospectivement modifié via ce chemin (seule dateActeReelle, posée atomiquement avec la
+// transition 'realise', fait foi à ce stade). Relit le compromis à chaque appel, jamais une
+// confiance dans un état affiché au GET : une course entre l'affichage du formulaire et sa
+// soumission (le compromis devient 'realise'/'annule' entre-temps) est donc refusée ici, pas
+// seulement masquée côté UI. `dateActe` reste nullable : un champ vide efface explicitement la
+// date (report sans nouvelle date connue) — jamais remplacé par une estimation inventée.
+export async function modifierDateActeAction(formData: FormData): Promise<void> {
+  const compromisId = String(formData.get("compromisId") ?? "");
+  const dateActe = parseDateOptionnelle(formData.get("dateActe"));
+
+  const compromisActuel = await getCompromisById(compromisId);
+  if (!compromisActuel) throw new Error("Compromis introuvable.");
+  if (compromisActuel.statut !== "en_cours") {
+    throw new Error("La date d'acte prévue n'est modifiable que pour un compromis en cours.");
+  }
+
+  const [bien, acquereur] = await Promise.all([
+    getBienById(compromisActuel.bienId),
+    getClientById(compromisActuel.acquereurId),
+  ]);
+  if (bien?.archiveLe) throw new Error("Impossible de modifier un compromis sur un bien archivé.");
+  if (acquereur?.archiveLe) throw new Error("Impossible de modifier un compromis pour un acquéreur archivé.");
+
+  await modifierDateActeCompromis(compromisId, dateActe);
 
   redirect(`/biens/${compromisActuel.bienId}`);
 }

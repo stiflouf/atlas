@@ -27,7 +27,7 @@ const {
 const { creerBien, archiverBien } = await import("./bienRepository");
 const { creerAcquereur } = await import("./clientRepository");
 const { enregistrerOffre, changerStatutOffre } = await import("./offreRepository");
-const { enregistrerCompromis, marquerCompromisAnnule, marquerCompromisRealise } = await import(
+const { enregistrerCompromis, marquerCompromisAnnule, marquerCompromisRealise, modifierDateActeCompromis } = await import(
   "./compromisRepository"
 );
 const { enregistrerCompteRenduVisite } = await import("./compteRenduVisiteRepository");
@@ -257,6 +257,30 @@ describe("dashboardRepository — chargerPipeline", () => {
     const { pipelinePrevisionnelParMois } = await chargerPipeline();
 
     expect(pipelinePrevisionnelParMois).toContainEqual({ mois: "2031-04", montant: 666000 });
+  });
+
+  // ADR-046 — chargerPipeline() n'a jamais de cache/snapshot : une modification de dateActe
+  // (report) doit être immédiatement reflétée à la prochaine lecture, sans donnée dupliquée pour
+  // l'ancien mois.
+  it("pipelinePrevisionnelParMois reflète un report de dateActe (A -> B), sans doublon pour l'ancien mois", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("PIPELINE-REPORT-DATEACTE");
+    const c = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 555000,
+      dateSignature: "2026-08-01",
+      dateActe: "2031-05-10",
+    });
+    idsCompromisCrees.push(c.id);
+
+    const avant = await chargerPipeline();
+    expect(avant.pipelinePrevisionnelParMois).toContainEqual({ mois: "2031-05", montant: 555000 });
+
+    await modifierDateActeCompromis(c.id, "2031-06-15");
+
+    const apres = await chargerPipeline();
+    expect(apres.pipelinePrevisionnelParMois).toContainEqual({ mois: "2031-06", montant: 555000 });
+    expect(apres.pipelinePrevisionnelParMois.find((p) => p.mois === "2031-05")).toBeUndefined();
   });
 
   it("exclut une offre en_cours sur un bien archivé (égalité avant/après)", async () => {

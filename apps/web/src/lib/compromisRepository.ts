@@ -130,6 +130,21 @@ export async function marquerCompromisAnnule(
   return ligne ? ligneVersCompromis(ligne) : undefined;
 }
 
+// Modification de la date d'acte PRÉVUE (ADR-046) — jamais dateActeReelle (constatée, ADR-017,
+// posée uniquement par marquerCompromisRealise). Insertion pure, aucune garde métier interne (le
+// statut 'en_cours' est vérifié par la Server Action appelante, même séparation que le reste de ce
+// fichier) : cette fonction accepte `undefined` pour effacer explicitement une date devenue
+// obsolète (report sans nouvelle date connue) — jamais une estimation inventée pour combler NULL.
+export async function modifierDateActeCompromis(id: string, dateActe: string | undefined): Promise<Compromis | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await getDb()
+    .update(compromisTable)
+    .set({ dateActe: dateActe ?? null })
+    .where(eq(compromisTable.id, id))
+    .returning();
+  return ligne ? ligneVersCompromis(ligne) : undefined;
+}
+
 // Écriture atomique dédiée à la transition 'realise' (ADR-017) : statut et dateActeReelle posés
 // dans le même UPDATE, jamais deux écritures séparées — aucune fenêtre où le compromis serait
 // 'realise' sans dateActeReelle. dateActe (prévue) n'est jamais touchée ici.

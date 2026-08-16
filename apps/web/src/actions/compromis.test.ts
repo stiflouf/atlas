@@ -16,13 +16,15 @@ const {
   evenementsMetier: evenementsMetierTable,
   executionsAutomatisation: executionsAutomatisationTable,
 } = await import("@/db/schema");
-const { creerBien, archiverBien, getBienById } = await import("@/lib/bienRepository");
+const { creerBien, archiverBien, getBienById, annulerCompromis: annulerCompromisJalonLegacy } = await import(
+  "@/lib/bienRepository"
+);
+const { deriverStatutCommercial } = await import("@/lib/statutCommercialBien");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
 const { enregistrerOffre, changerStatutOffre } = await import("@/lib/offreRepository");
-const { enregistrerCompromis, listerCompromisPourBien, getCompromisById } = await import(
-  "@/lib/compromisRepository"
-);
-const { ajouterCompromisAction, changerStatutCompromisAction } = await import("./compromis");
+const { enregistrerCompromis, listerCompromisPourBien, getCompromisById, marquerCompromisRealise, marquerCompromisAnnule } =
+  await import("@/lib/compromisRepository");
+const { ajouterCompromisAction, changerStatutCompromisAction, modifierDateActeAction } = await import("./compromis");
 
 const idsCompromisCrees: string[] = [];
 const idsOffresCrees: string[] = [];
@@ -530,5 +532,156 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     expect(apres?.dateAnnulation).toBe("2026-08-15");
     expect(apres?.motifAnnulation).toBe("financement_refuse");
     expect(apres?.prixConvenu).toBe(300000);
+  });
+});
+
+describe("statut commercial du Bien — priorité au modèle structuré (ADR-046 §26/42)", () => {
+  it("compromis structuré en_cours réel + jalon legacy effacé manuellement via l'ancien mécanisme -> statut reste compromis_signe", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("LEGACY-JALON-EFFACE");
+    const compromis = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromis.id);
+
+    // Simule exactement le vieux parcours indépendant (src/actions/statutCommercialBien.ts,
+    // annulerCompromisAction) : efface le jalon legacy SANS jamais toucher la ligne compromis
+    // structurée elle-même (les deux mécanismes sont totalement disjoints).
+    await annulerCompromisJalonLegacy(bien.id);
+    const bienApres = await getBienById(bien.id);
+    expect(bienApres?.compromisSigneLe).toBeUndefined();
+
+    const compromisDuBien = await listerCompromisPourBien(bien.id);
+    expect(deriverStatutCommercial(bienApres!, compromisDuBien)).toBe("compromis_signe");
+  });
+
+  it("compromis structuré annulé via le vrai parcours + jalon legacy jamais effacé -> statut n'affiche plus compromis_signe (test de régression principal)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("ANNULATION-STRUCTUREE");
+    const compromis = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromis.id);
+    // enregistrerCompromis() seul (repository, utilisé ci-dessus sans passer par la Server Action)
+    // ne pose pas compromisSigneLe — reproduit explicitement l'état laissé par le vrai parcours
+    // ajouterCompromisAction (qui pose ce jalon dans la même transaction, ADR-016).
+    const { marquerCompromisSigne } = await import("@/lib/bienRepository");
+    await marquerCompromisSigne(bien.id);
+    const bienAvantAnnulation = await getBienById(bien.id);
+    expect(bienAvantAnnulation?.compromisSigneLe).toBeDefined();
+
+    await changerStatutCompromisAction(
+      formData({ compromisId: compromis.id, statut: "annule", dateAnnulation: "2026-08-10", motifAnnulation: "desaccord_prix" })
+    ).catch(() => {});
+
+    // Le jalon legacy n'a jamais été touché par la transition structurée (comportement
+    // volontairement inchangé, §27 du brief) — la correction vit entièrement dans la dérivation.
+    const bienApres = await getBienById(bien.id);
+    expect(bienApres?.compromisSigneLe).toBeDefined();
+
+    const compromisDuBien = await listerCompromisPourBien(bien.id);
+    expect(deriverStatutCommercial(bienApres!, compromisDuBien)).not.toBe("compromis_signe");
+  });
+});
+
+describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
+  it("renseigne une date d'acte absente sur un compromis en_cours", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-RENSEIGNER");
+    const compromisCree = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05" });
+    idsCompromisCrees.push(compromisCree.id);
+    expect(compromisCree.dateActe).toBeUndefined();
+
+    await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-10-15" })).catch(() => {});
+
+    const apres = await getCompromisById(compromisCree.id);
+    expect(apres?.dateActe).toBe("2026-10-15");
+  });
+
+  it("reporte une date d'acte existante (A -> B)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-REPORTER");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05", dateActe: "2026-10-15",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-11-02" })).catch(() => {});
+
+    const apres = await getCompromisById(compromisCree.id);
+    expect(apres?.dateActe).toBe("2026-11-02");
+  });
+
+  it("efface une date d'acte devenue inconnue (champ vide -> NULL, jamais une estimation inventée)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-EFFACER");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05", dateActe: "2026-10-15",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "" })).catch(() => {});
+
+    const apres = await getCompromisById(compromisCree.id);
+    expect(apres?.dateActe).toBeUndefined();
+  });
+
+  it("refuse explicitement (throw) la modification sur un compromis realise", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-REALISE");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05", dateActe: "2026-10-15",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+    await marquerCompromisRealise(compromisCree.id, "2026-10-16");
+
+    await expect(
+      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).rejects.toThrow(/en cours/);
+
+    const inchange = await getCompromisById(compromisCree.id);
+    expect(inchange?.dateActe).toBe("2026-10-15");
+  });
+
+  it("refuse explicitement (throw) la modification sur un compromis annule", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-ANNULE");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05", dateActe: "2026-10-15",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+    await marquerCompromisAnnule(compromisCree.id, "2026-09-01", "desaccord_prix");
+
+    await expect(
+      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).rejects.toThrow(/en cours/);
+
+    const inchange = await getCompromisById(compromisCree.id);
+    expect(inchange?.dateActe).toBe("2026-10-15");
+  });
+
+  it("refuse explicitement (throw) une race : compromis devenu réalisé entre le GET affiché et le POST", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-RACE");
+    const compromisCree = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05" });
+    idsCompromisCrees.push(compromisCree.id);
+
+    // Simule un GET qui a affiché le formulaire alors que le compromis était encore en_cours,
+    // puis un changement d'état survenu avant la soumission — la Server Action doit relire l'état
+    // réel, jamais faire confiance à un instantané côté client.
+    await marquerCompromisRealise(compromisCree.id, "2026-09-01");
+
+    await expect(
+      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).rejects.toThrow(/en cours/);
+  });
+
+  it("refuse explicitement (throw) sur un bien archivé", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-BIEN-ARCHIVE");
+    const compromisCree = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05" });
+    idsCompromisCrees.push(compromisCree.id);
+    await archiverBien(bien.id);
+
+    await expect(
+      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).rejects.toThrow(/archivé/);
   });
 });

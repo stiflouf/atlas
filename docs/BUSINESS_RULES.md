@@ -681,6 +681,40 @@ provenance structurée unique, pas une nouvelle proposition commerciale légitim
 compromis, aucune tâche n'est terminée automatiquement, `compromis_signe` et l'automatisation
 `preparation_dossier_notaire_apres_compromis` restent strictement inchangés.
 
+## Suivi du Compromis jusqu'à l'acte authentique (ADR-046)
+
+**`dateActe` (date d'acte prévue) devient modifiable, uniquement pour un compromis `en_cours`** —
+nouvelle Server Action `modifierDateActeAction` (`src/actions/compromis.ts`), volontairement
+distincte de `changerStatutCompromisAction` : un report d'acte n'est jamais une transition de
+statut. Refusée explicitement pour `realise`/`annule` (historique constaté, jamais rétrospectivement
+modifié). Champ nullable et effaçable — un champ vide efface explicitement la date (report sans
+nouvelle date connue), jamais remplacée par une estimation inventée. UI dans l'onglet Compromis de
+`BienTabs` : « Date d'acte à définir » / « Renseigner la date » si absente, « Acte prévu le… » /
+« Modifier la date » si présente.
+
+**`dateActeReelle` inchangée** : reste exclusivement posée par `marquerCompromisRealise()`,
+atomiquement avec la transition `en_cours → realise`, jamais modifiable ensuite.
+
+**Statut commercial du Bien — modèle structuré prioritaire sur le jalon legacy** :
+`deriverStatutCommercial()` (`src/lib/statutCommercialBien.ts`) fait basculer vers
+`"compromis_signe"` dès qu'un compromis structuré non `annule` existe pour le bien —
+**indépendamment** de `bien.compromisSigneLe` (jalon legacy ADR-014, jamais effacé par
+`changerStatutCompromisAction`). Si tous les compromis structurés d'un bien sont `annule`, le jalon
+legacy n'est **plus jamais consulté** pour `"compromis_signe"` — corrige le badge fantôme qui
+pouvait survivre à une annulation structurée. Le jalon legacy reste un pur fallback de
+compatibilité, utilisé uniquement en l'absence totale de compromis structuré pour ce bien.
+`"vendu"` (compromis `realise` + `dateActeReelle`) reste prioritaire sur tout, comportement
+inchangé. Aucune écriture supplémentaire sur `bien.compromisSigneLe` — la correction vit
+entièrement dans la dérivation.
+
+**Tâche `preparation_dossier_notaire_apres_compromis` — wording clarifié** : titre
+`"Préparer le dossier notarial"` (au lieu de « … pour le notaire »), nouveau contexte
+*« Rassembler les éléments nécessaires au suivi du compromis et à la préparation du dossier
+notarial. »* — évite de laisser entendre un contact/envoi automatique vers un notaire, qu'Atlas ne
+connaît structurellement pas. Comportement fonctionnel strictement inchangé (déclencheur,
+activation, cible, priorité, type, absence d'échéance) ; « Préparer un email » continue de résoudre
+exclusivement l'acquéreur, jamais un notaire ni un vendeur inventé.
+
 ## Onglet Visites → Effectuées de la fiche bien
 
 **Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section

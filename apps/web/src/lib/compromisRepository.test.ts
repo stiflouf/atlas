@@ -26,6 +26,7 @@ const {
   enregistrerCompromis,
   marquerCompromisAnnule,
   marquerCompromisRealise,
+  modifierDateActeCompromis,
 } = await import("./compromisRepository");
 
 const idsCompromisCrees: string[] = [];
@@ -263,5 +264,41 @@ describe("compromisRepository (intégration Postgres)", () => {
     idsCompromisCrees.push(c2.id);
 
     await expect(getCompromisParOffreId(offre.id)).rejects.toThrow(/Incohérence/);
+  });
+
+  it("modifierDateActeCompromis() retourne undefined pour un id non-UUID, sans erreur de cast", async () => {
+    await expect(modifierDateActeCompromis("compromis-mock", "2026-10-15")).resolves.toBeUndefined();
+  });
+
+  it("modifierDateActeCompromis() renseigne une date d'acte absente (ADR-046)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("009");
+    const compromisCree = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05" });
+    idsCompromisCrees.push(compromisCree.id);
+    expect(compromisCree.dateActe).toBeUndefined();
+
+    const modifie = await modifierDateActeCompromis(compromisCree.id, "2026-10-15");
+    expect(modifie?.dateActe).toBe("2026-10-15");
+  });
+
+  it("modifierDateActeCompromis() reporte une date d'acte existante (ADR-046)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("010");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05", dateActe: "2026-10-15",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    const modifie = await modifierDateActeCompromis(compromisCree.id, "2026-11-02");
+    expect(modifie?.dateActe).toBe("2026-11-02");
+  });
+
+  it("modifierDateActeCompromis() efface une date d'acte devenue inconnue (undefined -> NULL, ADR-046)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("011");
+    const compromisCree = await enregistrerCompromis({
+      bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05", dateActe: "2026-10-15",
+    });
+    idsCompromisCrees.push(compromisCree.id);
+
+    const modifie = await modifierDateActeCompromis(compromisCree.id, undefined);
+    expect(modifie?.dateActe).toBeUndefined();
   });
 });
