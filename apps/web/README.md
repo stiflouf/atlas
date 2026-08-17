@@ -1,9 +1,12 @@
 # Atlas — `apps/web`
 
-Ce document est l'onboarding développeur. Pour la vision produit, voir le
-[`README.md` racine](../../README.md). Pour la documentation technique approfondie, voir
-[`docs/`](../../docs/) (architecture, modèle de données, règles métier, parcours, mode démo vs
-réel, décisions architecturales, limites connues, changelog).
+> **Nouvel ingénieur ?** La porte d'entrée canonique est
+> [`docs/DEVELOPER_ONBOARDING.md`](../../docs/DEVELOPER_ONBOARDING.md) — ce document reste une
+> référence bootstrap plus détaillée (variables d'environnement, connexion Google, routes).
+
+Pour la vision produit, voir le [`README.md` racine](../../README.md). Pour la documentation
+technique approfondie, voir [`docs/`](../../docs/README.md) (architecture, modèle de données,
+règles métier, parcours, mode démo vs réel, décisions architecturales, limites connues, changelog).
 
 ## Qu'est-ce qu'Atlas ?
 

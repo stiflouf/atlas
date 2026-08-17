@@ -5,8 +5,10 @@
 ---
 
 > **Développeur ?** Ce document est la vision produit. Pour cloner, installer et comprendre le
-> code, direction [`apps/web/README.md`](apps/web/README.md) — et [`docs/`](docs/) pour la
-> documentation technique approfondie (architecture, modèle de données, règles métier, décisions).
+> code, commencer par [`docs/DEVELOPER_ONBOARDING.md`](docs/DEVELOPER_ONBOARDING.md) (porte
+> d'entrée canonique) — voir aussi [`apps/web/README.md`](apps/web/README.md) et
+> [`docs/`](docs/README.md) pour la documentation technique approfondie (architecture, modèle de
+> données, règles métier, décisions).
 
 ---
 

@@ -5,7 +5,8 @@ projet. **Il ne remplace jamais le code comme source de vérité** — en cas de
 divergence apparente entre ce document et le code, le code a toujours raison ; corrige ce
 document plutôt que de lui faire confiance aveuglément. Aucun secret n'est présent ici (ni dans
 aucun fichier de `docs/`) — les noms de variables d'environnement sont cités, jamais leurs
-valeurs.
+valeurs. Porte d'entrée équivalente pour un ingénieur humain :
+[`docs/DEVELOPER_ONBOARDING.md`](DEVELOPER_ONBOARDING.md).
 
 ## État actuel du projet
 
