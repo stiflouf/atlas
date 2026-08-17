@@ -33,12 +33,18 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.local.example
+!.env.test.example
 
 # vercel
 .vercel
 
 # stockage local des documents réels (voir src/lib/stockageDocuments.ts) — jamais commité
 /stockage-documents/
+
+# artefacts Playwright (audit V1 Candidate, apps/web/e2e/) — jamais commités
+/playwright-report/
+/test-results/
+/blob-report/
 
 # typescript
 *.tsbuildinfo

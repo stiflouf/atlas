@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 // Test d'intégration : exerce la vraie base Postgres locale (pas de mock), même principe que
@@ -63,12 +63,20 @@ describe("clientRepository (intégration Postgres)", () => {
       .where(eq(acquereursTable.id, cree.id));
     const modifieLeAvant = ligneAvant.modifieLe.getTime();
 
-    await new Promise((r) => setTimeout(r, 10));
+    // Horloge contrôlée plutôt qu'une attente réelle arbitraire (fragile sous charge, audit V1
+    // Candidate) : seul `Date` est simulé (toFake: ["Date"]) — les timers réels du client Postgres
+    // (setTimeout/setImmediate internes au pool de connexions) continuent de fonctionner normalement.
+    // `modifieLe` de la ligne créée provient de l'horloge Postgres (defaultNow()), pas de Node — on
+    // pousse donc l'horloge Node explicitement au-delà de cette valeur avant l'UPDATE JS.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(modifieLeAvant + 1000));
 
     const modifie = await modifierAcquereur(
       cree.id,
       acquereurTest({ prenom: "Prénom modifié", necessiteParking: true })
     );
+
+    vi.useRealTimers();
 
     expect(modifie).toBeDefined();
     expect(modifie?.prenom).toBe("Prénom modifié");

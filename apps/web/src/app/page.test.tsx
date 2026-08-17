@@ -32,9 +32,15 @@ afterAll(async () => {
 });
 
 async function creerBienDeTest(suffixe: string) {
+  // Titre/référence uniques par exécution (Date.now(), même convention que les titres de tâche
+  // ci-dessous) : un run interrompu (kill/OOM) avant l'afterAll de ce fichier peut laisser un bien
+  // orphelin avec cet id de test — sans suffixe temporel, le run suivant créerait un second bien au
+  // titre strictement identique, dupliquant l'assertion de comptage global (audit V1 Candidate,
+  // classe de flakiness "état global").
+  const horodatage = Date.now();
   const bien = await creerBien({
-    reference: `[test réel] COCKPIT-${suffixe}`,
-    titre: `Bien cockpit ${suffixe}`,
+    reference: `[test réel] COCKPIT-${suffixe}-${horodatage}`,
+    titre: `Bien cockpit ${suffixe} ${horodatage}`,
     type: "appartement",
     adresse: "1 rue du Test",
     ville: "Testville",

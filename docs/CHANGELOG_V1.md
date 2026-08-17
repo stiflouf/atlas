@@ -1340,6 +1340,41 @@ complète du projet passante, build de production propre. Code prêt à utiliser
 la configuration externe (volume attaché, variable positionnée, persistance validée par un
 redéploiement réel) reste à effectuer séparément.
 
+## Stabilisation V1 Candidate (hors ADR)
+
+Passe de stabilisation technique, pas une nouvelle fonctionnalité métier — aucune ADR créée. Suite
+à l'audit final V1 Candidate ayant reproduit une classe de flakiness plus large que prévu (3
+fichiers distincts touchés sur 2 exécutions, pas seulement les 2 historiquement connus).
+
+Corrections de causes racines démontrées : tie-break déterministe (`desc(id)`) sur
+`getDernierRunScanPourRegle()` (deux runs peuvent partager un `demarreLe` à la milliseconde) ;
+horloge Node contrôlée (`vi.useFakeTimers({toFake:["Date"]})`) remplaçant un `setTimeout` arbitraire
+dans `clientRepository.test.ts`/`bienRepository.test.ts` ; fixture du cockpit (`page.test.tsx`)
+rendue unique par exécution (un process interrompu avant nettoyage pouvait laisser une ligne
+orpheline au même libellé). Validé par 3 exécutions complètes consécutives 100 % vertes
+(146 fichiers, 1198 tests) + stress ciblé (10 exécutions supplémentaires des fichiers concernés,
+0 échec).
+
+Garde-fou test/production ajouté (`src/db/resoudreDatabaseUrlTest.ts` + `vitest.setup.ts`,
+point de résolution unique de `DATABASE_URL` pour la suite, jamais 93 fichiers modifiés
+individuellement) : `pnpm test` ne peut plus utiliser implicitement une `DATABASE_URL` de
+production déjà présente dans le shell — base `atlas_test` locale dédiée par défaut,
+`ATLAS_TEST_DATABASE_URL` pour surcharger explicitement.
+
+Infrastructure E2E minimale ajoutée (Playwright, `apps/web/e2e/`) — deux smoke seulement : tunnel
+cœur Atlas (session réelle scellée via `iron-session`, jamais un contournement d'authentification,
+Bien → Acquéreur → Compromis → déconnexion) et documents/Pack Notaire/transmission (ADR-049,
+premier passage navigateur réel de ce parcours : upload, téléchargement ZIP, enregistrement de
+transmission, historique, manifeste). Deux passages complets consécutifs, verts, cleanup vérifié
+sans résidu. Jamais exécutée par `pnpm test` ni par une CI (toujours absente, hors périmètre de
+cette passe).
+
+Procédure de migration production documentée (`docs/PROCEDURE_MIGRATION_PRODUCTION.md`) et runbook
+pilote créé (`docs/PILOT_RUNBOOK.md`, point d'entrée opérationnel canonique).
+
+**0 migration** (aucun changement de schéma). Build de production propre, aucune nouvelle route
+publique.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

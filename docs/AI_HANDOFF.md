@@ -333,6 +333,9 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/actions/transmissionDossierNotaire.ts` | `enregistrerTransmissionDossierNotaireAction` (ADR-049) — revalide intégralement Compromis/Bien/documents/taille côté serveur, calcule SHA-256 avant tout INSERT |
 | `src/lib/stockageDocuments.ts` | Stockage documentaire (ADR-050) — SEUL point de lecture de `ATLAS_DOCUMENT_STORAGE_DIR` dans tout le projet ; `verifierDisponibiliteStockageDocuments()` fail-closed en production (jamais de création automatique de la racine) ; `ErreurStockageDocumentsIndisponible` distincte d'un document précis absent (`undefined`) |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
+| `src/db/resoudreDatabaseUrlTest.ts` | Garde-fou test/production (stabilisation V1 Candidate) — SEUL point de résolution de la `DATABASE_URL` utilisée par `pnpm test`/`pnpm test:e2e` ; ignore délibérément une `DATABASE_URL` ambiante non reconnue comme locale de dev, jamais lue pour s'en servir |
+| `apps/web/vitest.setup.ts` | `setupFiles` Vitest — fixe `DATABASE_URL` via `resoudreDatabaseUrlTest()` AVANT le chargement de chaque fichier de test ; les `process.env.DATABASE_URL ??= ...` déjà présents dans ~90 fichiers de test deviennent des no-op, jamais besoin de les modifier un par un |
+| `apps/web/e2e/` | Infrastructure E2E Playwright (stabilisation V1 Candidate) — `env.ts` (config serveur E2E dédiée), `session.ts` (injection d'une vraie session Atlas scellée, jamais un contournement d'auth), `nettoyage.ts` (purge post-smoke respectant les FK), `coeur.smoke.spec.ts`/`documents-adr049.smoke.spec.ts` (les deux seuls smoke, jamais une suite E2E étendue) |
 
 ## Pièges connus
 
@@ -359,6 +362,17 @@ IO Postgres) → `redirect()` → page re-render.
   `await exigerSessionAtlas();`** (ADR-047) — `src/actions/gardeSessionAtlas.structurel.test.ts`
   échoue sinon (analyse AST, pas un simple grep). Le Proxy (`src/proxy.ts`) ne protège jamais les
   Server Actions à lui seul.
+- **Toute nouvelle requête `ORDER BY <colonne temporelle> DESC LIMIT 1` sur une table à fort volume
+  d'écritures séquentielles doit inclure un tie-break déterministe** (ex. `, desc(id)`) — deux
+  lignes insérées à quelques millisecondes d'intervalle (`defaultNow()`) peuvent partager un
+  timestamp identique ; sans second critère, la ligne retournée devient non déterministe sous
+  charge (cause racine de la flakiness historique de `scanTemporel.test.ts`, corrigée dans
+  `runScanAutomatisationRepository.ts` — stabilisation V1 Candidate).
+- **Un test d'intégration qui compte des occurrences dans un rendu global (cockpit, dashboard) doit
+  utiliser des données rendues uniques par exécution** (suffixe `Date.now()` ou équivalent) — un
+  process interrompu avant son `afterAll` (kill/OOM) peut laisser une ligne orpheline au même
+  libellé littéral qu'une exécution suivante, faisant compter deux occurrences là où le test en
+  attend une (cause racine observée sur `page.test.tsx`, stabilisation V1 Candidate).
 
 ## Décisions déjà prises — ne pas rouvrir sans nouvelle ADR
 
@@ -495,8 +509,10 @@ Depuis `apps/web/` :
 npx tsc --noEmit -p tsconfig.json   # typecheck
 pnpm test                            # vitest — nécessite Postgres local démarré et migré
 pnpm build                           # build de production Next.js
+pnpm test:e2e                        # smoke Playwright (2 scénarios) — jamais dans pnpm test/CI
 ```
 
-Un Postgres local est nécessaire pour `pnpm test` (tests d'intégration repository) et pour tester
+Un Postgres local est nécessaire pour `pnpm test` (tests d'intégration repository, base `atlas_test`
+dédiée résolue automatiquement — voir `src/db/resoudreDatabaseUrlTest.ts`) et pour tester
 manuellement l'application — voir `apps/web/README.md`. Aucune de ces commandes ne doit être
 sautée avant de considérer une tâche terminée.

@@ -42,12 +42,17 @@ export async function terminerRunScanAutomatisation(
     .where(eq(runsScanAutomatisation.id, id));
 }
 
+// Tie-break sur `id` (uuid aléatoire, sans signification chronologique) : deux runs peuvent
+// partager le même `demarreLe` (defaultNow() à la milliseconde, deux inserts rapprochés) — sans ce
+// second critère, `ORDER BY demarreLe DESC LIMIT 1` devient non déterministe entre égalités. Le
+// rôle de ce tie-break est uniquement de rendre la sélection déterministe, jamais de représenter un
+// ordre temporel supplémentaire (audit V1 Candidate, classe de flakiness scanTemporel.test.ts).
 export async function getDernierRunScanPourRegle(regleCode: CodeRegleAutomatisation): Promise<RunScanAutomatisation | undefined> {
   const [ligne] = await getDb()
     .select()
     .from(runsScanAutomatisation)
     .where(eq(runsScanAutomatisation.regleCode, regleCode))
-    .orderBy(desc(runsScanAutomatisation.demarreLe))
+    .orderBy(desc(runsScanAutomatisation.demarreLe), desc(runsScanAutomatisation.id))
     .limit(1);
   return ligne ? ligneVersRun(ligne) : undefined;
 }

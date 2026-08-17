@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 // Test d'intégration : exerce la vraie base Postgres locale (pas de mock), même principe que
@@ -67,9 +67,14 @@ describe("bienRepository (intégration Postgres)", () => {
     const [ligneAvant] = await getDb().select().from(biensTable).where(eq(biensTable.id, cree.id));
     const modifieLeAvant = ligneAvant.modifieLe.getTime();
 
-    await new Promise((r) => setTimeout(r, 10));
+    // Horloge contrôlée plutôt qu'une attente réelle arbitraire (fragile sous charge, audit V1
+    // Candidate, même correction que clientRepository.test.ts) : seul `Date` est simulé.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(modifieLeAvant + 1000));
 
     const modifie = await modifierBien(cree.id, bienTest({ titre: "Titre modifié", ascenseur: true }));
+
+    vi.useRealTimers();
 
     expect(modifie).toBeDefined();
     expect(modifie?.titre).toBe("Titre modifié");

@@ -935,7 +935,24 @@ pas pour plusieurs sur la même instance.
   `noteBienRepository.test.ts`, `tacheRepository.test.ts`, `bienRepository.test.ts`,
   `clientRepository.test.ts`) — aucune configuration de CI n'a été trouvée dans le repo pour les
   exécuter automatiquement. **À confirmer** si une CI existe hors
-  du repo (GitHub Actions, etc.).
+  du repo (GitHub Actions, etc.). **Toujours vrai après la passe de stabilisation V1 Candidate** :
+  aucune CI n'a été ajoutée dans cette passe (délibérément hors périmètre).
+- **DB de test désormais dédiée et garantie** (stabilisation V1 Candidate) — `pnpm test` ne peut
+  plus utiliser implicitement une `DATABASE_URL` déjà présente dans le shell (risque fermé, voir
+  `src/db/resoudreDatabaseUrlTest.ts` + `vitest.setup.ts`) : base `atlas_test` locale dédiée par
+  défaut, `ATLAS_TEST_DATABASE_URL` pour surcharger explicitement, refus loud si la variable
+  ambiante ressemble à autre chose que la convention de dev locale documentée.
+- **Flakiness de classe corrigée et validée** (stabilisation V1 Candidate) : tie-break déterministe
+  sur `getDernierRunScanPourRegle()` (`ORDER BY demarre_le DESC, id DESC` — `id` sert uniquement à
+  départager, jamais une chronologie), horloge contrôlée (`vi.useFakeTimers({toFake:["Date"]})`) au
+  lieu d'un `setTimeout` arbitraire dans `clientRepository.test.ts`/`bienRepository.test.ts`,
+  fixture de `page.test.tsx` (cockpit) rendue unique par exécution. Validé par 3 exécutions
+  complètes consécutives 100 % vertes + stress ciblé (10 exécutions supplémentaires, 0 échec).
+- **Infrastructure E2E minimale ajoutée** (Playwright, `apps/web/e2e/`) : deux smoke tests
+  (tunnel cœur Atlas ; documents/Pack Notaire/transmission ADR-049), jamais exécutés par `pnpm
+  test`, jamais dans une CI (absente, voir ci-dessus). Session Atlas injectée via les vraies
+  primitives `iron-session`/`optionsSessionAtlas()`, jamais un contournement d'authentification.
+  Commandes : `pnpm test:e2e` / `pnpm test:e2e:ui`.
 
 ## Architecture cible non construite
 
