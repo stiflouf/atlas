@@ -59,13 +59,26 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   rattachements, provenance, état de vérification) sont corrigibles sans ré-upload
   (`corrigerClassementDocumentBienAction`) — voir "Dossier documentaire (ADR-029)" ci-dessous.
 
-## Documents réels : stockage local V1
+## Documents réels : stockage local, désormais configurable (ADR-050)
 
-- **Pas de persistance garantie hors dev local.** `apps/web/stockage-documents/` n'a pas de volume
-  dédié (contrairement à Postgres) — un futur déploiement serverless/conteneurisé sans volume
-  monté perdrait les fichiers à chaque redéploiement. Non problématique aujourd'hui (aucune cible
-  de déploiement n'existe), verrou explicite pour plus tard — voir ADR-013.
-- **Aucune sauvegarde automatique** de ce répertoire (un `pg_dump` seul ne couvre pas les fichiers).
+- **Code compatible avec un stockage persistant configuré** — `ATLAS_DOCUMENT_STORAGE_DIR`
+  (lue uniquement dans `src/lib/stockageDocuments.ts`) permet de pointer vers un volume monté ;
+  obligatoire et absolue en production, avec fail-closed explicite (jamais de création automatique
+  de la racine, jamais de repli silencieux) si absente/relative/inexistante.
+- **La persistance réelle dépend entièrement de la configuration externe** (volume Railway ou
+  équivalent réellement attaché) — le code seul ne peut pas la garantir. Tant qu'aucun volume n'a
+  été attaché et validé par un redéploiement réel, ne pas considérer le stockage comme persistant en
+  production.
+- **Aucune sauvegarde externe démontrée/configurée.** Un volume persistant n'est pas une stratégie
+  de backup — reste entièrement à définir côté exploitation (voir checklist ADR-047).
+- **La checklist ADR-029 ne détecte toujours pas un fichier physiquement disparu** — un document dont
+  la ligne DB existe mais dont le fichier a disparu (ex. avant configuration du volume) reste affiché
+  "present" tant que ses métadonnées sont intactes ; seule une tentative de lecture réelle
+  (téléchargement, Pack, transmission ADR-049) révèle l'absence, désormais distinguée honnêtement
+  d'un stockage indisponible (503) plutôt que masquée.
+- **Fichier orphelin possible** si l'écriture disque réussit puis que l'`INSERT` DB échoue ensuite —
+  aucun rollback/cleanup, dette non traitée par ADR-050 (aucun chemin de code de production
+  n'exécute de `DELETE` documentaire à ce jour).
 - **Deux limites de taille non alignées, comportement vérifié en conditions réelles** : un upload
   entre 10 et 11 Mo est rejeté proprement par la validation applicative (`throw` explicite depuis
   ADR-029, aucune écriture) ; un upload dépassant 11 Mo (`serverActions.bodySizeLimit`, `next.config.ts`)
@@ -836,10 +849,10 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **L'historique du manifeste persiste, mais le fichier source peut devenir indisponible** si le
   stockage documentaire n'est pas durable (voir point ci-dessous) — le SHA-256/nom/taille restent
   lisibles, le contenu binaire original peut ne plus être retéléchargeable.
-- **Stockage documentaire de production non démontré comme persistant** (dette déjà connue depuis
-  ADR-047, réaffirmée par ADR-049) — `stockage-documents/` est un répertoire filesystem local ; un
-  redéploiement sans volume monté peut faire disparaître les fichiers sources. À configurer/vérifier
-  avant toute utilisation avec des données réelles.
+- **Stockage documentaire : code prêt (ADR-050), configuration externe encore à effectuer et
+  valider.** `ATLAS_DOCUMENT_STORAGE_DIR` permet de pointer vers un volume persistant, avec
+  fail-closed en production — mais tant qu'un volume Railway réel n'a pas été attaché et testé par un
+  redéploiement effectif, la persistance en production reste supposée, pas démontrée.
 - Aucune de ces valeurs ne constitue une preuve juridique irréfutable, un recommandé électronique, ou
   un accusé de réception légal — wording opérationnel uniquement, jamais présenté autrement dans l'UI.
 

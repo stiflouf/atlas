@@ -1,5 +1,6 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { rm } from "node:fs/promises";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import JSZip from "jszip";
 import { ErreurGenerationPack, MAX_TAILLE_PACK_OCTETS, genererZipPackNotaire } from "./genererZipPackNotaire";
@@ -8,11 +9,15 @@ import { ecrireDocument, genererCleStockage } from "@/lib/stockageDocuments";
 import type { Bien } from "@/types/bien";
 import type { DocumentBien } from "@/types/documentBien";
 
-const clesCreees: string[] = [];
+// ADR-050 : répertoire temporaire isolé pour toute la suite, jamais le dossier de dev partagé.
+let dirStockageTest: string;
+beforeAll(async () => {
+  dirStockageTest = await mkdtemp(path.join(tmpdir(), "atlas-genererzip-test-"));
+  vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
+});
 afterAll(async () => {
-  for (const cle of clesCreees) {
-    await rm(path.join(process.cwd(), "stockage-documents", cle), { force: true });
-  }
+  vi.unstubAllEnvs();
+  await rm(dirStockageTest, { recursive: true, force: true });
 });
 
 const bien: Bien = {
@@ -52,7 +57,6 @@ function creerDocument(overrides: Partial<DocumentBien> = {}): DocumentBien {
 
 async function creerDocumentAvecFichier(contenu: Buffer, overrides: Partial<DocumentBien> = {}) {
   const cleStockage = genererCleStockage();
-  clesCreees.push(cleStockage);
   await ecrireDocument(cleStockage, contenu);
   return creerDocument({ cleStockage, tailleOctets: contenu.byteLength, ...overrides });
 }

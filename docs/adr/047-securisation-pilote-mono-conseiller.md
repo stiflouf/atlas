@@ -221,6 +221,17 @@ vérifié/configuré manuellement, elle ne prétend configurer Railway elle-mêm
 - [ ] `COMPATIBILITE_SCAN_SECRET` renseigné.
 - [ ] `COMPATIBILITE_BASELINE_SECRET` renseigné (distinct des trois précédents).
 
+### Stockage documentaire (ADR-050)
+
+- [ ] Créer/attacher un volume persistant au service web.
+- [ ] Choisir un mount path ABSOLU (ex. `/data/stockage-documents`).
+- [ ] Vérifier que ce mount path existe réellement au démarrage du runtime (le volume monté crée le
+      répertoire, Atlas ne le crée jamais lui-même en production).
+- [ ] Définir `ATLAS_DOCUMENT_STORAGE_DIR` sur CE chemin exact.
+- [ ] Vérifier que l'utilisateur du process peut lire/écrire sur ce chemin.
+- [ ] Définir une stratégie de sauvegarde/restauration du volume, séparée du code — un volume
+      persistant n'est PAS automatiquement une sauvegarde.
+
 ### Jobs périodiques (cadence externe, aucun cron interne à Atlas)
 
 - [ ] JOB-01 — `POST /api/automatisations/scan` — **quotidien**.
@@ -244,3 +255,5 @@ vérifié/configuré manuellement, elle ne prétend configurer Railway elle-mêm
 - [ ] Connexion Gmail fonctionne après connexion Atlas.
 - [ ] Téléchargement d'un document fonctionne en session, refusé explicitement sans session.
 - [ ] Logout Atlas puis nouvel accès à une page privée → redirigé vers `/connexion`.
+- [ ] Upload d'un document test, redéploiement/restart du service, document toujours téléchargeable
+      avec des octets identiques (ADR-050 — preuve réelle de persistance, pas seulement supposée).

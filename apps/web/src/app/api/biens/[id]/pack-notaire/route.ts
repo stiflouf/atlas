@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { calculerPackNotaire, chargerContextePackNotaire } from "@/lib/documents/packNotaire";
 import { ErreurGenerationPack, genererZipPackNotaire } from "@/lib/documents/genererZipPackNotaire";
+import { ErreurStockageDocumentsIndisponible } from "@/lib/stockageDocuments";
 import type { DocumentBien } from "@/types/documentBien";
 import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute";
 
@@ -65,6 +66,11 @@ export async function POST(request: Request, { params }: RouteProps) {
   } catch (erreur) {
     if (erreur instanceof ErreurGenerationPack) {
       return NextResponse.json({ erreur: erreur.message }, { status: 422 });
+    }
+    // ADR-050 : stockage indisponible/mal configuré — jamais confondu avec un fichier précis
+    // manquant (ErreurGenerationPack ci-dessus), jamais un ZIP partiel.
+    if (erreur instanceof ErreurStockageDocumentsIndisponible) {
+      return NextResponse.json({ erreur: "Stockage documentaire indisponible." }, { status: 503 });
     }
     throw erreur;
   }

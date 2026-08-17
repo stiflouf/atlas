@@ -331,6 +331,7 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/lib/documents/packNotaire.ts` | `determinerCompromisActuel()`/`chargerContextePackNotaire()` (extraits ADR-049) — source unique de la sélection du compromis contextuel, partagée par le Route Handler ZIP, la page Pack et `enregistrerTransmissionDossierNotaireAction` ; ne jamais réintroduire une 3ᵉ copie de cette logique |
 | `src/lib/transmissionDossierNotaireRepository.ts` | Transmissions Pack Notaire (ADR-049) — idempotence par `cleIdempotence` (`ON CONFLICT DO NOTHING`), immuable (aucune fonction de modification/suppression) |
 | `src/actions/transmissionDossierNotaire.ts` | `enregistrerTransmissionDossierNotaireAction` (ADR-049) — revalide intégralement Compromis/Bien/documents/taille côté serveur, calcule SHA-256 avant tout INSERT |
+| `src/lib/stockageDocuments.ts` | Stockage documentaire (ADR-050) — SEUL point de lecture de `ATLAS_DOCUMENT_STORAGE_DIR` dans tout le projet ; `verifierDisponibiliteStockageDocuments()` fail-closed en production (jamais de création automatique de la racine) ; `ErreurStockageDocumentsIndisponible` distincte d'un document précis absent (`undefined`) |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus
@@ -348,6 +349,12 @@ IO Postgres) → `redirect()` → page re-render.
 - Les tests de repository (`*Repository.test.ts`) sont des tests d'intégration qui exigent un
   Postgres local démarré et migré — ils échoueront, pas seulement seront lents, sans base
   disponible.
+- **Ne jamais lire `process.env.ATLAS_DOCUMENT_STORAGE_DIR` en dehors de `src/lib/stockageDocuments.ts`**
+  (ADR-050) — toute nouvelle fonctionnalité documentaire doit passer par `ecrireDocument`/
+  `lireDocument`/`verifierDisponibiliteStockageDocuments`, jamais reconstruire un chemin fichier
+  ailleurs. Une commande shell lancée depuis un autre `cwd` peut créer un `stockage-documents/`
+  parasite silencieusement — toujours vérifier le répertoire de travail avant d'exécuter des tests
+  documentaires manuellement.
 - **Toute nouvelle Server Action exportée sous `src/actions/*.ts` doit commencer par
   `await exigerSessionAtlas();`** (ADR-047) — `src/actions/gardeSessionAtlas.structurel.test.ts`
   échoue sinon (analyse AST, pas un simple grep). Le Proxy (`src/proxy.ts`) ne protège jamais les

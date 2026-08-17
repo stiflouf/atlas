@@ -1,7 +1,20 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
+
+// ADR-050 : ce fichier écrit de vrais fichiers via ecrireDocument (fixture ci-dessous) — répertoire
+// temporaire isolé pour toute la suite, jamais le dossier de dev partagé.
+let dirStockageTest: string;
+beforeAll(async () => {
+  dirStockageTest = await mkdtemp(path.join(tmpdir(), "atlas-documents-route-test-"));
+});
+afterAll(async () => {
+  await rm(dirStockageTest, { recursive: true, force: true });
+});
 
 // ADR-047 : /api/documents/[id] exige désormais une session Atlas (appelé par un <a href> HTML
 // brut — le cookie de session est envoyé automatiquement par le navigateur, jamais un Bearer).
@@ -74,6 +87,7 @@ describe("GET /api/documents/[id] (ADR-047)", () => {
   beforeEach(() => {
     cookieStoreActuel = creerCookieStoreFactice();
     vi.stubEnv("ATLAS_SESSION_PASSWORD", "a".repeat(32));
+    vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
   });
 
   afterEach(() => {
@@ -118,5 +132,24 @@ describe("GET /api/documents/[id] (ADR-047)", () => {
     });
 
     expect(reponse.status).toBe(404);
+  });
+
+  // ADR-050 : stockage indisponible/mal configuré ≠ document absent — 503 honnête, jamais un faux
+  // 404 qui laisserait croire que le document n'a simplement jamais existé.
+  it("session valide + stockage documentaire indisponible → 503, jamais un faux 404", async () => {
+    const document = await creerDocumentTest("[test réel] DOCUMENT-STOCKAGE-INDISPONIBLE", "contenu");
+    const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
+    await creerSessionAtlas({ sub: "google-sub-123", email: "conseiller@example.com" });
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", "");
+
+    const { GET } = await import("./route");
+    const reponse = await GET(new Request(`http://localhost/api/documents/${document.id}`), {
+      params: Promise.resolve({ id: document.id }),
+    });
+
+    expect(reponse.status).toBe(503);
+    expect(await reponse.json()).toEqual({ erreur: "Stockage documentaire indisponible." });
   });
 });

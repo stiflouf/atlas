@@ -1,4 +1,7 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 // ADR-047 : ces Server Actions exigent désormais une session Atlas. Le comportement métier
 // (garde-fous existants, transactions) est testé ici en mockant exigerSessionAtlas() comme une
@@ -16,6 +19,22 @@ import { eq } from "drizzle-orm";
 // jamais sur disque ni n'insère de métadonnée si le bien est archivé, si le type MIME n'est pas
 // dans la liste blanche, ou si le fichier dépasse 10 Mo.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
+
+// ADR-050 : ce fichier écrit de vrais fichiers via ajouterDocumentBienAction → ecrireDocument.
+// Répertoire temporaire isolé pour toute la suite — jamais le dossier de dev partagé
+// stockage-documents/ (une pollution silencieuse de ce dossier a déjà été observée dans une
+// session précédente).
+let dirStockageTest: string;
+
+beforeAll(async () => {
+  dirStockageTest = await mkdtemp(path.join(tmpdir(), "atlas-ajouter-document-test-"));
+  vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
+});
+
+afterAll(async () => {
+  vi.unstubAllEnvs();
+  await rm(dirStockageTest, { recursive: true, force: true });
+});
 
 const { getDb } = await import("@/db/client");
 const { biens: biensTable, compromis: compromisTable, acquereurs: acquereursTable } = await import("@/db/schema");
@@ -153,6 +172,21 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
     ).rejects.toThrow(/n'appartient pas au bien/);
 
     await expect(listerDocumentsPourBien(bienDuDocument.id)).resolves.toEqual([]);
+  });
+
+  // ADR-050 : non-régression — l'upload continue de fonctionner avec un répertoire de stockage
+  // configuré via ATLAS_DOCUMENT_STORAGE_DIR (pas seulement le repli process.cwd() historique), et
+  // le fichier physique atterrit bien dans CE répertoire.
+  it("upload : le fichier physique est écrit dans le répertoire configuré (ATLAS_DOCUMENT_STORAGE_DIR)", async () => {
+    const bien = await creerBienDeTest("[test réel] DOC-STOCKAGE-CONFIGURE");
+    const fichier = new File([new Uint8Array([9, 9, 9])], "diag.pdf", { type: "application/pdf" });
+    await ajouterDocumentBienAction(
+      formDataAvecFichier({ bienId: bien.id, nom: "Diagnostic", categorie: "diagnostic" }, fichier)
+    ).catch(() => {});
+
+    const [document] = await listerDocumentsPourBien(bien.id);
+    expect(document).toBeDefined();
+    await expect(stat(path.join(dirStockageTest, document.cleStockage))).resolves.toBeDefined();
   });
 });
 

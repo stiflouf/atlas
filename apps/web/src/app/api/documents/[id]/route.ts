@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDocumentBienById } from "@/lib/documentBienRepository";
-import { lireDocument } from "@/lib/stockageDocuments";
+import { ErreurStockageDocumentsIndisponible, lireDocument } from "@/lib/stockageDocuments";
 import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute";
 
 type RouteProps = { params: Promise<{ id: string }> };
@@ -19,7 +19,17 @@ export async function GET(_request: Request, { params }: RouteProps) {
   const document = await getDocumentBienById(id);
   if (!document) return new NextResponse(null, { status: 404 });
 
-  const contenu = await lireDocument(document.cleStockage);
+  // ADR-050 : un volume/répertoire de stockage indisponible n'est jamais confondu avec un document
+  // manquant — 503 honnête plutôt qu'un faux 404.
+  let contenu: Buffer | undefined;
+  try {
+    contenu = await lireDocument(document.cleStockage);
+  } catch (erreur) {
+    if (erreur instanceof ErreurStockageDocumentsIndisponible) {
+      return NextResponse.json({ erreur: "Stockage documentaire indisponible." }, { status: 503 });
+    }
+    throw erreur;
+  }
   if (!contenu) return new NextResponse(null, { status: 404 });
 
   const nomSur = document.nomFichierOriginal.replace(/["\r\n]/g, "");

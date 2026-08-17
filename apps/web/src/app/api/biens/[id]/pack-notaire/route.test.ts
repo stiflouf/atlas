@@ -1,8 +1,27 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import JSZip from "jszip";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
+
+// ADR-050 : ce fichier écrit de vrais fichiers via ecrireDocument (fixtures ci-dessous) —
+// répertoire temporaire isolé pour toute la suite, jamais le dossier de dev partagé.
+let dirStockageTest: string;
+beforeAll(async () => {
+  dirStockageTest = await mkdtemp(path.join(tmpdir(), "atlas-pack-notaire-route-test-"));
+});
+afterAll(async () => {
+  await rm(dirStockageTest, { recursive: true, force: true });
+});
+beforeEach(() => {
+  vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 // ADR-047 : cette route exige désormais une session Atlas. Le comportement métier (génération du
 // ZIP) est testé ici en mockant la session comme valide — le refus anonyme réel est couvert
@@ -184,5 +203,41 @@ describe("POST /api/biens/[id]/pack-notaire", () => {
     expect(contenuFichier).toBe("contenu du titre de propriete");
     const manifeste = await zip.file("manifeste.txt")?.async("string");
     expect(manifeste).toContain("Acquéreur enregistré : Jean Martin");
+  });
+
+  // ADR-050 : stockage indisponible/mal configuré → 503 honnête, jamais un ZIP partiel ni une
+  // erreur 422 (réservée à ErreurGenerationPack, un cas fonctionnellement différent).
+  it("503 si le stockage documentaire est indisponible — jamais de ZIP partiel", async () => {
+    const bien = await creerBienTest("[test réel] PACK-NOTAIRE-005", { chargeHonoraires: "vendeur" });
+    const acquereur = await creerAcquereurTest("pack-notaire-4@test.local");
+    const compromis = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-02-01",
+    });
+    idsCompromis.push(compromis.id);
+
+    const cle = genererCleStockage();
+    await ecrireDocument(cle, Buffer.from("contenu"));
+    const document = await enregistrerDocumentBien({
+      bienId: bien.id,
+      nom: "Titre de propriété",
+      categorie: "autre",
+      nomFichierOriginal: "titre.pdf",
+      cleStockage: cle,
+      tailleOctets: 7,
+      typeMime: "application/pdf",
+      typeDocument: "titre_propriete",
+      etatVerification: "non_verifie",
+    });
+    idsDocuments.push(document.id);
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", "");
+
+    const reponse = await POST(requetePost(bien.id, [document.id]), { params: Promise.resolve({ id: bien.id }) });
+    expect(reponse.status).toBe(503);
+    expect(await reponse.json()).toEqual({ erreur: "Stockage documentaire indisponible." });
   });
 });

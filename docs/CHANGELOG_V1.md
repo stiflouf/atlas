@@ -1313,6 +1313,33 @@ double submit, historique multi-transmissions distinct, immutabilité après mod
 document), sécurité (anonyme refusé avant toute mutation, détection automatique par le test
 structurel ADR-047) — suite complète du projet passante, build de production propre.
 
+## 50. Stockage documentaire persistant et sûr
+
+Un audit ciblé a confirmé que le stockage documentaire (`stockage-documents/`, filesystem local)
+dépendait de `process.cwd()`, codé en dur, sans volume persistant démontré — un redéploiement sans
+volume monté aurait fait disparaître silencieusement tous les documents d'un pilote réel.
+
+Nouvelle variable `ATLAS_DOCUMENT_STORAGE_DIR`, lue uniquement dans `stockageDocuments.ts` : en
+production, obligatoire et absolue, avec fail-closed strict (jamais de création automatique de la
+racine, jamais de repli silencieux) ; hors production, repli préservé sur le comportement
+historique. Nouvelle erreur dédiée `ErreurStockageDocumentsIndisponible`, distincte d'un document
+précis absent : répercutée en 503 explicite (`documents/[id]`, `pack-notaire`) ou en échec explicite
+(transmission ADR-049) plutôt que masquée en faux 404/message trompeur. Fonction centrale
+`verifierDisponibiliteStockageDocuments()`, testable, sans nouvelle route HTTP.
+
+Six suites de tests qui écrivaient auparavant de vrais fichiers dans le dossier de dev partagé ont
+été isolées vers un répertoire temporaire dédié — une pollution silencieuse de ce dossier avait déjà
+été observée dans une session de développement précédente.
+
+**0 migration** (aucune colonne DB liée au chemin physique). Tests ajoutés : résolution de
+configuration (6 cas production/hors production), disponibilité (existence, type répertoire,
+lecture, écriture — permissions vérifiées par mock ciblé, l'environnement d'exécution tournant en
+root rendant `chmod` non fiable), fail-closed explicite (aucun `mkdir`/`writeFile` réel avant
+l'erreur), non-régression upload/téléchargement/Pack/transmission avec répertoire configuré — suite
+complète du projet passante, build de production propre. Code prêt à utiliser un volume Railway ;
+la configuration externe (volume attaché, variable positionnée, persistance validée par un
+redéploiement réel) reste à effectuer séparément.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

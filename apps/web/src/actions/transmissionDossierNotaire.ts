@@ -3,7 +3,7 @@
 import { createHash } from "node:crypto";
 import { getBienById } from "@/lib/bienRepository";
 import { getCompromisById } from "@/lib/compromisRepository";
-import { lireDocument } from "@/lib/stockageDocuments";
+import { ErreurStockageDocumentsIndisponible, lireDocument } from "@/lib/stockageDocuments";
 import {
   calculerPackNotaire,
   chargerContextePackNotaire,
@@ -129,7 +129,20 @@ export async function enregistrerTransmissionDossierNotaireAction(
   // l'enregistrement dans son ensemble, jamais une ligne partielle.
   const documentsSnapshot: DocumentManifesteSnapshot[] = [];
   for (const [index, doc] of documentsSelectionnes.entries()) {
-    const contenu = await lireDocument(doc.cleStockage);
+    let contenu: Buffer | undefined;
+    try {
+      contenu = await lireDocument(doc.cleStockage);
+    } catch (erreur) {
+      // ADR-050 : stockage indisponible/mal configuré, distinct d'un document précis manquant
+      // (ci-dessous) — aucun INSERT n'a encore eu lieu, aucune transmission partielle possible.
+      if (erreur instanceof ErreurStockageDocumentsIndisponible) {
+        return {
+          statut: "echec",
+          message: "Le stockage documentaire est indisponible — enregistrement annulé, aucune transmission créée.",
+        };
+      }
+      throw erreur;
+    }
     if (!contenu) {
       return {
         statut: "echec",

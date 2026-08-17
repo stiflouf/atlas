@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 // ADR-049 : comportement métier ici, session Atlas mockée comme valide — le refus anonyme réel est
 // couvert séparément par transmissionDossierNotaire.securite.test.ts (jamais deux stratégies de
@@ -10,6 +13,22 @@ vi.mock("@/lib/auth/sessionAtlas", () => ({
 }));
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
+
+// ADR-050 : ce fichier écrit de vrais fichiers via ecrireDocument (fixtures) — répertoire temporaire
+// isolé pour toute la suite, jamais le dossier de dev partagé.
+let dirStockageTest: string;
+beforeAll(async () => {
+  dirStockageTest = await mkdtemp(path.join(tmpdir(), "atlas-transmission-test-"));
+});
+afterAll(async () => {
+  await rm(dirStockageTest, { recursive: true, force: true });
+});
+beforeEach(() => {
+  vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const { getDb } = await import("@/db/client");
 const {
@@ -368,6 +387,30 @@ describe("enregistrerTransmissionDossierNotaireAction — comportement métier",
     );
     expect(resultat.statut).toBe("echec");
     if (resultat.statut === "echec") expect(resultat.message).toMatch(/introuvable/i);
+    const transmissions = await listerTransmissionsPourCompromis(compromis.id);
+    expect(transmissions).toHaveLength(0);
+  });
+
+  // ADR-050 : stockage indisponible/mal configuré ≠ document précis absent (test ci-dessus) —
+  // message distinct, mais même garantie d'atomicité : aucun INSERT, aucune transmission créée.
+  it("stockage documentaire indisponible : refus explicite distinct, aucune transmission créée", async () => {
+    const { bien, compromis } = await creerCompromisDeTest("STOCKAGE-INDISPONIBLE");
+    const document = await creerDocumentDeTest(bien.id, "STOCKAGE-INDISPONIBLE", "contenu");
+
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", "");
+
+    const resultat = await enregistrerTransmissionDossierNotaireAction(
+      null,
+      formData({
+        compromisId: compromis.id,
+        cleIdempotence: crypto.randomUUID(),
+        documentIds: [document.id],
+        etudeNom: "Étude Stockage Indisponible",
+      })
+    );
+    expect(resultat.statut).toBe("echec");
+    if (resultat.statut === "echec") expect(resultat.message).toMatch(/stockage documentaire est indisponible/i);
     const transmissions = await listerTransmissionsPourCompromis(compromis.id);
     expect(transmissions).toHaveLength(0);
   });
