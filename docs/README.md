@@ -22,8 +22,13 @@ contribution : `CONTRIBUTING.md` racine.
 
 ## Décisions d'architecture
 
+- [`adr/README.md`](adr/README.md) — format d'une ADR, règle Scalabilité/Réversibilité pour les
+  futures ADR importantes.
 - [`adr/`](adr/) — une décision par sujet, jamais renumérotée. Voir la matrice
   « si tu touches X, lis d'abord Y » dans `DEVELOPER_ONBOARDING.md`.
+- [`adr/051-portabilite-reversibilite-montee-en-charge.md`](adr/051-portabilite-reversibilite-montee-en-charge.md)
+  — principes transversaux (portabilité, réversibilité, montée en charge) pour les décisions
+  futures ; aucune implémentation, le pilote reste la priorité immédiate.
 
 ## Sécurité
 

@@ -317,7 +317,7 @@ ne pas les recopier aveuglément dans une future passe sans revérifier.
 | `docs/ARCHITECTURE.md` | Le flux technique détaillé (UI → Action → Repository → DB) |
 | `docs/FLOWS.md` | Quelques parcours utilisateur bout en bout |
 | `docs/DEMO_VS_REAL.md` | Comment la bascule mock/réel fonctionne |
-| `docs/adr/*.md` | Pourquoi une décision a été prise, une par sujet |
+| `docs/adr/*.md` (voir `docs/adr/README.md` pour le format) | Pourquoi une décision a été prise, une par sujet |
 | `docs/KNOWN_LIMITATIONS.md` | Ce qui est volontairement absent/incomplet |
 | `docs/AI_HANDOFF.md` | État synthétique pour une reprise assistée (agent IA ou humain pressé) |
 | `docs/PILOT_RUNBOOK.md` | Comment exploiter la V1 Candidate en pilote |
@@ -341,6 +341,7 @@ Index cliquable : `docs/README.md`.
 | Authentification / session / sécurité pilote | ADR-047 |
 | Recherche / pagination | ADR-048 |
 | Release / E2E / exploitation pilote | `docs/PILOT_RUNBOOK.md`, `docs/PROCEDURE_MIGRATION_PRODUCTION.md`, ce document (Partie 4, section Tests) |
+| Décision structurante (hébergeur, stockage, async, multi-tenant futur, IaC) | ADR-051 — et écrire les rubriques Scalabilité/Réversibilité dans toute nouvelle ADR importante (voir `docs/adr/README.md`) |
 
 ### Variables d'environnement (catégories)
 

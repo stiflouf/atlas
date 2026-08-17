@@ -320,6 +320,36 @@ Copilote immobilier
 
 ---
 
+## Au-delà de la V1 (hypothèse, pas une roadmap engagée)
+
+Direction produit envisagée, à valider par le pilote réel avant toute conception — pas des offres
+commercialisées aujourd'hui, pas un découpage tarifaire définitif, pas des modules à coder :
+
+```
+Atlas            activité individuelle
+Atlas Pro        IA + automatisations avancées
+Atlas Team       collaboration / entraide / délégation entre conseillers
+Atlas Team+      IA organisationnelle / accompagnement de managers
+Atlas Safe       protection / alertes / confidentialité
+Atlas Enterprise réseaux / grands comptes
+```
+
+**Atlas Team**, en particulier, resterait une hypothèse à valider terrain : permettre à des
+conseillers/filleuls/managers de partager temporairement un dossier, demander de l'aide, déléguer
+certaines actions, contrôler/préparer certaines étapes, puis révoquer l'accès. Le pilote — surtout
+avec des conseillers qui en accompagnent d'autres — doit servir à comprendre les vrais workflows
+d'entraide avant toute conception. Aucun code déclenché avant ce retour terrain.
+
+Séquence à retenir : V1 Candidate → validation pilote réelle → premiers retours terrain →
+hardening SaaS si besoin commercial démontré → éventuelle industrialisation infrastructure →
+fonctionnalités Team/Pro/Safe/Enterprise selon validation produit. Principe essentiel : ne jamais
+laisser ces idées futures retarder la mise de la V1 entre les mains d'un vrai conseiller.
+
+Principes d'architecture transversaux (portabilité, réversibilité, montée en charge) posés dans
+[`docs/adr/051-portabilite-reversibilite-montee-en-charge.md`](docs/adr/051-portabilite-reversibilite-montee-en-charge.md).
+
+---
+
 # Notre promesse
 
 Nous ne vendons pas une Intelligence Artificielle.
