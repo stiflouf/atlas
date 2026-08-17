@@ -35,12 +35,14 @@ describe("POST /api/biens/[id]/pack-notaire — sécurité (ADR-047)", () => {
     vi.resetModules();
   });
 
-  it("anonyme (aucune session Atlas) reçoit un refus AVANT toute lecture du bien — aucun ZIP généré", async () => {
+  it("anonyme (aucune session Atlas) reçoit un refus explicite (401) AVANT toute lecture du bien — aucun ZIP généré", async () => {
     const { POST } = await import("./route");
     const idBienInexistant = "00000000-0000-0000-0000-000000000000";
-    await expect(
-      POST(requetePost(idBienInexistant), { params: Promise.resolve({ id: idBienInexistant }) })
-    ).rejects.toThrow(/non authentifié/i);
+    const reponse = await POST(requetePost(idBienInexistant), { params: Promise.resolve({ id: idBienInexistant }) });
+
+    expect(reponse.status).toBe(401);
+    expect(reponse.headers.get("Content-Type")).not.toBe("application/zip");
+    expect(await reponse.json()).toEqual({ erreur: "Non authentifié." });
   });
 
   it("session Atlas valide conserve le comportement existant (404 sur un bien introuvable)", async () => {

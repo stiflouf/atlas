@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // ADR-047 : cette route exige désormais une session Atlas. Le comportement métier (proxy IGN) est
-// testé ici en mockant exigerSessionAtlas() comme une session valide — le refus anonyme réel est
-// couvert séparément par route.securite.test.ts, qui utilise le vrai helper (jamais mocké là-bas).
+// testé ici en mockant la session comme valide — le refus anonyme réel est couvert séparément par
+// route.securite.test.ts, qui utilise le vrai helper (jamais mocké là-bas). lireSessionAtlas est
+// utilisée par refuserSiSessionAtlasAbsente() (Route Handler, passe de fermeture ADR-047) ;
+// exigerSessionAtlas reste mockée pour toute autre dépendance qui l'utiliserait directement.
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
+  lireSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
 
 const { GET } = await import("./route");

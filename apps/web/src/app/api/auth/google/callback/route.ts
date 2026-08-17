@@ -34,7 +34,10 @@ export async function GET(request: Request) {
     const tokens = await echangerCodeContreTokens(code);
     await ecrireConnexionGoogle(tokens.refreshToken, tokens.scope);
   } catch (e) {
-    console.error("[google-calendar] échec de l'échange de code OAuth :", e);
+    // Ne jamais logger l'objet erreur complet (correction n°10, passe de fermeture ADR-047) : une
+    // erreur d'échange de code OAuth peut porter des propriétés enrichies (réponse HTTP externe,
+    // URL, métadonnées) au-delà de `.message` — jamais code OAuth, refresh_token, cookie, state.
+    console.error("[google-calendar] échec de l'échange de code OAuth :", e instanceof Error ? e.message : "erreur non standard");
     return NextResponse.redirect(new URL("/?google=erreur", url.origin));
   }
 

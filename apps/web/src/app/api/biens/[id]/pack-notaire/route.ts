@@ -7,7 +7,7 @@ import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import { calculerPackNotaire, type ContextePackNotaire } from "@/lib/documents/packNotaire";
 import { ErreurGenerationPack, genererZipPackNotaire } from "@/lib/documents/genererZipPackNotaire";
 import type { DocumentBien } from "@/types/documentBien";
-import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute";
 
 type RouteProps = { params: Promise<{ id: string }> };
 
@@ -34,7 +34,8 @@ async function chargerContexte(bienId: string) {
 // ADR-047 : protégé par la session Atlas — appelé par un <form method="POST"> HTML brut, jamais un
 // Bearer (structurellement incompatible avec ce point d'appel).
 export async function POST(request: Request, { params }: RouteProps) {
-  await exigerSessionAtlas();
+  const refus = await refuserSiSessionAtlasAbsente();
+  if (refus) return refus;
   const { id } = await params;
   const contexte = await chargerContexte(id);
   if (!contexte) return NextResponse.json({ erreur: "Bien introuvable." }, { status: 404 });

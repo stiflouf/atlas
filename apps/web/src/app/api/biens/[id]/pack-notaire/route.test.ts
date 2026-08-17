@@ -5,10 +5,12 @@ import JSZip from "jszip";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 // ADR-047 : cette route exige désormais une session Atlas. Le comportement métier (génération du
-// ZIP) est testé ici en mockant exigerSessionAtlas() comme une session valide — le refus anonyme
-// réel est couvert séparément par route.securite.test.ts, qui utilise le vrai helper.
+// ZIP) est testé ici en mockant la session comme valide — le refus anonyme réel est couvert
+// séparément par route.securite.test.ts, qui utilise le vrai helper. lireSessionAtlas est utilisée
+// par refuserSiSessionAtlasAbsente() (Route Handler, passe de fermeture ADR-047).
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
+  lireSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
 
 const { getDb } = await import("@/db/client");

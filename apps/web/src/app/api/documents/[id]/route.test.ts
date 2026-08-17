@@ -81,15 +81,16 @@ describe("GET /api/documents/[id] (ADR-047)", () => {
     vi.resetModules();
   });
 
-  it("anonyme + UUID valide → aucun octet transmis (refus AVANT toute lecture du fichier)", async () => {
+  it("anonyme + UUID valide → aucun octet transmis (refus explicite (401) AVANT toute lecture du fichier)", async () => {
     const document = await creerDocumentTest("[test réel] DOCUMENT-SECURITE-001", "contenu confidentiel");
 
     const { GET } = await import("./route");
-    await expect(
-      GET(new Request(`http://localhost/api/documents/${document.id}`), {
-        params: Promise.resolve({ id: document.id }),
-      })
-    ).rejects.toThrow(/non authentifié/i);
+    const reponse = await GET(new Request(`http://localhost/api/documents/${document.id}`), {
+      params: Promise.resolve({ id: document.id }),
+    });
+
+    expect(reponse.status).toBe(401);
+    expect(await reponse.json()).toEqual({ erreur: "Non authentifié." });
   });
 
   it("session Atlas valide → téléchargement normal, contenu exact", async () => {

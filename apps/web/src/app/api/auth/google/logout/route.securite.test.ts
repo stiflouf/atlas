@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// ADR-047 — sécurité réelle (helper NON mocké ici, contrairement à route.test.ts) : même patron
-// de magasin de cookies en mémoire que sessionAtlas.test.ts, nécessaire car next/headers.cookies()
-// n'existe que dans un contexte de requête Next.js réel.
+// ADR-047, §8 de la passe de fermeture : anonyme → aucune révocation, aucune suppression de
+// connexion_google. Même patron que geocodage/communes/route.securite.test.ts (magasin de cookies
+// en mémoire, helper NON mocké — sécurité réelle).
 type CookieFactice = { name: string; value: string };
 function creerCookieStoreFactice() {
   const cookies = new Map<string, CookieFactice>();
@@ -18,7 +18,7 @@ function creerCookieStoreFactice() {
 let cookieStoreActuel = creerCookieStoreFactice();
 vi.mock("next/headers", () => ({ cookies: async () => cookieStoreActuel }));
 
-describe("GET /api/geocodage/communes — sécurité (ADR-047)", () => {
+describe("POST /api/auth/google/logout — sécurité (ADR-047)", () => {
   beforeEach(() => {
     cookieStoreActuel = creerCookieStoreFactice();
     vi.stubEnv("ATLAS_SESSION_PASSWORD", "a".repeat(32));
@@ -31,21 +31,13 @@ describe("GET /api/geocodage/communes — sécurité (ADR-047)", () => {
     vi.resetModules();
   });
 
-  it("anonyme (aucune session Atlas) reçoit un refus explicite (401), jamais un appel au proxy IGN", async () => {
-    const { GET } = await import("./route");
-    const reponse = await GET(new Request("http://localhost/api/geocodage/communes?q=Houilles"));
+  it("anonyme (aucune session Atlas) reçoit un refus explicite (401), aucune révocation ni mutation", async () => {
+    const { POST } = await import("./route");
+    const reponse = await POST(new Request("http://localhost/api/auth/google/logout", { method: "POST" }));
 
     expect(reponse.status).toBe(401);
     expect(await reponse.json()).toEqual({ erreur: "Non authentifié." });
+    // revoquerToken() appelle l'API Google via fetch — jamais atteint avant la garde.
     expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("session Atlas valide autorise l'appel", async () => {
-    const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
-    await creerSessionAtlas({ sub: "google-sub-123", email: "conseiller@example.com" });
-
-    const { GET } = await import("./route");
-    const reponse = await GET(new Request("http://localhost/api/geocodage/communes?q=H"));
-    expect(reponse.status).toBe(200);
   });
 });

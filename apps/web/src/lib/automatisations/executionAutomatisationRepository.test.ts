@@ -206,4 +206,51 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
     const resultat = await getExecutionAutomatisationParTacheId(tache.id);
     expect(resultat?.id).toBe(exec1.id);
   });
+
+  it("plusieurs exécutions avec tache_id NULL coexistent sans violation (ADR-047)", async () => {
+    const bien = await creerBienDeTest("NULLTACHE");
+    const acquereur = await creerAcquereurDeTest("NULLTACHE");
+    const cr1 = await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      dateVisite: "2026-03-01",
+      retour: "Visite 1",
+      interet: "interesse",
+    });
+    idsVisites.push(cr1.id);
+    const cr2 = await enregistrerCompteRenduVisite({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      dateVisite: "2026-03-15",
+      retour: "Visite 2",
+      interet: "a_reflechir",
+    });
+    idsVisites.push(cr2.id);
+
+    const [evt1] = await getDb()
+      .insert(evenementsMetier)
+      .values({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr1.id })
+      .returning();
+    const [evt2] = await getDb()
+      .insert(evenementsMetier)
+      .values({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr2.id })
+      .returning();
+    idsEvenements.push(evt1.id, evt2.id);
+
+    // Deux exécutions distinctes (evenementId différent), toutes deux sans tache_id — la contrainte
+    // UNIQUE(tache_id) ajoutée par ADR-047 ne doit jamais empêcher plusieurs NULL de coexister
+    // (comportement standard PostgreSQL, vérifié explicitement ici plutôt que seulement supposé).
+    const [exec1] = await getDb()
+      .insert(executionsAutomatisation)
+      .values({ regleCode: "retour_vendeur_apres_visite", evenementId: evt1.id, reussieLe: new Date() })
+      .returning();
+    const [exec2] = await getDb()
+      .insert(executionsAutomatisation)
+      .values({ regleCode: "retour_vendeur_apres_visite", evenementId: evt2.id, reussieLe: new Date() })
+      .returning();
+    idsExecutions.push(exec1.id, exec2.id);
+
+    expect(exec1.tacheId).toBeNull();
+    expect(exec2.tacheId).toBeNull();
+  });
 });

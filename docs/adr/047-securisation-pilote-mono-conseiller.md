@@ -180,4 +180,67 @@ démontrée dans le repository.
 - Dettes qui restent, non traitées ici : multi-utilisateur complet, RGPD outillé, CI, E2E métier,
   validation réelle du flux OAuth de bout en bout avec de vraies credentials Google (non
   disponibles dans cet environnement de développement — à faire manuellement avant le premier jour
-  de pilote, voir checklist de validation).
+  de pilote, voir checklist ci-dessous).
+
+## Checklist de configuration avant pilote
+
+Emplacement canonique de cette checklist : ce document. Ne pas dupliquer ailleurs. Noms de
+variables identiques à `apps/web/.env.local.example` — aucun nom supposé.
+
+Nous n'avons pas accès au compte Railway de production : cette checklist décrit ce qui doit être
+vérifié/configuré manuellement, elle ne prétend configurer Railway elle-même.
+
+### Application
+
+- [ ] `DATABASE_URL` de production renseignée (Postgres managé, pas le Postgres local de dev).
+- [ ] Domaine de production servi en HTTPS réel (le cookie `atlas_session` est `Secure` dès que
+      `NODE_ENV=production` — un domaine encore en HTTP le rendrait inutilisable, jamais une
+      dégradation silencieuse vers un cookie non sécurisé).
+- [ ] `NODE_ENV=production` effectivement positionnée sur l'environnement de déploiement.
+
+### Auth Atlas (identité, ADR-047)
+
+- [ ] `ATLAS_ALLOWED_EMAIL` renseignée avec l'unique adresse du conseiller pilote (jamais une liste).
+- [ ] `ATLAS_SESSION_PASSWORD` renseignée, 32 caractères minimum (`openssl rand -base64 32`).
+- [ ] `GOOGLE_ATLAS_REDIRECT_URI` renseignée avec l'URL de production
+      (`https://<domaine>/api/auth/atlas/callback`) — distincte de `GOOGLE_REDIRECT_URI` métier.
+- [ ] Cette URI de callback identité déclarée côté Google Cloud Console (écran de consentement /
+      identifiants OAuth) — sans cet enregistrement, Google refuse la redirection.
+
+### Google métier (Calendar/Gmail)
+
+- [ ] `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` renseignés.
+- [ ] `GOOGLE_REDIRECT_URI` renseignée avec l'URL de production (`.../api/auth/google/callback`) et
+      déclarée côté Google Cloud Console.
+- [ ] `GOOGLE_TOKEN_ENCRYPTION_KEY` renseignée (chiffrement du refresh_token stocké en base).
+
+### Endpoints techniques (machine, Bearer indépendant du Proxy)
+
+- [ ] `AUTOMATISATIONS_SCAN_SECRET` renseigné.
+- [ ] `AUTOMATISATIONS_REPRISE_SECRET` renseigné (distinct du précédent).
+- [ ] `COMPATIBILITE_SCAN_SECRET` renseigné.
+- [ ] `COMPATIBILITE_BASELINE_SECRET` renseigné (distinct des trois précédents).
+
+### Jobs périodiques (cadence externe, aucun cron interne à Atlas)
+
+- [ ] JOB-01 — `POST /api/automatisations/scan` — **quotidien**.
+- [ ] JOB-02 — `POST /api/automatisations/reprise` — **horaire**.
+- [ ] JOB-03 — `POST /api/compatibilite/scan` — **horaire**.
+- [ ] `POST /api/compatibilite/baseline` — **JAMAIS programmé en cron** : outil manuel explicite,
+      dry-run par défaut. Ne pas le configurer comme JOB-04.
+
+### Validation avant premier jour de pilote
+
+- [ ] Chaque job (scan/reprise/compatibilite-scan) appelé réellement au moins une fois avec le bon
+      Bearer, réponse 200 constatée.
+- [ ] Un Bearer invalide/absent sur ces 4 endpoints est bien refusé (503/401 selon l'implémentation,
+      jamais un traitement silencieux).
+- [ ] HTTPS réel vérifié dans un navigateur (pas seulement supposé actif).
+- [ ] Login Atlas avec le compte autorisé fonctionne de bout en bout (`/connexion` →
+      `/api/auth/atlas/login` → Google → `/api/auth/atlas/callback` → session posée).
+- [ ] Un compte Google non autorisé est bien rejeté (`?erreur=compte_non_autorise`), sans révéler
+      l'adresse attendue.
+- [ ] Connexion Calendar fonctionne après connexion Atlas.
+- [ ] Connexion Gmail fonctionne après connexion Atlas.
+- [ ] Téléchargement d'un document fonctionne en session, refusé explicitement sans session.
+- [ ] Logout Atlas puis nouvel accès à une page privée → redirigé vers `/connexion`.

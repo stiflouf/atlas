@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { SCOPE_CALENDAR_READONLY, construireUrlAutorisation } from "@/lib/google/oauth";
 import { ecrireStateTemporaire } from "@/lib/google/state";
 import { lireConnexionGoogle } from "@/lib/google/connexion";
-import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute";
 
 // ADR-047 : un visiteur anonyme ne peut jamais initier une autorisation Calendar pour l'instance
 // Atlas — seul un conseiller déjà authentifié dans Atlas le peut. Distinct de l'authentification
@@ -15,7 +15,8 @@ import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 // - lors d'une reconnexion explicite après échec (?reconnexion=1), typiquement quand le
 //   refresh_token stocké a été révoqué et n'est plus utilisable.
 export async function GET(request: Request) {
-  await exigerSessionAtlas();
+  const refus = await refuserSiSessionAtlasAbsente();
+  if (refus) return refus;
   const url = new URL(request.url);
   const reconnexionExplicite = url.searchParams.get("reconnexion") === "1";
   const dejaConnecte = Boolean(await lireConnexionGoogle());

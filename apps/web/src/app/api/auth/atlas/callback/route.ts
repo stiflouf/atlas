@@ -32,7 +32,11 @@ export async function GET(request: Request) {
 
     await creerSessionAtlas({ sub: identite.sub, email: identite.email });
   } catch (e) {
-    console.error("[atlas-auth] échec de la vérification d'identité Google :", e);
+    // Ne jamais logger l'objet erreur complet (correction n°10, passe de fermeture ADR-047) : une
+    // erreur venant de google-auth-library ou de l'échange de code peut porter des propriétés
+    // enrichies (réponse HTTP externe, URL, métadonnées) au-delà de `.message` — jamais id_token,
+    // access_token, code, cookie, session, state, nonce, Authorization ou secret.
+    console.error("[atlas-auth] échec de la vérification d'identité Google :", e instanceof Error ? e.message : "erreur non standard");
     return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", url.origin));
   }
 

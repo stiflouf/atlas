@@ -288,6 +288,98 @@ describe("compromisRepository (intégration Postgres)", () => {
     expect(resultat?.id).toBe(c1.id);
   });
 
+  // ADR-047 : complète le test ci-dessus qui isole offre_id — ici on isole précisément l'index
+  // unique partiel "un seul en_cours par bien", sans offreId, pour ne pas mélanger les deux
+  // garanties dans un seul test.
+  it("compromis_bien_id_en_cours_unique empêche un second compromis 'en_cours' pour le même bien (ADR-047)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("012");
+
+    const premier = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(premier.id);
+
+    let erreurCapturee: unknown;
+    try {
+      await enregistrerCompromis({
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        prixConvenu: 310000,
+        dateSignature: "2026-08-02",
+      });
+    } catch (erreur) {
+      erreurCapturee = erreur;
+    }
+    expect(erreurCapturee).toBeInstanceOf(Error);
+    const cause = (erreurCapturee as Error).cause as { constraint_name?: string } | undefined;
+    expect(cause?.constraint_name).toBe("compromis_bien_id_en_cours_unique");
+
+    const pourBien = await listerCompromisPourBien(bien.id);
+    expect(pourBien).toHaveLength(1);
+  });
+
+  it("un compromis 'annule' ou 'realise' n'empêche jamais un nouveau compromis 'en_cours' pour le même bien, plusieurs historiques coexistent (ADR-047)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("013");
+
+    const c1 = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(c1.id);
+    await marquerCompromisAnnule(c1.id, "2026-08-05", "desaccord_prix");
+
+    const c2 = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 310000,
+      dateSignature: "2026-08-10",
+    });
+    idsCompromisCrees.push(c2.id);
+    await marquerCompromisRealise(c2.id, "2026-09-01");
+
+    const c3 = await enregistrerCompromis({
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      prixConvenu: 320000,
+      dateSignature: "2026-09-10",
+    });
+    idsCompromisCrees.push(c3.id);
+
+    const pourBien = await listerCompromisPourBien(bien.id);
+    expect(pourBien).toHaveLength(3);
+    expect(pourBien.find((c) => c.id === c1.id)?.statut).toBe("annule");
+    expect(pourBien.find((c) => c.id === c2.id)?.statut).toBe("realise");
+    expect(pourBien.find((c) => c.id === c3.id)?.statut).toBe("en_cours");
+  });
+
+  it("plusieurs compromis avec offre_id NULL coexistent sans violation (ADR-047)", async () => {
+    const { bien: bienA, acquereur: acquereurA } = await creerBienEtAcquereurDeTest("014");
+    const { bien: bienB, acquereur: acquereurB } = await creerBienEtAcquereurDeTest("015");
+
+    const compromisA = await enregistrerCompromis({
+      bienId: bienA.id,
+      acquereurId: acquereurA.id,
+      prixConvenu: 300000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromisA.id);
+    const compromisB = await enregistrerCompromis({
+      bienId: bienB.id,
+      acquereurId: acquereurB.id,
+      prixConvenu: 310000,
+      dateSignature: "2026-08-01",
+    });
+    idsCompromisCrees.push(compromisB.id);
+
+    expect(compromisA.offreId).toBeUndefined();
+    expect(compromisB.offreId).toBeUndefined();
+  });
+
   it("modifierDateActeCompromis() retourne undefined pour un id non-UUID, sans erreur de cast", async () => {
     await expect(modifierDateActeCompromis("compromis-mock", "2026-10-15")).resolves.toBeUndefined();
   });

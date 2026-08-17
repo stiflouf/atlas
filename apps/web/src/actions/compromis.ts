@@ -90,7 +90,25 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
   }
 
   const idsExecutionsATraiter = await getDb().transaction(async (tx) => {
-    const compromis = await enregistrerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe }, tx);
+    let compromis;
+    try {
+      compromis = await enregistrerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe }, tx);
+    } catch (erreur) {
+      // Défense en profondeur (ADR-047) : les gardes applicatives ci-dessus couvrent le cas
+      // séquentiel normal, mais une écriture concurrente peut passer les deux gardes avant que
+      // cette transaction ne s'exécute. Les contraintes DB protègent alors l'invariant — traduites
+      // ici en un message identique aux gardes applicatives, jamais une erreur Postgres brute.
+      const cause = erreur instanceof Error ? erreur.cause : undefined;
+      if (cause && typeof cause === "object" && "constraint_name" in cause) {
+        if (cause.constraint_name === "compromis_offre_id_unique") {
+          throw new Error("Cette offre est déjà associée à un compromis.");
+        }
+        if (cause.constraint_name === "compromis_bien_id_en_cours_unique") {
+          throw new Error("Un compromis est déjà en cours pour ce bien.");
+        }
+      }
+      throw erreur;
+    }
     await marquerCompromisSigne(bienId, tx);
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
       { typeEvenement: "compromis_signe", compromisId: compromis.id },
