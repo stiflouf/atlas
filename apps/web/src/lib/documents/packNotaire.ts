@@ -2,6 +2,12 @@ import { calculerChecklistDossier, type ContexteDossier } from "./checklistDossi
 import { LABEL_CHARGE_HONORAIRES } from "@/types/bien";
 import { LABEL_TYPE_DOCUMENT, type DocumentBien } from "@/types/documentBien";
 import type { ProfilAcquereur } from "@/types/client";
+import type { Compromis } from "@/types/compromis";
+import { getBienById } from "@/lib/bienRepository";
+import { getClientById } from "@/lib/clientRepository";
+import { listerCompromisPourBien } from "@/lib/compromisRepository";
+import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
+import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 
 // Contexte du pack notaire (ADR-030) — étend ContexteDossier (ADR-029) d'un acquéreur déjà
 // résolu, nécessaire au nommage d'export et au manifeste. N'étend jamais ContexteDossier
@@ -60,6 +66,35 @@ export type PackNotaire = {
   // Visibles, sélection manuelle possible par le conseiller pour cet export — jamais persistée.
   documentsDisponibles: DocumentBien[];
 };
+
+// Compromis 'en_cours' prioritaire ; à défaut, le plus récent par dateSignature. Seule fonction
+// habilitée à déterminer "le" compromis contextuel d'un Pack — extraite ici pour n'exister qu'à un
+// seul endroit (auparavant dupliquée entre la route de génération ZIP et la page). La Server Action
+// de transmission (ADR-049) revérifie qu'un compromisId reçu du client correspond exactement à ce
+// résultat, pour empêcher un POST rattachant la transmission à un autre Compromis que celui affiché.
+export function determinerCompromisActuel(compromis: Compromis[]): Compromis | undefined {
+  return (
+    compromis.find((c) => c.statut === "en_cours") ??
+    [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1))[0]
+  );
+}
+
+// Regroupe bien/documents/compromis/prospectVendeurOrigine/acquereur — même contexte que celui
+// utilisé pour calculer le Pack, réutilisé tel quel par le Route Handler ZIP (ADR-030) et par la
+// Server Action de transmission (ADR-049) : jamais une troisième réimplémentation.
+export async function chargerContextePackNotaire(
+  bienId: string
+): Promise<{ ctx: ContextePackNotaire; documents: DocumentBien[] } | undefined> {
+  const bien = await getBienById(bienId);
+  if (!bien) return undefined;
+  const documents = await listerDocumentsPourBien(bien.id);
+  const compromis = await listerCompromisPourBien(bien.id);
+  const compromisActuel = determinerCompromisActuel(compromis);
+  const prospectVendeurOrigine = await getProspectVendeurParBien(bien.id);
+  const acquereur = compromisActuel ? await getClientById(compromisActuel.acquereurId) : undefined;
+  const ctx: ContextePackNotaire = { bien, compromisActuel, prospectVendeurOrigine, acquereur };
+  return { ctx, documents };
+}
 
 function formatDateFr(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR");

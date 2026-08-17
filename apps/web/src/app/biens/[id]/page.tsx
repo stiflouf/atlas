@@ -15,6 +15,7 @@ import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerLiensPourBien } from "@/lib/offreVisiteRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerRemunerationsPourBien } from "@/lib/remunerationRepository";
+import { listerTransmissionsPourCompromis } from "@/lib/transmissionDossierNotaireRepository";
 import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import { evaluerCompatibiliteBien } from "@/lib/compatibilite/orchestration";
 import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
@@ -70,6 +71,11 @@ export default async function FicheBien({ params }: PageProps) {
   const liens = await listerLiensPourBien(bien.id);
   const compromis = await listerCompromisPourBien(bien.id);
   const remunerations = await listerRemunerationsPourBien(bien.id);
+  // ADR-049 — historique des transmissions notariales, par Compromis (jamais recalculé, snapshot
+  // brut restitué tel quel par le repository).
+  const transmissionsParCompromis = new Map(
+    await Promise.all(compromis.map(async (c) => [c.id, await listerTransmissionsPourCompromis(c.id)] as const))
+  );
   const acquereursActifs = await listerClients();
   const compatibilites = await evaluerCompatibiliteBien(bien.id);
   const acquereurIds = [
@@ -257,6 +263,7 @@ export default async function FicheBien({ params }: PageProps) {
         offres={offres}
         compromis={compromis}
         remunerations={remunerations}
+        transmissionsParCompromis={transmissionsParCompromis}
         liens={liens}
         acquereursActifs={acquereursActifs}
         acquereursParId={acquereursParId}

@@ -1286,6 +1286,33 @@ bornes, rétrocompatibilité des liens `archives`/`vue` existants, 12 tests) —
 projet passante (1128 tests), build de production propre. Implémenté sur une branche dédiée
 (`feat/adr-048-recherche-pagination`), jamais poussé directement sur `main`.
 
+## 49. Traçabilité des transmissions du Pack Notaire
+
+Un audit dédié ("Passerelle Notaire Atlas") a conclu que la plus petite extension utile du Pack
+Notaire (ADR-029/030) était une traçabilité de transmission, pas un transport réel des fichiers : le
+conseiller transmet le Pack par son canal externe habituel, puis déclare explicitement dans Atlas
+qu'il l'a fait — Atlas fige alors le contenu déclaré (destinataire, documents, manifeste, SHA-256)
+sans jamais envoyer le moindre octet lui-même.
+
+Nouvelle table `transmissions_dossier_notaire` (pivot `compromisId`, aucune entité Notaire/Étude —
+destinataire snapshoté par transmission), immuable (aucune modification/suppression), idempotente
+(`cleIdempotence` générée côté client, même pattern que l'envoi Gmail ADR-031-bis). SHA-256 calculé
+avec `node:crypto` sur les octets réellement lus dans le stockage au moment de l'enregistrement ;
+manifeste JSON structuré et versionné (premier usage `jsonb` du projet), jamais recalculé à la
+lecture — une transmission historique reste exacte même si le document source est ensuite modifié.
+`chargerContextePackNotaire`/`determinerCompromisActuel` extraits d'ADR-030 (`packNotaire.ts`) pour
+n'exister qu'à un seul endroit, désormais partagés par le Route Handler ZIP, la page Pack et la
+nouvelle Server Action — élimine une triple duplication de la logique de sélection du compromis
+contextuel.
+
+**1 migration** (additive uniquement, une seule table). Tests ajoutés : repository (idempotence,
+tri déterministe, snapshot restitué sans recalcul), Server Action (compromis en_cours/realise/
+annule/inexistant, Bien archivé, sélection vide, document d'un autre bien, document rejeté/douteux
+[comportement ADR-030 exact préservé], fichier physique absent, taille > 200 Mo, SHA-256 exact,
+double submit, historique multi-transmissions distinct, immutabilité après modification du
+document), sécurité (anonyme refusé avant toute mutation, détection automatique par le test
+structurel ADR-047) — suite complète du projet passante, build de production propre.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

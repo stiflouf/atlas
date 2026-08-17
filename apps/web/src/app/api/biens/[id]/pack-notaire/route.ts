@@ -1,29 +1,10 @@
 import { NextResponse } from "next/server";
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
-import { listerCompromisPourBien } from "@/lib/compromisRepository";
-import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
-import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
-import { calculerPackNotaire, type ContextePackNotaire } from "@/lib/documents/packNotaire";
+import { calculerPackNotaire, chargerContextePackNotaire } from "@/lib/documents/packNotaire";
 import { ErreurGenerationPack, genererZipPackNotaire } from "@/lib/documents/genererZipPackNotaire";
 import type { DocumentBien } from "@/types/documentBien";
 import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute";
 
 type RouteProps = { params: Promise<{ id: string }> };
-
-async function chargerContexte(bienId: string) {
-  const bien = await getBienById(bienId);
-  if (!bien) return undefined;
-  const documents = await listerDocumentsPourBien(bien.id);
-  const compromis = await listerCompromisPourBien(bien.id);
-  const compromisActuel =
-    compromis.find((c) => c.statut === "en_cours") ??
-    [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1))[0];
-  const prospectVendeurOrigine = await getProspectVendeurParBien(bien.id);
-  const acquereur = compromisActuel ? await getClientById(compromisActuel.acquereurId) : undefined;
-  const ctx: ContextePackNotaire = { bien, compromisActuel, prospectVendeurOrigine, acquereur };
-  return { ctx, documents };
-}
 
 // Refus explicite, jamais un ZIP partiel (ADR-030) : bien introuvable (404) ; aucun compromis en
 // cours (409 — aucun export transactionnel sans contexte réel, correction n°2) ; sélection vide,
@@ -37,7 +18,7 @@ export async function POST(request: Request, { params }: RouteProps) {
   const refus = await refuserSiSessionAtlasAbsente();
   if (refus) return refus;
   const { id } = await params;
-  const contexte = await chargerContexte(id);
+  const contexte = await chargerContextePackNotaire(id);
   if (!contexte) return NextResponse.json({ erreur: "Bien introuvable." }, { status: 404 });
   const { ctx, documents } = contexte;
 

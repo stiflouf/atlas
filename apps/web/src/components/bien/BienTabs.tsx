@@ -56,6 +56,7 @@ import {
   modifierRemunerationAction,
 } from "@/actions/remuneration";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
+import type { TransmissionDossierNotaire } from "@/types/transmissionDossierNotaire";
 
 const CATEGORIES_DOCUMENT: CategorieDocument[] = [
   "mandat",
@@ -139,6 +140,7 @@ export default function BienTabs({
   offres,
   compromis,
   remunerations = [],
+  transmissionsParCompromis = new Map(),
   liens = [],
   acquereursActifs = [],
   acquereursParId = new Map(),
@@ -161,6 +163,8 @@ export default function BienTabs({
   offres: Offre[];
   compromis: Compromis[];
   remunerations?: Remuneration[];
+  // ADR-049 — historique des transmissions notariales par Compromis, jamais recalculé (snapshot).
+  transmissionsParCompromis?: Map<string, TransmissionDossierNotaire[]>;
   liens?: { lienId: string; offreId: string; visite: CompteRenduVisite }[];
   acquereursActifs?: ProfilAcquereur[];
   acquereursParId?: Map<string, ProfilAcquereur | undefined>;
@@ -1281,6 +1285,52 @@ export default function BienTabs({
                                 Marquer encaissée
                               </button>
                             </form>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const transmissions = transmissionsParCompromis.get(c.id) ?? [];
+                      if (transmissions.length === 0 && c.statut === "annule") return null;
+                      return (
+                        <div className="mt-3 pt-3 border-t border-[#f1f5f9]">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[12px] font-medium text-[#64748b]">Transmissions notariales</p>
+                            {c.id === compromisActuel?.id && (
+                              <Link
+                                href={`/biens/${bien.id}/pack-notaire`}
+                                className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                              >
+                                Gérer le dossier notaire →
+                              </Link>
+                            )}
+                          </div>
+                          {transmissions.length === 0 ? (
+                            <p className="text-[13px] text-[#94a3b8]">Aucune transmission enregistrée pour l&apos;instant.</p>
+                          ) : (
+                            <ul className="flex flex-col gap-2">
+                              {transmissions.map((t) => (
+                                <li key={t.id} className="text-[13px] text-[#0f172a]">
+                                  <p>
+                                    {formatDate(t.transmisLe)} — <span className="font-medium">{t.etudeNom}</span>
+                                    {t.destinataireNom && ` (${t.destinataireNom})`}
+                                  </p>
+                                  <p className="text-[12px] text-[#94a3b8]">
+                                    {t.manifesteSnapshot.documents.length} document
+                                    {t.manifesteSnapshot.documents.length > 1 ? "s" : ""}
+                                    {t.destinataireEmail && ` — ${t.destinataireEmail}`} — enregistré par {t.creeParEmail}
+                                  </p>
+                                  <details className="mt-1">
+                                    <summary className="text-[12px] text-[#4338ca] cursor-pointer">
+                                      Voir le manifeste transmis
+                                    </summary>
+                                    <pre className="whitespace-pre-wrap text-[12px] text-[#64748b] mt-1 bg-[#fafafa] rounded-lg p-2 border border-[#f1f5f9]">
+                                      {t.manifesteSnapshot.manifesteTexte}
+                                    </pre>
+                                  </details>
+                                </li>
+                              ))}
+                            </ul>
                           )}
                         </div>
                       );

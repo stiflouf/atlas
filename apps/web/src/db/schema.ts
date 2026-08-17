@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, check, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, check, primaryKey, jsonb } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // Produit mono-conseiller pour l'instant (voir ADR-006) : une seule ligne possible,
@@ -503,6 +503,38 @@ export const compromis = pgTable(
       .on(table.bienId)
       .where(sql`${table.statut} = 'en_cours'`),
   ]
+);
+
+// Traçabilité des transmissions du Pack Notaire (ADR-049) — Atlas ne transporte AUCUN fichier ici :
+// une ligne représente uniquement la déclaration explicite du conseiller "j'ai transmis cette
+// sélection à cette étude", après un envoi réalisé par son canal externe habituel. Fait historique
+// immuable (aucune Server Action de modification/suppression) : une correction se traduit toujours
+// par une nouvelle ligne. compromisId sans onDelete (NO ACTION, même choix déjà fait pour
+// evenements_metier.compromis_id) : aucun DELETE physique de compromis n'existe dans le code de
+// production (vérifié exhaustivement), et une transmission ne doit jamais disparaître
+// silencieusement avec son Compromis si ce chemin apparaissait un jour. cleIdempotence générée
+// côté client (même pattern que envoisEmail) mais en colonne UNIQUE séparée de id, pas en PK
+// fournie par le client — un double submit ne crée jamais deux lignes. manifesteSnapshot (premier
+// usage JSONB du projet) fige documents/hashes/manifeste texte au moment T ; manifesteVersion est
+// la SEULE source de vérité du format (le JSON ne duplique pas un champ version interne).
+export const transmissionsDossierNotaire = pgTable(
+  "transmissions_dossier_notaire",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    compromisId: uuid("compromis_id")
+      .notNull()
+      .references(() => compromis.id),
+    cleIdempotence: uuid("cle_idempotence").notNull(),
+    etudeNom: text("etude_nom").notNull(),
+    destinataireNom: text("destinataire_nom"),
+    destinataireEmail: text("destinataire_email"),
+    transmisLe: timestamp("transmis_le", { withTimezone: true }).notNull(),
+    creeParEmail: text("cree_par_email").notNull(),
+    manifesteVersion: integer("manifeste_version").notNull().default(1),
+    manifesteSnapshot: jsonb("manifeste_snapshot").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("transmissions_dossier_notaire_cle_idempotence_unique").on(table.cleIdempotence)]
 );
 
 // Racine du dossier fiscal (ADR-023). Mono-dossier aujourd'hui, même patron que connexions_google

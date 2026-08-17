@@ -328,6 +328,9 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/actions/gardeSessionAtlas.structurel.test.ts` | Garantit par analyse AST que TOUTE Server Action exportée sous `src/actions/` commence par `await exigerSessionAtlas()` — échoue si une nouvelle action oublie la garde |
 | `src/lib/prospectVendeurRepository.ts` | `predicatVue()` (ADR-048) — prédicat métier UNIQUE actif/perdu/converti/archivé, partagé par `listerProspectsVendeurs*()` ET `rechercherProspectsVendeurs()` ; ne jamais dupliquer cette logique ailleurs |
 | `src/types/pagination.ts` | Type `PageResultat<T>` (ADR-048), partagé par `rechercherBiensPage()`/`rechercherAcquereursPage()` |
+| `src/lib/documents/packNotaire.ts` | `determinerCompromisActuel()`/`chargerContextePackNotaire()` (extraits ADR-049) — source unique de la sélection du compromis contextuel, partagée par le Route Handler ZIP, la page Pack et `enregistrerTransmissionDossierNotaireAction` ; ne jamais réintroduire une 3ᵉ copie de cette logique |
+| `src/lib/transmissionDossierNotaireRepository.ts` | Transmissions Pack Notaire (ADR-049) — idempotence par `cleIdempotence` (`ON CONFLICT DO NOTHING`), immuable (aucune fonction de modification/suppression) |
+| `src/actions/transmissionDossierNotaire.ts` | `enregistrerTransmissionDossierNotaireAction` (ADR-049) — revalide intégralement Compromis/Bien/documents/taille côté serveur, calcule SHA-256 avant tout INSERT |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
 
 ## Pièges connus
@@ -383,7 +386,10 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
   `compromis` + parties liées (ADR-029, point 3).
 - Une table `pack_notaire` ou toute persistance de sélection/export documentaire — le pack reste
   entièrement dérivé à la demande, y compris la sélection manuelle d'export (éphémère, jamais
-  écrite en base — ADR-030).
+  écrite en base — ADR-030). Nuance depuis ADR-049 : `transmissions_dossier_notaire` persiste un
+  **snapshot d'une transmission déclarée** (fait historique immuable, jamais recalculé), pas la
+  logique de calcul du pack elle-même — ne pas confondre les deux, et ne pas réintroduire de
+  persistance dans `calculerPackNotaire`/`genererZipPackNotaire` sous prétexte que la table existe.
 - Une exigence de checklist `manquant` traitée comme `bloquant_technique` — la checklist ADR-029
   n'est pas juridiquement exhaustive, seule une contradiction structurelle FACTUELLEMENT démontrée
   (mauvais rattachement, classement `rejete`, fichier illisible) justifie un blocage technique
@@ -391,8 +397,10 @@ Components (007), pas de LLM pour les règles déterministes (008), `NULL ≠ fa
 - Une dépendance ZIP/PDF ajoutée sans vérifier au préalable l'absence de binding natif et la
   compatibilité avec le runtime Node.js par défaut des Route Handlers — voir l'audit `jszip`
   (ADR-030) comme référence de la démarche attendue.
-- Un `console.log` présenté comme une piste d'audit — ce n'est pas une traçabilité, une vraie
-  journalisation reste une évolution future explicite (ADR-030).
+- Un `console.log` présenté comme une piste d'audit — ce n'est pas une traçabilité. La traçabilité
+  des transmissions du Pack Notaire est désormais réelle et structurée (`transmissions_dossier_
+  notaire`, ADR-049) ; pour tout autre besoin d'audit non couvert, ne pas improviser un `console.log`
+  comme substitut.
 - Un destinataire d'email deviné depuis `titre`/`contexte` d'une tâche ou depuis un type de
   document — la résolution suit uniquement des FK/relations métier réelles, jamais un texte libre
   ni une correspondance type → personne codée en dur (ADR-031).

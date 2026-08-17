@@ -715,6 +715,41 @@ connaît structurellement pas. Comportement fonctionnel strictement inchangé (d
 activation, cible, priorité, type, absence d'échéance) ; « Préparer un email » continue de résoudre
 exclusivement l'acquéreur, jamais un notaire ni un vendeur inventé.
 
+## Traçabilité des transmissions du Pack Notaire (ADR-049)
+
+**Atlas ne transporte aucun fichier.** Le conseiller prépare/télécharge le Pack (ADR-030, inchangé),
+le transmet par son canal externe habituel, puis revient dans Atlas déclarer explicitement la
+transmission (`enregistrerTransmissionDossierNotaireAction`). Wording jamais ambigu : bouton
+« Enregistrer la transmission » (jamais « Envoyer »/« Transmettre »), confirmation explicite
+« Je confirme avoir transmis cette sélection à l'étude indiquée. », avertissement affiché « Atlas
+enregistre cette transmission dans le suivi du dossier. Les documents ne sont pas envoyés par Atlas
+à cette étape. » Aucune valeur ne constitue une preuve juridique, un recommandé électronique, ou une
+confirmation de réception par l'étude.
+
+**Pivot : `compromisId`.** Aucune entité Notaire/Étude/Contact — le destinataire (étude,
+interlocuteur, email) est snapshoté à chaque transmission, pas géré via un carnet d'adresses. Un
+même Compromis peut avoir plusieurs transmissions vers des études/interlocuteurs différents.
+
+**Revalidation intégrale au POST**, jamais confiance dans les champs du formulaire : Compromis relu
+en base, Bien relu via `compromis.bienId`, `statut === "annule"` → refus, `en_cours`/`realise` →
+autorisé, Bien archivé → refus (historique reste lisible), le `compromisId` soumis doit correspondre
+exactement au Compromis que `determinerCompromisActuel` retournerait pour ce Bien (empêche un POST
+rattaché à un autre Compromis que celui affiché), sélection revalidée via `calculerPackNotaire`
+(mêmes règles ADR-029/030 : documents rejetés toujours exclus, documents douteux toujours inclus
+seulement si sélectionnés manuellement, jamais présentés comme validés), taille ≤ 200 Mo, sélection
+vide refusée, tout document hors ensemble autorisé refuse l'opération entière.
+
+**Snapshot immuable** : pour chaque document sélectionné, un SHA-256 (`node:crypto`) est calculé sur
+les octets réellement présents dans le stockage au moment de l'enregistrement — jamais recalculé à
+la lecture. Un fichier absent refuse l'enregistrement dans son ensemble (aucune ligne partielle). Une
+modification ultérieure des métadonnées du document (reclassement ADR-029) ne change jamais le
+manifeste déjà transmis. Idempotence par `cle_idempotence` générée côté client (même pattern que
+l'envoi Gmail ADR-031-bis) : un double submit ne crée jamais deux lignes ; une nouvelle transmission
+légitime plus tard utilise une nouvelle clé.
+
+**Historique en lecture seule** dans l'onglet Compromis de `BienTabs.tsx` : section « Transmissions
+notariales » par Compromis, `<details>` affichant le manifeste texte snapshoté tel quel.
+
 ## Onglet Visites → Effectuées de la fiche bien
 
 **Fichier** : `src/components/bien/BienTabs.tsx`. Pour un bien réel sans dossier mock, la section

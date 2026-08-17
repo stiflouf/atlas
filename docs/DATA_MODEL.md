@@ -1027,6 +1027,36 @@ ne réimplémente aucune règle de présence/validité documentaire.
 - `/biens/[id]/pack-notaire` : page de lecture, formulaire HTML natif (pas de JavaScript
   nécessaire) pour la sélection manuelle éphémère.
 
+## Transmissions du Pack Notaire (`transmissions_dossier_notaire`, ADR-049)
+
+**Rôle** : traçabilité déclarative — Atlas ne transporte aucun fichier ici. Le conseiller transmet
+le Pack par son canal externe habituel puis déclare explicitement la transmission dans Atlas, qui
+en fige le contenu. Pivot : `compromisId` (jamais une table `transactions`).
+
+| Colonne | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `compromis_id` | uuid, FK → `compromis.id`, **pas de `onDelete`** | NO ACTION — même choix que `evenements_metier.compromis_id` : aucun `DELETE` physique de `compromis` n'existe en production, une transmission ne doit jamais disparaître silencieusement avec son Compromis |
+| `cle_idempotence` | uuid, **`UNIQUE`** | générée côté client, `ON CONFLICT DO NOTHING` — double submit → une seule ligne |
+| `etude_nom` | text NOT NULL | seul champ destinataire obligatoire |
+| `destinataire_nom` / `destinataire_email` | text nullables | snapshotés, pas de FK vers une entité contact (aucune table Notaire/Étude n'existe) |
+| `transmis_le` | timestamptz NOT NULL | date DÉCLARÉE par le conseiller, distincte de `cree_le` |
+| `cree_par_email` | text NOT NULL | email de la session Atlas créatrice (ADR-047, mono-conseiller) — pas de FK utilisateur |
+| `manifeste_version` | integer NOT NULL DEFAULT 1 | seule source de vérité du format ; le JSON ne duplique pas ce champ |
+| `manifeste_snapshot` | **jsonb** NOT NULL | premier usage JSONB du projet — `{manifesteTexte, documents: [{documentId, nomExport, nomOriginal, categorie, typeDocument?, etatVerification, tailleOctets, sha256}]}`, figé au moment T, jamais recalculé à la lecture |
+| `cree_le` | timestamptz NOT NULL DEFAULT now() | |
+
+Aucun statut technique d'envoi (`demarreLe`/`reussiLe`/`echoueLe`) : aucun transport réel à tracer.
+Immuable : aucune Server Action de modification/suppression — une correction crée une nouvelle
+ligne. SHA-256 (`node:crypto`) calculé sur les octets réellement lus dans `stockage-documents/` au
+moment de l'enregistrement ; fichier absent → transmission entière refusée (aucune ligne partielle).
+
+`src/actions/transmissionDossierNotaire.ts` (`enregistrerTransmissionDossierNotaireAction`) revalide
+tout côté serveur en réutilisant `chargerContextePackNotaire`/`calculerPackNotaire`/
+`determinerCompromisActuel` (extraits d'ADR-030 dans `packNotaire.ts`, désormais partagés par le
+Route Handler ZIP, la page Pack et cette action) : Compromis `annule` → refus, `en_cours`/`realise`
+→ autorisé, Bien archivé → refus, sélection hors ensemble autorisé → refus total, > 200 Mo → refus.
+
 ## Communications (`src/lib/communications/`, ADR-031)
 
 **Rôle** : brouillons d'email assistés (relances/suivis), entièrement éphémères — aucune table,
@@ -1310,6 +1340,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0026_flowery_mephisto.sql` | ADR-040 : table `visites` (entité métier minimale, `CHECK`/`UNIQUE`) ; colonne nullable `visite_id` sur `comptes_rendus_visite` (`ON DELETE SET NULL`) |
 | `0027_abandoned_red_wolf.sql` | ADR-042 : `CHECK` étendus (`configurations_automatisation`, `envois_email`, `executions_automatisation`) pour la 7ᵉ règle `retour_vendeur_apres_visite` ; seed `active = false` |
 | `0028_mixed_lorna_dane.sql` | ADR-047 : `UNIQUE(executions_automatisation.tache_id)`, `UNIQUE(compromis.offre_id)`, index unique partiel `compromis_bien_id_en_cours_unique` — trois invariants jusqu'ici seulement applicatifs, désormais garantis en base |
+| `0029_nappy_microbe.sql` | ADR-049 : table `transmissions_dossier_notaire` (FK `compromis_id` NO ACTION, `UNIQUE(cle_idempotence)`, premier usage `jsonb` du projet) |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

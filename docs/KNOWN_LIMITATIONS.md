@@ -818,6 +818,31 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Pas de garde DB contre la réutilisation d'une Offre par plusieurs Compromis** (inchangé depuis
   ADR-045) — politique purement applicative, aucun `UNIQUE(offre_id)`.
 
+## Traçabilité des transmissions du Pack Notaire (ADR-049)
+
+- **Déclarative, non vérifiée techniquement par Atlas** — Atlas ne transporte aucun fichier ; une
+  transmission enregistrée signifie seulement que le conseiller a explicitement déclaré l'avoir
+  transmise par son propre canal. Aucune preuve technique que l'envoi a réellement eu lieu.
+- **Aucune confirmation de réception** — rien ne permet de savoir si/quand l'étude a effectivement
+  reçu le dossier. Pas de lecture Gmail entrante, pas de détection d'accusé de réception.
+- **Le SHA-256 snapshoté ne garantit pas que les octets effectivement remis au tiers étaient
+  nécessairement identiques** à ceux présents dans Atlas au moment T — le canal de transport reste
+  entièrement externe et hors du contrôle d'Atlas.
+- **Aucun contact notaire structuré** — le destinataire (étude, interlocuteur, email) est snapshoté
+  par transmission, jamais géré via un carnet d'adresses ou une table dédiée (décision V1 explicite,
+  ADR-049).
+- **Aucun accès externe** — pas de mini-espace étude, pas de token, pas de magic link. Un notaire
+  n'a et n'aura, dans le périmètre ADR-049, aucun moyen de consulter Atlas.
+- **L'historique du manifeste persiste, mais le fichier source peut devenir indisponible** si le
+  stockage documentaire n'est pas durable (voir point ci-dessous) — le SHA-256/nom/taille restent
+  lisibles, le contenu binaire original peut ne plus être retéléchargeable.
+- **Stockage documentaire de production non démontré comme persistant** (dette déjà connue depuis
+  ADR-047, réaffirmée par ADR-049) — `stockage-documents/` est un répertoire filesystem local ; un
+  redéploiement sans volume monté peut faire disparaître les fichiers sources. À configurer/vérifier
+  avant toute utilisation avec des données réelles.
+- Aucune de ces valeurs ne constitue une preuve juridique irréfutable, un recommandé électronique, ou
+  un accusé de réception légal — wording opérationnel uniquement, jamais présenté autrement dans l'UI.
+
 ## Limites du moteur de matching
 
 - Entièrement déterministe, à base de mots-clés et de seuils fixes (`docs/BUSINESS_RULES.md`) —

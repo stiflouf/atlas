@@ -1,19 +1,15 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
-import { listerCompromisPourBien } from "@/lib/compromisRepository";
-import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
-import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import {
   LABEL_ETAT_PREPARATION_PACK,
   LABEL_SEVERITE_PACK_NOTAIRE,
   calculerPackNotaire,
-  type ContextePackNotaire,
+  chargerContextePackNotaire,
   type SeveritePackNotaire,
 } from "@/lib/documents/packNotaire";
 import { LABEL_ETAT_VERIFICATION_DOCUMENT } from "@/types/documentBien";
+import TransmissionNotaireFormulaire from "@/components/documents/TransmissionNotaireFormulaire";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -28,17 +24,10 @@ const COULEUR_SEVERITE: Record<SeveritePackNotaire, string> = {
 
 export default async function PageDossierNotaire({ params }: PageProps) {
   const { id } = await params;
-  const bien = await getBienById(id);
-  if (!bien) notFound();
-
-  const documents = await listerDocumentsPourBien(bien.id);
-  const compromis = await listerCompromisPourBien(bien.id);
-  const compromisActuel =
-    compromis.find((c) => c.statut === "en_cours") ??
-    [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1))[0];
-  const prospectVendeurOrigine = await getProspectVendeurParBien(bien.id);
-  const acquereur = compromisActuel ? await getClientById(compromisActuel.acquereurId) : undefined;
-  const ctx: ContextePackNotaire = { bien, compromisActuel, prospectVendeurOrigine, acquereur };
+  const contexte = await chargerContextePackNotaire(id);
+  if (!contexte) notFound();
+  const { ctx, documents } = contexte;
+  const { bien, compromisActuel } = ctx;
   const pack = calculerPackNotaire(ctx, documents);
 
   const raisonExclusion = new Map<string, string>();
@@ -143,6 +132,14 @@ export default async function PageDossierNotaire({ params }: PageProps) {
           </form>
         )}
       </div>
+
+      {compromisActuel && (
+        <TransmissionNotaireFormulaire
+          compromisId={compromisActuel.id}
+          selectionProposee={pack.selectionProposee.map((d) => ({ id: d.id, nom: d.nom }))}
+          documentsDisponibles={pack.documentsDisponibles.map((d) => ({ id: d.id, nom: d.nom }))}
+        />
+      )}
 
       {pack.documentsInterdits.length > 0 && (
         <div className="mt-6">
