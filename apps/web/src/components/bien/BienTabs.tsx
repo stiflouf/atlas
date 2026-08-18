@@ -322,11 +322,11 @@ export default function BienTabs({
       {/* Contenu */}
       {active === "contexte" && (
         <div className="max-w-2xl">
-          <p className="text-[14px] text-[#64748b] leading-relaxed mb-6">{bien.description}</p>
+          <p className="text-[14px] text-text-2 leading-relaxed mb-6">{bien.description}</p>
           <ul className="flex flex-col gap-2">
             {bien.caracteristiques.map((c) => (
-              <li key={c} className="flex items-start gap-2 text-[14px] text-[#0f172a]">
-                <span className="text-[#4338ca] mt-0.5 shrink-0">·</span>
+              <li key={c} className="flex items-start gap-2 text-[14px] text-text-1">
+                <span className="text-accent mt-0.5 shrink-0">·</span>
                 {c}
               </li>
             ))}
@@ -339,14 +339,14 @@ export default function BienTabs({
           {dossier.historique.map((evt, i) => (
             <div key={i} className="flex gap-4 pb-6 relative">
               <div className="flex flex-col items-center">
-                <div className="w-2 h-2 rounded-full bg-[#4338ca] mt-1.5 shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-accent mt-1.5 shrink-0" />
                 {i < dossier.historique.length - 1 && (
-                  <div className="w-px flex-1 bg-[#f1f5f9] mt-1" />
+                  <div className="w-px flex-1 bg-border mt-1" />
                 )}
               </div>
               <div className="flex-1 min-w-0 pb-0">
-                <p className="text-[11px] text-[#94a3b8] mb-0.5">{formatDate(evt.date)} · {evt.auteur}</p>
-                <p className="text-[14px] text-[#0f172a] leading-snug">{evt.texte}</p>
+                <p className="text-[11px] text-text-3 mb-0.5">{formatDate(evt.date)} · {evt.auteur}</p>
+                <p className="text-[14px] text-text-1 leading-snug">{evt.texte}</p>
               </div>
             </div>
           ))}
@@ -358,14 +358,14 @@ export default function BienTabs({
           {evenementsHistorique.map((evt, i) => (
             <div key={`${bien.id}-${evt.date}`} className="flex gap-4 pb-6 relative">
               <div className="flex flex-col items-center">
-                <div className="w-2 h-2 rounded-full bg-[#4338ca] mt-1.5 shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-accent mt-1.5 shrink-0" />
                 {i < evenementsHistorique.length - 1 && (
-                  <div className="w-px flex-1 bg-[#f1f5f9] mt-1" />
+                  <div className="w-px flex-1 bg-border mt-1" />
                 )}
               </div>
               <div className="flex-1 min-w-0 pb-0">
-                <p className="text-[11px] text-[#94a3b8] mb-0.5">{formatDate(evt.date)}</p>
-                <p className="text-[14px] text-[#0f172a] leading-snug">{evt.texte}</p>
+                <p className="text-[11px] text-text-3 mb-0.5">{formatDate(evt.date)}</p>
+                <p className="text-[14px] text-text-1 leading-snug">{evt.texte}</p>
               </div>
             </div>
           ))}
@@ -374,21 +374,21 @@ export default function BienTabs({
 
       {active === "notes" && dossier && (
         <div>
-          <div className="bg-[#fafafa] rounded-lg p-4 border border-[#f1f5f9]">
+          <div className="bg-surface-muted rounded-lg p-4 border border-border">
             {dossier.notes.split("\n\n").map((paragraph, i) => (
-              <p key={i} className={`text-[14px] text-[#64748b] leading-relaxed ${i > 0 ? "mt-4" : ""}`}>
+              <p key={i} className={`text-[14px] text-text-2 leading-relaxed ${i > 0 ? "mt-4" : ""}`}>
                 {paragraph}
               </p>
             ))}
           </div>
-          <p className="text-[11px] text-[#94a3b8] mt-3">Notes privées — non communiquées aux acquéreurs.</p>
+          <p className="text-[11px] text-text-3 mt-3">Notes privées — non communiquées aux acquéreurs.</p>
         </div>
       )}
 
       {active === "notes" && !dossier && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
-            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
               Ce bien est archivé — impossible d'ajouter une nouvelle note.
             </p>
           ) : (
@@ -399,11 +399,11 @@ export default function BienTabs({
                 rows={3}
                 required
                 placeholder="Ajouter une note..."
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <button
                 type="submit"
-                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+                className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
               >
                 Ajouter une note
               </button>
@@ -411,40 +411,40 @@ export default function BienTabs({
           )}
 
           {notes.length === 0 ? (
-            <p className="text-[14px] text-[#94a3b8]">Aucune note pour l'instant.</p>
+            <p className="text-[14px] text-text-3">Aucune note pour l'instant.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {notes.map((note) => (
-                <div key={note.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-                  <p className="text-[11px] text-[#94a3b8] mb-1">{formatDate(note.creeLe)}</p>
-                  <p className="text-[14px] text-[#0f172a] leading-relaxed whitespace-pre-wrap">{note.contenu}</p>
+                <div key={note.id} className="bg-surface rounded-lg border border-border p-4">
+                  <p className="text-[11px] text-text-3 mb-1">{formatDate(note.creeLe)}</p>
+                  <p className="text-[14px] text-text-1 leading-relaxed whitespace-pre-wrap">{note.contenu}</p>
                 </div>
               ))}
             </div>
           )}
-          <p className="text-[11px] text-[#94a3b8]">Notes privées — non communiquées aux acquéreurs.</p>
+          <p className="text-[11px] text-text-3">Notes privées — non communiquées aux acquéreurs.</p>
         </div>
       )}
 
       {active === "visites" && (
         <div className="flex flex-col gap-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">À venir</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">À venir</p>
             {dossier ? (
               visitesAVenirMock.length === 0 ? (
-                <p className="text-[14px] text-[#94a3b8]">Aucune visite à venir dans l'agenda.</p>
+                <p className="text-[14px] text-text-3">Aucune visite à venir dans l'agenda.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {visitesAVenirMock.map((rdv) => (
-                    <div key={rdv.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-                      <p className="text-[13px] font-medium text-[#64748b]">{rdv.heure} — Aujourd'hui</p>
-                      <p className="text-[14px] font-medium text-[#0f172a] mt-0.5">{rdv.client?.prenom} {rdv.client?.nom}</p>
+                    <div key={rdv.id} className="bg-surface rounded-lg border border-border p-4">
+                      <p className="text-[13px] font-medium text-text-2">{rdv.heure} — Aujourd'hui</p>
+                      <p className="text-[14px] font-medium text-text-1 mt-0.5">{rdv.client?.prenom} {rdv.client?.nom}</p>
                     </div>
                   ))}
                 </div>
               )
             ) : visitesAVenirReelles.length === 0 ? (
-              <p className="text-[14px] text-[#94a3b8]">Aucune visite à venir enregistrée pour ce bien.</p>
+              <p className="text-[14px] text-text-3">Aucune visite à venir enregistrée pour ce bien.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {visitesAVenirReelles.map((v) => {
@@ -453,14 +453,14 @@ export default function BienTabs({
                     <Link
                       key={v.id}
                       href={`/visites/${v.id}`}
-                      className="block bg-white rounded-lg border border-[#f1f5f9] p-4 hover:border-[#4338ca] transition-colors"
+                      className="block bg-surface rounded-lg border border-border p-4 hover:border-[#4338ca] transition-colors"
                     >
                       <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-[13px] font-medium text-[#64748b]">{formatDate(v.datePrevue)}</p>
-                        <span className="text-[11px] text-[#94a3b8]">·</span>
-                        <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_VISITE[v.statut]}</span>
+                        <p className="text-[13px] font-medium text-text-2">{formatDate(v.datePrevue)}</p>
+                        <span className="text-[11px] text-text-3">·</span>
+                        <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_VISITE[v.statut]}</span>
                       </div>
-                      <p className="text-[14px] font-medium text-[#0f172a]">
+                      <p className="text-[14px] font-medium text-text-1">
                         {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                       </p>
                     </Link>
@@ -471,40 +471,40 @@ export default function BienTabs({
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Effectuées</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Effectuées</p>
             {dossier ? (
               visitesPasseesMock.length === 0 ? (
-                <p className="text-[14px] text-[#94a3b8]">Aucune visite effectuée pour l'instant.</p>
+                <p className="text-[14px] text-text-3">Aucune visite effectuée pour l'instant.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {visitesPasseesMock.map((v) => (
-                    <div key={v.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-                      <p className="text-[13px] font-medium text-[#64748b]">{formatDate(v.date)}</p>
-                      <p className="text-[14px] font-medium text-[#0f172a] mt-0.5">{v.client}</p>
-                      <p className="text-[13px] text-[#94a3b8] mt-1 leading-snug">{v.retour}</p>
+                    <div key={v.id} className="bg-surface rounded-lg border border-border p-4">
+                      <p className="text-[13px] font-medium text-text-2">{formatDate(v.date)}</p>
+                      <p className="text-[14px] font-medium text-text-1 mt-0.5">{v.client}</p>
+                      <p className="text-[13px] text-text-3 mt-1 leading-snug">{v.retour}</p>
                     </div>
                   ))}
                 </div>
               )
             ) : comptesRendusTries.length === 0 ? (
-              <p className="text-[14px] text-[#94a3b8]">Aucune visite effectuée enregistrée pour ce bien.</p>
+              <p className="text-[14px] text-text-3">Aucune visite effectuée enregistrée pour ce bien.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {comptesRendusTries.map((cr) => {
                   const acquereur = acquereursParId.get(cr.acquereurId);
                   return (
-                    <div key={cr.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                    <div key={cr.id} className="bg-surface rounded-lg border border-border p-4">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-[13px] font-medium text-[#64748b]">{formatDate(cr.dateVisite)}</p>
-                        <span className="text-[11px] text-[#94a3b8]">·</span>
-                        <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_INTERET[cr.interet]}</span>
+                        <p className="text-[13px] font-medium text-text-2">{formatDate(cr.dateVisite)}</p>
+                        <span className="text-[11px] text-text-3">·</span>
+                        <span className="text-[11px] font-medium text-accent">{LABEL_INTERET[cr.interet]}</span>
                       </div>
-                      <p className="text-[14px] font-medium text-[#0f172a]">
+                      <p className="text-[14px] font-medium text-text-1">
                         {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                       </p>
-                      <p className="text-[13px] text-[#94a3b8] mt-1 leading-snug whitespace-pre-wrap">{cr.retour}</p>
+                      <p className="text-[13px] text-text-3 mt-1 leading-snug whitespace-pre-wrap">{cr.retour}</p>
                       {cr.prochaineEtape && (
-                        <p className="text-[13px] text-[#94a3b8] mt-2 border-t border-[#f1f5f9] pt-2">
+                        <p className="text-[13px] text-text-3 mt-2 border-t border-border pt-2">
                           Prochaine étape : {cr.prochaineEtape}
                         </p>
                       )}
@@ -518,14 +518,14 @@ export default function BienTabs({
       )}
 
       {active === "documents" && dossier && (
-        <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <div className="flex flex-col divide-y divide-border bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           {dossier.documents.map((doc) => (
             <div key={doc.nom} className="flex items-center justify-between gap-4 px-4 py-3">
               <div className="flex-1 min-w-0">
-                <p className="text-[14px] text-[#0f172a] truncate">{doc.nom}</p>
-                <p className="text-[11px] text-[#94a3b8]">{doc.type} · {formatDate(doc.date)}</p>
+                <p className="text-[14px] text-text-1 truncate">{doc.nom}</p>
+                <p className="text-[11px] text-text-3">{doc.type} · {formatDate(doc.date)}</p>
               </div>
-              <span className="text-[13px] text-[#4338ca] font-medium shrink-0">Voir</span>
+              <span className="text-[13px] text-accent font-medium shrink-0">Voir</span>
             </div>
           ))}
         </div>
@@ -534,9 +534,9 @@ export default function BienTabs({
       {active === "documents" && !dossier && (
         <div className="flex flex-col gap-4">
           {checklist && (
-            <div className="bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-4 flex flex-col gap-3">
+            <div className="bg-surface-muted rounded-lg border border-border p-4 flex flex-col gap-3">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">
                   Dossier documentaire
                 </p>
                 {!checklist.honorairesRenseignes && <Badge variant="warning">Charge des honoraires non renseignée</Badge>}
@@ -548,16 +548,16 @@ export default function BienTabs({
                 if (exigencesFamille.length === 0) return null;
                 return (
                   <div key={famille}>
-                    <p className="text-[12px] font-medium text-[#64748b] mb-1">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
+                    <p className="text-[12px] font-medium text-text-2 mb-1">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
                     <div className="flex flex-col gap-1.5">
                       {exigencesFamille.map((e) => (
                         <div key={e.code} className="flex items-center justify-between gap-2 text-[13px]">
-                          <span className="text-[#0f172a]">{e.label}</span>
+                          <span className="text-text-1">{e.label}</span>
                           <span className="flex items-center gap-2 shrink-0">
                             {(e.etat === "manquant" || e.etat === "a_verifier" || e.etat === "perime") && (
                               <Link
                                 href={`/communications/nouveau?bienId=${bien.id}&exigenceCode=${e.code}`}
-                                className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                                className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors"
                               >
                                 Préparer un email
                               </Link>
@@ -570,15 +570,15 @@ export default function BienTabs({
                   </div>
                 );
               })}
-              <div className="flex items-center justify-between text-[13px] pt-2 border-t border-[#e2e8f0]">
-                <span className="text-[#0f172a]">PV d&apos;assemblée générale</span>
-                <span className="text-[#64748b]">
+              <div className="flex items-center justify-between text-[13px] pt-2 border-t border-border-md">
+                <span className="text-text-1">PV d&apos;assemblée générale</span>
+                <span className="text-text-2">
                   {checklist.pvAg.presents.length} / {checklist.pvAg.attendus} derniers
                 </span>
               </div>
               <Link
                 href={`/biens/${bien.id}/pack-notaire`}
-                className="self-start text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                className="self-start text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
               >
                 Préparer le pack notaire →
               </Link>
@@ -586,7 +586,7 @@ export default function BienTabs({
           )}
 
           {bien.archiveLe ? (
-            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
               Ce bien est archivé — impossible d'ajouter un nouveau document.
             </p>
           ) : (
@@ -597,13 +597,13 @@ export default function BienTabs({
                 name="nom"
                 required
                 placeholder="Nom du document (ex. Diagnostics énergétiques)"
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <div className="grid grid-cols-2 gap-2">
                 <select
                   name="categorie"
                   defaultValue="autre"
-                  className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                 >
                   {CATEGORIES_DOCUMENT.map((categorie) => (
                     <option key={categorie} value={categorie}>
@@ -614,7 +614,7 @@ export default function BienTabs({
                 <select
                   name="typeDocument"
                   defaultValue=""
-                  className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                 >
                   <option value="">Type — non classé</option>
                   {FAMILLES_DOCUMENT.map((famille) => (
@@ -632,31 +632,31 @@ export default function BienTabs({
                 type="text"
                 name="typeDocumentDetail"
                 placeholder="Précision si type « Autre » (optionnel)"
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-[#94a3b8]">
+                <label className="text-[11px] text-text-3">
                   Date du document
                   <input
                     type="date"
                     name="dateDocument"
-                    className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                    className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   />
                 </label>
-                <label className="text-[11px] text-[#94a3b8]">
+                <label className="text-[11px] text-text-3">
                   Fin de validité (diagnostics)
                   <input
                     type="date"
                     name="dateFinValidite"
-                    className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                    className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   />
                 </label>
               </div>
               {(compromisActuel || acquereursActifs.length > 0 || prospectVendeurOrigine) && (
                 <div className="flex flex-col gap-1.5 pt-1">
-                  <p className="text-[11px] font-medium text-[#64748b]">Rattachement (optionnel)</p>
+                  <p className="text-[11px] font-medium text-text-2">Rattachement (optionnel)</p>
                   {compromisActuel && (
-                    <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                    <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
                       <input type="checkbox" name="compromisId" value={compromisActuel.id} />
                       Rattacher au compromis en cours
                     </label>
@@ -665,7 +665,7 @@ export default function BienTabs({
                     <select
                       name="acquereurId"
                       defaultValue=""
-                      className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                      className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                     >
                       <option value="">Acquéreur — aucun</option>
                       {acquereursActifs.map((a) => (
@@ -676,7 +676,7 @@ export default function BienTabs({
                     </select>
                   )}
                   {prospectVendeurOrigine && (
-                    <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                    <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
                       <input type="checkbox" name="prospectVendeurId" value={prospectVendeurOrigine.id} />
                       Rattacher au vendeur d&apos;origine ({prospectVendeurOrigine.nom})
                     </label>
@@ -687,31 +687,31 @@ export default function BienTabs({
                 type="text"
                 name="coproprieteDeclaree"
                 placeholder="Copropriété déclarée par le document (optionnel)"
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <input
                 type="text"
                 name="adresseDeclaree"
                 placeholder="Adresse déclarée par le document (optionnel)"
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <input
                 type="text"
                 name="provenance"
                 placeholder="Provenance (optionnel — agent, vendeur, notaire...)"
-                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <input
                 type="file"
                 name="fichier"
                 required
                 accept="application/pdf,image/jpeg,image/png"
-                className="w-full text-[13px] text-[#64748b]"
+                className="w-full text-[13px] text-text-2"
               />
-              <p className="text-[11px] text-[#94a3b8]">PDF, JPEG ou PNG — 10 Mo maximum.</p>
+              <p className="text-[11px] text-text-3">PDF, JPEG ou PNG — 10 Mo maximum.</p>
               <button
                 type="submit"
-                className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+                className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
               >
                 Ajouter le document
               </button>
@@ -719,15 +719,15 @@ export default function BienTabs({
           )}
 
           {documents.length === 0 ? (
-            <p className="text-[14px] text-[#94a3b8]">Aucun document pour l'instant.</p>
+            <p className="text-[14px] text-text-3">Aucun document pour l'instant.</p>
           ) : (
-            <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div className="flex flex-col divide-y divide-border bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
               {documents.map((doc) => (
                 <div key={doc.id} className="flex flex-col gap-2 px-4 py-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] text-[#0f172a] truncate">{doc.nom}</p>
-                      <p className="text-[11px] text-[#94a3b8]">
+                      <p className="text-[14px] text-text-1 truncate">{doc.nom}</p>
+                      <p className="text-[11px] text-text-3">
                         {doc.typeDocument ? LABEL_TYPE_DOCUMENT[doc.typeDocument] : LABEL_CATEGORIE_DOCUMENT[doc.categorie]}
                         {" · "}
                         {formatTaille(doc.tailleOctets)} · {formatDate(doc.creeLe)}
@@ -735,16 +735,16 @@ export default function BienTabs({
                           ` · ${LABEL_ETAT_VERIFICATION_DOCUMENT[doc.etatVerification]}`}
                       </p>
                     </div>
-                    <a href={`/api/documents/${doc.id}`} className="text-[13px] text-[#4338ca] font-medium shrink-0">
+                    <a href={`/api/documents/${doc.id}`} className="text-[13px] text-accent font-medium shrink-0">
                       Télécharger
                     </a>
                   </div>
 
                   <details className="text-[12px]">
-                    <summary className="text-[#94a3b8] cursor-pointer select-none">Corriger le classement</summary>
+                    <summary className="text-text-3 cursor-pointer select-none">Corriger le classement</summary>
                     <form
                       action={corrigerClassementDocumentBienAction}
-                      className="flex flex-col gap-2 mt-2 pt-2 border-t border-[#f1f5f9]"
+                      className="flex flex-col gap-2 mt-2 pt-2 border-t border-border"
                     >
                       <input type="hidden" name="id" value={doc.id} />
                       <input
@@ -753,20 +753,20 @@ export default function BienTabs({
                         required
                         defaultValue={doc.bienId}
                         placeholder="Identifiant du bien"
-                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                       />
                       <input
                         type="text"
                         name="nom"
                         required
                         defaultValue={doc.nom}
-                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                       />
                       <div className="grid grid-cols-2 gap-2">
                         <select
                           name="categorie"
                           defaultValue={doc.categorie}
-                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                         >
                           {CATEGORIES_DOCUMENT.map((categorie) => (
                             <option key={categorie} value={categorie}>
@@ -777,7 +777,7 @@ export default function BienTabs({
                         <select
                           name="typeDocument"
                           defaultValue={doc.typeDocument ?? ""}
-                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                         >
                           <option value="">Type — non classé</option>
                           {FAMILLES_DOCUMENT.map((famille) => (
@@ -796,17 +796,17 @@ export default function BienTabs({
                           type="date"
                           name="dateDocument"
                           defaultValue={doc.dateDocument ?? ""}
-                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                         />
                         <input
                           type="date"
                           name="dateFinValidite"
                           defaultValue={doc.dateFinValidite ?? ""}
-                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                         />
                       </div>
                       {compromisActuel && (
-                        <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                        <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
                           <input
                             type="checkbox"
                             name="compromisId"
@@ -820,7 +820,7 @@ export default function BienTabs({
                         <select
                           name="acquereurId"
                           defaultValue={doc.acquereurId ?? ""}
-                          className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                         >
                           <option value="">Acquéreur — aucun</option>
                           {acquereursActifs.map((a) => (
@@ -831,7 +831,7 @@ export default function BienTabs({
                         </select>
                       )}
                       {prospectVendeurOrigine && (
-                        <label className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                        <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
                           <input
                             type="checkbox"
                             name="prospectVendeurId"
@@ -846,19 +846,19 @@ export default function BienTabs({
                         name="coproprieteDeclaree"
                         defaultValue={doc.coproprieteDeclaree ?? ""}
                         placeholder="Copropriété déclarée par le document"
-                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                       />
                       <input
                         type="text"
                         name="adresseDeclaree"
                         defaultValue={doc.adresseDeclaree ?? ""}
                         placeholder="Adresse déclarée par le document"
-                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                       />
                       <select
                         name="etatVerification"
                         defaultValue={doc.etatVerification}
-                        className="w-full border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                       >
                         {ETATS_VERIFICATION_DOCUMENT.map((etat) => (
                           <option key={etat} value={etat}>
@@ -868,7 +868,7 @@ export default function BienTabs({
                       </select>
                       <button
                         type="submit"
-                        className="self-start text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                        className="self-start text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
                       >
                         Enregistrer la correction
                       </button>
@@ -884,7 +884,7 @@ export default function BienTabs({
       {active === "offres" && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
-            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
               Ce bien est archivé — impossible d'ajouter une nouvelle offre.
             </p>
           ) : (
@@ -900,32 +900,32 @@ export default function BienTabs({
           )}
 
           {offresTriees.length === 0 ? (
-            <p className="text-[14px] text-[#94a3b8]">Aucune offre pour l'instant.</p>
+            <p className="text-[14px] text-text-3">Aucune offre pour l'instant.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {offresTriees.map((offre) => {
                 const acquereur = acquereursParId.get(offre.acquereurId);
                 return (
-                  <div key={offre.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                  <div key={offre.id} className="bg-surface rounded-lg border border-border p-4">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-[13px] font-medium text-[#64748b]">{formatDate(offre.dateOffre)}</p>
-                      <span className="text-[11px] text-[#94a3b8]">·</span>
-                      <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_OFFRE[offre.statut]}</span>
+                      <p className="text-[13px] font-medium text-text-2">{formatDate(offre.dateOffre)}</p>
+                      <span className="text-[11px] text-text-3">·</span>
+                      <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_OFFRE[offre.statut]}</span>
                     </div>
-                    <p className="text-[14px] font-medium text-[#0f172a]">
+                    <p className="text-[14px] font-medium text-text-1">
                       {formatPrix(offre.montant)} — {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                     </p>
                     {offre.dateValidite && (
-                      <p className="text-[13px] text-[#94a3b8] mt-1">Valable jusqu'au {formatDate(offre.dateValidite)}</p>
+                      <p className="text-[13px] text-text-3 mt-1">Valable jusqu'au {formatDate(offre.dateValidite)}</p>
                     )}
                     {offre.dateDecision && (
-                      <p className="text-[13px] text-[#94a3b8] mt-1">
+                      <p className="text-[13px] text-text-3 mt-1">
                         Décidée le {formatDate(offre.dateDecision)}
                         {offre.motifPerte && ` — ${LABEL_MOTIF_PERTE[offre.motifPerte]}`}
                       </p>
                     )}
                     {offre.statut === "en_cours" && !bien.archiveLe && (
-                      <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
+                      <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border">
                         {(["acceptee", "refusee", "retiree"] as const).map((statut) => (
                           <form
                             key={statut}
@@ -939,14 +939,14 @@ export default function BienTabs({
                               name="dateDecision"
                               required
                               defaultValue={new Date().toISOString().slice(0, 10)}
-                              className="border border-[#e2e8f0] rounded-lg px-2 py-1 text-[12px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              className="border border-border-md rounded-lg px-2 py-1 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             />
                             {statut !== "acceptee" && (
                               <select
                                 name="motifPerte"
                                 required
                                 defaultValue=""
-                                className="border border-[#e2e8f0] rounded-lg px-2 py-1 text-[12px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                className="border border-border-md rounded-lg px-2 py-1 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               >
                                 <option value="" disabled>
                                   Motif
@@ -977,10 +977,10 @@ export default function BienTabs({
                       !bien.archiveLe &&
                       !compromisEnCours &&
                       !idsOffresDejaUtiliseesParCompromis.has(offre.id) && (
-                        <div className="mt-3 pt-3 border-t border-[#f1f5f9]">
+                        <div className="mt-3 pt-3 border-t border-border">
                           <Link
                             href={`/compromis/nouveau?bienId=${bien.id}&acquereurId=${offre.acquereurId}&offreId=${offre.id}`}
-                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                            className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
                           >
                             Créer le compromis
                           </Link>
@@ -1001,24 +1001,24 @@ export default function BienTabs({
                           !idsDejaLies.has(cr.id)
                       );
                       return (
-                        <div className="mt-3 pt-3 border-t border-[#f1f5f9]">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-1.5">
+                        <div className="mt-3 pt-3 border-t border-border">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-1.5">
                             Visites liées
                           </p>
                           {liensDeLOffre.length === 0 ? (
-                            <p className="text-[12px] text-[#94a3b8] mb-2">Aucune visite liée pour l'instant.</p>
+                            <p className="text-[12px] text-text-3 mb-2">Aucune visite liée pour l'instant.</p>
                           ) : (
                             <div className="flex flex-col gap-1 mb-2">
                               {liensDeLOffre.map(({ lienId, visite }) => (
                                 <div key={lienId} className="flex items-center justify-between gap-2 text-[13px]">
-                                  <span className="text-[#64748b]">
+                                  <span className="text-text-2">
                                     {formatDate(visite.dateVisite)} — {LABEL_INTERET[visite.interet]}
                                   </span>
                                   <form action={delierVisiteAction}>
                                     <input type="hidden" name="lienId" value={lienId} />
                                     <button
                                       type="submit"
-                                      className="text-[11px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors"
+                                      className="text-[11px] font-medium text-text-2 hover:text-danger transition-colors"
                                     >
                                       Retirer le lien
                                     </button>
@@ -1034,7 +1034,7 @@ export default function BienTabs({
                                 name="compteRenduVisiteId"
                                 required
                                 defaultValue=""
-                                className="flex-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[12px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                className="flex-1 border border-border-md rounded-lg px-2 py-1.5 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               >
                                 <option value="" disabled>
                                   Lier une visite existante
@@ -1047,7 +1047,7 @@ export default function BienTabs({
                               </select>
                               <button
                                 type="submit"
-                                className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors shrink-0"
+                                className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors shrink-0"
                               >
                                 Lier
                               </button>
@@ -1067,11 +1067,11 @@ export default function BienTabs({
       {active === "compromis" && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
-            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
               Ce bien est archivé — impossible d'ajouter un nouveau compromis.
             </p>
           ) : compromisEnCours ? (
-            <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
               Un compromis est déjà en cours pour ce bien — résolvez-le avant d'en ajouter un nouveau.
             </p>
           ) : (
@@ -1086,23 +1086,23 @@ export default function BienTabs({
           )}
 
           {compromisTries.length === 0 ? (
-            <p className="text-[14px] text-[#94a3b8]">Aucun compromis pour l'instant.</p>
+            <p className="text-[14px] text-text-3">Aucun compromis pour l'instant.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {compromisTries.map((c) => {
                 const acquereur = acquereursParId.get(c.acquereurId);
                 return (
-                  <div key={c.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                  <div key={c.id} className="bg-surface rounded-lg border border-border p-4">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-[13px] font-medium text-[#64748b]">{formatDate(c.dateSignature)}</p>
-                      <span className="text-[11px] text-[#94a3b8]">·</span>
-                      <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
+                      <p className="text-[13px] font-medium text-text-2">{formatDate(c.dateSignature)}</p>
+                      <span className="text-[11px] text-text-3">·</span>
+                      <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
                     </div>
-                    <p className="text-[14px] font-medium text-[#0f172a]">
+                    <p className="text-[14px] font-medium text-text-1">
                       {formatPrix(c.prixConvenu)} — {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                     </p>
                     {c.dateActe && (
-                      <p className="text-[13px] text-[#94a3b8] mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
+                      <p className="text-[13px] text-text-3 mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
                     )}
                     {/* Date prévue modifiable tant que le compromis reste en_cours (ADR-046) —
                         un report d'acte est courant et ne doit jamais laisser une date fausse.
@@ -1114,7 +1114,7 @@ export default function BienTabs({
                     {c.statut === "en_cours" && !bien.archiveLe && (
                       <div className="mt-1.5">
                         {!c.dateActe && (
-                          <p className="text-[13px] text-[#94a3b8]">Date d&apos;acte à définir</p>
+                          <p className="text-[13px] text-text-3">Date d&apos;acte à définir</p>
                         )}
                         <form action={modifierDateActeAction} className="flex items-end gap-2 mt-1">
                           <input type="hidden" name="compromisId" value={c.id} />
@@ -1122,7 +1122,7 @@ export default function BienTabs({
                             type="date"
                             name="dateActe"
                             defaultValue={c.dateActe ?? ""}
-                            className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                            className="border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                           />
                           <Button type="submit" variant="secondary" size="sm">
                             {c.dateActe ? "Modifier la date" : "Renseigner la date"}
@@ -1131,27 +1131,27 @@ export default function BienTabs({
                       </div>
                     )}
                     {c.dateActeReelle && (
-                      <p className="text-[13px] text-[#16a34a] mt-1">Acte signé le {formatDate(c.dateActeReelle)}</p>
+                      <p className="text-[13px] text-success mt-1">Acte signé le {formatDate(c.dateActeReelle)}</p>
                     )}
                     {c.dateAnnulation && (
-                      <p className="text-[13px] text-[#94a3b8] mt-1">
+                      <p className="text-[13px] text-text-3 mt-1">
                         Annulé le {formatDate(c.dateAnnulation)}
                         {c.motifAnnulation && ` — ${LABEL_MOTIF_PERTE[c.motifAnnulation]}`}
                       </p>
                     )}
                     {c.statut === "en_cours" && !bien.archiveLe && (
-                      <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t border-[#f1f5f9]">
+                      <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t border-border">
                         <form action={changerStatutCompromisAction} className="flex items-end gap-2">
                           <input type="hidden" name="compromisId" value={c.id} />
                           <input type="hidden" name="statut" value="realise" />
-                          <label className="text-[11px] text-[#94a3b8]">
+                          <label className="text-[11px] text-text-3">
                             Date réelle de l'acte
                             <input
                               type="date"
                               name="dateActeReelle"
                               required
                               defaultValue={c.dateActe ?? ""}
-                              className="block mt-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              className="block mt-1 border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             />
                           </label>
                           <Button type="submit" variant="primary" size="sm">
@@ -1161,21 +1161,21 @@ export default function BienTabs({
                         <form action={changerStatutCompromisAction} className="flex items-end gap-2">
                           <input type="hidden" name="compromisId" value={c.id} />
                           <input type="hidden" name="statut" value="annule" />
-                          <label className="text-[11px] text-[#94a3b8]">
+                          <label className="text-[11px] text-text-3">
                             Date d'annulation
                             <input
                               type="date"
                               name="dateAnnulation"
                               required
                               defaultValue={new Date().toISOString().slice(0, 10)}
-                              className="block mt-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              className="block mt-1 border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             />
                           </label>
                           <select
                             name="motifAnnulation"
                             required
                             defaultValue=""
-                            className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                            className="border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                           >
                             <option value="" disabled>
                               Motif
@@ -1210,36 +1210,36 @@ export default function BienTabs({
                         return eligibleMalgreArchivage ? (
                           <form
                             action={ajouterRemunerationAction}
-                            className="flex flex-col gap-2 mt-3 pt-3 border-t border-[#f1f5f9]"
+                            className="flex flex-col gap-2 mt-3 pt-3 border-t border-border"
                           >
                             <input type="hidden" name="compromisId" value={c.id} />
-                            <p className="text-[12px] font-medium text-[#64748b]">Rémunération</p>
+                            <p className="text-[12px] font-medium text-text-2">Rémunération</p>
                             <input
                               type="text"
                               inputMode="decimal"
                               name="montantRemunerationConseiller"
                               required
                               placeholder="Rémunération conseiller (€)"
-                              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             />
                             <input
                               type="text"
                               inputMode="decimal"
                               name="montantHonorairesTotal"
                               placeholder="Honoraires totaux (€, optionnel)"
-                              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             />
-                            <label className="text-[11px] text-[#94a3b8]">
+                            <label className="text-[11px] text-text-3">
                               Date d'encaissement prévue (optionnelle)
                               <input
                                 type="date"
                                 name="dateEncaissementPrevue"
-                                className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               />
                             </label>
                             <button
                               type="submit"
-                              className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+                              className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
                             >
                               Ajouter la rémunération
                             </button>
@@ -1248,25 +1248,25 @@ export default function BienTabs({
                       }
 
                       return (
-                        <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-[#f1f5f9]">
+                        <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-border">
                           <div className="flex items-center gap-2">
-                            <p className="text-[12px] font-medium text-[#64748b]">Rémunération</p>
-                            <span className="text-[11px] font-medium text-[#4338ca]">
+                            <p className="text-[12px] font-medium text-text-2">Rémunération</p>
+                            <span className="text-[11px] font-medium text-accent">
                               {etatRemuneration ? LABEL_ETAT_REMUNERATION[etatRemuneration] : "Liée à un compromis annulé"}
                             </span>
                           </div>
-                          <p className="text-[14px] font-medium text-[#0f172a]">
+                          <p className="text-[14px] font-medium text-text-1">
                             {formatMontantCentimes(remuneration.montantRemunerationConseillerCentimes)}
                             {remuneration.montantHonorairesTotalCentimes != null &&
                               ` (honoraires totaux ${formatMontantCentimes(remuneration.montantHonorairesTotalCentimes)})`}
                           </p>
                           {remuneration.dateEncaissementPrevue && !remuneration.dateEncaissementReelle && (
-                            <p className="text-[13px] text-[#94a3b8]">
+                            <p className="text-[13px] text-text-3">
                               Encaissement prévu le {formatDate(remuneration.dateEncaissementPrevue)}
                             </p>
                           )}
                           {remuneration.dateEncaissementReelle && (
-                            <p className="text-[13px] text-[#16a34a]">
+                            <p className="text-[13px] text-success">
                               Encaissée le {formatDate(remuneration.dateEncaissementReelle)}
                             </p>
                           )}
@@ -1279,7 +1279,7 @@ export default function BienTabs({
                                 name="montantRemunerationConseiller"
                                 required
                                 defaultValue={(remuneration.montantRemunerationConseillerCentimes / 100).toFixed(2)}
-                                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               />
                               <input
                                 type="text"
@@ -1291,17 +1291,17 @@ export default function BienTabs({
                                     : ""
                                 }
                                 placeholder="Honoraires totaux (€, optionnel)"
-                                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               />
                               <input
                                 type="date"
                                 name="dateEncaissementPrevue"
                                 defaultValue={remuneration.dateEncaissementPrevue ?? ""}
-                                className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               />
                               <button
                                 type="submit"
-                                className="self-start text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                                className="self-start text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
                               >
                                 Corriger la rémunération
                               </button>
@@ -1310,18 +1310,18 @@ export default function BienTabs({
                           {!remuneration.dateEncaissementReelle && encaissementDisponible && (
                             <form action={marquerRemunerationEncaisseeAction} className="flex items-end gap-2">
                               <input type="hidden" name="compromisId" value={c.id} />
-                              <label className="text-[11px] text-[#94a3b8]">
+                              <label className="text-[11px] text-text-3">
                                 Date d'encaissement réelle
                                 <input
                                   type="date"
                                   name="dateEncaissementReelle"
                                   required
-                                  className="block mt-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                                  className="block mt-1 border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                                 />
                               </label>
                               <button
                                 type="submit"
-                                className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
+                                className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors pb-1.5"
                               >
                                 Marquer encaissée
                               </button>
@@ -1334,38 +1334,38 @@ export default function BienTabs({
                       const transmissions = transmissionsParCompromis.get(c.id) ?? [];
                       if (transmissions.length === 0 && c.statut === "annule") return null;
                       return (
-                        <div className="mt-3 pt-3 border-t border-[#f1f5f9]">
+                        <div className="mt-3 pt-3 border-t border-border">
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-[12px] font-medium text-[#64748b]">Transmissions notariales</p>
+                            <p className="text-[12px] font-medium text-text-2">Transmissions notariales</p>
                             {c.id === compromisActuel?.id && (
                               <Link
                                 href={`/biens/${bien.id}/pack-notaire`}
-                                className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                                className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
                               >
                                 Gérer le dossier notaire →
                               </Link>
                             )}
                           </div>
                           {transmissions.length === 0 ? (
-                            <p className="text-[13px] text-[#94a3b8]">Aucune transmission enregistrée pour l&apos;instant.</p>
+                            <p className="text-[13px] text-text-3">Aucune transmission enregistrée pour l&apos;instant.</p>
                           ) : (
                             <ul className="flex flex-col gap-2">
                               {transmissions.map((t) => (
-                                <li key={t.id} className="text-[13px] text-[#0f172a]">
+                                <li key={t.id} className="text-[13px] text-text-1">
                                   <p>
                                     {formatDate(t.transmisLe)} — <span className="font-medium">{t.etudeNom}</span>
                                     {t.destinataireNom && ` (${t.destinataireNom})`}
                                   </p>
-                                  <p className="text-[12px] text-[#94a3b8]">
+                                  <p className="text-[12px] text-text-3">
                                     {t.manifesteSnapshot.documents.length} document
                                     {t.manifesteSnapshot.documents.length > 1 ? "s" : ""}
                                     {t.destinataireEmail && ` — ${t.destinataireEmail}`} — enregistré par {t.creeParEmail}
                                   </p>
                                   <details className="mt-1">
-                                    <summary className="text-[12px] text-[#4338ca] cursor-pointer">
+                                    <summary className="text-[12px] text-accent cursor-pointer">
                                       Voir le manifeste transmis
                                     </summary>
-                                    <pre className="whitespace-pre-wrap text-[12px] text-[#64748b] mt-1 bg-[#fafafa] rounded-lg p-2 border border-[#f1f5f9]">
+                                    <pre className="whitespace-pre-wrap text-[12px] text-text-2 mt-1 bg-surface-muted rounded-lg p-2 border border-border">
                                       {t.manifesteSnapshot.manifesteTexte}
                                     </pre>
                                   </details>
@@ -1385,16 +1385,16 @@ export default function BienTabs({
       )}
 
       {active === "taches" && (
-        <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
+        <div className="flex flex-col divide-y divide-border bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
           {taches.length === 0 ? (
-            <p className="text-[14px] text-[#94a3b8] py-3">Aucune tâche en cours sur ce dossier.</p>
+            <p className="text-[14px] text-text-3 py-3">Aucune tâche en cours sur ce dossier.</p>
           ) : (
             taches.map((tache) => {
               const statut = deriverStatutTache(tache);
               return (
                 <div key={tache.id} className="flex items-start gap-3 py-3">
                   {statut !== "a_faire" ? (
-                    <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-[#f1f5f9] border-[#e2e8f0]" />
+                    <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-border border-border-md" />
                   ) : (
                     <form action={terminerTacheAction} className="mt-0.5 shrink-0">
                       <input type="hidden" name="id" value={tache.id} />
@@ -1402,14 +1402,14 @@ export default function BienTabs({
                       <button
                         type="submit"
                         aria-label="Marquer comme terminée"
-                        className="w-4 h-4 rounded border border-[#e2e8f0] hover:border-[#4338ca] hover:bg-[#eef2ff] transition-colors"
+                        className="w-4 h-4 rounded border border-border-md hover:border-[#4338ca] hover:bg-accent-light transition-colors"
                       />
                     </form>
                   )}
                   <div className="flex-1">
-                    <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
-                    {tache.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>}
-                    <p className="text-[11px] text-[#94a3b8] mt-0.5">
+                    <p className="text-[14px] text-text-1">{tache.titre}</p>
+                    {tache.contexte && <p className="text-[13px] text-text-3 mt-0.5">{tache.contexte}</p>}
+                    <p className="text-[11px] text-text-3 mt-0.5">
                       {statut === "annulee"
                         ? "Annulée"
                         : tache.echeance
@@ -1417,7 +1417,7 @@ export default function BienTabs({
                           : LABEL_ECHEANCE_ABSENTE}
                     </p>
                     {tache.origine === "automatique" && (
-                      <p className="text-[11px] text-[#94a3b8] mt-0.5">
+                      <p className="text-[11px] text-text-3 mt-0.5">
                         Créée automatiquement — Règle :{" "}
                         {tache.origineCode && labelRegleAutomatisation[tache.origineCode as CodeRegleAutomatisation]
                           ? labelRegleAutomatisation[tache.origineCode as CodeRegleAutomatisation]
@@ -1428,7 +1428,7 @@ export default function BienTabs({
                       {deriverCibleTache(tache) && (
                         <Link
                           href={`/communications/nouveau?tacheId=${tache.id}`}
-                          className="text-[11px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                          className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors"
                         >
                           Préparer un email
                         </Link>
@@ -1437,7 +1437,7 @@ export default function BienTabs({
                         <form action={annulerTacheAction}>
                           <input type="hidden" name="id" value={tache.id} />
                           <input type="hidden" name="redirectTo" value={`/biens/${bien.id}`} />
-                          <button type="submit" className="text-[11px] text-[#94a3b8] hover:text-[#dc2626] transition-colors">
+                          <button type="submit" className="text-[11px] text-text-3 hover:text-danger transition-colors">
                             Annuler
                           </button>
                         </form>
@@ -1457,24 +1457,24 @@ export default function BienTabs({
       {active === "compatibilite" && (
         <div className="flex flex-col gap-2">
           {compatibilitesTriees.length === 0 ? (
-            <p className="text-[14px] text-[#94a3b8]">Aucun acquéreur à comparer pour l'instant.</p>
+            <p className="text-[14px] text-text-3">Aucun acquéreur à comparer pour l'instant.</p>
           ) : (
             compatibilitesTriees.map((resultat) => {
               const acquereur = acquereursCompatibiliteParId.get(resultat.acquereurId);
               const criteresPertinents = resultat.criteres.filter((c) => c.statut !== "non_concerne");
               return (
-                <details key={resultat.acquereurId} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                <details key={resultat.acquereurId} className="bg-surface rounded-lg border border-border p-4">
                   <summary className="cursor-pointer flex items-center justify-between gap-3 list-none">
-                    <span className="text-[14px] font-medium text-[#0f172a]">
+                    <span className="text-[14px] font-medium text-text-1">
                       {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                     </span>
                     <Badge variant={VARIANT_PAR_STATUT_COMPATIBILITE[resultat.statutGlobal]}>
                       {LABEL_STATUT_COMPATIBILITE[resultat.statutGlobal]}
                     </Badge>
                   </summary>
-                  <div className="mt-3 pt-3 border-t border-[#f1f5f9] flex flex-col gap-2">
+                  <div className="mt-3 pt-3 border-t border-border flex flex-col gap-2">
                     {criteresPertinents.length === 0 ? (
-                      <p className="text-[13px] text-[#94a3b8]">
+                      <p className="text-[13px] text-text-3">
                         Aucune exigence structurée déclarée par cet acquéreur pour ce bien.
                       </p>
                     ) : (
@@ -1483,7 +1483,7 @@ export default function BienTabs({
                           <Badge variant={VARIANT_PAR_STATUT_CRITERE[critere.statut]}>
                             {LABEL_STATUT_CRITERE[critere.statut]}
                           </Badge>
-                          <p className="text-[13px] text-[#64748b] leading-snug">{critere.explication}</p>
+                          <p className="text-[13px] text-text-2 leading-snug">{critere.explication}</p>
                         </div>
                       ))
                     )}

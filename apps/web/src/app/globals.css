@@ -2,30 +2,51 @@
 
 @theme inline {
   --font-sans: var(--font-inter);
+  /* Grands titres uniquement (classe `font-serif`) — jamais l'UI/les données/les formulaires. */
+  --font-serif: var(--font-fraunces);
 
-  --color-page: #f8f9fa;
-  --color-surface: #ffffff;
+  /* Identité premium (direction artistique validée, ajustée après revue maquette) — crème chaud
+     plutôt que blanc/gris froid, navy profond comme couleur de marque/CTA, champagne réservé aux
+     détails. Le crème doit rester subtil (perçu, pas remarqué) — jamais une grande zone blanche
+     pure qui redonnerait une impression de back-office. */
+  --color-page: #f6f2ea;
+  --color-surface: #fffcf7;
+  --color-surface-muted: #f1ead9;
 
-  --color-text-1: #0f172a;
-  --color-text-2: #64748b;
-  --color-text-3: #94a3b8;
+  /* text-1/2/3 = primary/secondary/muted (nommage conservé tel quel : des centaines d'usages
+     existants dans le projet, renommer casserait un diff énorme pour un gain nul). */
+  --color-text-1: #122038;
+  --color-text-2: #5a5d70;
+  --color-text-3: #8b8d9e;
 
-  --color-border: #f1f5f9;
-  --color-border-md: #e2e8f0;
+  --color-border: #e8e0cf;
+  --color-border-md: #d9ceb6;
 
-  --color-accent: #4338ca;
-  --color-accent-hover: #3730a3;
-  --color-accent-light: #eef2ff;
+  /* Marque : navy profond (sidebar + CTA premium). */
+  --color-navy: #071a3a;
+  --color-navy-hover: #102a54;
 
-  --color-danger: #dc2626;
-  --color-danger-light: #fef2f2;
-  --color-success: #16a34a;
-  --color-success-light: #f0fdf4;
+  /* `accent` repointé sur le navy (au lieu de l'indigo précédent) : tous les usages existants
+     (Button primary, focus rings, onglet actif, badges) deviennent navy sans toucher chaque
+     fichier un par un — c'est le seul token dont la VALEUR change de famille de couleur. */
+  --color-accent: #071a3a;
+  --color-accent-hover: #102a54;
+  --color-accent-light: #f0e4cc;
 
-  /* Ajouté pour la passe design RC2 : sémantique "à obtenir/à vérifier", distincte de danger —
-     un dossier documentaire qui commence n'est pas une anomalie (voir ADR-029, BienTabs.tsx). */
-  --color-warning: #d97706;
-  --color-warning-light: #fffbeb;
+  /* Champagne : accent chaud réservé à l'identité/aux détails — jamais un texte peu contrasté
+     (voir BrandMark, petits éléments sélectionnés). */
+  --color-champagne: #c59a5b;
+  --color-champagne-light: #f2e6d0;
+
+  --color-danger: #ae4029;
+  --color-danger-light: #f7e6df;
+  --color-success: #3a6b4f;
+  --color-success-light: #e8f0ea;
+
+  /* "À obtenir/à vérifier" (ADR-029) — jamais une anomalie, teinte champagne assombrie pour
+     rester lisible en texte, contraste vérifié sur surface/page (voir BienTabs.tsx). */
+  --color-warning: #92692c;
+  --color-warning-light: #f5ead4;
 }
 
 * {
@@ -35,8 +56,8 @@
 html,
 body {
   height: 100%;
-  background-color: #f8f9fa;
-  color: #0f172a;
+  background-color: #f6f2ea;
+  color: #122038;
   font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -50,6 +71,6 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #e2e8f0;
+  background: #d9ceb6;
   border-radius: 2px;
 }

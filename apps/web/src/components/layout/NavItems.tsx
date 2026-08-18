@@ -21,17 +21,15 @@ export default function NavItems({ variant }: Props) {
 
   if (variant === "sidebar") {
     return (
-      <nav className="flex flex-col gap-1">
+      <nav className="flex flex-col gap-0.5">
         {items.map(({ label, href, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-100 ${
-                active
-                  ? "bg-[#eef2ff] text-[#4338ca] font-medium"
-                  : "text-[#64748b] hover:bg-[#f8fafc] hover:text-[#0f172a]"
+              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors duration-100 ${
+                active ? "bg-white/10 text-champagne font-medium" : "text-white/70 hover:bg-white/5 hover:text-white"
               }`}
             >
               <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
@@ -52,7 +50,7 @@ export default function NavItems({ variant }: Props) {
             key={href}
             href={href}
             className={`flex flex-col items-center gap-1 py-2 px-6 transition-colors duration-100 ${
-              active ? "text-[#4338ca]" : "text-[#94a3b8]"
+              active ? "text-navy" : "text-text-3"
             }`}
           >
             <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />

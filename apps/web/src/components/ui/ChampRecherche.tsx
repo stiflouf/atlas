@@ -17,25 +17,25 @@ export default function ChampRecherche({ action, q, placeholder, champsCaches, h
   return (
     <form method="GET" action={action} className="flex items-center gap-2 mb-6">
       <div className="relative flex-1 max-w-xs">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" strokeWidth={1.8} />
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-3" strokeWidth={1.8} />
         <input
           type="text"
           name="q"
           defaultValue={q ?? ""}
           placeholder={placeholder}
-          className="w-full border border-[#e2e8f0] rounded-lg pl-9 pr-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+          className="w-full border border-border-md rounded-lg pl-9 pr-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         />
       </div>
       {champsCaches &&
         Object.entries(champsCaches).map(([nom, valeur]) => <input key={nom} type="hidden" name={nom} value={valeur} />)}
       <button
         type="submit"
-        className="text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg shrink-0"
+        className="text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg shrink-0"
       >
         Rechercher
       </button>
       {q && (
-        <a href={hrefEffacer} className="text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors shrink-0">
+        <a href={hrefEffacer} className="text-[13px] text-text-2 hover:text-text-1 transition-colors shrink-0">
           Effacer
         </a>
       )}

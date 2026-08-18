@@ -4,12 +4,13 @@ import type { ButtonHTMLAttributes } from "react";
 // nécessaires ailleurs dans le produit (CTA principal / action secondaire / action destructive),
 // sur les tokens de couleur existants. Compatible tel quel avec un `<form action={...}>` (Server
 // Action) via `type="submit"` — aucune logique, aucun état, un wrapper de style uniquement.
-type Variant = "primary" | "secondary" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-accent text-white hover:bg-accent-hover disabled:hover:bg-accent",
   secondary: "border border-border-md text-text-1 hover:border-accent hover:text-accent bg-transparent",
+  ghost: "text-text-2 hover:text-accent hover:bg-surface-muted bg-transparent",
   danger: "border border-border-md text-danger hover:border-danger hover:bg-danger-light bg-transparent",
 };
 

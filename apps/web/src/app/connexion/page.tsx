@@ -1,3 +1,6 @@
+import BrandMark from "@/components/layout/BrandMark";
+import { PRODUCT_TAGLINE } from "@/lib/branding";
+
 const MESSAGES_ERREUR: Record<string, string> = {
   compte_non_autorise: "Compte non autorisé.",
   connexion_echouee: "La connexion a échoué — merci de réessayer.",
@@ -13,20 +16,22 @@ export default async function ConnexionPage({ searchParams }: PageProps) {
   const messageErreur = params.erreur ? MESSAGES_ERREUR[params.erreur] : undefined;
 
   return (
-    <div className="h-full flex items-center justify-center px-4">
-      <div className="w-full max-w-sm bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.06)] p-8 text-center">
-        <p className="text-[15px] font-semibold text-[#0f172a] tracking-tight mb-1">Atlas</p>
-        <p className="text-[13px] text-[#64748b] mb-6">Le compagnon du conseiller immobilier.</p>
+    <div className="h-full flex items-center justify-center px-4 bg-page">
+      <div className="w-full max-w-sm bg-surface border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-8 text-center">
+        <div className="flex justify-center mb-4">
+          <BrandMark />
+        </div>
+        <p className="text-[13px] text-text-2 mb-6">{PRODUCT_TAGLINE}</p>
 
         {messageErreur && (
-          <p className="text-[13px] text-[#b91c1c] bg-[#fef2f2] border border-[#fecaca] rounded-lg px-3 py-2 mb-4">
+          <p className="text-[13px] text-danger bg-danger-light border border-danger/20 rounded-lg px-3 py-2 mb-4">
             {messageErreur}
           </p>
         )}
 
         <a
           href="/api/auth/atlas/login"
-          className="inline-flex items-center justify-center w-full text-[14px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+          className="inline-flex items-center justify-center w-full text-[14px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
         >
           Se connecter avec Google
         </a>

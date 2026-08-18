@@ -37,15 +37,15 @@ export default function CompromisFormulaire(props: Props) {
       {props.verrouille ? (
         <>
           <div>
-            <p className="text-[11px] font-medium text-[#64748b] mb-1">Acquéreur</p>
-            <p className="text-[14px] font-medium text-[#0f172a] bg-[#fafafa] border border-[#f1f5f9] rounded-lg px-3 py-2">
+            <p className="text-[11px] font-medium text-text-2 mb-1">Acquéreur</p>
+            <p className="text-[14px] font-medium text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
               {props.acquereur.prenom} {props.acquereur.nom}
             </p>
             <input type="hidden" name="acquereurId" value={props.acquereur.id} />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-[#64748b] mb-1">Offre acceptée</p>
-            <p className="text-[14px] font-medium text-[#0f172a] bg-[#fafafa] border border-[#f1f5f9] rounded-lg px-3 py-2">
+            <p className="text-[11px] font-medium text-text-2 mb-1">Offre acceptée</p>
+            <p className="text-[14px] font-medium text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
               {formatPrix(props.offre.montant)} — {formatDate(props.offre.dateOffre)}
             </p>
             <input type="hidden" name="offreId" value={props.offre.id} />
@@ -57,7 +57,7 @@ export default function CompromisFormulaire(props: Props) {
             name="acquereurId"
             required
             defaultValue=""
-            className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+            className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
           >
             <option value="" disabled>
               Acquéreur
@@ -71,7 +71,7 @@ export default function CompromisFormulaire(props: Props) {
           <select
             name="offreId"
             defaultValue=""
-            className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+            className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
           >
             <option value="">Aucune (compromis direct)</option>
             {props.offresAcceptees.map((o) => {
@@ -93,28 +93,28 @@ export default function CompromisFormulaire(props: Props) {
         required
         min={1}
         placeholder="Prix convenu (€)"
-        className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+        className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
       />
-      <label className="text-[11px] text-[#94a3b8]">
+      <label className="text-[11px] text-text-3">
         Date de signature
         <input
           type="date"
           name="dateSignature"
           required
-          className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         />
       </label>
-      <label className="text-[11px] text-[#94a3b8]">
+      <label className="text-[11px] text-text-3">
         Date d&apos;acte prévue (optionnelle)
         <input
           type="date"
           name="dateActe"
-          className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         />
       </label>
       <button
         type="submit"
-        className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+        className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
       >
         Ajouter le compromis
       </button>

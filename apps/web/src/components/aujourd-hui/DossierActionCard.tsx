@@ -12,8 +12,8 @@ export default function DossierActionCard({ bien, raison }: { bien: Bien; raison
       <Card className="hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow duration-150">
         <div className="p-4">
           <p className="text-[14px] leading-snug">
-            <span className="font-medium text-[#0f172a]">{labelCourt(bien)}</span>
-            <span className="text-[#64748b]"> — {raison}</span>
+            <span className="font-medium text-text-1">{labelCourt(bien)}</span>
+            <span className="text-text-2"> — {raison}</span>
           </p>
         </div>
       </Card>

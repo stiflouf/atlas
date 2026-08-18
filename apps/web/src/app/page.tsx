@@ -4,6 +4,8 @@ import TacheItem from "@/components/aujourd-hui/TacheItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
 import AlerteCard from "@/components/alertes/AlerteCard";
 import SectionTitle from "@/components/ui/SectionTitle";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import { listerTaches } from "@/lib/tacheRepository";
@@ -137,20 +139,19 @@ export default async function AujourdHui() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       {/* En-tête */}
-      <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="mb-9 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">
+          <h1 className="font-serif text-[26px] md:text-[32px] font-semibold text-text-1 leading-tight">
             Aujourd'hui
           </h1>
-          <p className="text-[13px] text-[#94a3b8] mt-1 capitalize">
+          <p className="text-[13px] text-text-3 mt-1.5 capitalize">
             {greeting} — {dateStr}
           </p>
         </div>
-        <Link
-          href="/taches/nouveau"
-          className="shrink-0 mt-1 text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
-        >
-          + Nouvelle tâche
+        <Link href="/taches/nouveau" className="shrink-0 mt-0.5">
+          <Button variant="primary" size="sm">
+            + Nouvelle tâche
+          </Button>
         </Link>
       </div>
 
@@ -165,7 +166,7 @@ export default async function AujourdHui() {
           </div>
           {autresAlertes.length > 0 && (
             <details className="mt-2">
-              <summary className="text-[13px] text-[#4338ca] font-medium cursor-pointer">
+              <summary className="text-[13px] text-accent font-medium cursor-pointer">
                 Afficher les autres ({autresAlertes.length})
               </summary>
               <div className="flex flex-col gap-2 mt-2">
@@ -187,7 +188,7 @@ export default async function AujourdHui() {
         </SectionTitle>
 
         {source === "google_calendar" && (
-          <div className="text-[12px] text-[#94a3b8] mb-1">
+          <div className="text-[12px] text-text-3 mb-1">
             Google Calendar : connecté ·{" "}
             <form action="/api/auth/google/logout" method="POST" className="inline">
               {/* La révocation Google est globale (ADR-031-bis) : ce bouton déconnecte aussi Gmail
@@ -200,15 +201,15 @@ export default async function AujourdHui() {
           </div>
         )}
         {source === "demo" && (
-          <div className="text-[12px] text-[#94a3b8] mb-1">
+          <div className="text-[12px] text-text-3 mb-1">
             Source : Données de démonstration ·{" "}
-            <a href="/api/auth/google/login" className="text-[#4338ca] font-medium">
+            <a href="/api/auth/google/login" className="text-accent font-medium">
               Connecter Google Calendar
             </a>
           </div>
         )}
         {source === "demo_erreur" && (
-          <div className="text-[12px] text-[#b45309] mb-1">
+          <div className="text-[12px] text-warning mb-1">
             Google Calendar indisponible — données de démonstration affichées ·{" "}
             <a href="/api/auth/google/login?reconnexion=1" className="font-medium underline">
               Se reconnecter
@@ -217,13 +218,13 @@ export default async function AujourdHui() {
         )}
         {/* Capacité distincte de Calendar (ADR-031-bis) : jamais un simple "Google connecté" —
             le conseiller doit voir explicitement ce qui est autorisé pour l'envoi d'emails. */}
-        <div className="text-[12px] text-[#94a3b8] mb-3">
+        <div className="text-[12px] text-text-3 mb-3">
           Gmail : {gmailAutorise ? "autorisé" : "non autorisé"}
           {!gmailAutorise && (
             <>
               {" "}
               ·{" "}
-              <a href="/api/auth/google/gmail/login" className="text-[#4338ca] font-medium">
+              <a href="/api/auth/google/gmail/login" className="text-accent font-medium">
                 Autoriser Gmail
               </a>
             </>
@@ -238,7 +239,7 @@ export default async function AujourdHui() {
           </div>
         )}
         {rdvTermines > 0 && (
-          <p className="text-[12px] text-[#94a3b8] mt-2">
+          <p className="text-[12px] text-text-3 mt-2">
             {rdvTermines} déjà terminé{rdvTermines > 1 ? "s" : ""} aujourd'hui
           </p>
         )}
@@ -277,11 +278,11 @@ export default async function AujourdHui() {
             {autresTaches.length} autre{autresTaches.length > 1 ? "s" : ""} tâche
             {autresTaches.length > 1 ? "s" : ""}
           </SectionTitle>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] px-4 divide-y divide-[#f1f5f9]">
+          <Card className="px-4 divide-y divide-border">
             {autresTaches.map((tache) => (
               <TacheItem key={tache.id} tache={tache} />
             ))}
-          </div>
+          </Card>
         </section>
       )}
 
@@ -289,7 +290,7 @@ export default async function AujourdHui() {
           les alertes ont par ailleurs du contenu, seulement quand il n'y a structurellement rien à
           traiter dans les deux sections ci-dessus. */}
       {dossiersAttention.length === 0 && autresTaches.length === 0 && (
-        <p className="text-[13px] text-[#94a3b8]">Rien à traiter pour le moment.</p>
+        <p className="text-[13px] text-text-3">Rien à traiter pour le moment.</p>
       )}
     </div>
   );

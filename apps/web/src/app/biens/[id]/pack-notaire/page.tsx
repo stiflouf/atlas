@@ -43,30 +43,30 @@ export default async function PageDossierNotaire({ params }: PageProps) {
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
         href={`/biens/${bien.id}`}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         {bien.titre}
       </Link>
 
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-1">Dossier notaire</h1>
-      <p className="text-[14px] text-[#64748b] mb-3">
+      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-1">Dossier notaire</h1>
+      <p className="text-[14px] text-text-2 mb-3">
         {bien.titre} — {bien.adresse}, {bien.codePostal} {bien.ville}
       </p>
       <Link
         href={`/communications/nouveau?bienId=${bien.id}&notaire=1`}
-        className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mb-6 inline-block"
+        className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors mb-6 inline-block"
       >
         Préparer un message pour le notaire →
       </Link>
 
-      <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 mb-6">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-1">
+      <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 mb-6">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-1">
           État de préparation Atlas
         </p>
-        <p className="text-[16px] font-medium text-[#0f172a]">{LABEL_ETAT_PREPARATION_PACK[pack.etatPreparation]}</p>
+        <p className="text-[16px] font-medium text-text-1">{LABEL_ETAT_PREPARATION_PACK[pack.etatPreparation]}</p>
         {pack.etatPreparation === "preparation_atlas_complete" && (
-          <p className="text-[12px] text-[#94a3b8] mt-1">
+          <p className="text-[12px] text-text-3 mt-1">
             Signifie uniquement qu'aucun constat n'est détecté par les contrôles Atlas actuellement implémentés —
             pas une garantie de conformité légale ni d'acceptation par le notaire.
           </p>
@@ -83,7 +83,7 @@ export default async function PageDossierNotaire({ params }: PageProps) {
             </p>
             <ul className="flex flex-col gap-1">
               {constats.map((c) => (
-                <li key={c.code} className="text-[14px] text-[#0f172a]">
+                <li key={c.code} className="text-[14px] text-text-1">
                   {c.message}
                 </li>
               ))}
@@ -93,13 +93,13 @@ export default async function PageDossierNotaire({ params }: PageProps) {
       })}
 
       <div className="mt-6">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
           Documents prêts : {pack.selectionProposee.length} proposés automatiquement
           {pack.documentsDisponibles.length > 0 && ` — ${pack.documentsDisponibles.length} disponibles pour ajout manuel`}
         </p>
 
         {!compromisActuel ? (
-          <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+          <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
             Contexte transactionnel incomplet — aucun compromis en cours pour ce bien, le téléchargement du pack
             est indisponible.
           </p>
@@ -107,27 +107,27 @@ export default async function PageDossierNotaire({ params }: PageProps) {
           <form
             method="POST"
             action={`/api/biens/${bien.id}/pack-notaire`}
-            className="flex flex-col gap-2 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4"
+            className="flex flex-col gap-2 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4"
           >
             {pack.selectionProposee.map((doc) => (
-              <label key={doc.id} className="inline-flex items-center gap-2 text-[14px] text-[#0f172a]">
+              <label key={doc.id} className="inline-flex items-center gap-2 text-[14px] text-text-1">
                 <input type="checkbox" name="documentIds" value={doc.id} defaultChecked />
                 {doc.nom}
-                <span className="text-[11px] text-[#94a3b8]">— proposé</span>
+                <span className="text-[11px] text-text-3">— proposé</span>
               </label>
             ))}
             {pack.documentsDisponibles.map((doc) => (
-              <label key={doc.id} className="inline-flex items-center gap-2 text-[14px] text-[#0f172a]">
+              <label key={doc.id} className="inline-flex items-center gap-2 text-[14px] text-text-1">
                 <input type="checkbox" name="documentIds" value={doc.id} />
                 {doc.nom}
-                <span className="text-[11px] text-[#94a3b8]">
+                <span className="text-[11px] text-text-3">
                   — {LABEL_ETAT_VERIFICATION_DOCUMENT[doc.etatVerification]}
                 </span>
               </label>
             ))}
             <button
               type="submit"
-              className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
             >
               Télécharger le pack (ZIP)
             </button>
@@ -145,13 +145,13 @@ export default async function PageDossierNotaire({ params }: PageProps) {
 
       {pack.documentsInterdits.length > 0 && (
         <div className="mt-6">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
             Documents exclus de ce pack
           </p>
           <ul className="flex flex-col gap-1">
             {pack.documentsInterdits.map((doc) => (
-              <li key={doc.id} className="text-[13px] text-[#94a3b8]">
-                <span className="text-[#0f172a]">{doc.nom}</span> — {raisonExclusion.get(doc.id) ?? "exclu"}
+              <li key={doc.id} className="text-[13px] text-text-3">
+                <span className="text-text-1">{doc.nom}</span> — {raisonExclusion.get(doc.id) ?? "exclu"}
               </li>
             ))}
           </ul>

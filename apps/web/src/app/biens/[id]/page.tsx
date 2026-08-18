@@ -114,7 +114,7 @@ export default async function FicheBien({ params }: PageProps) {
       {/* Retour */}
       <Link
         href="/biens"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         Biens
@@ -123,24 +123,24 @@ export default async function FicheBien({ params }: PageProps) {
       {/* En-tête du bien */}
       <div className="mb-8">
         <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0 mt-0.5">
-            <Building2 size={18} className="text-[#4338ca]" strokeWidth={1.8} />
+          <div className="w-10 h-10 rounded-lg bg-accent-light flex items-center justify-center shrink-0 mt-0.5">
+            <Building2 size={18} className="text-accent" strokeWidth={1.8} />
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight">
+            <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
               {bien.titre}
             </h1>
-            <p className="text-[14px] text-[#64748b] mt-0.5">
+            <p className="text-[14px] text-text-2 mt-0.5">
               {bien.adresse}, {bien.codePostal} {bien.ville}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 mt-4">
-          <span className="text-[20px] font-semibold text-[#0f172a]">{formatPrix(bien.prix)}</span>
-          <span className="text-[14px] text-[#64748b]">{bien.surface} m²</span>
-          <span className="text-[14px] text-[#94a3b8]">·</span>
-          <span className="text-[14px] text-[#64748b]">{bien.pieces} pièces</span>
+          <span className="text-[20px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
+          <span className="text-[14px] text-text-2">{bien.surface} m²</span>
+          <span className="text-[14px] text-text-3">·</span>
+          <span className="text-[14px] text-text-2">{bien.pieces} pièces</span>
           <Badge variant="accent">{bien.reference}</Badge>
           <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
           {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
@@ -150,28 +150,28 @@ export default async function FicheBien({ params }: PageProps) {
             des jalons réels offreEnCoursLe/compromisSigneLe (ADR-014), sans "dernière activité"
             (aucune donnée équivalente réelle pour l'instant). */}
         {dossier ? (
-          <div className="mt-4 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+          <div className="mt-4 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={statutConfig[dossier.statut].variant}>
                 {statutConfig[dossier.statut].label}
               </Badge>
-              <span className="text-[12px] text-[#94a3b8]">
+              <span className="text-[12px] text-text-3">
                 Dernière activité le {formatDate(dossier.derniereActivite)}
               </span>
             </div>
             {tachePrincipale && (
-              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
+              <p className="text-[14px] text-text-1 leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
             )}
           </div>
         ) : (
-          <div className="mt-4 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+          <div className="mt-4 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={variantStatutCommercial[statutCommercial]}>
                 {LABEL_STATUT_COMMERCIAL[statutCommercial]}
               </Badge>
             </div>
             {tachePrincipale && (
-              <p className="text-[14px] text-[#0f172a] leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
+              <p className="text-[14px] text-text-1 leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
             )}
             {UUID_REGEX.test(bien.id) && !bien.archiveLe && (
               <div className="flex flex-wrap gap-3 mt-3">
@@ -216,7 +216,7 @@ export default async function FicheBien({ params }: PageProps) {
           {prochaineVisite && (
             <Link
               href={`/visites/${prochaineVisite.id}/preparer`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
             >
               Préparer une visite →
             </Link>
@@ -224,7 +224,7 @@ export default async function FicheBien({ params }: PageProps) {
           {!bien.archiveLe && (
             <Link
               href={`/taches/nouveau?bienId=${bien.id}`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
             >
               + Ajouter une tâche
             </Link>
@@ -233,7 +233,7 @@ export default async function FicheBien({ params }: PageProps) {
             <>
               <Link
                 href={`/biens/${bien.id}/modifier`}
-                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
               >
                 Modifier
               </Link>
@@ -241,7 +241,7 @@ export default async function FicheBien({ params }: PageProps) {
                 <input type="hidden" name="id" value={bien.id} />
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748b] bg-white border border-[#e2e8f0] hover:border-[#dc2626] hover:text-[#dc2626] transition-colors px-3.5 py-2 rounded-lg"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-text-2 bg-surface border border-border-md hover:border-[#dc2626] hover:text-danger transition-colors px-3.5 py-2 rounded-lg"
                 >
                   {bien.archiveLe ? "Désarchiver" : "Archiver"}
                 </button>

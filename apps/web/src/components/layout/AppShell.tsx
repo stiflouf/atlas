@@ -11,11 +11,11 @@ const CHEMINS_SANS_CHROME = new Set(["/connexion"]);
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   if (CHEMINS_SANS_CHROME.has(pathname)) {
-    return <div className="h-full bg-[#f8f9fa]">{children}</div>;
+    return <div className="h-full bg-page">{children}</div>;
   }
 
   return (
-    <div className="flex h-full bg-[#f8f9fa]">
+    <div className="flex h-full bg-page">
       <Sidebar />
       <main className="flex-1 overflow-y-auto pb-14 md:pb-0">
         {children}

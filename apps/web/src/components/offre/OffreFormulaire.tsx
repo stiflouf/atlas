@@ -63,8 +63,8 @@ export default function OffreFormulaire(props: Props) {
 
       {props.verrouille ? (
         <div>
-          <p className="text-[11px] font-medium text-[#64748b] mb-1">Acquéreur</p>
-          <p className="text-[14px] font-medium text-[#0f172a] bg-[#fafafa] border border-[#f1f5f9] rounded-lg px-3 py-2">
+          <p className="text-[11px] font-medium text-text-2 mb-1">Acquéreur</p>
+          <p className="text-[14px] font-medium text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
             {props.acquereur.prenom} {props.acquereur.nom}
           </p>
           <input type="hidden" name="acquereurId" value={props.acquereur.id} />
@@ -75,7 +75,7 @@ export default function OffreFormulaire(props: Props) {
           required
           defaultValue=""
           onChange={(e) => setAcquereurSelectionne(e.target.value)}
-          className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+          className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         >
           <option value="" disabled>
             Acquéreur
@@ -90,8 +90,8 @@ export default function OffreFormulaire(props: Props) {
 
       {compteRenduSource && (
         <div>
-          <p className="text-[11px] font-medium text-[#64748b] mb-1">Visite associée</p>
-          <p className="text-[13px] text-[#0f172a] bg-[#fafafa] border border-[#f1f5f9] rounded-lg px-3 py-2">
+          <p className="text-[11px] font-medium text-text-2 mb-1">Visite associée</p>
+          <p className="text-[13px] text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
             {formatDate(compteRenduSource.dateVisite)} — {LABEL_INTERET[compteRenduSource.interet]}
           </p>
           <input type="hidden" name="compteRenduVisiteIds" value={compteRenduSource.id} />
@@ -100,15 +100,15 @@ export default function OffreFormulaire(props: Props) {
 
       {acquereurId && (comptesRendusPourAcquereur.length > 0 || !compteRenduSource) && (
         <div>
-          <p className="text-[11px] font-medium text-[#64748b] mb-1">
+          <p className="text-[11px] font-medium text-text-2 mb-1">
             {compteRenduSource ? "Autres visites à lier (optionnel)" : "Visites à lier à cette offre (optionnel)"}
           </p>
           {comptesRendusPourAcquereur.length === 0 ? (
-            <p className="text-[12px] text-[#94a3b8]">Aucune visite enregistrée avec cet acquéreur.</p>
+            <p className="text-[12px] text-text-3">Aucune visite enregistrée avec cet acquéreur.</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {comptesRendusPourAcquereur.map((cr) => (
-                <label key={cr.id} className="inline-flex items-center gap-2 text-[13px] text-[#0f172a]">
+                <label key={cr.id} className="inline-flex items-center gap-2 text-[13px] text-text-1">
                   <input type="checkbox" name="compteRenduVisiteIds" value={cr.id} />
                   {formatDate(cr.dateVisite)} — {LABEL_INTERET[cr.interet]}
                 </label>
@@ -119,7 +119,7 @@ export default function OffreFormulaire(props: Props) {
       )}
 
       {offresEnCoursPourPaire.length > 0 && (
-        <div className="bg-[#fffbeb] border border-[#fde68a] rounded-lg p-3 flex flex-col gap-2">
+        <div className="bg-warning-light border border-[#fde68a] rounded-lg p-3 flex flex-col gap-2">
           <p className="text-[13px] text-[#92400e]">
             Une offre en cours existe déjà pour cet acquéreur sur ce bien :
           </p>
@@ -148,29 +148,29 @@ export default function OffreFormulaire(props: Props) {
         required
         min={1}
         placeholder="Montant de l'offre (€)"
-        className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+        className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
       />
-      <label className="text-[11px] text-[#94a3b8]">
+      <label className="text-[11px] text-text-3">
         Date de l&apos;offre
         <input
           type="date"
           name="dateOffre"
           required
-          className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         />
       </label>
-      <label className="text-[11px] text-[#94a3b8]">
+      <label className="text-[11px] text-text-3">
         Date de validité (optionnelle)
         <input
           type="date"
           name="dateValidite"
-          className="w-full mt-1 border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         />
       </label>
       <button
         type="submit"
         disabled={soumissionBloqueeParDoublon}
-        className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3.5 py-2 rounded-lg"
+        className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3.5 py-2 rounded-lg"
       >
         Ajouter l&apos;offre
       </button>

@@ -1409,6 +1409,46 @@ massive des hex littéraux hors des fichiers déjà touchés par les 6 chantiers
 chantier onglets, 1 sélecteur d'ambiguïté préexistant corrigé, sans lien avec cette passe). Build de
 production propre, mêmes 21 routes.
 
+## Direction artistique premium (hors ADR)
+
+Passe visuelle, aucune modification métier — de "back-office propre" à identité immobilière
+premium (navy profond + champagne + crème chaud), suite à validation d'une direction artistique
+plus ambitieuse que la passe précédente.
+
+**Palette** — `globals.css` : `page`/`surface` passent d'un gris/blanc froid à un crème chaud
+subtil (`#f6f2ea`/`#fffcf7`, jamais une grande zone blanche pure) ; `accent` repointé du bleu-indigo
+vers un navy profond (`#071a3a`, seul token dont la valeur change de famille de couleur — tous les
+usages existants du token, boutons/onglet actif/focus, deviennent navy sans toucher chaque fichier) ;
+nouveaux tokens `navy`/`navy-hover`, `champagne`/`champagne-light`, `surface-muted` ; `text-1/2/3`
+(primary/secondary/muted) et `danger`/`success`/`warning` réajustés en teintes plus chaudes et
+maîtrisées.
+
+**Typographie** — `Fraunces` (Google Font, `next/font/google`, même mécanisme qu'Inter, aucune
+nouvelle dépendance npm) réservée aux grands titres (`font-serif`, ex. "Aujourd'hui", titre de
+fiche) — jamais l'UI, les données ou les formulaires, qui restent Inter.
+
+**Marque** — `src/lib/branding.ts` (`PRODUCT_NAME`/`PRODUCT_TAGLINE`) et
+`src/components/layout/BrandMark.tsx` (monogramme + nom, remplaçable) centralisent les 3 occurrences
+d'affichage du nom produit (identifiées par audit) — un renommage futur reste un changement local,
+sans dispersion dans l'UI.
+
+**Shell** — sidebar desktop en navy profond sur toute la hauteur (structure de navigation
+inchangée), bottom nav mobile sur surface claire avec icônes navy ; carte conseiller minimale
+(initiales, jamais une photo inventée).
+
+**Écrans P0/P1 retravaillés visuellement** (structure/données inchangées) : cockpit Aujourd'hui,
+fiche Bien (desktop + mobile), liste Biens, Documents/Offres/Compromis/Pack-transmission, fiche
+Client. `Card`/`Badge`/`Button` (déjà créés) étendus (variantes `elevated`/`interactive`, `warning`,
+`ghost`) et systématiquement réutilisés plutôt que dupliqués.
+
+Aucune donnée ni fonctionnalité inventée (aucune photo de bien, aucun KPI ajouté, aucun bouton
+d'action global sans équivalent réel) — uniquement une meilleure présentation des données déjà
+disponibles.
+
+**0 migration, 0 dépendance npm nouvelle, 0 changement de logique métier.** Suite Vitest complète
+(1198 tests) et 2 smoke Playwright verts (retests après cache de compilation à froid). Build de
+production propre, mêmes 21 routes, badge d'outillage dev absent du serveur de production (vérifié).
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

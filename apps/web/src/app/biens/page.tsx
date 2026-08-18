@@ -66,17 +66,17 @@ export default async function BiensPage({ searchParams }: PageProps) {
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">
+          <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">
             {modeArchives ? "Biens archivés" : "Biens"}
           </h1>
-          <p className="text-[14px] text-[#94a3b8] mt-1">
+          <p className="text-[14px] text-text-3 mt-1">
             {totalAffiche} {modeArchives ? "biens archivés" : "mandats actifs"}
           </p>
         </div>
         {!modeArchives && (
           <Link
             href="/biens/nouveau"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg shrink-0"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg shrink-0"
           >
             <Plus size={14} />
             Ajouter un bien
@@ -86,7 +86,7 @@ export default async function BiensPage({ searchParams }: PageProps) {
 
       <Link
         href={construireHref({ archives: !modeArchives, q: texte })}
-        className="inline-block text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mb-6"
+        className="inline-block text-[13px] font-medium text-accent hover:text-accent-hover transition-colors mb-6"
       >
         {modeArchives ? "← Voir les biens actifs" : "Voir les archives →"}
       </Link>
@@ -102,7 +102,7 @@ export default async function BiensPage({ searchParams }: PageProps) {
       <section>
         <SectionTitle>{modeArchives ? "Biens archivés" : "Mandats en cours"}</SectionTitle>
         {biens.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">
+          <p className="text-[14px] text-text-3">
             {texte
               ? `Aucun résultat pour « ${texte} ».`
               : modeArchives
@@ -115,24 +115,24 @@ export default async function BiensPage({ searchParams }: PageProps) {
               <Link key={bien.id} href={`/biens/${bien.id}`}>
                 <Card className="hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow duration-150">
                   <div className="flex items-center gap-4 p-4">
-                    <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0">
-                      <Building2 size={18} className="text-[#4338ca]" strokeWidth={1.8} />
+                    <div className="w-10 h-10 rounded-lg bg-accent-light flex items-center justify-center shrink-0">
+                      <Building2 size={18} className="text-accent" strokeWidth={1.8} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-[14px] font-medium text-[#0f172a] truncate">{bien.titre}</p>
+                        <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
                       </div>
-                      <p className="text-[13px] text-[#64748b]">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
+                      <p className="text-[13px] text-text-2">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
                       <div className="flex items-center gap-3 mt-1.5">
-                        <span className="text-[13px] font-medium text-[#0f172a]">{formatPrix(bien.prix)}</span>
-                        <span className="text-[12px] text-[#94a3b8]">{bien.surface} m² · {bien.pieces} pièces</span>
+                        <span className="text-[13px] font-medium text-text-1">{formatPrix(bien.prix)}</span>
+                        <span className="text-[12px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
                         <Badge variant="accent">{bien.reference}</Badge>
                         {bien.archiveLe && (
                           <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>
                         )}
                       </div>
                     </div>
-                    <ChevronRight size={16} className="text-[#94a3b8] shrink-0" />
+                    <ChevronRight size={16} className="text-text-3 shrink-0" />
                   </div>
                 </Card>
               </Link>
