@@ -14,28 +14,42 @@ export default function Sidebar() {
         <NavItems variant="sidebar" />
       </div>
 
-      {/* Zone visuelle de marque — décorative, générative (aucun asset distant). Masquée sous une
-          hauteur d'écran réduite (laptop compact) pour ne jamais pousser le bloc conseiller hors
-          champ. */}
-      <div className="hidden md:block [@media(max-height:720px)]:!hidden mx-3 mb-3 rounded-lg overflow-hidden relative h-24">
-        <svg viewBox="0 0 200 60" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 w-full h-full">
+      {/* Zone photographique de marque — tiers inférieur, bord à bord (jamais une card collée),
+          fondue dans le navy environnant. Masquée sous une hauteur d'écran réduite (laptop
+          compact) pour ne jamais pousser le bloc conseiller hors champ.
+          Placeholder généré (SVG) en couche de base, TOUJOURS présent ; la photo de marque
+          (public/brand/sidebar-night-house.webp) est superposée en `background-image` CSS — tant
+          que le fichier n'existe pas, un `background-image` échoue silencieusement (aucune icône
+          cassée, contrairement à une balise <img>) et le placeholder reste visible tel quel.
+          Aucun JS nécessaire : l'image s'active automatiquement dès que le fichier est déposé. */}
+      <div className="hidden md:block [@media(max-height:720px)]:!hidden relative h-64 lg:h-72 overflow-hidden shrink-0">
+        <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 w-full h-full">
           <defs>
             <linearGradient id="sbv-bg" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#102a54" />
               <stop offset="100%" stopColor="#071a3a" />
             </linearGradient>
           </defs>
-          <rect width="200" height="60" fill="url(#sbv-bg)" />
+          <rect width="200" height="200" fill="url(#sbv-bg)" />
           <g fill="#c59a5b" fillOpacity="0.18">
-            <rect x="-10" y="30" width="30" height="30" />
-            <rect x="18" y="14" width="22" height="46" />
-            <rect x="150" y="24" width="24" height="36" />
-            <rect x="176" y="10" width="24" height="50" />
+            <rect x="-10" y="130" width="40" height="70" />
+            <rect x="26" y="96" width="30" height="104" />
+            <rect x="150" y="118" width="32" height="82" />
+            <rect x="178" y="90" width="30" height="110" />
           </g>
           <g fill="#c59a5b" fillOpacity="0.3">
-            <rect x="42" y="4" width="26" height="56" />
+            <rect x="60" y="60" width="36" height="140" />
           </g>
         </svg>
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: "url(/brand/sidebar-night-house.webp)" }}
+        />
+        {/* Assombrissement léger + fondu vers le navy en haut et en bas — l'image doit sembler
+            faire partie de la sidebar, pas une card posée dessus. */}
+        <div className="absolute inset-0 bg-navy/20" />
+        <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-navy to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-navy to-transparent" />
       </div>
 
       {/* Conseiller — carte minimale (avatar/initiale, jamais une photo inventée). */}
