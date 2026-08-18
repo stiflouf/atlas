@@ -72,7 +72,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
   const totalPages = Math.max(1, Math.ceil(totalAffiche / PAR_PAGE));
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
+    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">

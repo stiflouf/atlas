@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Building2 } from "lucide-react";
 import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
@@ -109,7 +110,7 @@ export default async function FicheBien({ params }: PageProps) {
   });
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
+    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       {/* Retour */}
       <Link
         href="/biens"
@@ -177,33 +178,33 @@ export default async function FicheBien({ params }: PageProps) {
                 {!bien.offreEnCoursLe && (
                   <form action={marquerOffreEnCoursAction}>
                     <input type="hidden" name="id" value={bien.id} />
-                    <button type="submit" className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+                    <Button type="submit" variant="primary" size="sm">
                       Marquer une offre en cours
-                    </button>
+                    </Button>
                   </form>
                 )}
                 {bien.offreEnCoursLe && !bien.compromisSigneLe && (
                   <form action={retirerOffreAction}>
                     <input type="hidden" name="id" value={bien.id} />
-                    <button type="submit" className="text-[12px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors">
+                    <Button type="submit" variant="danger" size="sm">
                       Retirer l'offre
-                    </button>
+                    </Button>
                   </form>
                 )}
                 {!bien.compromisSigneLe && (
                   <form action={marquerCompromisSigneAction}>
                     <input type="hidden" name="id" value={bien.id} />
-                    <button type="submit" className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+                    <Button type="submit" variant="secondary" size="sm">
                       Marquer compromis signé
-                    </button>
+                    </Button>
                   </form>
                 )}
                 {bien.compromisSigneLe && (
                   <form action={annulerCompromisAction}>
                     <input type="hidden" name="id" value={bien.id} />
-                    <button type="submit" className="text-[12px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors">
+                    <Button type="submit" variant="danger" size="sm">
                       Annuler le compromis
-                    </button>
+                    </Button>
                   </form>
                 )}
               </div>

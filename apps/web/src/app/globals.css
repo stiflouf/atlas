@@ -20,6 +20,12 @@
   --color-danger: #dc2626;
   --color-danger-light: #fef2f2;
   --color-success: #16a34a;
+  --color-success-light: #f0fdf4;
+
+  /* Ajouté pour la passe design RC2 : sémantique "à obtenir/à vérifier", distincte de danger —
+     un dossier documentaire qui commence n'est pas une anomalie (voir ADR-029, BienTabs.tsx). */
+  --color-warning: #d97706;
+  --color-warning-light: #fffbeb;
 }
 
 * {

@@ -1375,6 +1375,40 @@ pilote créé (`docs/PILOT_RUNBOOK.md`, point d'entrée opérationnel canonique)
 **0 migration** (aucun changement de schéma). Build de production propre, aucune nouvelle route
 publique.
 
+## Passe design candidate RC2 (hors ADR)
+
+Passe purement visuelle/UX, aucune modification métier, suite à l'audit visuel V1 Candidate
+(Option B retenue : petite passe ciblée avant pilote). Scope fermé à 6 chantiers.
+
+**Onglets de la fiche Bien** — débordement horizontal sans affordance (P1 principal de l'audit) :
+ajout d'un dégradé de bord signalant du contenu caché + auto-scroll de l'onglet actif dans la zone
+visible + rôles `tablist`/`tab`/`aria-selected`. Aucun onglet supprimé, aucune route changée ; tous
+les onglets tiennent naturellement dès ~1280px de large, sans scroll.
+
+**Largeur desktop** — les pages denses (cockpit, listes Biens/Clients/Prospects, fiches Bien/
+Acquéreur/Prospect) passent de `max-w-2xl` (672px) à `max-w-6xl` (1152px) ; les formulaires simples
+et les formulaires intégrés à la fiche Bien (Offre/Compromis/Document) restent à une largeur de
+lecture confortable (`max-w-xl`/`max-w-2xl`), jamais étirés.
+
+**Hiérarchie des CTA Offre/Compromis** — nouveau composant `Button` partagé
+(`src/components/ui/Button.tsx`, variants primary/secondary/danger) : une seule action primaire
+pleine par bloc (Accepter, Marquer réalisé, Marquer une offre en cours), les autres en outline,
+jamais de rouge plein permanent pour une simple transition d'état. Aucune condition métier changée.
+
+**Checklist documentaire moins anxiogène** — `manquant`/`perime` (ADR-029) passent de rouge à un
+badge warning (ambre) neutre — un dossier qui commence n'est pas une anomalie ; seul `incoherent`
+reste en danger. Même principe appliqué à la page Pack Notaire (déjà correcte, migrée vers les
+tokens par cohérence). Aucune donnée cachée, aucun calcul changé.
+
+**Tokens/consolidation légère** — deux tokens ajoutés (`--color-warning`, `--color-success-light`,
+`globals.css`), `Badge` migré sur les tokens existants, nouveau variant `warning`. Pas de conversion
+massive des hex littéraux hors des fichiers déjà touchés par les 6 chantiers.
+
+**0 migration, 0 dépendance, 0 changement de logique métier.** Suite Vitest complète (1198 tests) et
+2 smoke Playwright verts sans modification fonctionnelle (2 sélecteurs `role="tab"` ajustés suite au
+chantier onglets, 1 sélecteur d'ambiguïté préexistant corrigé, sans lien avec cette passe). Build de
+production propre, mêmes 21 routes.
+
 ---
 
 Pour le détail technique de chaque étape : `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`,

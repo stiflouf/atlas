@@ -30,9 +30,12 @@ test("tunnel cœur Atlas : session, Bien, Acquéreur, Compromis, déconnexion", 
   // jamais NODE_ENV=test ni route de contournement.
   await injecterSessionAtlasValide(context, baseURL!);
 
-  // 3. Cockpit accessible avec la session injectée.
+  // 3. Cockpit accessible avec la session injectée. `exact: true` — sans lui, ce nom correspond
+  // aussi (sous-chaîne) au titre de section "Aucun rendez-vous restant aujourd'hui", visible dès
+  // que les rendez-vous mockés du jour sont vides (dérive naturelle de la date courante face aux
+  // données de démonstration statiques) : ambiguïté déjà latente, sans lien avec cette passe.
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Aujourd'hui" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Aujourd'hui", exact: true })).toBeVisible();
 
   // 4. Créer un Bien via le vrai formulaire (Server Action réelle).
   await page.goto("/biens/nouveau");
@@ -77,7 +80,7 @@ test("tunnel cœur Atlas : session, Bien, Acquéreur, Compromis, déconnexion", 
   await page.waitForURL(new RegExp(`/biens/${bienId}$`));
 
   // 7. Le Compromis apparaît bien sur la fiche du Bien (onglet Compromis).
-  await page.getByRole("button", { name: "Compromis", exact: true }).click();
+  await page.getByRole("tab", { name: "Compromis", exact: true }).click();
   await expect(page.getByText(nomAcquereur)).toBeVisible();
 
   // 8. Déconnexion réelle (route POST existante, jamais un simple oubli du cookie côté test) →

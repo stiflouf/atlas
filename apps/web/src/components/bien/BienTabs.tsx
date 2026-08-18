@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import {
@@ -81,13 +82,17 @@ const FAMILLES_DOCUMENT: FamilleDocument[] = [
 
 const ETATS_VERIFICATION_DOCUMENT: EtatVerificationDocument[] = ["non_verifie", "confirme", "a_verifier", "rejete"];
 
-const COULEUR_ETAT_CONTROLE: Record<string, string> = {
-  present: "text-[#16a34a]",
-  manquant: "text-[#dc2626]",
-  a_verifier: "text-[#d97706]",
-  perime: "text-[#dc2626]",
-  incoherent: "text-[#dc2626]",
-  non_applicable: "text-[#94a3b8]",
+// Passe design RC2 (chantier D) : "manquant"/"perime" ne sont pas des anomalies — un dossier qui
+// commence a normalement tout à obtenir (ADR-029, a_obtenir ≠ erreur/illégalité/blocage
+// juridique). Seul "incoherent" (contradiction détectée) reste une vraie alerte. Règle métier/
+// calcul de la checklist strictement inchangés — seule la présentation visuelle change.
+const VARIANT_ETAT_CONTROLE: Record<string, "success" | "warning" | "danger" | "muted"> = {
+  present: "success",
+  manquant: "warning",
+  a_verifier: "warning",
+  perime: "warning",
+  incoherent: "danger",
+  non_applicable: "muted",
 };
 
 function formatTaille(octets: number): string {
@@ -178,6 +183,40 @@ export default function BienTabs({
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
+  // Affordance de scroll des onglets (passe design RC2, chantier A) — purement visuel, aucune
+  // logique métier : l'onglet actif est ramené dans la zone visible, et un dégradé signale s'il
+  // reste du contenu caché de chaque côté. Rôle/comportement des onglets eux-mêmes inchangés.
+  const barreOngletsRef = useRef<HTMLDivElement>(null);
+  const ongletActifRef = useRef<HTMLButtonElement>(null);
+  const [debordementGauche, setDebordementGauche] = useState(false);
+  const [debordementDroite, setDebordementDroite] = useState(false);
+
+  function mettreAJourDebordement() {
+    const conteneur = barreOngletsRef.current;
+    if (!conteneur) return;
+    setDebordementGauche(conteneur.scrollLeft > 2);
+    setDebordementDroite(conteneur.scrollLeft + conteneur.clientWidth < conteneur.scrollWidth - 2);
+  }
+
+  useEffect(() => {
+    mettreAJourDebordement();
+    ongletActifRef.current?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  useEffect(() => {
+    const conteneur = barreOngletsRef.current;
+    if (!conteneur) return;
+    mettreAJourDebordement();
+    conteneur.addEventListener("scroll", mettreAJourDebordement, { passive: true });
+    window.addEventListener("resize", mettreAJourDebordement);
+    return () => {
+      conteneur.removeEventListener("scroll", mettreAJourDebordement);
+      window.removeEventListener("resize", mettreAJourDebordement);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const liensParOffre = new Map<string, { lienId: string; visite: CompteRenduVisite }[]>();
   for (const lien of liens) {
     const liste = liensParOffre.get(lien.offreId) ?? [];
@@ -247,26 +286,42 @@ export default function BienTabs({
 
   return (
     <div>
-      {/* Onglets */}
-      <div className="flex overflow-x-auto gap-0 border-b border-[#f1f5f9] mb-6 scrollbar-none">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActive(tab.id)}
-            className={`shrink-0 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors duration-100 ${
-              active === tab.id
-                ? "border-[#4338ca] text-[#4338ca]"
-                : "border-transparent text-[#94a3b8] hover:text-[#64748b]"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Onglets — affordance de scroll (chantier A) : dégradé de bord dès qu'il reste du contenu
+          caché, jamais affiché quand tous les onglets tiennent (ex. desktop large, chantier B). */}
+      <div className="relative mb-6">
+        <div
+          ref={barreOngletsRef}
+          role="tablist"
+          className="flex overflow-x-auto gap-0 border-b border-border scrollbar-none scroll-smooth"
+        >
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              ref={active === tab.id ? ongletActifRef : undefined}
+              role="tab"
+              aria-selected={active === tab.id}
+              onClick={() => setActive(tab.id)}
+              className={`shrink-0 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent ${
+                active === tab.id
+                  ? "border-accent text-accent"
+                  : "border-transparent text-text-3 hover:text-text-2"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {debordementGauche && (
+          <div className="pointer-events-none absolute left-0 top-0 bottom-[1px] w-8 bg-gradient-to-r from-surface to-transparent" />
+        )}
+        {debordementDroite && (
+          <div className="pointer-events-none absolute right-0 top-0 bottom-[1px] w-8 bg-gradient-to-l from-surface to-transparent" />
+        )}
       </div>
 
       {/* Contenu */}
       {active === "contexte" && (
-        <div>
+        <div className="max-w-2xl">
           <p className="text-[14px] text-[#64748b] leading-relaxed mb-6">{bien.description}</p>
           <ul className="flex flex-col gap-2">
             {bien.caracteristiques.map((c) => (
@@ -484,11 +539,7 @@ export default function BienTabs({
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8]">
                   Dossier documentaire
                 </p>
-                {!checklist.honorairesRenseignes && (
-                  <span className="text-[11px] font-medium text-[#dc2626]">
-                    Charge des honoraires non renseignée
-                  </span>
-                )}
+                {!checklist.honorairesRenseignes && <Badge variant="warning">Charge des honoraires non renseignée</Badge>}
               </div>
               {FAMILLES_DOCUMENT.map((famille) => {
                 const exigencesFamille = checklist.exigences.filter(
@@ -498,7 +549,7 @@ export default function BienTabs({
                 return (
                   <div key={famille}>
                     <p className="text-[12px] font-medium text-[#64748b] mb-1">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-1.5">
                       {exigencesFamille.map((e) => (
                         <div key={e.code} className="flex items-center justify-between gap-2 text-[13px]">
                           <span className="text-[#0f172a]">{e.label}</span>
@@ -511,9 +562,7 @@ export default function BienTabs({
                                 Préparer un email
                               </Link>
                             )}
-                            <span className={`font-medium ${COULEUR_ETAT_CONTROLE[e.etat]}`}>
-                              {LABEL_ETAT_CONTROLE_EXIGENCE[e.etat]}
-                            </span>
+                            <Badge variant={VARIANT_ETAT_CONTROLE[e.etat]}>{LABEL_ETAT_CONTROLE_EXIGENCE[e.etat]}</Badge>
                           </span>
                         </div>
                       ))}
@@ -541,7 +590,7 @@ export default function BienTabs({
               Ce bien est archivé — impossible d'ajouter un nouveau document.
             </p>
           ) : (
-            <form action={ajouterDocumentBienAction} className="flex flex-col gap-2">
+            <form action={ajouterDocumentBienAction} className="flex flex-col gap-2 max-w-xl">
               <input type="hidden" name="bienId" value={bien.id} />
               <input
                 type="text"
@@ -839,13 +888,15 @@ export default function BienTabs({
               Ce bien est archivé — impossible d'ajouter une nouvelle offre.
             </p>
           ) : (
-            <OffreFormulaire
-              bienId={bien.id}
-              comptesRendus={comptesRendus}
-              offresEnCoursDuBien={offresTriees.filter((o) => o.statut === "en_cours")}
-              verrouille={false}
-              acquereurs={acquereursActifs}
-            />
+            <div className="max-w-xl">
+              <OffreFormulaire
+                bienId={bien.id}
+                comptesRendus={comptesRendus}
+                offresEnCoursDuBien={offresTriees.filter((o) => o.statut === "en_cours")}
+                verrouille={false}
+                acquereurs={acquereursActifs}
+              />
+            </div>
           )}
 
           {offresTriees.length === 0 ? (
@@ -907,12 +958,9 @@ export default function BienTabs({
                                 ))}
                               </select>
                             )}
-                            <button
-                              type="submit"
-                              className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
-                            >
+                            <Button type="submit" variant={statut === "acceptee" ? "primary" : "secondary"} size="sm">
                               {statut === "acceptee" ? "Accepter" : statut === "refusee" ? "Refuser" : "Retirer"}
-                            </button>
+                            </Button>
                           </form>
                         ))}
                       </div>
@@ -1027,12 +1075,14 @@ export default function BienTabs({
               Un compromis est déjà en cours pour ce bien — résolvez-le avant d'en ajouter un nouveau.
             </p>
           ) : (
-            <CompromisFormulaire
-              bienId={bien.id}
-              verrouille={false}
-              acquereurs={acquereursActifs}
-              offresAcceptees={offresAccepteesDuBien}
-            />
+            <div className="max-w-xl">
+              <CompromisFormulaire
+                bienId={bien.id}
+                verrouille={false}
+                acquereurs={acquereursActifs}
+                offresAcceptees={offresAccepteesDuBien}
+              />
+            </div>
           )}
 
           {compromisTries.length === 0 ? (
@@ -1074,12 +1124,9 @@ export default function BienTabs({
                             defaultValue={c.dateActe ?? ""}
                             className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
                           />
-                          <button
-                            type="submit"
-                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
-                          >
+                          <Button type="submit" variant="secondary" size="sm">
                             {c.dateActe ? "Modifier la date" : "Renseigner la date"}
-                          </button>
+                          </Button>
                         </form>
                       </div>
                     )}
@@ -1107,12 +1154,9 @@ export default function BienTabs({
                               className="block mt-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
                             />
                           </label>
-                          <button
-                            type="submit"
-                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
-                          >
+                          <Button type="submit" variant="primary" size="sm">
                             Marquer réalisé
-                          </button>
+                          </Button>
                         </form>
                         <form action={changerStatutCompromisAction} className="flex items-end gap-2">
                           <input type="hidden" name="compromisId" value={c.id} />
@@ -1142,12 +1186,9 @@ export default function BienTabs({
                               </option>
                             ))}
                           </select>
-                          <button
-                            type="submit"
-                            className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors pb-1.5"
-                          >
+                          <Button type="submit" variant="danger" size="sm">
                             Annuler
-                          </button>
+                          </Button>
                         </form>
                       </div>
                     )}

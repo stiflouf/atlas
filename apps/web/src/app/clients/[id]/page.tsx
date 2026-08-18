@@ -77,7 +77,7 @@ export default async function FicheClient({ params }: PageProps) {
   } as const;
 
   return (
-    <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
+    <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <Link
         href="/clients"
         className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"

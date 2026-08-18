@@ -334,6 +334,8 @@ IO Postgres) → `redirect()` → page re-render.
 | `src/actions/transmissionDossierNotaire.ts` | `enregistrerTransmissionDossierNotaireAction` (ADR-049) — revalide intégralement Compromis/Bien/documents/taille côté serveur, calcule SHA-256 avant tout INSERT |
 | `src/lib/stockageDocuments.ts` | Stockage documentaire (ADR-050) — SEUL point de lecture de `ATLAS_DOCUMENT_STORAGE_DIR` dans tout le projet ; `verifierDisponibiliteStockageDocuments()` fail-closed en production (jamais de création automatique de la racine) ; `ErreurStockageDocumentsIndisponible` distincte d'un document précis absent (`undefined`) |
 | `apps/web/.env.local.example` | Liste exhaustive et à jour des variables d'environnement nécessaires |
+| `src/components/ui/Button.tsx` | Passe design RC2 — CTA partagé (`primary`/`secondary`/`danger`), sur les tokens `globals.css` ; utilisé pour toute nouvelle hiérarchie d'actions (une seule primary pleine par bloc) |
+| `src/components/bien/BienTabs.tsx` (barre d'onglets) | Passe design RC2 — `role="tablist"`/`role="tab"`, auto-scroll de l'onglet actif, dégradé de bord si contenu caché ; un nouvel onglet doit garder ce patron, jamais un `<div role="button">` brut |
 | `src/db/resoudreDatabaseUrlTest.ts` | Garde-fou test/production (stabilisation V1 Candidate) — SEUL point de résolution de la `DATABASE_URL` utilisée par `pnpm test`/`pnpm test:e2e` ; ignore délibérément une `DATABASE_URL` ambiante non reconnue comme locale de dev, jamais lue pour s'en servir |
 | `apps/web/vitest.setup.ts` | `setupFiles` Vitest — fixe `DATABASE_URL` via `resoudreDatabaseUrlTest()` AVANT le chargement de chaque fichier de test ; les `process.env.DATABASE_URL ??= ...` déjà présents dans ~90 fichiers de test deviennent des no-op, jamais besoin de les modifier un par un |
 | `apps/web/e2e/` | Infrastructure E2E Playwright (stabilisation V1 Candidate) — `env.ts` (config serveur E2E dédiée), `session.ts` (injection d'une vraie session Atlas scellée, jamais un contournement d'auth), `nettoyage.ts` (purge post-smoke respectant les FK), `coeur.smoke.spec.ts`/`documents-adr049.smoke.spec.ts` (les deux seuls smoke, jamais une suite E2E étendue) |
@@ -342,6 +344,10 @@ IO Postgres) → `redirect()` → page re-render.
 
 - **`docs/` vit à la racine du monorepo**, pas sous `apps/web/` — un agent scopé à `apps/web/`
   peut conclure à tort qu'aucune documentation/ADR n'existe.
+- **Les onglets de `BienTabs.tsx` sont `role="tab"` depuis la passe design RC2** — un test
+  Playwright qui les cible via `getByRole("button", { name: "Documents" })` échoue silencieusement
+  (élément introuvable) ; utiliser `getByRole("tab", ...)`. Les deux smoke E2E existants ont été
+  corrigés pour cette raison.
 - Un id mocké (`"bien-001"`) passé à une requête Postgres filtrée par `uuid` provoque une erreur
   de cast si la garde `UUID_REGEX` n'est pas appliquée avant — toujours vérifier ce garde-fou en
   ajoutant une nouvelle fonction de repository acceptant un id externe.

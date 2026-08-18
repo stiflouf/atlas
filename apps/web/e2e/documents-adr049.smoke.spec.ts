@@ -66,7 +66,7 @@ test("Pack Notaire ADR-049 : upload, téléchargement ZIP, transmission, histori
 
   // 1. Upload d'un document réel via le vrai formulaire (multipart, Server Action réelle).
   await page.goto(`/biens/${bienId}`);
-  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await page.getByRole("tab", { name: "Documents", exact: true }).click();
   const champFichier = page.locator('[name="fichier"]');
   await page.locator('[name="nom"]').fill(nomDocument);
   await champFichier.setInputFiles({
@@ -81,7 +81,7 @@ test("Pack Notaire ADR-049 : upload, téléchargement ZIP, transmission, histori
   // d'URL non discriminante — l'onglet actif (useState client, sans état d'URL) retombe alors sur
   // "Contexte" par défaut, d'où le reclic.
   await champFichier.waitFor({ state: "detached" });
-  await page.getByRole("button", { name: "Documents", exact: true }).click();
+  await page.getByRole("tab", { name: "Documents", exact: true }).click();
   await expect(page.getByText(nomDocument)).toBeVisible();
 
   // 2. Pack Notaire : téléchargement ZIP réel (form POST natif → événement download navigateur).
@@ -113,7 +113,7 @@ test("Pack Notaire ADR-049 : upload, téléchargement ZIP, transmission, histori
 
   // 4. Historique + manifeste (sur la fiche Bien, onglet Compromis — ADR-049).
   await page.goto(`/biens/${bienId}`);
-  await page.getByRole("button", { name: "Compromis", exact: true }).click();
+  await page.getByRole("tab", { name: "Compromis", exact: true }).click();
   await expect(page.getByText("Transmissions notariales")).toBeVisible();
   await expect(page.getByText(etude1)).toBeVisible();
   await page.getByText("Voir le manifeste transmis").first().click();
@@ -132,7 +132,7 @@ test("Pack Notaire ADR-049 : upload, téléchargement ZIP, transmission, histori
   await expect(page.getByText("Transmission enregistrée dans le suivi du dossier.")).toBeVisible();
 
   await page.goto(`/biens/${bienId}`);
-  await page.getByRole("button", { name: "Compromis", exact: true }).click();
+  await page.getByRole("tab", { name: "Compromis", exact: true }).click();
   await expect(page.getByText(etude1)).toBeVisible();
   await expect(page.getByText(etude2)).toBeVisible();
 });

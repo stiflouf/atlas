@@ -15,11 +15,13 @@ type PageProps = { params: Promise<{ id: string }> };
 
 const ORDRE_SEVERITES: SeveritePackNotaire[] = ["bloquant_technique", "a_obtenir", "a_verifier", "information"];
 
+// Déjà correct avant la passe design RC2 (a_obtenir/a_verifier en warning, jamais en danger) —
+// migré ici vers les tokens existants par cohérence (chantier E), sémantique inchangée.
 const COULEUR_SEVERITE: Record<SeveritePackNotaire, string> = {
-  bloquant_technique: "text-[#dc2626]",
-  a_obtenir: "text-[#d97706]",
-  a_verifier: "text-[#d97706]",
-  information: "text-[#94a3b8]",
+  bloquant_technique: "text-danger",
+  a_obtenir: "text-warning",
+  a_verifier: "text-warning",
+  information: "text-text-3",
 };
 
 export default async function PageDossierNotaire({ params }: PageProps) {
