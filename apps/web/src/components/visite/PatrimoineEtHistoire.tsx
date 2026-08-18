@@ -20,32 +20,32 @@ export default function PatrimoineEtHistoire({ monuments, recupereLe, elementsAR
       <details className="group">
         <summary className="cursor-pointer list-none flex items-center gap-1.5 mb-3 [&::-webkit-details-marker]:hidden">
           <SectionTitle>Patrimoine & histoire</SectionTitle>
-          <ChevronDown size={14} className="text-[#94a3b8] transition-transform group-open:rotate-180" />
+          <ChevronDown size={14} className="text-text-3 transition-transform group-open:rotate-180" />
         </summary>
 
         <div className="mt-1">
           {monuments.length > 0 && (
             <div className="mb-6">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
                 Patrimoine à proximité
               </p>
-              <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+              <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-border mb-2">
                 {monuments.map((m) => (
                   <div key={m.reference} className="py-3">
-                    <p className="text-[14px] font-medium text-[#0f172a] leading-snug">{m.nom}</p>
-                    <p className="text-[12px] text-[#64748b] mt-0.5">
+                    <p className="text-[14px] font-medium text-text-1 leading-snug">{m.nom}</p>
+                    <p className="text-[12px] text-text-2 mt-0.5">
                       {m.type && `${m.type.charAt(0).toUpperCase()}${m.type.slice(1)}`}
                       {m.type && " · "}
                       {m.distanceMetres} m
                     </p>
                     {m.extraitHistorique && (
-                      <p className="text-[13px] text-[#475569] leading-snug mt-1">{m.extraitHistorique}</p>
+                      <p className="text-[13px] text-text-2 leading-snug mt-1">{m.extraitHistorique}</p>
                     )}
                   </div>
                 ))}
               </div>
               {recupereLe && (
-                <p className="text-[11px] text-[#94a3b8]">
+                <p className="text-[11px] text-text-3">
                   Source : Ministère de la Culture — Base Mérimée · récupéré le{" "}
                   {new Date(recupereLe).toLocaleString("fr-FR")}
                 </p>
@@ -55,17 +55,17 @@ export default function PatrimoineEtHistoire({ monuments, recupereLe, elementsAR
 
           {elementsARaconter.length > 0 && (
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
                 À raconter si pertinent
               </p>
-              <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9] mb-2">
+              <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-border mb-2">
                 {elementsARaconter.map((e) => (
                   <div key={e.reference} className="py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-1">
                       🏛 Histoire · {e.distanceMetres} m
                     </p>
-                    <p className="text-[14px] text-[#0f172a] leading-snug">{e.texte}</p>
-                    <p className="text-[11px] text-[#94a3b8] mt-1">
+                    <p className="text-[14px] text-text-1 leading-snug">{e.texte}</p>
+                    <p className="text-[11px] text-text-3 mt-1">
                       Source : {e.source} — {e.reference}
                     </p>
                   </div>

@@ -94,7 +94,7 @@ function EnTeteRetour() {
   return (
     <Link
       href="/"
-      className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+      className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
     >
       <ArrowLeft size={14} />
       Aujourd'hui
@@ -113,10 +113,10 @@ export default async function PreparerVisite({ params }: PageProps) {
     return (
       <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
         <EnTeteRetour />
-        <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-2">
+        <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-2">
           {rdv.titre}
         </h1>
-        <p className="text-[14px] text-[#64748b] leading-relaxed">
+        <p className="text-[14px] text-text-2 leading-relaxed">
           Atlas n'a pas pu identifier avec une confiance suffisante le bien et/ou l'acquéreur
           concernés par ce rendez-vous — aucune préparation ne peut être affichée de façon fiable.
         </p>
@@ -149,13 +149,13 @@ export default async function PreparerVisite({ params }: PageProps) {
         <EnTeteRetour />
         <div className="mb-6">
           <Badge variant="accent">Rendez-vous résolu</Badge>
-          <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mt-2">
+          <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mt-2">
             {bien.titre}
           </h1>
-          <p className="text-[14px] text-[#64748b] mt-0.5">
+          <p className="text-[14px] text-text-2 mt-0.5">
             {bien.adresse}, {bien.codePostal} {bien.ville}
           </p>
-          <p className="text-[14px] text-[#0f172a] mt-3">
+          <p className="text-[14px] text-text-1 mt-3">
             Acquéreur : {acquereur.prenom} {acquereur.nom}
           </p>
         </div>
@@ -163,7 +163,7 @@ export default async function PreparerVisite({ params }: PageProps) {
           <input type="hidden" name="rendezVousCalendarId" value={rdv.id} />
           <button
             type="submit"
-            className="text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+            className="text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
           >
             Enregistrer et préparer cette visite
           </button>
@@ -253,29 +253,29 @@ export default async function PreparerVisite({ params }: PageProps) {
           {/* Statut Visite (ADR-040) — absent si la visite n'a pas pu être matérialisée (bien/
               acquéreur mockés) : comportement identique à avant ADR-040 dans ce cas. */}
           {visite && <Badge variant={VARIANT_BADGE_STATUT_VISITE[visite.statut]}>{LABEL_STATUT_VISITE[visite.statut]}</Badge>}
-          <span className="text-[13px] text-[#94a3b8]">{prep.heureVisite}</span>
+          <span className="text-[13px] text-text-3">{prep.heureVisite}</span>
         </div>
-        <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mt-2">
+        <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mt-2">
           {bien.titre}
         </h1>
-        <p className="text-[14px] text-[#64748b] mt-0.5">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
+        <p className="text-[14px] text-text-2 mt-0.5">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
         <div className="flex flex-wrap items-center gap-3 mt-3">
-          <span className="text-[15px] font-semibold text-[#0f172a]">{formatPrix(bien.prix)}</span>
-          <span className="text-[13px] text-[#94a3b8]">{bien.surface} m² · {bien.pieces} pièces</span>
+          <span className="text-[15px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
+          <span className="text-[13px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
         </div>
         {localisation && qualiteGeocodage === "fiable" && (
-          <p className="text-[12px] text-[#94a3b8] mt-2">
+          <p className="text-[12px] text-text-3 mt-2">
             Localisation : {localisation.coordonnees.lat.toFixed(5)}, {localisation.coordonnees.lon.toFixed(5)}
             {" — "}
             {localisation.labelTrouve} (confiance {Math.round(localisation.score * 100)}%) · IGN Géoplateforme
           </p>
         )}
         {localisation && qualiteGeocodage !== "fiable" && (
-          <div className="mt-3 bg-[#fef2f2] rounded-lg p-3">
-            <p className="text-[12px] font-semibold uppercase tracking-wider text-[#dc2626] mb-1">
+          <div className="mt-3 bg-danger-light rounded-lg p-3">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-danger mb-1">
               {qualiteGeocodage === "a_verifier" ? "Adresse à vérifier" : "Adresse non fiable"}
             </p>
-            <p className="text-[13px] text-[#64748b] leading-snug">
+            <p className="text-[13px] text-text-2 leading-snug">
               Atlas a interprété « {adresseBien} » comme « {localisation.labelTrouve} » — confiance{" "}
               {Math.round(localisation.score * 100)}%.
             </p>
@@ -289,9 +289,9 @@ export default async function PreparerVisite({ params }: PageProps) {
           <SectionTitle>Points d'attention pour la visite</SectionTitle>
           <div className="flex flex-col gap-2">
             {pointsAttention.map((p) => (
-              <div key={p.id} className="bg-[#fef2f2] rounded-lg px-4 py-3">
-                <p className="text-[14px] text-[#0f172a] leading-snug">{p.texte}</p>
-                <p className="text-[11px] text-[#94a3b8] mt-1">{p.provenance}</p>
+              <div key={p.id} className="bg-danger-light rounded-lg px-4 py-3">
+                <p className="text-[14px] text-text-1 leading-snug">{p.texte}</p>
+                <p className="text-[11px] text-text-3 mt-1">{p.provenance}</p>
               </div>
             ))}
           </div>
@@ -304,9 +304,9 @@ export default async function PreparerVisite({ params }: PageProps) {
           <SectionTitle>Points forts pour la visite</SectionTitle>
           <div className="flex flex-col gap-2">
             {pointsForts.map((p) => (
-              <div key={p.id} className="bg-[#f0fdf4] rounded-lg px-4 py-3">
-                <p className="text-[14px] text-[#0f172a] leading-snug">{p.texte}</p>
-                <p className="text-[11px] text-[#94a3b8] mt-1">{p.provenance}</p>
+              <div key={p.id} className="bg-success-light rounded-lg px-4 py-3">
+                <p className="text-[14px] text-text-1 leading-snug">{p.texte}</p>
+                <p className="text-[11px] text-text-3 mt-1">{p.provenance}</p>
               </div>
             ))}
           </div>
@@ -314,9 +314,9 @@ export default async function PreparerVisite({ params }: PageProps) {
       )}
 
       {/* Profil acquéreur */}
-      <section className="mb-8 bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+      <section className="mb-8 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
         <SectionTitle>Acquéreur</SectionTitle>
-        <p className="text-[15px] font-medium text-[#0f172a]">
+        <p className="text-[15px] font-medium text-text-1">
           {aq.prenom} {aq.nom}
         </p>
         <div className="flex flex-wrap gap-2 mt-2">
@@ -328,14 +328,14 @@ export default async function PreparerVisite({ params }: PageProps) {
         {aq.criteres.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             {aq.criteres.map((c) => (
-              <span key={c} className="text-[12px] bg-[#f8f9fa] text-[#64748b] px-2 py-0.5 rounded">
+              <span key={c} className="text-[12px] bg-surface-muted text-text-2 px-2 py-0.5 rounded">
                 {c}
               </span>
             ))}
           </div>
         )}
         {aq.notes && (
-          <p className="text-[13px] text-[#94a3b8] mt-3 leading-relaxed border-t border-[#f1f5f9] pt-3">
+          <p className="text-[13px] text-text-3 mt-3 leading-relaxed border-t border-border pt-3">
             {aq.notes}
           </p>
         )}
@@ -353,14 +353,14 @@ export default async function PreparerVisite({ params }: PageProps) {
 
           {comptesRendusRecents.length > 0 && (
             <div className="mb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
                 Comptes rendus précédents avec {aq.prenom} {aq.nom}
               </p>
               <div className="flex flex-col gap-2">
                 {comptesRendusRecents.map((cr) => (
-                  <div key={cr.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                  <div key={cr.id} className="bg-surface rounded-lg border border-border p-4">
                     <div className="flex items-center gap-2 mb-1.5">
-                      <p className="text-[11px] text-[#94a3b8]">{formatDateCourte(cr.dateVisite)}</p>
+                      <p className="text-[11px] text-text-3">{formatDateCourte(cr.dateVisite)}</p>
                       <Badge
                         variant={
                           cr.interet === "interesse"
@@ -373,11 +373,11 @@ export default async function PreparerVisite({ params }: PageProps) {
                         {LABEL_INTERET[cr.interet]}
                       </Badge>
                     </div>
-                    <p className="text-[14px] text-[#0f172a] leading-relaxed whitespace-pre-wrap">
+                    <p className="text-[14px] text-text-1 leading-relaxed whitespace-pre-wrap">
                       {cr.retour}
                     </p>
                     {cr.prochaineEtape && (
-                      <p className="text-[13px] text-[#94a3b8] mt-2 border-t border-[#f1f5f9] pt-2">
+                      <p className="text-[13px] text-text-3 mt-2 border-t border-border pt-2">
                         Prochaine étape : {cr.prochaineEtape}
                       </p>
                     )}
@@ -389,25 +389,25 @@ export default async function PreparerVisite({ params }: PageProps) {
 
           {notesRecentes.length > 0 && (
             <div className="mb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
                 Notes récentes
               </p>
               <div className="flex flex-col gap-2">
                 {notesRecentes.map((note) => (
-                  <div key={note.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-                    <p className="text-[11px] text-[#94a3b8] mb-1">{formatDateCourte(note.creeLe)}</p>
+                  <div key={note.id} className="bg-surface rounded-lg border border-border p-4">
+                    <p className="text-[11px] text-text-3 mb-1">{formatDateCourte(note.creeLe)}</p>
                     {note.contenu.length > APERCU_NOTE_MAX ? (
                       <details>
-                        <summary className="text-[14px] text-[#0f172a] leading-relaxed cursor-pointer">
+                        <summary className="text-[14px] text-text-1 leading-relaxed cursor-pointer">
                           {apercuNote(note.contenu)}{" "}
-                          <span className="text-[12px] text-[#4338ca] font-medium">Lire la suite</span>
+                          <span className="text-[12px] text-accent font-medium">Lire la suite</span>
                         </summary>
-                        <p className="text-[14px] text-[#0f172a] leading-relaxed mt-2 whitespace-pre-wrap">
+                        <p className="text-[14px] text-text-1 leading-relaxed mt-2 whitespace-pre-wrap">
                           {note.contenu}
                         </p>
                       </details>
                     ) : (
-                      <p className="text-[14px] text-[#0f172a] leading-relaxed whitespace-pre-wrap">
+                      <p className="text-[14px] text-text-1 leading-relaxed whitespace-pre-wrap">
                         {note.contenu}
                       </p>
                     )}
@@ -419,20 +419,20 @@ export default async function PreparerVisite({ params }: PageProps) {
 
           {tachesEnCours.length > 0 && (
             <div className="mb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
                 Tâches en cours
               </p>
-              <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9]">
+              <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-border">
                 {tachesEnCours.map((tache) => (
                   <div key={tache.id} className="py-3">
                     <div className="flex items-center gap-2">
                       <Badge variant={tache.provenance === "bien" ? "accent" : "default"}>
                         {tache.provenance === "bien" ? "Bien" : "Acquéreur"}
                       </Badge>
-                      <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
+                      <p className="text-[14px] text-text-1">{tache.titre}</p>
                     </div>
                     {tache.contexte && (
-                      <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>
+                      <p className="text-[13px] text-text-3 mt-0.5">{tache.contexte}</p>
                     )}
                   </div>
                 ))}
@@ -442,13 +442,13 @@ export default async function PreparerVisite({ params }: PageProps) {
 
           {historiqueRecent.length > 0 && (
             <details>
-              <summary className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] cursor-pointer">
+              <summary className="text-[11px] font-semibold uppercase tracking-wider text-text-3 cursor-pointer">
                 Historique récent ({historiqueRecent.length})
               </summary>
               <div className="flex flex-col gap-2 mt-2">
                 {historiqueRecent.map((evt) => (
-                  <p key={`${evt.date}-${evt.texte}`} className="text-[13px] text-[#64748b]">
-                    <span className="text-[#94a3b8]">{formatDateCourte(evt.date)}</span> — {evt.texte}
+                  <p key={`${evt.date}-${evt.texte}`} className="text-[13px] text-text-2">
+                    <span className="text-text-3">{formatDateCourte(evt.date)}</span> — {evt.texte}
                   </p>
                 ))}
               </div>
@@ -460,21 +460,21 @@ export default async function PreparerVisite({ params }: PageProps) {
       {/* Résumé du bien */}
       <section className="mb-8">
         <SectionTitle>Résumé du bien</SectionTitle>
-        <p className="text-[14px] text-[#64748b] leading-relaxed">{bien.description}</p>
+        <p className="text-[14px] text-text-2 leading-relaxed">{bien.description}</p>
       </section>
 
       {/* Marché — transactions réelles à proximité, jamais une estimation */}
       {marcheDvf && marcheDvf.transactions.length > 0 && (
         <section className="mb-8">
           <SectionTitle>Marché</SectionTitle>
-          <p className="text-[13px] text-[#94a3b8] mb-3 leading-relaxed">
+          <p className="text-[13px] text-text-3 mb-3 leading-relaxed">
             Transactions de vente réellement enregistrées à proximité, de surface comparable — des
             références de marché pour le conseiller, pas une estimation du bien.
           </p>
 
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 mb-3">
-            <p className="text-[11px] text-[#94a3b8] uppercase tracking-wider">Prix affiché de ce bien</p>
-            <p className="text-[16px] font-semibold text-[#4338ca] mt-0.5">
+          <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 mb-3">
+            <p className="text-[11px] text-text-3 uppercase tracking-wider">Prix affiché de ce bien</p>
+            <p className="text-[16px] font-semibold text-accent mt-0.5">
               {formatPrixM2(Math.round(bien.prix / bien.surface))}
             </p>
           </div>
@@ -483,13 +483,13 @@ export default async function PreparerVisite({ params }: PageProps) {
             {marcheDvf.transactions.map((t) => (
               <div
                 key={t.reference}
-                className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 flex items-start justify-between gap-4"
+                className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 py-3 flex items-start justify-between gap-4"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] text-[#64748b]">
+                  <p className="text-[13px] text-text-2">
                     {t.surfaceM2.toFixed(0)} m² · {t.distanceMetres} m
                   </p>
-                  <p className="text-[11px] text-[#94a3b8] mt-0.5">
+                  <p className="text-[11px] text-text-3 mt-0.5">
                     Vendu le{" "}
                     {new Date(t.dateVente).toLocaleDateString("fr-FR", {
                       day: "numeric",
@@ -499,13 +499,13 @@ export default async function PreparerVisite({ params }: PageProps) {
                   </p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-[14px] font-medium text-[#0f172a]">{formatPrix(t.prixVente)}</p>
-                  <p className="text-[11px] text-[#94a3b8]">{formatPrixM2(t.prixM2)}</p>
+                  <p className="text-[14px] font-medium text-text-1">{formatPrix(t.prixVente)}</p>
+                  <p className="text-[11px] text-text-3">{formatPrixM2(t.prixM2)}</p>
                 </div>
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-[#94a3b8] mt-2">
+          <p className="text-[11px] text-text-3 mt-2">
             Source : {marcheDvf.source} · récupéré le {new Date(marcheDvf.recupereLe).toLocaleString("fr-FR")}
           </p>
         </section>
@@ -515,12 +515,12 @@ export default async function PreparerVisite({ params }: PageProps) {
       {prep.questionsASuggerer && prep.questionsASuggerer.length > 0 && (
         <section className="mb-8">
           <SectionTitle>Questions suggérées pour la visite</SectionTitle>
-          <p className="text-[13px] text-[#94a3b8] mb-3 leading-relaxed">
+          <p className="text-[13px] text-text-3 mb-3 leading-relaxed">
             Une aide pour préparer l'entretien — pas une information sur le bien ou l'acquéreur.
           </p>
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-[#f1f5f9]">
+          <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4 divide-y divide-border">
             {prep.questionsASuggerer.map((q, i) => (
-              <p key={i} className="py-3 text-[14px] text-[#0f172a] leading-snug">
+              <p key={i} className="py-3 text-[14px] text-text-1 leading-snug">
                 {q}
               </p>
             ))}
@@ -548,10 +548,10 @@ export default async function PreparerVisite({ params }: PageProps) {
       {/* Compte rendu après la visite — jamais de génération automatique de tâche ; la
           "prochaine étape" reste un texte libre, à transformer manuellement en tâche si besoin
           via le bouton "+ Ajouter une tâche" existant sur la fiche du bien. */}
-      <section className="mb-8 border-t border-[#f1f5f9] pt-6">
+      <section className="mb-8 border-t border-border pt-6">
         <SectionTitle>Compte rendu de la visite</SectionTitle>
         {bien.archiveLe || acquereur.archiveLe ? (
-          <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+          <p className="text-[13px] text-text-3 bg-surface rounded-lg border border-border p-3">
             {bien.archiveLe && acquereur.archiveLe
               ? "Ce bien et cet acquéreur sont archivés"
               : bien.archiveLe
@@ -562,7 +562,7 @@ export default async function PreparerVisite({ params }: PageProps) {
         ) : visite && visite.statut !== "planifiee" ? (
           // Visite déjà tranchée (ADR-040) — jamais un second compte rendu ou une seconde
           // transition depuis un état terminal (double soumission, contournement de formulaire).
-          <p className="text-[13px] text-[#94a3b8] bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-3">
+          <p className="text-[13px] text-text-3 bg-surface rounded-lg border border-border p-3">
             Cette visite a déjà été marquée « {LABEL_STATUT_VISITE[visite.statut]} ».
           </p>
         ) : (
@@ -571,7 +571,7 @@ export default async function PreparerVisite({ params }: PageProps) {
               jamais annulée+recréée) ; annuler ne demande aucun motif structuré. Absentes si la
               visite n'a pas pu être matérialisée (bien/acquéreur mockés). */}
           {visite && (
-            <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-[#f1f5f9]">
+            <div className="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-border">
               <form action={reporterVisiteAction} className="flex items-center gap-2">
                 <input type="hidden" name="id" value={visite.id} />
                 <input type="hidden" name="rendezVousCalendarId" value={rdv.id} />
@@ -579,11 +579,11 @@ export default async function PreparerVisite({ params }: PageProps) {
                   type="date"
                   name="nouvelleDatePrevue"
                   defaultValue={visite.datePrevue}
-                  className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                  className="border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                 />
                 <button
                   type="submit"
-                  className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+                  className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
                 >
                   Reporter
                 </button>
@@ -593,7 +593,7 @@ export default async function PreparerVisite({ params }: PageProps) {
                 <input type="hidden" name="rendezVousCalendarId" value={rdv.id} />
                 <button
                   type="submit"
-                  className="text-[13px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors"
+                  className="text-[13px] font-medium text-text-2 hover:text-danger transition-colors"
                 >
                   Annuler la visite
                 </button>
@@ -606,21 +606,21 @@ export default async function PreparerVisite({ params }: PageProps) {
           <input type="hidden" name="visiteId" value={visite?.id ?? ""} />
 
           <div>
-            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Date de la visite</label>
+            <label className="text-[12px] font-medium text-text-2 mb-1 block">Date de la visite</label>
             <input
               type="date"
               name="dateVisite"
               defaultValue={dateVisiteParDefaut}
               required
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Intérêt de l'acquéreur</label>
+            <label className="text-[12px] font-medium text-text-2 mb-1 block">Intérêt de l'acquéreur</label>
             <div className="flex flex-wrap gap-3">
               {(Object.keys(LABEL_INTERET) as Interet[]).map((valeur) => (
-                <label key={valeur} className="inline-flex items-center gap-1.5 text-[13px] text-[#0f172a]">
+                <label key={valeur} className="inline-flex items-center gap-1.5 text-[13px] text-text-1">
                   <input type="radio" name="interet" value={valeur} defaultChecked={valeur === "inconnu"} />
                   {LABEL_INTERET[valeur]}
                 </label>
@@ -629,31 +629,31 @@ export default async function PreparerVisite({ params }: PageProps) {
           </div>
 
           <div>
-            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Retour libre</label>
+            <label className="text-[12px] font-medium text-text-2 mb-1 block">Retour libre</label>
             <textarea
               name="retour"
               rows={4}
               required
               placeholder="Ce que vous avez observé, ce que l'acquéreur a dit..."
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
             />
           </div>
 
           <div>
-            <label className="text-[12px] font-medium text-[#64748b] mb-1 block">
+            <label className="text-[12px] font-medium text-text-2 mb-1 block">
               Prochaine étape (optionnel)
             </label>
             <textarea
               name="prochaineEtape"
               rows={2}
               placeholder="Ex. Envoyer une contre-proposition, relancer dans une semaine..."
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
             />
           </div>
 
           <button
             type="submit"
-            className="self-start text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+            className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
           >
             Enregistrer le compte rendu
           </button>
@@ -663,7 +663,7 @@ export default async function PreparerVisite({ params }: PageProps) {
       </section>
 
       {/* Rappel du principe Atlas */}
-      <p className="text-[12px] text-[#94a3b8] leading-relaxed border-t border-[#f1f5f9] pt-4 mb-6">
+      <p className="text-[12px] text-text-3 leading-relaxed border-t border-border pt-4 mb-6">
         Ces éléments sont des suggestions pour vous aider à préparer la visite — ils ne remplacent ni
         votre jugement, ni la relation que vous construisez avec l'acquéreur.
       </p>

@@ -12,9 +12,9 @@ const LABEL_STATUT_VERIFICATION: Record<string, string> = {
 export default function ExplicationCalculProjection({ provenance }: { provenance: ProvenanceRegleProjection[] }) {
   if (provenance.length === 0) return null;
   return (
-    <details className="mt-1.5 text-[12px] text-[#64748b]">
-      <summary className="cursor-pointer select-none text-[#3b82f6]">Comment ce chiffre est calculé ?</summary>
-      <div className="mt-2 flex flex-col gap-1.5 pl-3 border-l-2 border-[#e2e8f0]">
+    <details className="mt-1.5 text-[12px] text-text-2">
+      <summary className="cursor-pointer select-none text-accent">Comment ce chiffre est calculé ?</summary>
+      <div className="mt-2 flex flex-col gap-1.5 pl-3 border-l-2 border-border-md">
         {provenance.map((p, index) => {
           if (p.origine === "indisponible") {
             return (
@@ -26,10 +26,10 @@ export default function ExplicationCalculProjection({ provenance }: { provenance
           if (p.origine === "hypothese_reconduction") {
             return (
               <p key={`hypothese-${p.regleReconduite.code}-${index}`}>
-                <span className="font-medium text-[#b45309]">Hypothèse de reconduction</span> — dernière règle
+                <span className="font-medium text-warning">Hypothèse de reconduction</span> — dernière règle
                 officiellement connue depuis {p.anneeDerniereRegleOfficielle} ({p.regleReconduite.sourceLibelle}),
                 reconduite sans garantie pour cette année.{" "}
-                <a href={p.regleReconduite.sourceUrl} target="_blank" rel="noreferrer" className="underline text-[#3b82f6]">
+                <a href={p.regleReconduite.sourceUrl} target="_blank" rel="noreferrer" className="underline text-accent">
                   Source de la dernière règle connue
                 </a>
               </p>
@@ -40,7 +40,7 @@ export default function ExplicationCalculProjection({ provenance }: { provenance
               Règle officielle — {p.regle.sourceLibelle} ({LABEL_STATUT_VERIFICATION[p.regle.statutVerification]}),
               applicable depuis le {p.regle.dateDebutValidite}
               {p.regle.dateFinValidite ? ` jusqu'au ${p.regle.dateFinValidite}` : ""}.{" "}
-              <a href={p.regle.sourceUrl} target="_blank" rel="noreferrer" className="underline text-[#3b82f6]">
+              <a href={p.regle.sourceUrl} target="_blank" rel="noreferrer" className="underline text-accent">
                 Source officielle
               </a>
             </p>

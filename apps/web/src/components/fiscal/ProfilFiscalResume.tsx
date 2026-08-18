@@ -8,9 +8,9 @@ import {
 
 function Ligne({ label, valeur }: { label: string; valeur: string }) {
   return (
-    <div className="flex justify-between text-[13px] py-1.5 border-b border-[#f1f5f9] last:border-b-0">
-      <span className="text-[#64748b]">{label}</span>
-      <span className="text-[#0f172a] font-medium">{valeur}</span>
+    <div className="flex justify-between text-[13px] py-1.5 border-b border-border last:border-b-0">
+      <span className="text-text-2">{label}</span>
+      <span className="text-text-1 font-medium">{valeur}</span>
     </div>
   );
 }
@@ -25,8 +25,8 @@ function libelleTriEtat(valeur: boolean | undefined, siOui: string, siNon: strin
 // l'historique complet (pas d'écran d'audit en V1).
 export default function ProfilFiscalResume({ profil }: { profil: ProfilFiscal }) {
   return (
-    <div className="bg-white border border-[#e2e8f0] rounded-lg px-4 py-3">
-      <p className="text-[12px] text-[#94a3b8] mb-2">Situation applicable depuis le {profil.dateDebutValidite}</p>
+    <div className="bg-surface border border-border-md rounded-lg px-4 py-3">
+      <p className="text-[12px] text-text-3 mb-2">Situation applicable depuis le {profil.dateDebutValidite}</p>
       <Ligne label="Régime fiscal" valeur={LABEL_REGIME_FISCAL[profil.regimeFiscal]} />
       <Ligne label="Régime TVA" valeur={LABEL_REGIME_TVA[profil.regimeTva]} />
       <Ligne label="Périodicité Urssaf" valeur={LABEL_PERIODICITE_URSSAF[profil.periodiciteUrssaf]} />

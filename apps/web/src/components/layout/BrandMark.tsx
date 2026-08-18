@@ -1,13 +1,13 @@
-import { PRODUCT_NAME } from "@/lib/branding";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/branding";
 
 // Monogramme temporaire, volontairement sobre et remplaçable — le logo final n'est pas figé
-// (vérification marque en cours). Isolé ici : un futur remplacement (SVG, nouveau nom) ne touche
-// que ce fichier, jamais Sidebar/BottomNav/connexion. Motif géométrique abstrait (3 formes
-// architecturales simples) plutôt qu'une lettre gravée — un renommage futur reste un changement
-// local, aucune identité littérale à défaire.
-type Props = { taille?: "sm" | "md"; surNavy?: boolean; className?: string };
+// (nom "Domiora" encore en sécurisation juridique). Isolé ici : un futur remplacement (SVG,
+// nouveau nom) ne touche que ce fichier, jamais Sidebar/BottomNav/connexion. Motif géométrique
+// abstrait (3 formes architecturales simples) plutôt qu'une lettre gravée — un renommage futur
+// reste un changement local, aucune identité littérale à défaire.
+type Props = { taille?: "sm" | "md"; surNavy?: boolean; avecBaseline?: boolean; className?: string };
 
-export default function BrandMark({ taille = "md", surNavy = false, className = "" }: Props) {
+export default function BrandMark({ taille = "md", surNavy = false, avecBaseline = false, className = "" }: Props) {
   const tailleMonogramme = taille === "sm" ? "w-6 h-6" : "w-8 h-8";
   const tailleTexte = taille === "sm" ? "text-[13px]" : "text-[15px]";
 
@@ -23,8 +23,18 @@ export default function BrandMark({ taille = "md", surNavy = false, className = 
           <line x1="16" y1="20" x2="16" y2="13" stroke="#c59a5b" strokeWidth="1.6" />
         </svg>
       </span>
-      <span className={`font-semibold tracking-tight ${tailleTexte} ${surNavy ? "text-white" : "text-text-1"}`}>
-        {PRODUCT_NAME}
+      <span className="flex flex-col min-w-0">
+        <span
+          className={`font-semibold tracking-tight leading-tight ${tailleTexte} ${surNavy ? "text-white" : "text-text-1"}`}
+        >
+          {PRODUCT_NAME}
+        </span>
+        {/* Baseline très discrète (sidebar uniquement) — jamais dans BottomNav/contextes exigus. */}
+        {avecBaseline && (
+          <span className={`text-[10px] tracking-wide truncate ${surNavy ? "text-white/45" : "text-text-3"}`}>
+            {PRODUCT_TAGLINE}
+          </span>
+        )}
       </span>
     </div>
   );

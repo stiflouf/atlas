@@ -2,9 +2,9 @@ import type { ProspectVendeur } from "@/types/prospectVendeur";
 import { ORIGINES_LEAD, LABEL_ORIGINE_LEAD } from "@/types/origineLead";
 
 const inputCls =
-  "w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]";
-const labelCls = "text-[12px] font-medium text-[#64748b] mb-1 block";
-const helpCls = "text-[12px] text-[#94a3b8] mt-1";
+  "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
+const labelCls = "text-[12px] font-medium text-text-2 mb-1 block";
+const helpCls = "text-[12px] text-text-3 mt-1";
 
 const TYPES_BIEN: { value: string; label: string }[] = [
   { value: "appartement", label: "Appartement" },
@@ -81,8 +81,8 @@ export default function ProspectVendeurFormulaire({
         </div>
       </div>
 
-      <div className="border-t border-[#f1f5f9] pt-4 mt-2">
-        <p className="text-[12px] text-[#94a3b8] mb-3">Bien potentiel — tout est facultatif à ce stade.</p>
+      <div className="border-t border-border pt-4 mt-2">
+        <p className="text-[12px] text-text-3 mb-3">Bien potentiel — tout est facultatif à ce stade.</p>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Adresse précise</label>
@@ -126,7 +126,7 @@ export default function ProspectVendeurFormulaire({
 
       <button
         type="submit"
-        className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+        className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
       >
         {libelleSubmit}
       </button>

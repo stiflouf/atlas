@@ -20,9 +20,9 @@ export default function ExplicationCalcul({
 }) {
   if (provenance.length === 0 && !assiette) return null;
   return (
-    <details className="mt-1.5 text-[12px] text-[#64748b]">
-      <summary className="cursor-pointer select-none text-[#3b82f6]">Comment ce chiffre est calculé ?</summary>
-      <div className="mt-2 flex flex-col gap-1.5 pl-3 border-l-2 border-[#e2e8f0]">
+    <details className="mt-1.5 text-[12px] text-text-2">
+      <summary className="cursor-pointer select-none text-accent">Comment ce chiffre est calculé ?</summary>
+      <div className="mt-2 flex flex-col gap-1.5 pl-3 border-l-2 border-border-md">
         {assiette && (
           <div>
             <p>
@@ -48,7 +48,7 @@ export default function ExplicationCalcul({
             {p.sourceLibelle} ({LABEL_STATUT_VERIFICATION[p.statutVerification]}), applicable depuis le{" "}
             {p.dateDebutValidite}
             {p.dateFinValidite ? ` jusqu'au ${p.dateFinValidite}` : ""}.{" "}
-            <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline text-[#3b82f6]">
+            <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline text-accent">
               Source officielle
             </a>
           </p>

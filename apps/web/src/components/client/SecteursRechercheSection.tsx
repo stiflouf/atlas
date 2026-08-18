@@ -6,7 +6,7 @@ import type { Commune } from "@/types/geocodage";
 import { ajouterSecteurRechercheAction, supprimerSecteurRechercheAction } from "@/actions/secteurRecherche";
 
 const inputCls =
-  "w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]";
+  "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
 
 // Formulaire d'ajout séparé (ADR-035) : useActionState pour afficher une erreur actionnable
 // inline (IGN indisponible, doublon) — même patron que BrouillonEmailFormulaire/
@@ -67,7 +67,7 @@ function AjoutSecteur({
 
   return (
     <div>
-      <label className="text-[12px] font-medium text-[#64748b] mb-1 block">Ajouter un secteur</label>
+      <label className="text-[12px] font-medium text-text-2 mb-1 block">Ajouter un secteur</label>
       <input
         type="text"
         value={recherche}
@@ -76,14 +76,14 @@ function AjoutSecteur({
         className={inputCls}
       />
 
-      {recherchEnCours && <p className="text-[12px] text-[#94a3b8] mt-1">Recherche…</p>}
+      {recherchEnCours && <p className="text-[12px] text-text-3 mt-1">Recherche…</p>}
 
       {!recherchEnCours && recherche.trim().length >= 2 && resultats.length === 0 && !selection && (
-        <p className="text-[12px] text-[#94a3b8] mt-1">Aucune commune trouvée.</p>
+        <p className="text-[12px] text-text-3 mt-1">Aucune commune trouvée.</p>
       )}
 
       {resultats.length > 0 && !selection && (
-        <div className="mt-1 bg-white rounded-lg border border-[#e2e8f0] shadow-[0_2px_8px_rgba(0,0,0,0.08)] max-h-56 overflow-y-auto">
+        <div className="mt-1 bg-surface rounded-lg border border-border-md shadow-[0_2px_8px_rgba(0,0,0,0.08)] max-h-56 overflow-y-auto">
           {resultats.map((commune) => (
             <button
               key={commune.citycode}
@@ -92,10 +92,10 @@ function AjoutSecteur({
                 setSelection(commune);
                 setResultats([]);
               }}
-              className="block w-full text-left px-3 py-2 text-[13px] text-[#0f172a] hover:bg-[#f8f9fa] transition-colors"
+              className="block w-full text-left px-3 py-2 text-[13px] text-text-1 hover:bg-surface-muted transition-colors"
             >
               {commune.nom} ({commune.codePostal}){" "}
-              <span className="text-[#94a3b8]">— {commune.contexte}</span>
+              <span className="text-text-3">— {commune.contexte}</span>
             </button>
           ))}
         </div>
@@ -106,12 +106,12 @@ function AjoutSecteur({
           <input type="hidden" name="acquereurId" value={acquereurId} />
           <input type="hidden" name="codeInsee" value={selection.citycode} />
           <input type="hidden" name="nomCommune" value={selection.nom} />
-          <span className="text-[13px] text-[#0f172a]">
+          <span className="text-[13px] text-text-1">
             {selection.nom} ({selection.codePostal})
           </span>
           <button
             type="submit"
-            className="text-[12px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3 py-1.5 rounded-lg"
+            className="text-[12px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3 py-1.5 rounded-lg"
           >
             Ajouter
           </button>
@@ -121,14 +121,14 @@ function AjoutSecteur({
               setSelection(null);
               setRecherche("");
             }}
-            className="text-[12px] text-[#94a3b8] hover:text-[#64748b] transition-colors"
+            className="text-[12px] text-text-3 hover:text-text-2 transition-colors"
           >
             Annuler
           </button>
         </form>
       )}
 
-      {etat.statut === "erreur" && <p className="text-[12px] text-[#dc2626] mt-2">{etat.message}</p>}
+      {etat.statut === "erreur" && <p className="text-[12px] text-danger mt-2">{etat.message}</p>}
     </div>
   );
 }
@@ -146,20 +146,20 @@ export default function SecteursRechercheSection({
 
   return (
     <section className="mb-8">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
         Secteurs de recherche
       </p>
 
       {secteurs.length === 0 ? (
-        <p className="text-[14px] text-[#94a3b8] mb-3">Aucun secteur de recherche renseigné.</p>
+        <p className="text-[14px] text-text-3 mb-3">Aucun secteur de recherche renseigné.</p>
       ) : (
         <div className="flex flex-col gap-2 mb-3">
           {secteurs.map((secteur) => (
             <div
               key={secteur.id}
-              className="flex items-center justify-between gap-3 bg-white rounded-lg border border-[#f1f5f9] px-4 py-2.5"
+              className="flex items-center justify-between gap-3 bg-surface rounded-lg border border-border px-4 py-2.5"
             >
-              <span className="text-[14px] text-[#0f172a]">
+              <span className="text-[14px] text-text-1">
                 {secteur.nomCommune} — {secteur.codePostal}
               </span>
               {!archive && (
@@ -169,7 +169,7 @@ export default function SecteursRechercheSection({
                   <input type="hidden" name="redirectTo" value={`/clients/${acquereurId}`} />
                   <button
                     type="submit"
-                    className="text-[12px] text-[#94a3b8] hover:text-[#dc2626] transition-colors"
+                    className="text-[12px] text-text-3 hover:text-danger transition-colors"
                   >
                     Retirer
                   </button>

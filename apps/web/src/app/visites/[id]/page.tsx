@@ -59,7 +59,7 @@ export default async function VisitePage({ params }: PageProps) {
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
         href="/"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         Aujourd'hui
@@ -68,23 +68,23 @@ export default async function VisitePage({ params }: PageProps) {
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <Badge variant={VARIANT_BADGE_STATUT_VISITE[visite.statut]}>{LABEL_STATUT_VISITE[visite.statut]}</Badge>
-          <span className="text-[13px] text-[#94a3b8]">{formatDateCourte(visite.datePrevue)}</span>
+          <span className="text-[13px] text-text-3">{formatDateCourte(visite.datePrevue)}</span>
         </div>
-        <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mt-2">
-          <Link href={`/biens/${bien.id}`} className="hover:text-[#4338ca] transition-colors">
+        <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mt-2">
+          <Link href={`/biens/${bien.id}`} className="hover:text-accent transition-colors">
             {bien.titre}
           </Link>
         </h1>
-        <p className="text-[14px] text-[#64748b] mt-0.5">
+        <p className="text-[14px] text-text-2 mt-0.5">
           {bien.adresse}, {bien.codePostal} {bien.ville}
         </p>
         <div className="flex flex-wrap items-center gap-3 mt-3">
-          <span className="text-[15px] font-semibold text-[#0f172a]">{formatPrix(bien.prix)}</span>
-          <span className="text-[13px] text-[#94a3b8]">{bien.surface} m² · {bien.pieces} pièces</span>
+          <span className="text-[15px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
+          <span className="text-[13px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
         </div>
-        <p className="text-[14px] text-[#0f172a] mt-3">
+        <p className="text-[14px] text-text-1 mt-3">
           Acquéreur :{" "}
-          <Link href={`/clients/${acquereur.id}`} className="font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={`/clients/${acquereur.id}`} className="font-medium text-accent hover:text-accent-hover transition-colors">
             {acquereur.prenom} {acquereur.nom}
           </Link>
         </p>
@@ -99,7 +99,7 @@ export default async function VisitePage({ params }: PageProps) {
           <div className="flex flex-wrap items-center gap-3 mb-4">
             <Link
               href={`/visites/${visite.rendezVousCalendarId}/preparer`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
             >
               {compteRendu ? "Ouvrir la préparation" : "Préparer / renseigner le compte rendu"}
             </Link>
@@ -113,9 +113,9 @@ export default async function VisitePage({ params }: PageProps) {
                 type="date"
                 name="nouvelleDatePrevue"
                 defaultValue={visite.datePrevue}
-                className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-[13px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+                className="border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
-              <button type="submit" className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+              <button type="submit" className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors">
                 Reporter
               </button>
             </form>
@@ -123,7 +123,7 @@ export default async function VisitePage({ params }: PageProps) {
               <input type="hidden" name="id" value={visite.id} />
               <input type="hidden" name="rendezVousCalendarId" value={visite.rendezVousCalendarId} />
               <input type="hidden" name="redirectTo" value={`/visites/${visite.id}`} />
-              <button type="submit" className="text-[13px] font-medium text-[#64748b] hover:text-[#dc2626] transition-colors">
+              <button type="submit" className="text-[13px] font-medium text-text-2 hover:text-danger transition-colors">
                 Annuler la visite
               </button>
             </form>
@@ -134,16 +134,16 @@ export default async function VisitePage({ params }: PageProps) {
       {/* Compte rendu — lecture seule ici (ADR-041, §7) : la création reste exclusivement sur la
           page de préparation, jamais un second formulaire dupliqué. */}
       {compteRendu ? (
-        <section className="mb-8 border-t border-[#f1f5f9] pt-6">
+        <section className="mb-8 border-t border-border pt-6">
           <SectionTitle>Compte rendu</SectionTitle>
-          <div className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+          <div className="bg-surface rounded-lg border border-border p-4">
             <div className="flex items-center gap-2 mb-1.5">
-              <p className="text-[11px] text-[#94a3b8]">{formatDateCourte(compteRendu.dateVisite)}</p>
+              <p className="text-[11px] text-text-3">{formatDateCourte(compteRendu.dateVisite)}</p>
               <Badge variant={VARIANT_BADGE_INTERET[compteRendu.interet]}>{LABEL_INTERET[compteRendu.interet]}</Badge>
             </div>
-            <p className="text-[14px] text-[#0f172a] leading-relaxed whitespace-pre-wrap">{compteRendu.retour}</p>
+            <p className="text-[14px] text-text-1 leading-relaxed whitespace-pre-wrap">{compteRendu.retour}</p>
             {compteRendu.prochaineEtape && (
-              <p className="text-[13px] text-[#94a3b8] mt-2 border-t border-[#f1f5f9] pt-2">
+              <p className="text-[13px] text-text-3 mt-2 border-t border-border pt-2">
                 Prochaine étape : {compteRendu.prochaineEtape}
               </p>
             )}
@@ -158,7 +158,7 @@ export default async function VisitePage({ params }: PageProps) {
           {visite.statut === "realisee" && (
             <Link
               href={`/offres/nouveau?bienId=${bien.id}&acquereurId=${acquereur.id}&compteRenduVisiteId=${compteRendu.id}`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg mt-4"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg mt-4"
             >
               Créer une offre
             </Link>
@@ -168,9 +168,9 @@ export default async function VisitePage({ params }: PageProps) {
         // Théoriquement impossible aujourd'hui (une visite ne transite vers `realisee` que dans la
         // même transaction que la création de son compte rendu) — affiché honnêtement plutôt que
         // masqué si jamais rencontré, sans inventer de donnée.
-        <section className="mb-8 border-t border-[#f1f5f9] pt-6">
+        <section className="mb-8 border-t border-border pt-6">
           <SectionTitle>Compte rendu</SectionTitle>
-          <p className="text-[13px] text-[#94a3b8]">Aucun compte rendu trouvé pour cette visite réalisée.</p>
+          <p className="text-[13px] text-text-3">Aucun compte rendu trouvé pour cette visite réalisée.</p>
         </section>
       ) : null}
     </div>

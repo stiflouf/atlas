@@ -146,18 +146,18 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
         href={retourHref}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         Retour
       </Link>
 
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-1">{titre}</h1>
-      <p className="text-[14px] text-[#64748b] mb-6">{LABEL_INTENTION_COMMUNICATION[intention]}</p>
+      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-1">{titre}</h1>
+      <p className="text-[14px] text-text-2 mb-6">{LABEL_INTENTION_COMMUNICATION[intention]}</p>
 
       {choixRequis ? (
-        <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-          <p className="text-[13px] text-[#0f172a] mb-3">
+        <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+          <p className="text-[13px] text-text-1 mb-3">
             Plusieurs destinataires sont possibles pour ce dossier — choisissez celui à qui adresser ce message.
           </p>
           <form method="GET" className="flex flex-col gap-2">
@@ -165,17 +165,17 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
             {params.bienId && <input type="hidden" name="bienId" value={params.bienId} />}
             {params.exigenceCode && <input type="hidden" name="exigenceCode" value={params.exigenceCode} />}
             {candidats.map((c) => (
-              <label key={`${c.type}:${c.id}`} className="inline-flex items-center gap-2 text-[14px] text-[#0f172a]">
+              <label key={`${c.type}:${c.id}`} className="inline-flex items-center gap-2 text-[14px] text-text-1">
                 <input type="radio" name="candidat" value={`${c.type}:${c.id}`} required />
                 {c.prenom ? `${c.prenom} ${c.nom}` : c.nom}
-                <span className="text-[11px] text-[#94a3b8]">
+                <span className="text-[11px] text-text-3">
                   ({c.type === "prospectVendeur" ? "vendeur" : "acquéreur"})
                 </span>
               </label>
             ))}
             <button
               type="submit"
-              className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
             >
               Choisir ce destinataire
             </button>

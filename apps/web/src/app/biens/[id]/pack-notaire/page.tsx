@@ -26,6 +26,16 @@ const COULEUR_SEVERITE: Record<SeveritePackNotaire, string> = {
   information: "text-text-3",
 };
 
+// Points de rythme (chantier convergence Domiora) — la liste "À obtenir" pouvait paraître longue
+// et brute ; un point coloré + un fond de card léger par groupe suffisent à la structurer sans
+// toucher au calcul (packNotaire.ts, ADR-049, strictement inchangé).
+const POINT_SEVERITE: Record<SeveritePackNotaire, string> = {
+  bloquant_technique: "bg-danger",
+  a_obtenir: "bg-warning",
+  a_verifier: "bg-warning",
+  information: "bg-text-3",
+};
+
 export default async function PageDossierNotaire({ params }: PageProps) {
   const { id } = await params;
   const contexte = await chargerContextePackNotaire(id);
@@ -90,13 +100,14 @@ export default async function PageDossierNotaire({ params }: PageProps) {
             <p className={`text-[12px] font-semibold uppercase tracking-wider mb-1.5 ${COULEUR_SEVERITE[severite]}`}>
               {LABEL_SEVERITE_PACK_NOTAIRE[severite]}
             </p>
-            <ul className="flex flex-col gap-1">
+            <div className="flex flex-col bg-surface rounded-lg border border-border divide-y divide-border">
               {constats.map((c) => (
-                <li key={c.code} className="text-[14px] text-text-1">
-                  {c.message}
-                </li>
+                <div key={c.code} className="flex items-start gap-2.5 px-3 py-2.5">
+                  <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${POINT_SEVERITE[severite]}`} />
+                  <p className="text-[14px] text-text-1 leading-snug">{c.message}</p>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
         );
       })}

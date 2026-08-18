@@ -7,7 +7,7 @@ export default function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col w-[220px] shrink-0 h-full bg-navy">
       <div className="px-5 py-5 border-b border-white/10">
-        <BrandMark surNavy />
+        <BrandMark surNavy avecBaseline />
       </div>
 
       <div className="flex-1 px-3 py-4">

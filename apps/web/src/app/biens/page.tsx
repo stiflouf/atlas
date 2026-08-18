@@ -8,8 +8,19 @@ import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
 import BienVisualPlaceholder from "@/components/ui/BienVisualPlaceholder";
 import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
+import { deriverStatutCommercial, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
 
 const PAR_PAGE = 25;
+
+// Statut dérivé uniquement des champs déjà chargés sur `Bien` (offreEnCoursLe/compromisSigneLe) —
+// deriverStatutCommercial() sans second argument ignore volontairement les compromis structurés
+// (voir sa doc), aucune requête additionnelle par ligne (§12 : pas de requête coûteuse en liste).
+const VARIANT_STATUT_COMMERCIAL: Record<StatutCommercial, "default" | "accent" | "success"> = {
+  en_commercialisation: "default",
+  offre_en_cours: "accent",
+  compromis_signe: "success",
+  vendu: "success",
+};
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
@@ -116,15 +127,18 @@ export default async function BiensPage({ searchParams }: PageProps) {
               <Link key={bien.id} href={`/biens/${bien.id}`}>
                 <Card variant="interactive">
                   <div className="flex items-center gap-4 p-3">
-                    <BienVisualPlaceholder ratio="thumb" className="w-16 h-16 shrink-0" />
+                    <BienVisualPlaceholder ratio="thumb" className="w-20 h-20 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
                       </div>
-                      <p className="text-[13px] text-text-2">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
-                      <div className="flex items-center gap-3 mt-1.5">
+                      <p className="text-[13px] text-text-2 truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
                         <span className="text-[13px] font-medium text-text-1">{formatPrix(bien.prix)}</span>
                         <span className="text-[12px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
+                        <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
+                          {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
+                        </Badge>
                         <Badge variant="accent">{bien.reference}</Badge>
                         {bien.archiveLe && (
                           <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>

@@ -1,9 +1,9 @@
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 
 const inputCls =
-  "w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]";
-const labelCls = "text-[12px] font-medium text-[#64748b] mb-1 block";
-const helpCls = "text-[12px] text-[#94a3b8] mt-1";
+  "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
+const labelCls = "text-[12px] font-medium text-text-2 mb-1 block";
+const helpCls = "text-[12px] text-text-3 mt-1";
 
 // ADR-027, correction n° 6 : formulaire de conversion en bien — pré-remplit ce qui est déjà connu
 // du prospect (jamais la base directement, seulement des valeurs par défaut éditables), mais
@@ -109,7 +109,7 @@ export default function ProspectVendeurConversionFormulaire({
 
       <button
         type="submit"
-        className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+        className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
       >
         Signer le mandat et créer le bien
       </button>

@@ -4,9 +4,9 @@ import { useState } from "react";
 import type { ProfilFiscal } from "@/types/profilFiscal";
 
 const inputCls =
-  "w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]";
-const labelCls = "text-[12px] font-medium text-[#64748b] mb-1 block";
-const helpCls = "text-[12px] text-[#94a3b8] mt-1";
+  "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
+const labelCls = "text-[12px] font-medium text-text-2 mb-1 block";
+const helpCls = "text-[12px] text-text-3 mt-1";
 
 // Même principe que bienFormulaire.parseTriEtat côté lecture : un select à 3 états.
 function triEtat(valeur: boolean | undefined): "" | "oui" | "non" {
@@ -211,7 +211,7 @@ export default function ProfilFiscalFormulaire({
 
       <button
         type="submit"
-        className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+        className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
       >
         {profilActuel ? "Enregistrer ce changement" : "Enregistrer ma situation fiscale"}
       </button>

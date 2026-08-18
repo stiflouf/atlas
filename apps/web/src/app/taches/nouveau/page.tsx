@@ -6,8 +6,8 @@ import { listerClients } from "@/lib/clientRepository";
 import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
 
 const inputCls =
-  "w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]";
-const labelCls = "text-[12px] font-medium text-[#64748b] mb-1 block";
+  "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
+const labelCls = "text-[12px] font-medium text-text-2 mb-1 block";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, les select bien/acquéreur/prospect vendeur figeraient la liste au moment du build.
@@ -36,13 +36,13 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
         href="/"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         Aujourd'hui
       </Link>
 
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-6">
+      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-6">
         Nouvelle tâche
       </h1>
 
@@ -89,8 +89,8 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
           <input name="echeance" type="date" className={inputCls} placeholder="Sans échéance" />
         </div>
 
-        <div className="border-t border-[#f1f5f9] pt-4 mt-2">
-          <p className="text-[12px] text-[#94a3b8] mb-3">
+        <div className="border-t border-border pt-4 mt-2">
+          <p className="text-[12px] text-text-3 mb-3">
             Une tâche peut être rattachée à un bien, un acquéreur ou un prospect vendeur — une seule
             cible à la fois — ou à aucun des trois pour une tâche générale.
           </p>
@@ -134,7 +134,7 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
 
         <button
           type="submit"
-          className="self-start mt-2 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-4 py-2.5 rounded-lg"
+          className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
         >
           Créer la tâche
         </button>

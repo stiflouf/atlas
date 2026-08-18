@@ -72,30 +72,30 @@ function EcranConfirmationEnvoi({
   );
 
   return (
-    <div className="flex flex-col gap-4 bg-[#fafafa] rounded-lg border border-[#f1f5f9] p-4">
+    <div className="flex flex-col gap-4 bg-surface rounded-lg border border-border p-4">
       {etatEnvoi.statut === "idle" && (
         <>
-          <p className="text-[14px] text-[#0f172a] font-medium">Envoyer cet email à {destinataireEmail} ?</p>
+          <p className="text-[14px] text-text-1 font-medium">Envoyer cet email à {destinataireEmail} ?</p>
           <div>
-            <p className="text-[11px] font-medium text-[#64748b] mb-1">Objet</p>
-            <p className="text-[14px] text-[#0f172a]">{objet}</p>
+            <p className="text-[11px] font-medium text-text-2 mb-1">Objet</p>
+            <p className="text-[14px] text-text-1">{objet}</p>
           </div>
           <div>
-            <p className="text-[11px] font-medium text-[#64748b] mb-1">Corps</p>
-            <p className="text-[14px] text-[#0f172a] whitespace-pre-wrap">{corps}</p>
+            <p className="text-[11px] font-medium text-text-2 mb-1">Corps</p>
+            <p className="text-[14px] text-text-1 whitespace-pre-wrap">{corps}</p>
           </div>
           <form action={declencherEnvoi} className="flex items-center gap-2">
             {champsCaches}
             <button
               type="submit"
-              className="text-[13px] font-medium text-white bg-[#16a34a] hover:bg-[#15803d] transition-colors px-3.5 py-2 rounded-lg"
+              className="text-[13px] font-medium text-white bg-success hover:bg-success transition-colors px-3.5 py-2 rounded-lg"
             >
               Confirmer l&apos;envoi
             </button>
             <button
               type="button"
               onClick={onAnnuler}
-              className="text-[13px] font-medium text-[#64748b] hover:text-[#0f172a] transition-colors px-3.5 py-2"
+              className="text-[13px] font-medium text-text-2 hover:text-text-1 transition-colors px-3.5 py-2"
             >
               Annuler
             </button>
@@ -105,14 +105,14 @@ function EcranConfirmationEnvoi({
 
       {(etatEnvoi.statut === "envoye" || etatEnvoi.statut === "deja_envoye") && (
         <div className="flex flex-col gap-2">
-          <p className="text-[14px] font-medium text-[#16a34a]">
+          <p className="text-[14px] font-medium text-success">
             {etatEnvoi.statut === "envoye" ? "Envoi confirmé par Gmail" : "Email déjà envoyé"}
           </p>
           {tacheId && !tacheTerminee && (
             <form action={terminerTacheAction} onSubmit={() => setTacheTerminee(true)} className="flex items-center gap-2">
               <input type="hidden" name="id" value={tacheId} />
               {bienId && <input type="hidden" name="redirectTo" value={`/biens/${bienId}`} />}
-              <button type="submit" className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+              <button type="submit" className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors">
                 Marquer également la tâche comme terminée
               </button>
             </form>
@@ -122,8 +122,8 @@ function EcranConfirmationEnvoi({
 
       {etatEnvoi.statut === "incertain" && (
         <div className="flex flex-col gap-2">
-          <p className="text-[14px] font-medium text-[#d97706]">Statut d&apos;envoi incertain</p>
-          <p className="text-[13px] text-[#64748b]">
+          <p className="text-[14px] font-medium text-warning">Statut d&apos;envoi incertain</p>
+          <p className="text-[13px] text-text-2">
             La confirmation de Google n&apos;a pas pu être obtenue (réseau ou délai dépassé) — vérifiez vos messages
             envoyés dans Gmail avant toute nouvelle tentative. Rien n&apos;a été enregistré comme interaction tant
             que l&apos;envoi n&apos;est pas confirmé.
@@ -131,7 +131,7 @@ function EcranConfirmationEnvoi({
           <button
             type="button"
             onClick={onNouvelleTentative}
-            className="self-start text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+            className="self-start text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
           >
             Nouvelle tentative (après vérification)
           </button>
@@ -140,11 +140,11 @@ function EcranConfirmationEnvoi({
 
       {etatEnvoi.statut === "echec" && (
         <div className="flex flex-col gap-2">
-          <p className="text-[14px] font-medium text-[#dc2626]">{etatEnvoi.message}</p>
+          <p className="text-[14px] font-medium text-danger">{etatEnvoi.message}</p>
           <button
             type="button"
             onClick={onNouvelleTentative}
-            className="self-start text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+            className="self-start text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
           >
             Réessayer
           </button>
@@ -197,7 +197,7 @@ export default function BrouillonEmailFormulaire({
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-[11px] font-medium text-[#64748b] mb-1.5">Ton</p>
+        <p className="text-[11px] font-medium text-text-2 mb-1.5">Ton</p>
         <div className="flex gap-2 flex-wrap">
           {TONS.map((t) => (
             <button
@@ -211,46 +211,46 @@ export default function BrouillonEmailFormulaire({
               }}
               disabled={idempotencyKey !== null}
               className={`text-[12px] px-2.5 py-1 rounded-full border transition-colors disabled:opacity-40 ${
-                t === ton ? "bg-[#eef2ff] border-[#4338ca] text-[#4338ca]" : "border-[#e2e8f0] text-[#64748b]"
+                t === ton ? "bg-accent-light border-accent text-accent" : "border-border-md text-text-2"
               }`}
             >
               {LABEL_TON_MESSAGE[t]}
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-[#94a3b8] mt-1.5">
+        <p className="text-[11px] text-text-3 mt-1.5">
           Changer de ton régénère le texte depuis les données du dossier — vos modifications manuelles sont alors
           remplacées.
         </p>
       </div>
 
       <div>
-        <p className="text-[11px] font-medium text-[#64748b] mb-1">À</p>
+        <p className="text-[11px] font-medium text-text-2 mb-1">À</p>
         {destinataireEmail ? (
-          <p className="text-[14px] text-[#0f172a]">{destinataireEmail}</p>
+          <p className="text-[14px] text-text-1">{destinataireEmail}</p>
         ) : (
-          <p className="text-[13px] text-[#dc2626]">Email impossible : adresse non renseignée</p>
+          <p className="text-[13px] text-danger">Email impossible : adresse non renseignée</p>
         )}
       </div>
 
       {idempotencyKey === null && (
         <>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium text-[#64748b]">Objet</span>
+            <span className="text-[11px] font-medium text-text-2">Objet</span>
             <input
               value={objet}
               onChange={(e) => setObjet(e.target.value)}
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
             />
           </label>
 
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] font-medium text-[#64748b]">Corps</span>
+            <span className="text-[11px] font-medium text-text-2">Corps</span>
             <textarea
               value={corps}
               onChange={(e) => setCorps(e.target.value)}
               rows={12}
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2 text-[14px] text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#4338ca]/20 focus:border-[#4338ca]"
+              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
             />
           </label>
 
@@ -258,7 +258,7 @@ export default function BrouillonEmailFormulaire({
             {destinataireEmail && !mailtoTropLong && (
               <a
                 href={lienMailto}
-                className="text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+                className="text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
               >
                 Ouvrir dans le client mail
               </a>
@@ -266,22 +266,22 @@ export default function BrouillonEmailFormulaire({
             <button
               type="button"
               onClick={copierMessage}
-              className="text-[13px] font-medium text-[#4338ca] border border-[#4338ca] hover:bg-[#eef2ff] transition-colors px-3.5 py-2 rounded-lg"
+              className="text-[13px] font-medium text-accent border border-accent hover:bg-accent-light transition-colors px-3.5 py-2 rounded-lg"
             >
               {copie ? "Copié !" : "Copier le message"}
             </button>
             {destinataireEmail && mailtoTropLong && (
-              <p className="text-[12px] text-[#94a3b8]">Message trop long pour un lien mailto: — utilisez « Copier ».</p>
+              <p className="text-[12px] text-text-3">Message trop long pour un lien mailto: — utilisez « Copier ».</p>
             )}
           </div>
 
           {gmailAutorise && destinataireEmail && (
-            <div className="pt-3 border-t border-[#f1f5f9]">
-              <p className="text-[12px] font-medium text-[#16a34a] mb-2">Gmail connecté</p>
+            <div className="pt-3 border-t border-border">
+              <p className="text-[12px] font-medium text-success mb-2">Gmail connecté</p>
               <button
                 type="button"
                 onClick={() => setIdempotencyKey(crypto.randomUUID())}
-                className="text-[13px] font-medium text-white bg-[#16a34a] hover:bg-[#15803d] transition-colors px-3.5 py-2 rounded-lg"
+                className="text-[13px] font-medium text-white bg-success hover:bg-success transition-colors px-3.5 py-2 rounded-lg"
               >
                 Envoyer avec Gmail
               </button>
@@ -308,11 +308,11 @@ export default function BrouillonEmailFormulaire({
           />
           <div className="flex flex-wrap items-center gap-2">
             {destinataireEmail && !mailtoTropLong && (
-              <a href={lienMailto} className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+              <a href={lienMailto} className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors">
                 Ouvrir dans le client mail
               </a>
             )}
-            <button type="button" onClick={copierMessage} className="text-[12px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+            <button type="button" onClick={copierMessage} className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors">
               {copie ? "Copié !" : "Copier le message"}
             </button>
           </div>

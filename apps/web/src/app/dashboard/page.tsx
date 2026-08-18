@@ -68,23 +68,23 @@ function MetricCard({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-[12px] text-[#94a3b8]">{label}</p>
-      <p className="text-[22px] font-semibold text-[#0f172a] leading-tight">{valeur}</p>
-      {reserve && <p className="text-[11px] text-[#94a3b8] leading-snug">{reserve}</p>}
+      <p className="text-[12px] text-text-3">{label}</p>
+      <p className="text-[22px] font-semibold text-text-1 leading-tight">{valeur}</p>
+      {reserve && <p className="text-[11px] text-text-3 leading-snug">{reserve}</p>}
     </div>
   );
 }
 
 function ParMoisListe({ items }: { items: MontantParMois[] }) {
   if (items.length === 0) {
-    return <p className="text-[13px] text-[#94a3b8]">Aucune donnée pour l'instant.</p>;
+    return <p className="text-[13px] text-text-3">Aucune donnée pour l'instant.</p>;
   }
   return (
     <ul className="flex flex-col gap-1.5">
       {items.map(({ mois, montant }) => (
         <li key={mois} className="flex items-center justify-between text-[13px]">
-          <span className="text-[#64748b] capitalize">{formatMois(mois)}</span>
-          <span className="font-medium text-[#0f172a]">{formatPrix(montant)}</span>
+          <span className="text-text-2 capitalize">{formatMois(mois)}</span>
+          <span className="font-medium text-text-1">{formatPrix(montant)}</span>
         </li>
       ))}
     </ul>
@@ -93,14 +93,14 @@ function ParMoisListe({ items }: { items: MontantParMois[] }) {
 
 function ParMoisCentimesListe({ items }: { items: MontantCentimesParMois[] }) {
   if (items.length === 0) {
-    return <p className="text-[13px] text-[#94a3b8]">Aucune donnée pour l'instant.</p>;
+    return <p className="text-[13px] text-text-3">Aucune donnée pour l'instant.</p>;
   }
   return (
     <ul className="flex flex-col gap-1.5">
       {items.map(({ mois, montantCentimes }) => (
         <li key={mois} className="flex items-center justify-between text-[13px]">
-          <span className="text-[#64748b] capitalize">{formatMois(mois)}</span>
-          <span className="font-medium text-[#0f172a]">{formatMontantCentimes(montantCentimes)}</span>
+          <span className="text-text-2 capitalize">{formatMois(mois)}</span>
+          <span className="font-medium text-text-1">{formatMontantCentimes(montantCentimes)}</span>
         </li>
       ))}
     </ul>
@@ -116,7 +116,7 @@ function VentilationAnnuelleTable({ items }: { items: MontantCentimesParMoisAnnu
     <div className="overflow-x-auto">
       <table className="w-full text-[13px]">
         <thead>
-          <tr className="text-left text-[11px] text-[#94a3b8]">
+          <tr className="text-left text-[11px] text-text-3">
             <th className="font-medium pb-1.5 pr-3">Mois</th>
             <th className="font-medium pb-1.5 pr-3">Prévisionnel</th>
             <th className="font-medium pb-1.5 pr-3">Finalisé non encaissé</th>
@@ -125,11 +125,11 @@ function VentilationAnnuelleTable({ items }: { items: MontantCentimesParMoisAnnu
         </thead>
         <tbody>
           {items.map(({ mois, previsionnelCentimes, finaliseNonEncaisseCentimes, encaisseCentimes }) => (
-            <tr key={mois} className="border-t border-[#f1f5f9]">
-              <td className="py-1.5 pr-3 text-[#64748b] capitalize">{formatMois(mois)}</td>
-              <td className="py-1.5 pr-3 text-[#0f172a]">{formatMontantCentimes(previsionnelCentimes)}</td>
-              <td className="py-1.5 pr-3 text-[#0f172a]">{formatMontantCentimes(finaliseNonEncaisseCentimes)}</td>
-              <td className="py-1.5 text-[#0f172a]">{formatMontantCentimes(encaisseCentimes)}</td>
+            <tr key={mois} className="border-t border-border">
+              <td className="py-1.5 pr-3 text-text-2 capitalize">{formatMois(mois)}</td>
+              <td className="py-1.5 pr-3 text-text-1">{formatMontantCentimes(previsionnelCentimes)}</td>
+              <td className="py-1.5 pr-3 text-text-1">{formatMontantCentimes(finaliseNonEncaisseCentimes)}</td>
+              <td className="py-1.5 text-text-1">{formatMontantCentimes(encaisseCentimes)}</td>
             </tr>
           ))}
         </tbody>
@@ -142,16 +142,16 @@ function VentilationAnnuelleTable({ items }: { items: MontantCentimesParMoisAnnu
 // motifs explicitement renseignés — voir la réserve affichée au-dessus de chaque liste.
 function ParMotifListe({ items }: { items: PerteParMotif[] }) {
   if (items.length === 0) {
-    return <p className="text-[13px] text-[#94a3b8]">Aucune perte avec motif renseigné pour l'instant.</p>;
+    return <p className="text-[13px] text-text-3">Aucune perte avec motif renseigné pour l'instant.</p>;
   }
   return (
     <ul className="flex flex-col gap-1.5">
       {items.map(({ motif, nombre, volume }) => (
         <li key={motif} className="flex items-center justify-between text-[13px]">
-          <span className="text-[#64748b]">
-            {LABEL_MOTIF_PERTE[motif]} <span className="text-[#94a3b8]">({nombre})</span>
+          <span className="text-text-2">
+            {LABEL_MOTIF_PERTE[motif]} <span className="text-text-3">({nombre})</span>
           </span>
-          <span className="font-medium text-[#0f172a]">{formatPrix(volume)}</span>
+          <span className="font-medium text-text-1">{formatPrix(volume)}</span>
         </li>
       ))}
     </ul>
@@ -173,8 +173,8 @@ export default async function DashboardPage() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-3xl">
       <div className="mb-8">
-        <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">Tableau de bord</h1>
-        <p className="text-[14px] text-[#94a3b8] mt-1">Vue d'ensemble de l'activité commerciale</p>
+        <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">Tableau de bord</h1>
+        <p className="text-[14px] text-text-3 mt-1">Vue d'ensemble de l'activité commerciale</p>
       </div>
 
       <section className="mb-8">
@@ -193,7 +193,7 @@ export default async function DashboardPage() {
               reserve="Calculé sur les compromis résolus (réalisés ou annulés)."
             />
           </div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Réalisé par mois</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Réalisé par mois</p>
           <ParMoisListe items={resultats.realiseParMois} />
         </Card>
       </section>
@@ -218,7 +218,7 @@ export default async function DashboardPage() {
               reserve="Biens archivés inclus."
             />
           </div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
             Rémunération encaissée par mois
           </p>
           <ParMoisCentimesListe items={remuneration.remunerationEncaisseeParMoisCentimes} />
@@ -250,11 +250,11 @@ export default async function DashboardPage() {
               reserve={`${projection.nombreEncaissementsAttendusDepasses} vente(s) concernée(s). Biens archivés inclus. ${remuneration.nombreVentesFinalisees} ventes finalisées au total, ${remuneration.nombreRemunerationsVentesFinaliseesRenseignees}/${remuneration.nombreVentesFinalisees} disposent d'une rémunération renseignée. Parmi les ventes non encore encaissées, ${projection.nombreFinaliseNonEncaisseAvecDatePrevue}/${projection.nombreFinaliseNonEncaisseRenseignees} disposent en plus d'une date d'encaissement prévue.`}
             />
           </div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
             Janvier → décembre {projection.annee}
           </p>
           <VentilationAnnuelleTable items={projection.ventilationMensuelle} />
-          <p className="text-[11px] text-[#94a3b8] mt-2">
+          <p className="text-[11px] text-text-3 mt-2">
             {`Ventilation limitée aux rémunérations avec une date connue (${projection.nombreRemunerationsPrevisionnellesAvecDatePrevue}/${remuneration.nombreRemunerationsPrevisionnellesRenseignees} prévisionnelles, ${projection.nombreFinaliseNonEncaisseAvecDatePrevue}/${projection.nombreFinaliseNonEncaisseRenseignees} finalisées non encaissées) — les totaux globaux ci-dessus incluent aussi celles sans date. Un mois passé non nul dans la colonne "Prévisionnel" ne signifie pas un dépassement au sens de "Encaissements attendus dépassés", strictement réservée aux compromis réalisés.`}
           </p>
         </Card>
@@ -285,10 +285,10 @@ export default async function DashboardPage() {
               reserve="Biens archivés exclus."
             />
           </div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
             Pipeline prévisionnel par mois
           </p>
-          <p className="text-[11px] text-[#94a3b8] mb-2">
+          <p className="text-[11px] text-text-3 mb-2">
             Basé sur la date d'acte prévue des compromis en cours — non garantie, sujette à décalage ou annulation.
           </p>
           <ParMoisListe items={pipeline.pipelinePrevisionnelParMois} />
@@ -315,21 +315,21 @@ export default async function DashboardPage() {
               valeur={formatJours(pipelineVendeur.delaiMoyenProspectMandatSigneJours)}
             />
           </div>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
             Répartition des prospects en cours par statut
           </p>
           {pipelineVendeur.nombreEnCours === 0 ? (
-            <p className="text-[13px] text-[#94a3b8]">Aucun prospect en cours pour l'instant.</p>
+            <p className="text-[13px] text-text-3">Aucun prospect en cours pour l'instant.</p>
           ) : (
             <ul className="flex flex-col gap-1.5">
               {Object.entries(pipelineVendeur.nombreParStatutEnCours)
                 .filter(([, nombre]) => nombre > 0)
                 .map(([statut, nombre]) => (
                   <li key={statut} className="flex items-center justify-between text-[13px]">
-                    <span className="text-[#64748b]">
+                    <span className="text-text-2">
                       {LABEL_STATUT_PROSPECT_VENDEUR[statut as keyof typeof LABEL_STATUT_PROSPECT_VENDEUR]}
                     </span>
-                    <span className="font-medium text-[#0f172a]">{nombre}</span>
+                    <span className="font-medium text-text-1">{nombre}</span>
                   </li>
                 ))}
             </ul>
@@ -396,30 +396,30 @@ export default async function DashboardPage() {
             />
           </div>
 
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
             Offres perdues par motif
           </p>
-          <p className="text-[11px] text-[#94a3b8] mb-2">Calculé uniquement sur les pertes disposant d'un motif renseigné.</p>
+          <p className="text-[11px] text-text-3 mb-2">Calculé uniquement sur les pertes disposant d'un motif renseigné.</p>
           <ParMotifListe items={pertes.pertesOffresParMotif} />
 
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2 mt-6">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2 mt-6">
             Compromis annulés par motif
           </p>
-          <p className="text-[11px] text-[#94a3b8] mb-2">Calculé uniquement sur les pertes disposant d'un motif renseigné.</p>
+          <p className="text-[11px] text-text-3 mb-2">Calculé uniquement sur les pertes disposant d'un motif renseigné.</p>
           <ParMotifListe items={pertes.pertesCompromisParMotif} />
 
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2 mt-6">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2 mt-6">
             Offres perdues par mois
           </p>
-          <p className="text-[11px] text-[#94a3b8] mb-2">
+          <p className="text-[11px] text-text-3 mb-2">
             Calculé uniquement sur les pertes disposant d'une date de décision fiable.
           </p>
           <ParMoisListe items={pertes.pertesOffresParMois} />
 
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2 mt-6">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2 mt-6">
             Compromis annulés par mois
           </p>
-          <p className="text-[11px] text-[#94a3b8] mb-2">
+          <p className="text-[11px] text-text-3 mb-2">
             Calculé uniquement sur les pertes disposant d'une date d'annulation fiable.
           </p>
           <ParMoisListe items={pertes.pertesCompromisParMois} />

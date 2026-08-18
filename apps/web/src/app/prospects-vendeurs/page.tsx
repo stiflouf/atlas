@@ -91,15 +91,15 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">
+          <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">
             {TITRE_VUE[vue]}
           </h1>
-          <p className="text-[14px] text-[#94a3b8] mt-1">{total} prospect{total > 1 ? "s" : ""}</p>
+          <p className="text-[14px] text-text-3 mt-1">{total} prospect{total > 1 ? "s" : ""}</p>
         </div>
         {vue === "en_cours" && (
           <Link
             href="/prospects-vendeurs/nouveau"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg shrink-0"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg shrink-0"
           >
             <Plus size={14} />
             Ajouter un prospect vendeur
@@ -109,22 +109,22 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
 
       <div className="flex flex-wrap gap-4 mb-6">
         {vue !== "en_cours" && (
-          <Link href={construireHref({ q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ q: texte })} className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors">
             ← Voir les prospects en cours
           </Link>
         )}
         {vue !== "perdus" && (
-          <Link href={construireHref({ vue: "perdus", q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ vue: "perdus", q: texte })} className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors">
             Voir les perdus →
           </Link>
         )}
         {vue !== "convertis" && (
-          <Link href={construireHref({ vue: "convertis", q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ vue: "convertis", q: texte })} className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors">
             Voir les convertis →
           </Link>
         )}
         {vue !== "archives" && (
-          <Link href={construireHref({ vue: "archives", q: texte })} className="text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+          <Link href={construireHref({ vue: "archives", q: texte })} className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors">
             Voir les archivés →
           </Link>
         )}
@@ -141,7 +141,7 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
       <section>
         <SectionTitle>{TITRE_VUE[vue]}</SectionTitle>
         {prospects.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">
+          <p className="text-[14px] text-text-3">
             {texte ? `Aucun résultat pour « ${texte} ».` : "Aucun prospect dans cette vue."}
           </p>
         ) : (
@@ -154,21 +154,21 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
                 <Link key={prospect.id} href={`/prospects-vendeurs/${prospect.id}`}>
                   <Card className="hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow duration-150">
                     <div className="flex items-center gap-4 p-4">
-                      <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0">
-                        <User size={18} className="text-[#4338ca]" strokeWidth={1.8} />
+                      <div className="w-10 h-10 rounded-lg bg-accent-light flex items-center justify-center shrink-0">
+                        <User size={18} className="text-accent" strokeWidth={1.8} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-medium text-[#0f172a] truncate">
+                        <p className="text-[14px] font-medium text-text-1 truncate">
                           {prospect.prenom ? `${prospect.prenom} ` : ""}
                           {prospect.nom}
                         </p>
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           <Badge variant="default">{LABEL_STATUT_PROSPECT_VENDEUR[statut]}</Badge>
                           {prospect.origineLead && <Badge variant="muted">{LABEL_ORIGINE_LEAD[prospect.origineLead]}</Badge>}
-                          {localisation && <span className="text-[13px] text-[#64748b]">{localisation}</span>}
+                          {localisation && <span className="text-[13px] text-text-2">{localisation}</span>}
                         </div>
                         {tachePrincipale && (
-                          <p className="text-[12px] text-[#94a3b8] mt-1.5">
+                          <p className="text-[12px] text-text-3 mt-1.5">
                             {raisonTache(tachePrincipale)}
                             {tachePrincipale.echeance && ` — ${formatDate(tachePrincipale.echeance)}`}
                           </p>

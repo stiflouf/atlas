@@ -65,10 +65,10 @@ export default async function FiscalPage({ searchParams }: PageProps) {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-2">
+      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-2">
         Ma situation fiscale
       </h1>
-      <p className="text-[13px] text-[#64748b] mb-6">
+      <p className="text-[13px] text-text-2 mb-6">
         Ces informations permettent à Atlas de situer vos encaissements par rapport aux règles
         fiscales et sociales applicables.
       </p>
@@ -80,7 +80,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
       )}
 
       {profilActuel && cotisations && cfp && vfl && eligibiliteRfr && microBnc && franchiseTva && projection && (
-        <section className="mb-10 border-t border-[#f1f5f9] pt-6">
+        <section className="mb-10 border-t border-border pt-6">
           <VueAnneeResume
             annee={anneeCourante}
             cotisations={cotisations}
@@ -95,11 +95,11 @@ export default async function FiscalPage({ searchParams }: PageProps) {
       )}
 
       {profilActuel && projectionsPluriannuelles && (
-        <section className="mb-10 border-t border-[#f1f5f9] pt-6">
-          <h2 className="text-[15px] font-semibold text-[#0f172a] mb-1">
+        <section className="mb-10 border-t border-border pt-6">
+          <h2 className="text-[15px] font-semibold text-text-1 mb-1">
             Projection {anneeCourante + 1}–{anneeCourante + HORIZON_PROJECTION_ANNEES}
           </h2>
-          <p className="text-[12px] text-[#94a3b8] mb-3">
+          <p className="text-[12px] text-text-3 mb-3">
             Aucun changement de régime ci-dessous n&apos;est une certitude juridique — uniquement des
             projections à partir de votre pipeline commercial et de votre rythme d&apos;activité passé.
           </p>
@@ -108,15 +108,15 @@ export default async function FiscalPage({ searchParams }: PageProps) {
       )}
 
       <section id="profil" className="mb-10">
-        <h2 className="text-[15px] font-semibold text-[#0f172a] mb-3">
+        <h2 className="text-[15px] font-semibold text-text-1 mb-3">
           {profilActuel ? "Enregistrer un changement de situation" : "Renseigner ma situation"}
         </h2>
         <ProfilFiscalFormulaire profilActuel={profilActuel} action={enregistrerProfilFiscalAction} />
       </section>
 
-      <section id="amorcage" className="mb-10 border-t border-[#f1f5f9] pt-6">
-        <h2 className="text-[15px] font-semibold text-[#0f172a] mb-1">Recettes des années précédentes</h2>
-        <p className="text-[12px] text-[#94a3b8] mb-3">
+      <section id="amorcage" className="mb-10 border-t border-border pt-6">
+        <h2 className="text-[15px] font-semibold text-text-1 mb-1">Recettes des années précédentes</h2>
+        <p className="text-[12px] text-text-3 mb-3">
           Optionnel — utile pour situer votre chiffre d&apos;affaires par rapport aux seuils légaux dès
           votre arrivée sur Atlas, même si votre activité a commencé avant.
         </p>
@@ -125,7 +125,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
             {historique.map((h) => (
               <li
                 key={h.annee}
-                className="text-[13px] text-[#0f172a] flex justify-between border-b border-[#f1f5f9] py-1.5"
+                className="text-[13px] text-text-1 flex justify-between border-b border-border py-1.5"
               >
                 <span>
                   {h.annee} (jusqu&apos;au {h.dateFinCouverture})
@@ -138,9 +138,9 @@ export default async function FiscalPage({ searchParams }: PageProps) {
         <HistoriqueAmorcageFormulaire action={enregistrerHistoriqueAmorcageAction} />
       </section>
 
-      <section id="rfr" className="border-t border-[#f1f5f9] pt-6">
-        <h2 className="text-[15px] font-semibold text-[#0f172a] mb-1">Revenu fiscal de référence du foyer</h2>
-        <p className="text-[12px] text-[#94a3b8] mb-3">
+      <section id="rfr" className="border-t border-border pt-6">
+        <h2 className="text-[15px] font-semibold text-text-1 mb-1">Revenu fiscal de référence du foyer</h2>
+        <p className="text-[12px] text-text-3 mb-3">
           Optionnel — utile seulement si vous voulez qu&apos;Atlas surveille votre éligibilité au
           versement libératoire pour les années à venir. Ignorez si vous ne voulez pas ce suivi.
         </p>
@@ -149,7 +149,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
             {rfr.map((r) => (
               <li
                 key={r.anneeRfr}
-                className="text-[13px] text-[#0f172a] flex justify-between border-b border-[#f1f5f9] py-1.5"
+                className="text-[13px] text-text-1 flex justify-between border-b border-border py-1.5"
               >
                 <span>
                   {r.anneeRfr} ({(r.nombrePartsCentiemes / 100).toLocaleString("fr-FR")} part
