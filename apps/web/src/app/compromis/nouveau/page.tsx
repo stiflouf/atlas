@@ -24,15 +24,15 @@ function EtatHonnete({ bienId, titre, message }: { bienId?: string; titre: strin
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
         href={bienId ? `/biens/${bienId}` : "/"}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         {bienId ? "Retour au bien" : "Aujourd'hui"}
       </Link>
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-3">{titre}</h1>
-      <p className="text-[14px] text-[#64748b]">{message}</p>
+      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-3">{titre}</h1>
+      <p className="text-[14px] text-text-2">{message}</p>
       {!bienId && (
-        <Link href="/biens" className="inline-block mt-3 text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors">
+        <Link href="/biens" className="inline-block mt-3 text-[13px] font-medium text-accent hover:text-accent-hover transition-colors">
           Voir les biens
         </Link>
       )}
@@ -122,14 +122,14 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
         href={`/biens/${bien.id}`}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         {bien.titre}
       </Link>
 
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-1">Nouveau compromis</h1>
-      <p className="text-[14px] text-[#64748b] mb-6">
+      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-1">Nouveau compromis</h1>
+      <p className="text-[14px] text-text-2 mb-6">
         {bien.titre} — {formatPrix(bien.prix)}
       </p>
 

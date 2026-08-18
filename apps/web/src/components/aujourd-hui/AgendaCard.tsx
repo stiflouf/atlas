@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import type { RendezVous, TypeRdv } from "@/types/agenda";
 import type { StatutRendezVous } from "@/lib/rendezVous";
@@ -10,6 +9,15 @@ import { getBienById } from "@/lib/bienRepository";
 import ConfirmationBienRdv from "./ConfirmationBienRdv";
 
 type BadgeConfig = { label: string; variant: "accent" | "default" | "muted" | "success" };
+
+// Couleur du point de la timeline — dérivée de la même variante que le Badge (ADR-inchangé),
+// jamais une seconde logique de catégorisation.
+const DOT_COLOR: Record<BadgeConfig["variant"], string> = {
+  accent: "bg-champagne",
+  default: "bg-navy",
+  muted: "bg-text-3",
+  success: "bg-success",
+};
 
 const typeConfig: Record<TypeRdv, BadgeConfig> = {
   visite: { label: "Visite", variant: "accent" },
@@ -39,11 +47,15 @@ export default async function AgendaCard({
   statut,
   contexte,
   dateLabel,
+  dernier = false,
 }: {
   rdv: RendezVous;
   statut: StatutRendezVous;
   contexte?: ContexteRendezVous;
   dateLabel?: string;
+  // Timeline (passe enrichissement visuel) — omet le rail de connexion sous le dernier item d'une
+  // liste, purement décoratif.
+  dernier?: boolean;
 }) {
   // Google ne fournit qu'un type générique : si Atlas a déduit un type métier probable du
   // contexte (titre), on l'affiche à la place — sans jamais modifier `rdv.type` lui-même.
@@ -81,37 +93,43 @@ export default async function AgendaCard({
   );
 
   return (
-    <Card>
-      <div className="flex items-start justify-between gap-4 p-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-[13px] font-medium text-text-2 tabular-nums">
-              {dateLabel && `${dateLabel} · `}
-              {rdv.journeeEntiere ? "Toute la journée" : rdv.heure}
+    <div className="flex gap-3">
+      {/* Heure — colonne fixe alignée sur toute la timeline. */}
+      <div className="w-14 shrink-0 text-right pt-0.5">
+        <span className="text-[12px] font-medium text-text-2 tabular-nums leading-tight">
+          {dateLabel && <span className="block text-[11px] text-text-3">{dateLabel}</span>}
+          {rdv.journeeEntiere ? "Toute la journée" : rdv.heure}
+        </span>
+      </div>
+
+      {/* Rail — point coloré par type + ligne de connexion vers l'item suivant. */}
+      <div className="flex flex-col items-center shrink-0">
+        <span className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${DOT_COLOR[variant]}`} />
+        {!dernier && <span className="w-px flex-1 bg-border mt-1" />}
+      </div>
+
+      <div className="flex-1 min-w-0 pb-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Badge variant={variant}>{label}</Badge>
+          {statut === "en_cours" && !rdv.journeeEntiere && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-success">
+              <span className="w-1.5 h-1.5 rounded-full bg-success" />
+              En cours
             </span>
-            <Badge variant={variant}>{label}</Badge>
-            {statut === "en_cours" && !rdv.journeeEntiere && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-success">
-                <span className="w-1.5 h-1.5 rounded-full bg-success" />
-                En cours
-              </span>
-            )}
-          </div>
-          <p className="text-[14px] font-medium text-text-1 leading-snug">{rdv.titre}</p>
-          {rdv.lieu && (
-            <p className="text-[13px] text-text-2 mt-0.5 truncate">{rdv.lieu}</p>
-          )}
-          {rdv.client && (
-            <p className="text-[13px] text-text-3 mt-0.5">
-              {rdv.client.prenom} {rdv.client.nom}
-            </p>
           )}
         </div>
+        <p className="text-[14px] font-medium text-text-1 leading-snug">{rdv.titre}</p>
+        {rdv.lieu && <p className="text-[13px] text-text-2 mt-0.5 truncate">{rdv.lieu}</p>}
+        {rdv.client && (
+          <p className="text-[13px] text-text-3 mt-0.5">
+            {rdv.client.prenom} {rdv.client.nom}
+          </p>
+        )}
 
         {preparationDisponible && (
           <Link
             href={`/visites/${rdv.id}/preparer`}
-            className="shrink-0 self-center min-h-[44px] flex items-center text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
+            className="inline-block mt-1.5 text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
           >
             Préparer&nbsp;→
           </Link>
@@ -119,15 +137,17 @@ export default async function AgendaCard({
         {!preparationDisponible && rdv.type === "appel" && callHref && (
           <a
             href={callHref}
-            className="shrink-0 self-center min-h-[44px] flex items-center text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
+            className="inline-block mt-1.5 text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
           >
             Appeler&nbsp;→
           </a>
         )}
         {!preparationDisponible && candidatsBanniere.length > 0 && (
-          <ConfirmationBienRdv rdvId={rdv.id} candidats={candidatsBanniere} />
+          <div className="mt-1.5">
+            <ConfirmationBienRdv rdvId={rdv.id} candidats={candidatsBanniere} />
+          </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }

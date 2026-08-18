@@ -42,10 +42,10 @@ export default function ConfirmationBienRdv({
   if (etat === "confirme") {
     return (
       <div className="flex flex-col items-end gap-0.5">
-        <p className="text-[11px] text-[#94a3b8]">Bien confirmé : {choisi.titre}</p>
+        <p className="text-[11px] text-text-3">Bien confirmé : {choisi.titre}</p>
         <Link
           href={`/visites/${rdvId}/preparer`}
-          className="shrink-0 self-end min-h-[44px] flex items-center text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors"
+          className="shrink-0 self-end min-h-[44px] flex items-center text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
         >
           Préparer&nbsp;→
         </Link>
@@ -57,11 +57,11 @@ export default function ConfirmationBienRdv({
     return (
       <div className="flex flex-col items-end gap-1 text-[12px]">
         {candidats.map((c) => (
-          <button key={c.bienId} onClick={() => valider(c, "corrige")} className="text-[#4338ca] font-medium">
+          <button key={c.bienId} onClick={() => valider(c, "corrige")} className="text-accent font-medium">
             {c.titre}
           </button>
         ))}
-        <button onClick={ignorer} className="text-[#94a3b8]">
+        <button onClick={ignorer} className="text-text-3">
           Annuler
         </button>
       </div>
@@ -69,18 +69,18 @@ export default function ConfirmationBienRdv({
   }
 
   return (
-    <div className="text-[12px] text-[#64748b] max-w-[200px] text-right">
+    <div className="text-[12px] text-text-2 max-w-[200px] text-right">
       <p className="mb-1.5 leading-snug">Ce rendez-vous concerne-t-il {candidats[0].titre} ?</p>
       <div className="flex flex-wrap justify-end gap-x-2 gap-y-1">
-        <button onClick={() => valider(candidats[0], "confirme")} className="font-medium text-[#4338ca]">
+        <button onClick={() => valider(candidats[0], "confirme")} className="font-medium text-accent">
           Oui
         </button>
         {candidats.length > 1 && (
-          <button onClick={() => setEtat("choix")} className="text-[#64748b]">
+          <button onClick={() => setEtat("choix")} className="text-text-2">
             Choisir un autre bien
           </button>
         )}
-        <button onClick={ignorer} className="text-[#94a3b8]">
+        <button onClick={ignorer} className="text-text-3">
           Ignorer
         </button>
       </div>

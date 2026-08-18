@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Building2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import BienVisualPlaceholder from "@/components/ui/BienVisualPlaceholder";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
@@ -120,30 +121,30 @@ export default async function FicheBien({ params }: PageProps) {
         Biens
       </Link>
 
-      {/* En-tête du bien */}
+      {/* En-tête du bien — véritable header de dossier immobilier (chantier composition) : visuel
+          + informations principales, plus une suite de texte pure. */}
       <div className="mb-8">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-accent-light flex items-center justify-center shrink-0 mt-0.5">
-            <Building2 size={18} className="text-accent" strokeWidth={1.8} />
-          </div>
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 mb-4">
+          <BienVisualPlaceholder ratio="panoramic" className="w-full md:w-60 md:shrink-0" />
           <div className="flex-1 min-w-0">
-            <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
+            <h1 className="font-serif text-[22px] md:text-[26px] font-semibold text-text-1 leading-tight">
               {bien.titre}
             </h1>
-            <p className="text-[14px] text-text-2 mt-0.5">
+            <p className="text-[14px] text-text-2 mt-1">
               {bien.adresse}, {bien.codePostal} {bien.ville}
             </p>
+            <div className="flex flex-wrap items-center gap-3 mt-3">
+              <span className="text-[20px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
+              <span className="text-[14px] text-text-2">{bien.surface} m²</span>
+              <span className="text-[14px] text-text-3">·</span>
+              <span className="text-[14px] text-text-2">{bien.pieces} pièces</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              <Badge variant="accent">{bien.reference}</Badge>
+              <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
+              {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
+            </div>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 mt-4">
-          <span className="text-[20px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
-          <span className="text-[14px] text-text-2">{bien.surface} m²</span>
-          <span className="text-[14px] text-text-3">·</span>
-          <span className="text-[14px] text-text-2">{bien.pieces} pièces</span>
-          <Badge variant="accent">{bien.reference}</Badge>
-          <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
-          {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
         </div>
 
         {/* État du dossier — visible immédiatement. Mock inchangé si dossier existe ; sinon dérivé
@@ -224,7 +225,7 @@ export default async function FicheBien({ params }: PageProps) {
           {!bien.archiveLe && (
             <Link
               href={`/taches/nouveau?bienId=${bien.id}`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg"
             >
               + Ajouter une tâche
             </Link>
@@ -233,7 +234,7 @@ export default async function FicheBien({ params }: PageProps) {
             <>
               <Link
                 href={`/biens/${bien.id}/modifier`}
-                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg"
               >
                 Modifier
               </Link>
@@ -241,7 +242,7 @@ export default async function FicheBien({ params }: PageProps) {
                 <input type="hidden" name="id" value={bien.id} />
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-text-2 bg-surface border border-border-md hover:border-[#dc2626] hover:text-danger transition-colors px-3.5 py-2 rounded-lg"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-text-2 bg-surface border border-border-md hover:border-danger hover:text-danger transition-colors px-3.5 py-2 rounded-lg"
                 >
                   {bien.archiveLe ? "Désarchiver" : "Archiver"}
                 </button>

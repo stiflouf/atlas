@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Building2, ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Plus } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
+import BienVisualPlaceholder from "@/components/ui/BienVisualPlaceholder";
 import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
 
 const PAR_PAGE = 25;
@@ -113,11 +114,9 @@ export default async function BiensPage({ searchParams }: PageProps) {
           <div className="flex flex-col gap-2">
             {biens.map((bien) => (
               <Link key={bien.id} href={`/biens/${bien.id}`}>
-                <Card className="hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow duration-150">
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="w-10 h-10 rounded-lg bg-accent-light flex items-center justify-center shrink-0">
-                      <Building2 size={18} className="text-accent" strokeWidth={1.8} />
-                    </div>
+                <Card variant="interactive">
+                  <div className="flex items-center gap-4 p-3">
+                    <BienVisualPlaceholder ratio="thumb" className="w-16 h-16 shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>

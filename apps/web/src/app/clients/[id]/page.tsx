@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, Handshake, FileSignature, Building2, ListChecks } from "lucide-react";
 import Badge from "@/components/ui/Badge";
+import Card from "@/components/ui/Card";
+import IconTile from "@/components/ui/IconTile";
+import Avatar from "@/components/ui/Avatar";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
 import { getClientById } from "@/lib/clientRepository";
 import { getTachesPourAcquereur } from "@/lib/tacheRepository";
@@ -80,7 +83,7 @@ export default async function FicheClient({ params }: PageProps) {
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <Link
         href="/clients"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         Clients
@@ -88,21 +91,19 @@ export default async function FicheClient({ params }: PageProps) {
 
       <div className="mb-8">
         <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0 mt-0.5">
-            <User size={18} className="text-[#4338ca]" strokeWidth={1.8} />
-          </div>
+          <Avatar initiales={`${client.prenom.charAt(0)}${client.nom.charAt(0)}`} size={44} className="mt-0.5" />
           <div className="flex-1 min-w-0">
-            <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight">
+            <h1 className="font-serif text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
               {client.prenom} {client.nom}
             </h1>
-            <p className="text-[14px] text-[#64748b] mt-0.5">
+            <p className="text-[14px] text-text-2 mt-0.5">
               {client.email} · {client.telephone}
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 mt-4">
-          <span className="text-[16px] font-semibold text-[#0f172a]">
+          <span className="text-[16px] font-semibold text-text-1">
             {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
           </span>
           <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>
@@ -113,7 +114,7 @@ export default async function FicheClient({ params }: PageProps) {
           {!client.archiveLe && (
             <Link
               href={`/taches/nouveau?acquereurId=${client.id}`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
             >
               + Ajouter une tâche
             </Link>
@@ -122,7 +123,7 @@ export default async function FicheClient({ params }: PageProps) {
             <>
               <Link
                 href={`/clients/${client.id}/modifier`}
-                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#4338ca] bg-white border border-[#e2e8f0] hover:border-[#4338ca] transition-colors px-3.5 py-2 rounded-lg"
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg"
               >
                 Modifier
               </Link>
@@ -130,7 +131,7 @@ export default async function FicheClient({ params }: PageProps) {
                 <input type="hidden" name="id" value={client.id} />
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#64748b] bg-white border border-[#e2e8f0] hover:border-[#dc2626] hover:text-[#dc2626] transition-colors px-3.5 py-2 rounded-lg"
+                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-text-2 bg-surface border border-border-md hover:border-danger hover:text-danger transition-colors px-3.5 py-2 rounded-lg"
                 >
                   {client.archiveLe ? "Désarchiver" : "Archiver"}
                 </button>
@@ -146,50 +147,56 @@ export default async function FicheClient({ params }: PageProps) {
         archive={!!client.archiveLe}
       />
 
-      <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Offres</p>
+      <section className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <IconTile icon={Handshake} tone="champagne" size={26} iconSize={13} />
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">Offres</p>
+        </div>
         {offres.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">Aucune offre pour l'instant.</p>
+          <p className="text-[14px] text-text-3">Aucune offre pour l'instant.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {offres.map((offre) => {
               const bienOffre = biensParId.get(offre.bienId);
               return (
-                <div key={offre.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                <Card key={offre.id} className="p-4">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-[13px] font-medium text-[#64748b]">{formatDate(offre.dateOffre)}</p>
-                    <span className="text-[11px] text-[#94a3b8]">·</span>
-                    <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_OFFRE[offre.statut]}</span>
+                    <p className="text-[13px] font-medium text-text-2">{formatDate(offre.dateOffre)}</p>
+                    <span className="text-[11px] text-text-3">·</span>
+                    <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_OFFRE[offre.statut]}</span>
                   </div>
-                  <p className="text-[14px] font-medium text-[#0f172a]">
+                  <p className="text-[14px] font-medium text-text-1">
                     {formatPrix(offre.montant)} — {bienOffre ? bienOffre.titre : "Bien indisponible"}
                   </p>
-                </div>
+                </Card>
               );
             })}
           </div>
         )}
       </section>
 
-      <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Compromis</p>
+      <section className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <IconTile icon={FileSignature} tone="champagne" size={26} iconSize={13} />
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">Compromis</p>
+        </div>
         {compromis.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">Aucun compromis pour l'instant.</p>
+          <p className="text-[14px] text-text-3">Aucun compromis pour l'instant.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {compromis.map((c) => {
               const bienCompromis = biensParId.get(c.bienId);
               return (
-                <div key={c.id} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
+                <Card key={c.id} className="p-4">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-[13px] font-medium text-[#64748b]">{formatDate(c.dateSignature)}</p>
-                    <span className="text-[11px] text-[#94a3b8]">·</span>
-                    <span className="text-[11px] font-medium text-[#4338ca]">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
+                    <p className="text-[13px] font-medium text-text-2">{formatDate(c.dateSignature)}</p>
+                    <span className="text-[11px] text-text-3">·</span>
+                    <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
                   </div>
-                  <p className="text-[14px] font-medium text-[#0f172a]">
+                  <p className="text-[14px] font-medium text-text-1">
                     {formatPrix(c.prixConvenu)} — {bienCompromis ? bienCompromis.titre : "Bien indisponible"}
                   </p>
-                </div>
+                </Card>
               );
             })}
           </div>
@@ -198,75 +205,83 @@ export default async function FicheClient({ params }: PageProps) {
 
       {/* ADR-034 — moteur canonique et déterministe, déjà calculé côté serveur. Jamais de score,
           jamais "a_verifier" présenté comme une incompatibilité. */}
-      <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Biens compatibles</p>
+      <section className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <IconTile icon={Building2} tone="champagne" size={26} iconSize={13} />
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">Biens compatibles</p>
+        </div>
         {compatibilitesTriees.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">Aucun bien à comparer pour l'instant.</p>
+          <p className="text-[14px] text-text-3">Aucun bien à comparer pour l'instant.</p>
         ) : (
           <div className="flex flex-col gap-2">
             {compatibilitesTriees.map((resultat) => {
               const bienCompatible = biensCompatibiliteParId.get(resultat.bienId);
               const criteresPertinents = resultat.criteres.filter((c) => c.statut !== "non_concerne");
               return (
-                <details key={resultat.bienId} className="bg-white rounded-lg border border-[#f1f5f9] p-4">
-                  <summary className="cursor-pointer flex items-center justify-between gap-3 list-none">
-                    <span className="text-[14px] font-medium text-[#0f172a]">
-                      {bienCompatible ? bienCompatible.titre : "Bien indisponible"}
-                    </span>
-                    <Badge variant={VARIANT_PAR_STATUT_COMPATIBILITE[resultat.statutGlobal]}>
-                      {LABEL_STATUT_COMPATIBILITE[resultat.statutGlobal]}
-                    </Badge>
-                  </summary>
-                  <div className="mt-3 pt-3 border-t border-[#f1f5f9] flex flex-col gap-2">
-                    {criteresPertinents.length === 0 ? (
-                      <p className="text-[13px] text-[#94a3b8]">
-                        Aucune exigence structurée déclarée par cet acquéreur pour ce bien.
-                      </p>
-                    ) : (
-                      criteresPertinents.map((critere) => (
-                        <div key={critere.critere} className="flex items-start gap-2">
-                          <Badge variant={VARIANT_PAR_STATUT_CRITERE[critere.statut]}>
-                            {LABEL_STATUT_CRITERE[critere.statut]}
-                          </Badge>
-                          <p className="text-[13px] text-[#64748b] leading-snug">{critere.explication}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </details>
+                <Card key={resultat.bienId} className="p-4">
+                  <details>
+                    <summary className="cursor-pointer flex items-center justify-between gap-3 list-none">
+                      <span className="text-[14px] font-medium text-text-1">
+                        {bienCompatible ? bienCompatible.titre : "Bien indisponible"}
+                      </span>
+                      <Badge variant={VARIANT_PAR_STATUT_COMPATIBILITE[resultat.statutGlobal]}>
+                        {LABEL_STATUT_COMPATIBILITE[resultat.statutGlobal]}
+                      </Badge>
+                    </summary>
+                    <div className="mt-3 pt-3 border-t border-border flex flex-col gap-2">
+                      {criteresPertinents.length === 0 ? (
+                        <p className="text-[13px] text-text-3">
+                          Aucune exigence structurée déclarée par cet acquéreur pour ce bien.
+                        </p>
+                      ) : (
+                        criteresPertinents.map((critere) => (
+                          <div key={critere.critere} className="flex items-start gap-2">
+                            <Badge variant={VARIANT_PAR_STATUT_CRITERE[critere.statut]}>
+                              {LABEL_STATUT_CRITERE[critere.statut]}
+                            </Badge>
+                            <p className="text-[13px] text-text-2 leading-snug">{critere.explication}</p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </details>
+                </Card>
               );
             })}
           </div>
         )}
       </section>
 
-      <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Tâches</p>
+      <section className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <IconTile icon={ListChecks} tone="champagne" size={26} iconSize={13} />
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">Tâches</p>
+        </div>
         {tachesAFaire.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">Aucune tâche en cours.</p>
+          <p className="text-[14px] text-text-3">Aucune tâche en cours.</p>
         ) : (
-          <div className="bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04),0_1px_2px_rgba(0,0,0,0.06)] px-4 divide-y divide-[#f1f5f9]">
+          <Card className="px-4 divide-y divide-border">
             {tachesAFaire.map((tache) => (
               <TacheItem key={tache.id} tache={tache} redirectTo={`/clients/${client.id}`} />
             ))}
-          </div>
+          </Card>
         )}
       </section>
 
       {tachesTerminees.length > 0 && (
         <section>
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#94a3b8] mb-2">Terminées</p>
-          <div className="flex flex-col divide-y divide-[#f1f5f9] bg-white rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Terminées</p>
+          <Card className="flex flex-col divide-y divide-border px-4">
             {tachesTerminees.map((tache) => (
               <div key={tache.id} className="flex items-start gap-3 py-3">
-                <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-[#f1f5f9] border-[#e2e8f0]" />
+                <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-border border-border-md" />
                 <div>
-                  <p className="text-[14px] text-[#0f172a]">{tache.titre}</p>
-                  {tache.contexte && <p className="text-[13px] text-[#94a3b8] mt-0.5">{tache.contexte}</p>}
+                  <p className="text-[14px] text-text-1">{tache.titre}</p>
+                  {tache.contexte && <p className="text-[13px] text-text-3 mt-0.5">{tache.contexte}</p>}
                 </div>
               </div>
             ))}
-          </div>
+          </Card>
         </section>
       )}
     </div>

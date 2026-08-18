@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Scale } from "lucide-react";
+import Card from "@/components/ui/Card";
+import IconTile from "@/components/ui/IconTile";
 import {
   LABEL_ETAT_PREPARATION_PACK,
   LABEL_SEVERITE_PACK_NOTAIRE,
@@ -49,10 +51,17 @@ export default async function PageDossierNotaire({ params }: PageProps) {
         {bien.titre}
       </Link>
 
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-1">Dossier notaire</h1>
-      <p className="text-[14px] text-text-2 mb-3">
-        {bien.titre} — {bien.adresse}, {bien.codePostal} {bien.ville}
-      </p>
+      <div className="flex items-start gap-3 mb-1">
+        <IconTile icon={Scale} tone="navy" size={36} iconSize={17} className="mt-0.5" />
+        <div>
+          <h1 className="font-serif text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
+            Dossier notaire
+          </h1>
+          <p className="text-[14px] text-text-2 mt-0.5">
+            {bien.titre} — {bien.adresse}, {bien.codePostal} {bien.ville}
+          </p>
+        </div>
+      </div>
       <Link
         href={`/communications/nouveau?bienId=${bien.id}&notaire=1`}
         className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors mb-6 inline-block"
@@ -60,7 +69,7 @@ export default async function PageDossierNotaire({ params }: PageProps) {
         Préparer un message pour le notaire →
       </Link>
 
-      <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 mb-6">
+      <Card variant="elevated" className="p-4 mb-6">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-1">
           État de préparation Atlas
         </p>
@@ -71,7 +80,7 @@ export default async function PageDossierNotaire({ params }: PageProps) {
             pas une garantie de conformité légale ni d'acceptation par le notaire.
           </p>
         )}
-      </div>
+      </Card>
 
       {ORDRE_SEVERITES.map((severite) => {
         const constats = pack.constats.filter((c) => c.severite === severite);
@@ -107,7 +116,7 @@ export default async function PageDossierNotaire({ params }: PageProps) {
           <form
             method="POST"
             action={`/api/biens/${bien.id}/pack-notaire`}
-            className="flex flex-col gap-2 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4"
+            className="flex flex-col gap-2 bg-surface border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-4"
           >
             {pack.selectionProposee.map((doc) => (
               <label key={doc.id} className="inline-flex items-center gap-2 text-[14px] text-text-1">

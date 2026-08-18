@@ -119,18 +119,18 @@ export default function OffreFormulaire(props: Props) {
       )}
 
       {offresEnCoursPourPaire.length > 0 && (
-        <div className="bg-warning-light border border-[#fde68a] rounded-lg p-3 flex flex-col gap-2">
-          <p className="text-[13px] text-[#92400e]">
+        <div className="bg-warning-light border border-warning/30 rounded-lg p-3 flex flex-col gap-2">
+          <p className="text-[13px] text-warning">
             Une offre en cours existe déjà pour cet acquéreur sur ce bien :
           </p>
           <ul className="flex flex-col gap-0.5">
             {offresEnCoursPourPaire.map((o) => (
-              <li key={o.id} className="text-[13px] font-medium text-[#92400e]">
+              <li key={o.id} className="text-[13px] font-medium text-warning">
                 {formatPrix(o.montant)} — {formatDate(o.dateOffre)}
               </li>
             ))}
           </ul>
-          <label className="inline-flex items-center gap-2 text-[13px] text-[#92400e]">
+          <label className="inline-flex items-center gap-2 text-[13px] text-warning">
             <input
               type="checkbox"
               name="confirmerNouvelleOffreMalgreExistante"

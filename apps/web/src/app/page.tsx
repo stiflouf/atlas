@@ -155,142 +155,163 @@ export default async function AujourdHui() {
         </Link>
       </div>
 
-      {/* Ce qui mérite mon attention (ADR-026) — dérivé à la lecture, jamais persisté. */}
-      {alertesPrioritaires.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>Ce qui mérite mon attention</SectionTitle>
-          <div className="flex flex-col gap-2">
-            {alertesPrioritaires.map((alerte) => (
-              <AlerteCard key={alerte.id} alerte={alerte} />
-            ))}
-          </div>
-          {autresAlertes.length > 0 && (
-            <details className="mt-2">
-              <summary className="text-[13px] text-accent font-medium cursor-pointer">
-                Afficher les autres ({autresAlertes.length})
-              </summary>
-              <div className="flex flex-col gap-2 mt-2">
-                {autresAlertes.map((alerte) => (
-                  <AlerteCard key={alerte.id} alerte={alerte} />
+      {/* Composition en 2 colonnes sur desktop (passe enrichissement visuel) — colonne principale :
+          agenda + dossiers actionnables ; colonne secondaire, plus dense : attention + tâches sans
+          bien. Mobile reste empilé (ordre naturel du flux). Aucune section supprimée/ajoutée. */}
+      <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8 lg:items-start">
+        <div className="flex flex-col gap-8 min-w-0">
+          {/* Rendez-vous */}
+          <section>
+            <SectionTitle>
+              {rdvActifs.length > 0
+                ? `${rdvActifs.length} rendez-vous restant${rdvActifs.length > 1 ? "s" : ""}`
+                : "Aucun rendez-vous restant aujourd'hui"}
+            </SectionTitle>
+
+            {source === "google_calendar" && (
+              <div className="text-[12px] text-text-3 mb-1">
+                Google Calendar : connecté ·{" "}
+                <form action="/api/auth/google/logout" method="POST" className="inline">
+                  {/* La révocation Google est globale (ADR-031-bis) : ce bouton déconnecte aussi
+                      Gmail s'il a été autorisé — le libellé le dit explicitement, jamais
+                      "Déconnecter Calendar" seul une fois Gmail accordé. */}
+                  <button type="submit" className="font-medium underline">
+                    {gmailAutorise ? "Déconnecter Google (Calendar + Gmail)" : "Déconnecter"}
+                  </button>
+                </form>
+              </div>
+            )}
+            {source === "demo" && (
+              <div className="text-[12px] text-text-3 mb-1">
+                Source : Données de démonstration ·{" "}
+                <a href="/api/auth/google/login" className="text-accent font-medium">
+                  Connecter Google Calendar
+                </a>
+              </div>
+            )}
+            {source === "demo_erreur" && (
+              <div className="text-[12px] text-warning mb-1">
+                Google Calendar indisponible — données de démonstration affichées ·{" "}
+                <a href="/api/auth/google/login?reconnexion=1" className="font-medium underline">
+                  Se reconnecter
+                </a>
+              </div>
+            )}
+            {/* Capacité distincte de Calendar (ADR-031-bis) : jamais un simple "Google connecté" —
+                le conseiller doit voir explicitement ce qui est autorisé pour l'envoi d'emails. */}
+            <div className="text-[12px] text-text-3 mb-4">
+              Gmail : {gmailAutorise ? "autorisé" : "non autorisé"}
+              {!gmailAutorise && (
+                <>
+                  {" "}
+                  ·{" "}
+                  <a href="/api/auth/google/gmail/login" className="text-accent font-medium">
+                    Autoriser Gmail
+                  </a>
+                </>
+              )}
+            </div>
+
+            {rdvActifs.length > 0 && (
+              <div className="flex flex-col">
+                {rdvActifs.map(({ rdv, statut, contexte }, i) => (
+                  <AgendaCard
+                    key={rdv.id}
+                    rdv={rdv}
+                    statut={statut}
+                    contexte={contexte}
+                    dernier={i === rdvActifs.length - 1}
+                  />
                 ))}
               </div>
-            </details>
+            )}
+            {rdvTermines > 0 && (
+              <p className="text-[12px] text-text-3 mt-1">
+                {rdvTermines} déjà terminé{rdvTermines > 1 ? "s" : ""} aujourd'hui
+              </p>
+            )}
+          </section>
+
+          {/* À venir (7 prochains jours, hors aujourd'hui) */}
+          {rdvAVenirAvecContexte.length > 0 && (
+            <section>
+              <SectionTitle>{rdvAVenirAvecContexte.length} rendez-vous à venir</SectionTitle>
+              <div className="flex flex-col">
+                {rdvAVenirAvecContexte.map(({ rdv, contexte, dateLabel }, i) => (
+                  <AgendaCard
+                    key={rdv.id}
+                    rdv={rdv}
+                    statut="a_venir"
+                    contexte={contexte}
+                    dateLabel={dateLabel}
+                    dernier={i === rdvAVenirAvecContexte.length - 1}
+                  />
+                ))}
+              </div>
+            </section>
           )}
-        </section>
-      )}
 
-      {/* Rendez-vous */}
-      <section className="mb-8">
-        <SectionTitle>
-          {rdvActifs.length > 0
-            ? `${rdvActifs.length} rendez-vous restant${rdvActifs.length > 1 ? "s" : ""}`
-            : "Aucun rendez-vous restant aujourd'hui"}
-        </SectionTitle>
-
-        {source === "google_calendar" && (
-          <div className="text-[12px] text-text-3 mb-1">
-            Google Calendar : connecté ·{" "}
-            <form action="/api/auth/google/logout" method="POST" className="inline">
-              {/* La révocation Google est globale (ADR-031-bis) : ce bouton déconnecte aussi Gmail
-                  s'il a été autorisé — le libellé le dit explicitement, jamais "Déconnecter
-                  Calendar" seul une fois Gmail accordé. */}
-              <button type="submit" className="font-medium underline">
-                {gmailAutorise ? "Déconnecter Google (Calendar + Gmail)" : "Déconnecter"}
-              </button>
-            </form>
-          </div>
-        )}
-        {source === "demo" && (
-          <div className="text-[12px] text-text-3 mb-1">
-            Source : Données de démonstration ·{" "}
-            <a href="/api/auth/google/login" className="text-accent font-medium">
-              Connecter Google Calendar
-            </a>
-          </div>
-        )}
-        {source === "demo_erreur" && (
-          <div className="text-[12px] text-warning mb-1">
-            Google Calendar indisponible — données de démonstration affichées ·{" "}
-            <a href="/api/auth/google/login?reconnexion=1" className="font-medium underline">
-              Se reconnecter
-            </a>
-          </div>
-        )}
-        {/* Capacité distincte de Calendar (ADR-031-bis) : jamais un simple "Google connecté" —
-            le conseiller doit voir explicitement ce qui est autorisé pour l'envoi d'emails. */}
-        <div className="text-[12px] text-text-3 mb-3">
-          Gmail : {gmailAutorise ? "autorisé" : "non autorisé"}
-          {!gmailAutorise && (
-            <>
-              {" "}
-              ·{" "}
-              <a href="/api/auth/google/gmail/login" className="text-accent font-medium">
-                Autoriser Gmail
-              </a>
-            </>
+          {/* Dossiers nécessitant une tâche */}
+          {dossiersAttention.length > 0 && (
+            <section>
+              <SectionTitle>Dossiers nécessitant une action</SectionTitle>
+              <div className="flex flex-col gap-2">
+                {dossiersAttention.map(({ bien, tache }) => (
+                  <DossierActionCard key={bien.id} bien={bien} raison={raisonTache(tache)} />
+                ))}
+              </div>
+            </section>
           )}
         </div>
 
-        {rdvActifs.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {rdvActifs.map(({ rdv, statut, contexte }) => (
-              <AgendaCard key={rdv.id} rdv={rdv} statut={statut} contexte={contexte} />
-            ))}
-          </div>
-        )}
-        {rdvTermines > 0 && (
-          <p className="text-[12px] text-text-3 mt-2">
-            {rdvTermines} déjà terminé{rdvTermines > 1 ? "s" : ""} aujourd'hui
-          </p>
-        )}
-      </section>
+        {/* Colonne secondaire — plus dense, jamais une card pleine largeur pour 3 lignes. */}
+        <div className="flex flex-col gap-6 mt-8 lg:mt-0">
+          {/* Ce qui mérite mon attention (ADR-026) — dérivé à la lecture, jamais persisté. */}
+          {alertesPrioritaires.length > 0 && (
+            <section>
+              <SectionTitle>Ce qui mérite mon attention</SectionTitle>
+              <div className="flex flex-col gap-2">
+                {alertesPrioritaires.map((alerte) => (
+                  <AlerteCard key={alerte.id} alerte={alerte} />
+                ))}
+              </div>
+              {autresAlertes.length > 0 && (
+                <details className="mt-2">
+                  <summary className="text-[13px] text-accent font-medium cursor-pointer">
+                    Afficher les autres ({autresAlertes.length})
+                  </summary>
+                  <div className="flex flex-col gap-2 mt-2">
+                    {autresAlertes.map((alerte) => (
+                      <AlerteCard key={alerte.id} alerte={alerte} />
+                    ))}
+                  </div>
+                </details>
+              )}
+            </section>
+          )}
 
-      {/* À venir (7 prochains jours, hors aujourd'hui) */}
-      {rdvAVenirAvecContexte.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>
-            {rdvAVenirAvecContexte.length} rendez-vous à venir
-          </SectionTitle>
-          <div className="flex flex-col gap-2">
-            {rdvAVenirAvecContexte.map(({ rdv, contexte, dateLabel }) => (
-              <AgendaCard key={rdv.id} rdv={rdv} statut="a_venir" contexte={contexte} dateLabel={dateLabel} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Dossiers nécessitant une tâche */}
-      {dossiersAttention.length > 0 && (
-        <section className="mb-8">
-          <SectionTitle>Dossiers nécessitant une action</SectionTitle>
-          <div className="flex flex-col gap-2">
-            {dossiersAttention.map(({ bien, tache }) => (
-              <DossierActionCard key={bien.id} bien={bien} raison={raisonTache(tache)} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Autres tâches (sans bien rattaché) */}
-      {autresTaches.length > 0 && (
-        <section>
-          <SectionTitle>
-            {autresTaches.length} autre{autresTaches.length > 1 ? "s" : ""} tâche
-            {autresTaches.length > 1 ? "s" : ""}
-          </SectionTitle>
-          <Card className="px-4 divide-y divide-border">
-            {autresTaches.map((tache) => (
-              <TacheItem key={tache.id} tache={tache} />
-            ))}
-          </Card>
-        </section>
-      )}
+          {/* Autres tâches (sans bien rattaché) */}
+          {autresTaches.length > 0 && (
+            <section>
+              <SectionTitle>
+                {autresTaches.length} autre{autresTaches.length > 1 ? "s" : ""} tâche
+                {autresTaches.length > 1 ? "s" : ""}
+              </SectionTitle>
+              <Card className="px-4 divide-y divide-border">
+                {autresTaches.map((tache) => (
+                  <TacheItem key={tache.id} tache={tache} />
+                ))}
+              </Card>
+            </section>
+          )}
+        </div>
+      </div>
 
       {/* État vide (ADR-039) — scopé aux seules actions/tâches : n'apparaît jamais si l'agenda ou
           les alertes ont par ailleurs du contenu, seulement quand il n'y a structurellement rien à
           traiter dans les deux sections ci-dessus. */}
       {dossiersAttention.length === 0 && autresTaches.length === 0 && (
-        <p className="text-[13px] text-text-3">Rien à traiter pour le moment.</p>
+        <p className="text-[13px] text-text-3 mt-8">Rien à traiter pour le moment.</p>
       )}
     </div>
   );

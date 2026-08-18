@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Users, Building2, ShieldCheck, Landmark, Handshake, Scale, FileText } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import IconTile from "@/components/ui/IconTile";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import {
@@ -79,6 +81,19 @@ const FAMILLES_DOCUMENT: FamilleDocument[] = [
   "notaire",
   "autre",
 ];
+
+// Pictogrammes du dossier documentaire (chantier composition) — purement décoratif, aucune
+// incidence sur le classement réel du document.
+const ICONE_FAMILLE_DOCUMENT: Record<FamilleDocument, typeof Users> = {
+  parties: Users,
+  bien: Building2,
+  diagnostics: ShieldCheck,
+  copropriete: Building2,
+  transaction: Handshake,
+  financement: Landmark,
+  notaire: Scale,
+  autre: FileText,
+};
 
 const ETATS_VERIFICATION_DOCUMENT: EtatVerificationDocument[] = ["non_verifie", "confirme", "a_verifier", "rejete"];
 
@@ -453,7 +468,7 @@ export default function BienTabs({
                     <Link
                       key={v.id}
                       href={`/visites/${v.id}`}
-                      className="block bg-surface rounded-lg border border-border p-4 hover:border-[#4338ca] transition-colors"
+                      className="block bg-surface rounded-lg border border-border p-4 hover:border-accent transition-colors"
                     >
                       <div className="flex items-center gap-2 mb-0.5">
                         <p className="text-[13px] font-medium text-text-2">{formatDate(v.datePrevue)}</p>
@@ -534,7 +549,7 @@ export default function BienTabs({
       {active === "documents" && !dossier && (
         <div className="flex flex-col gap-4">
           {checklist && (
-            <div className="bg-surface-muted rounded-lg border border-border p-4 flex flex-col gap-3">
+            <div className="bg-surface-muted rounded-lg border border-border p-4 flex flex-col gap-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">
                   Dossier documentaire
@@ -548,10 +563,13 @@ export default function BienTabs({
                 if (exigencesFamille.length === 0) return null;
                 return (
                   <div key={famille}>
-                    <p className="text-[12px] font-medium text-text-2 mb-1">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <IconTile icon={ICONE_FAMILLE_DOCUMENT[famille]} tone="champagne" size={24} iconSize={12} />
+                      <p className="text-[12px] font-medium text-text-2">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
+                    </div>
+                    <div className="flex flex-col bg-surface rounded-lg border border-border divide-y divide-border">
                       {exigencesFamille.map((e) => (
-                        <div key={e.code} className="flex items-center justify-between gap-2 text-[13px]">
+                        <div key={e.code} className="flex items-center justify-between gap-2 text-[13px] px-3 py-2">
                           <span className="text-text-1">{e.label}</span>
                           <span className="flex items-center gap-2 shrink-0">
                             {(e.etat === "manquant" || e.etat === "a_verifier" || e.etat === "perime") && (
@@ -907,14 +925,20 @@ export default function BienTabs({
                 const acquereur = acquereursParId.get(offre.acquereurId);
                 return (
                   <div key={offre.id} className="bg-surface rounded-lg border border-border p-4">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-[13px] font-medium text-text-2">{formatDate(offre.dateOffre)}</p>
-                      <span className="text-[11px] text-text-3">·</span>
-                      <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_OFFRE[offre.statut]}</span>
+                    <div className="flex items-start gap-3">
+                      <IconTile icon={Handshake} tone="champagne" size={30} iconSize={14} className="mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="text-[13px] font-medium text-text-2">{formatDate(offre.dateOffre)}</p>
+                          <span className="text-[11px] text-text-3">·</span>
+                          <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_OFFRE[offre.statut]}</span>
+                        </div>
+                        <p className="text-[14px] font-medium text-text-1">
+                          {formatPrix(offre.montant)} —{" "}
+                          {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-[14px] font-medium text-text-1">
-                      {formatPrix(offre.montant)} — {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
-                    </p>
                     {offre.dateValidite && (
                       <p className="text-[13px] text-text-3 mt-1">Valable jusqu'au {formatDate(offre.dateValidite)}</p>
                     )}
@@ -1093,14 +1117,20 @@ export default function BienTabs({
                 const acquereur = acquereursParId.get(c.acquereurId);
                 return (
                   <div key={c.id} className="bg-surface rounded-lg border border-border p-4">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-[13px] font-medium text-text-2">{formatDate(c.dateSignature)}</p>
-                      <span className="text-[11px] text-text-3">·</span>
-                      <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
+                    <div className="flex items-start gap-3">
+                      <IconTile icon={Scale} tone="navy" size={30} iconSize={14} className="mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="text-[13px] font-medium text-text-2">{formatDate(c.dateSignature)}</p>
+                          <span className="text-[11px] text-text-3">·</span>
+                          <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
+                        </div>
+                        <p className="text-[14px] font-medium text-text-1">
+                          {formatPrix(c.prixConvenu)} —{" "}
+                          {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-[14px] font-medium text-text-1">
-                      {formatPrix(c.prixConvenu)} — {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
-                    </p>
                     {c.dateActe && (
                       <p className="text-[13px] text-text-3 mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
                     )}
@@ -1402,7 +1432,7 @@ export default function BienTabs({
                       <button
                         type="submit"
                         aria-label="Marquer comme terminée"
-                        className="w-4 h-4 rounded border border-border-md hover:border-[#4338ca] hover:bg-accent-light transition-colors"
+                        className="w-4 h-4 rounded border border-border-md hover:border-accent hover:bg-accent-light transition-colors"
                       />
                     </form>
                   )}

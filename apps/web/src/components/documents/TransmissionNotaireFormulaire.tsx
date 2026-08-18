@@ -1,6 +1,8 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Scale } from "lucide-react";
+import IconTile from "@/components/ui/IconTile";
 import { enregistrerTransmissionDossierNotaireAction, type ResultatActionTransmission } from "@/actions/transmissionDossierNotaire";
 
 const ETAT_INITIAL: ResultatActionTransmission = { statut: "idle" };
@@ -160,7 +162,10 @@ export default function TransmissionNotaireFormulaire({
 
   return (
     <div className="mt-6">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Transmissions notariales</p>
+      <div className="flex items-center gap-2 mb-2">
+        <IconTile icon={Scale} tone="navy" size={26} iconSize={13} />
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">Transmissions notariales</p>
+      </div>
 
       {cleIdempotence !== null ? (
         <EcranConfirmationTransmission
@@ -177,7 +182,7 @@ export default function TransmissionNotaireFormulaire({
           onNouvelleTentative={() => setCleIdempotence(crypto.randomUUID())}
         />
       ) : (
-        <div className="flex flex-col gap-3 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+        <div className="flex flex-col gap-3 bg-surface border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-4">
           <p className="text-[13px] text-text-2">
             Après avoir transmis le pack (ou un sous-ensemble) par votre canal habituel, enregistrez cette
             transmission pour la retrouver dans le suivi du dossier. Atlas n&apos;envoie aucun fichier à cette étape.

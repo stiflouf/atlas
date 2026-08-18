@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { User, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
+import Avatar from "@/components/ui/Avatar";
 import { listerClients, rechercherAcquereursPage } from "@/lib/clientRepository";
 
 const PAR_PAGE = 25;
@@ -75,17 +76,17 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-[22px] md:text-[28px] font-semibold text-[#0f172a] leading-tight">
+          <h1 className="font-serif text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">
             {modeArchives ? "Acquéreurs archivés" : "Clients"}
           </h1>
-          <p className="text-[14px] text-[#94a3b8] mt-1">
+          <p className="text-[14px] text-text-3 mt-1">
             {totalAffiche} {modeArchives ? "acquéreurs archivés" : "acquéreurs"}
           </p>
         </div>
         {!modeArchives && (
           <Link
             href="/clients/nouveau"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-[#4338ca] hover:bg-[#3730a3] transition-colors px-3.5 py-2 rounded-lg shrink-0"
+            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg shrink-0"
           >
             <Plus size={14} />
             Ajouter un acquéreur
@@ -95,7 +96,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
 
       <Link
         href={construireHref({ archives: !modeArchives, q: texte })}
-        className="inline-block text-[13px] font-medium text-[#4338ca] hover:text-[#3730a3] transition-colors mb-6"
+        className="inline-block text-[13px] font-medium text-accent hover:text-accent-hover transition-colors mb-6"
       >
         {modeArchives ? "← Voir les acquéreurs actifs" : "Voir les archives →"}
       </Link>
@@ -111,7 +112,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       <section>
         <SectionTitle>{modeArchives ? "Acquéreurs archivés" : "Acquéreurs"}</SectionTitle>
         {clients.length === 0 ? (
-          <p className="text-[14px] text-[#94a3b8]">
+          <p className="text-[14px] text-text-3">
             {texte
               ? `Aucun résultat pour « ${texte} ».`
               : modeArchives
@@ -122,17 +123,15 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           <div className="flex flex-col gap-2">
             {clients.map((client) => (
               <Link key={client.id} href={`/clients/${client.id}`}>
-                <Card className="hover:shadow-[0_2px_8px_rgba(0,0,0,0.08)] transition-shadow duration-150">
-                  <div className="flex items-center gap-4 p-4">
-                    <div className="w-10 h-10 rounded-lg bg-[#eef2ff] flex items-center justify-center shrink-0">
-                      <User size={18} className="text-[#4338ca]" strokeWidth={1.8} />
-                    </div>
+                <Card variant="interactive">
+                  <div className="flex items-center gap-4 p-3">
+                    <Avatar initiales={`${client.prenom.charAt(0)}${client.nom.charAt(0)}`} size={40} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] font-medium text-[#0f172a] truncate">
+                      <p className="text-[14px] font-medium text-text-1 truncate">
                         {client.prenom} {client.nom}
                       </p>
                       <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-[13px] text-[#64748b]">
+                        <span className="text-[13px] text-text-2">
                           {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
                         </span>
                         <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>

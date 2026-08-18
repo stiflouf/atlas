@@ -27,7 +27,7 @@ export default function TacheItem({
         <button
           type="submit"
           aria-label="Marquer comme terminée"
-          className="w-4 h-4 rounded border border-border-md hover:border-[#4338ca] hover:bg-accent-light transition-colors"
+          className="w-4 h-4 rounded border border-border-md hover:border-accent hover:bg-accent-light transition-colors"
         />
       </form>
       <div className="flex-1 min-w-0">
