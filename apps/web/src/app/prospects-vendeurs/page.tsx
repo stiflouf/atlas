@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { User, Plus } from "lucide-react";
+import { User, Plus, UserSearch } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
+import EmptyState from "@/components/ui/EmptyState";
 import { rechercherProspectsVendeurs, type VueProspectVendeur } from "@/lib/prospectVendeurRepository";
 import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
@@ -141,9 +142,16 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
       <section>
         <SectionTitle>{TITRE_VUE[vue]}</SectionTitle>
         {prospects.length === 0 ? (
-          <p className="text-[14px] text-text-3">
-            {texte ? `Aucun résultat pour « ${texte} ».` : "Aucun prospect dans cette vue."}
-          </p>
+          texte ? (
+            <p className="text-[14px] text-text-3">Aucun résultat pour « {texte} ».</p>
+          ) : (
+            <EmptyState
+              icon={UserSearch}
+              titre="Aucun prospect dans cette vue"
+              message="Les propriétaires que vous démarchez apparaîtront ici, avec leur statut et leurs prochaines tâches."
+              cta={vue === "en_cours" ? { href: "/prospects-vendeurs/nouveau", libelle: "Ajouter un prospect vendeur" } : undefined}
+            />
+          )
         ) : (
           <div className="flex flex-col gap-2">
             {prospects.map((prospect) => {

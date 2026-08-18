@@ -90,10 +90,10 @@ export default async function FicheClient({ params }: PageProps) {
       </Link>
 
       <div className="mb-8">
-        <div className="flex items-start gap-3 mb-3">
-          <Avatar initiales={`${client.prenom.charAt(0)}${client.nom.charAt(0)}`} size={44} className="mt-0.5" />
+        <div className="flex items-start gap-4 mb-4">
+          <Avatar initiales={`${client.prenom.charAt(0)}${client.nom.charAt(0)}`} size={56} className="mt-0.5" />
           <div className="flex-1 min-w-0">
-            <h1 className="font-serif text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
+            <h1 className="font-serif text-[22px] md:text-[26px] font-semibold text-text-1 leading-tight">
               {client.prenom} {client.nom}
             </h1>
             <p className="text-[14px] text-text-2 mt-0.5">
@@ -102,8 +102,8 @@ export default async function FicheClient({ params }: PageProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 mt-4">
-          <span className="text-[16px] font-semibold text-text-1">
+        <div className="flex flex-wrap items-center gap-3 bg-surface border border-border rounded-lg px-4 py-3">
+          <span className="text-[17px] font-semibold text-text-1">
             {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
           </span>
           <Badge variant="default">{stadeLabel[client.stadeProjet] ?? client.stadeProjet}</Badge>

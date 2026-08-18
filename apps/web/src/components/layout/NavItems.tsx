@@ -21,18 +21,28 @@ export default function NavItems({ variant }: Props) {
 
   if (variant === "sidebar") {
     return (
-      <nav className="flex flex-col gap-0.5">
+      <nav className="flex flex-col gap-1">
         {items.map(({ label, href, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors duration-100 ${
-                active ? "bg-white/10 text-champagne font-medium" : "text-white/70 hover:bg-white/5 hover:text-white"
+              className={`relative flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-lg text-[13px] transition-colors duration-100 ${
+                active ? "bg-white/[0.08] text-white font-medium" : "text-white/65 hover:bg-white/5 hover:text-white"
               }`}
             >
-              <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+              {/* Repère d'onglet actif — champagne, discret (§4 : subtil, jamais un bloc plein). */}
+              {active && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-full bg-champagne" />
+              )}
+              <span
+                className={`inline-flex items-center justify-center shrink-0 w-7 h-7 rounded-md transition-colors ${
+                  active ? "bg-champagne/15 text-champagne" : "text-white/55"
+                }`}
+              >
+                <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
+              </span>
               {label}
             </Link>
           );

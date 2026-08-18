@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Scale } from "lucide-react";
+import { ArrowLeft, Scale, FileCheck } from "lucide-react";
 import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
+import StatTile from "@/components/ui/StatTile";
 import {
   LABEL_ETAT_PREPARATION_PACK,
   LABEL_SEVERITE_PACK_NOTAIRE,
@@ -113,10 +114,17 @@ export default async function PageDossierNotaire({ params }: PageProps) {
       })}
 
       <div className="mt-6">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
-          Documents prêts : {pack.selectionProposee.length} proposés automatiquement
-          {pack.documentsDisponibles.length > 0 && ` — ${pack.documentsDisponibles.length} disponibles pour ajout manuel`}
-        </p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Documents prêts</p>
+        <StatTile
+          icon={FileCheck}
+          valeur={pack.selectionProposee.length}
+          libelle={
+            pack.documentsDisponibles.length > 0
+              ? `proposés automatiquement — ${pack.documentsDisponibles.length} disponibles pour ajout manuel`
+              : "proposés automatiquement"
+          }
+          className="mb-3"
+        />
 
         {!compromisActuel ? (
           <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">

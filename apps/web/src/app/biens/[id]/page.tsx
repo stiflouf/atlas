@@ -1,9 +1,10 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Ruler, DoorOpen, Building, TreePine, Car } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import BienVisualPlaceholder from "@/components/ui/BienVisualPlaceholder";
+import StatTile from "@/components/ui/StatTile";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
@@ -121,30 +122,39 @@ export default async function FicheBien({ params }: PageProps) {
         Biens
       </Link>
 
-      {/* En-tête du bien — véritable header de dossier immobilier (chantier composition) : visuel
-          + informations principales, plus une suite de texte pure. */}
+      {/* En-tête du bien — véritable hero immobilier (chantier fidélité visuelle) : média pleine
+          largeur, puis informations principales et tuiles métadonnées, plus un header horizontal
+          administratif. Layout unique partagé desktop/mobile. */}
       <div className="mb-8">
-        <div className="flex flex-col md:flex-row gap-4 md:gap-6 mb-4">
-          <BienVisualPlaceholder ratio="panoramic" className="w-full md:w-60 md:shrink-0" />
-          <div className="flex-1 min-w-0">
-            <h1 className="font-serif text-[22px] md:text-[26px] font-semibold text-text-1 leading-tight">
-              {bien.titre}
-            </h1>
-            <p className="text-[14px] text-text-2 mt-1">
-              {bien.adresse}, {bien.codePostal} {bien.ville}
-            </p>
-            <div className="flex flex-wrap items-center gap-3 mt-3">
-              <span className="text-[20px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
-              <span className="text-[14px] text-text-2">{bien.surface} m²</span>
-              <span className="text-[14px] text-text-3">·</span>
-              <span className="text-[14px] text-text-2">{bien.pieces} pièces</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              <Badge variant="accent">{bien.reference}</Badge>
-              <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
-              {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
-            </div>
-          </div>
+        <BienVisualPlaceholder ratio="panoramic" className="w-full h-56 md:h-80 mb-5" />
+
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <Badge variant="accent">{bien.reference}</Badge>
+          <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
+          {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
+        </div>
+        <h1 className="font-serif text-[24px] md:text-[30px] font-semibold text-text-1 leading-tight">
+          {bien.titre}
+        </h1>
+        <p className="text-[14px] text-text-2 mt-1">
+          {bien.adresse}, {bien.codePostal} {bien.ville}
+        </p>
+        <p className="text-[24px] md:text-[28px] font-semibold text-text-1 mt-3">{formatPrix(bien.prix)}</p>
+
+        {/* Tuiles métadonnées — uniquement les attributs réellement renseignés sur le Bien, jamais
+            une valeur inventée pour compléter la grille. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 mt-4 max-w-2xl">
+          <StatTile icon={Ruler} valeur={`${bien.surface} m²`} libelle="Surface" />
+          <StatTile icon={DoorOpen} valeur={bien.pieces} libelle="Pièces" />
+          {bien.etage != null && <StatTile icon={Building} valeur={bien.etage} libelle="Étage" />}
+          {bien.exterieur && bien.exterieur !== "aucun" && (
+            <StatTile
+              icon={TreePine}
+              valeur={bien.exterieur === "balcon" ? "Balcon" : bien.exterieur === "terrasse" ? "Terrasse" : "Jardin"}
+              libelle="Extérieur"
+            />
+          )}
+          {bien.parking && <StatTile icon={Car} valeur="Oui" libelle="Parking" />}
         </div>
 
         {/* État du dossier — visible immédiatement. Mock inchangé si dossier existe ; sinon dérivé

@@ -19,6 +19,9 @@ import RfrFoyerFormulaire from "@/components/fiscal/RfrFoyerFormulaire";
 import VueAnneeResume from "@/components/fiscal/VueAnneeResume";
 import ProjectionPluriannuelle from "@/components/fiscal/ProjectionPluriannuelle";
 import { formatMontantCentimes, parseMontantCentimes } from "@/types/remuneration";
+import { Landmark } from "lucide-react";
+import Card from "@/components/ui/Card";
+import IconTile from "@/components/ui/IconTile";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, la page figerait au moment du build.
@@ -65,13 +68,18 @@ export default async function FiscalPage({ searchParams }: PageProps) {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-2">
-        Ma situation fiscale
-      </h1>
-      <p className="text-[13px] text-text-2 mb-6">
-        Ces informations permettent à Atlas de situer vos encaissements par rapport aux règles
-        fiscales et sociales applicables.
-      </p>
+      <div className="flex items-start gap-3 mb-6">
+        <IconTile icon={Landmark} tone="navy" size={36} iconSize={17} className="mt-0.5" />
+        <div>
+          <h1 className="font-serif text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
+            Ma situation fiscale
+          </h1>
+          <p className="text-[13px] text-text-2 mt-1">
+            Ces informations permettent à Atlas de situer vos encaissements par rapport aux règles
+            fiscales et sociales applicables.
+          </p>
+        </div>
+      </div>
 
       {profilActuel && (
         <section className="mb-8">
@@ -108,10 +116,12 @@ export default async function FiscalPage({ searchParams }: PageProps) {
       )}
 
       <section id="profil" className="mb-10">
-        <h2 className="text-[15px] font-semibold text-text-1 mb-3">
-          {profilActuel ? "Enregistrer un changement de situation" : "Renseigner ma situation"}
-        </h2>
-        <ProfilFiscalFormulaire profilActuel={profilActuel} action={enregistrerProfilFiscalAction} />
+        <Card variant="elevated" className="p-5">
+          <h2 className="text-[15px] font-semibold text-text-1 mb-3">
+            {profilActuel ? "Enregistrer un changement de situation" : "Renseigner ma situation"}
+          </h2>
+          <ProfilFiscalFormulaire profilActuel={profilActuel} action={enregistrerProfilFiscalAction} />
+        </Card>
       </section>
 
       <section id="amorcage" className="mb-10 border-t border-border pt-6">

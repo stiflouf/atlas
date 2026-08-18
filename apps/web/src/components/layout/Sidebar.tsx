@@ -6,8 +6,8 @@ import BrandMark from "./BrandMark";
 export default function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col w-[220px] shrink-0 h-full bg-navy">
-      <div className="px-5 py-5 border-b border-white/10">
-        <BrandMark surNavy avecBaseline />
+      <div className="px-5 py-6 border-b border-white/10">
+        <BrandMark surNavy avecBaseline taille="lg" />
       </div>
 
       <div className="flex-1 px-3 py-4">

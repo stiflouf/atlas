@@ -5,11 +5,22 @@ import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/branding";
 // nouveau nom) ne touche que ce fichier, jamais Sidebar/BottomNav/connexion. Motif géométrique
 // abstrait (3 formes architecturales simples) plutôt qu'une lettre gravée — un renommage futur
 // reste un changement local, aucune identité littérale à défaire.
-type Props = { taille?: "sm" | "md"; surNavy?: boolean; avecBaseline?: boolean; className?: string };
+type Props = { taille?: "sm" | "md" | "lg"; surNavy?: boolean; avecBaseline?: boolean; className?: string };
+
+const TAILLE_MONOGRAMME: Record<NonNullable<Props["taille"]>, string> = {
+  sm: "w-6 h-6",
+  md: "w-8 h-8",
+  lg: "w-10 h-10",
+};
+const TAILLE_TEXTE: Record<NonNullable<Props["taille"]>, string> = {
+  sm: "text-[13px]",
+  md: "text-[15px]",
+  lg: "text-[18px]",
+};
 
 export default function BrandMark({ taille = "md", surNavy = false, avecBaseline = false, className = "" }: Props) {
-  const tailleMonogramme = taille === "sm" ? "w-6 h-6" : "w-8 h-8";
-  const tailleTexte = taille === "sm" ? "text-[13px]" : "text-[15px]";
+  const tailleMonogramme = TAILLE_MONOGRAMME[taille];
+  const tailleTexte = TAILLE_TEXTE[taille];
 
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>

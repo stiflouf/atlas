@@ -1,3 +1,5 @@
+import { Zap } from "lucide-react";
+import IconTile from "@/components/ui/IconTile";
 import { CATALOGUE_REGLES_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
 import { listerConfigurationsAutomatisation } from "@/lib/automatisations/configurationAutomatisationRepository";
 import { getDerniereExecutionPourRegle } from "@/lib/automatisations/executionAutomatisationRepository";
@@ -62,11 +64,18 @@ export default async function PageAutomatisations() {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
-      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-1">Automatisations</h1>
-      <p className="text-[14px] text-text-2 mb-6">
-        Chaque règle réagit à un événement métier précis et ne peut créer qu'une tâche — jamais un envoi, jamais une
-        suppression. Une règle nouvellement ajoutée démarre toujours désactivée.
-      </p>
+      <div className="flex items-start gap-3 mb-6">
+        <IconTile icon={Zap} tone="navy" size={36} iconSize={17} className="mt-0.5" />
+        <div>
+          <h1 className="font-serif text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
+            Automatisations
+          </h1>
+          <p className="text-[14px] text-text-2 mt-1">
+            Chaque règle réagit à un événement métier précis et ne peut créer qu'une tâche — jamais un envoi, jamais
+            une suppression. Une règle nouvellement ajoutée démarre toujours désactivée.
+          </p>
+        </div>
+      </div>
 
       <div className="flex flex-col gap-3">
         {lignes.map(({ regle, config, derniereExecution, dernierRun }) => {
@@ -75,12 +84,15 @@ export default async function PageAutomatisations() {
           const etatRun = dernierRun ? deriverEtatRunScanAutomatisation(dernierRun) : undefined;
           const estTemporelle = REGLES_TEMPORELLES.includes(regle.code);
           return (
-            <div key={regle.code} className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
+            <div key={regle.code} className="bg-surface border border-border rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-[14px] font-medium text-text-1">{regle.nom}</p>
-                  <p className="text-[13px] text-text-2 mt-0.5">{regle.description}</p>
-                  <p className="text-[11px] text-text-3 mt-1">Action produite : création d'une tâche</p>
+                <div className="flex items-start gap-3 min-w-0">
+                  <IconTile icon={Zap} tone="champagne" size={30} iconSize={14} className="mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-[14px] font-medium text-text-1">{regle.nom}</p>
+                    <p className="text-[13px] text-text-2 mt-0.5">{regle.description}</p>
+                    <p className="text-[11px] text-text-3 mt-1">Action produite : création d'une tâche</p>
+                  </div>
                 </div>
                 <form action={basculerAutomatisationAction}>
                   <input type="hidden" name="regleCode" value={regle.code} />

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CalendarCheck, Building2, ListChecks, AlertCircle } from "lucide-react";
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
@@ -6,6 +7,7 @@ import AlerteCard from "@/components/alertes/AlerteCard";
 import SectionTitle from "@/components/ui/SectionTitle";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import StatTile from "@/components/ui/StatTile";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import { listerTaches } from "@/lib/tacheRepository";
@@ -153,6 +155,16 @@ export default async function AujourdHui() {
             + Nouvelle tâche
           </Button>
         </Link>
+      </div>
+
+      {/* Repères chiffrés (chantier fidélité visuelle) — 4 comptages déjà calculés ci-dessus pour
+          les sections existantes, aucune requête ni règle supplémentaire : biens.length vient de
+          listerBiens() (ligne Promise.all), les trois autres des dérivations déjà en place. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        <StatTile icon={Building2} valeur={biens.length} libelle="Biens actifs" />
+        <StatTile icon={ListChecks} valeur={tachesActives.length} libelle="Tâches actives" />
+        <StatTile icon={CalendarCheck} valeur={rdvActifs.length} libelle="RDV aujourd'hui" />
+        <StatTile icon={AlertCircle} valeur={dossiersAttention.length} libelle="Dossiers à traiter" />
       </div>
 
       {/* Composition en 2 colonnes sur desktop (passe enrichissement visuel) — colonne principale :

@@ -122,20 +122,16 @@ export default async function BiensPage({ searchParams }: PageProps) {
                 : "Aucun bien actif."}
           </p>
         ) : (
-          <div className="flex flex-col gap-2">
-            {biens.map((bien) => (
-              <Link key={bien.id} href={`/biens/${bien.id}`}>
-                <Card variant="interactive">
-                  <div className="flex items-center gap-4 p-3">
-                    <BienVisualPlaceholder ratio="thumb" className="w-20 h-20 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
-                      </div>
-                      <p className="text-[13px] text-text-2 truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                        <span className="text-[13px] font-medium text-text-1">{formatPrix(bien.prix)}</span>
-                        <span className="text-[12px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
+          <>
+            {/* Desktop/tablette — vraies cards immobilières (média pleine largeur en haut), jamais
+                une ligne de tableau. */}
+            <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {biens.map((bien) => (
+                <Link key={bien.id} href={`/biens/${bien.id}`}>
+                  <Card variant="interactive" className="h-full flex flex-col overflow-hidden">
+                    <BienVisualPlaceholder ratio="panoramic" arrondi={false} className="w-full" />
+                    <div className="p-4 flex-1 flex flex-col">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
                         <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
                           {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
                         </Badge>
@@ -144,13 +140,51 @@ export default async function BiensPage({ searchParams }: PageProps) {
                           <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>
                         )}
                       </div>
+                      <p className="text-[15px] font-medium text-text-1 truncate">{bien.titre}</p>
+                      <p className="text-[13px] text-text-2 truncate mt-0.5">
+                        {bien.adresse}, {bien.codePostal} {bien.ville}
+                      </p>
+                      <div className="flex items-center gap-3 mt-auto pt-3">
+                        <span className="text-[15px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
+                        <span className="text-[12px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
+                      </div>
                     </div>
-                    <ChevronRight size={16} className="text-text-3 shrink-0" />
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+
+            {/* Mobile — ligne compacte, déjà revue (thumbnail + informations essentielles). */}
+            <div className="flex flex-col gap-2 md:hidden">
+              {biens.map((bien) => (
+                <Link key={bien.id} href={`/biens/${bien.id}`}>
+                  <Card variant="interactive">
+                    <div className="flex items-center gap-4 p-3">
+                      <BienVisualPlaceholder ratio="thumb" className="w-20 h-20 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
+                        </div>
+                        <p className="text-[13px] text-text-2 truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                          <span className="text-[13px] font-medium text-text-1">{formatPrix(bien.prix)}</span>
+                          <span className="text-[12px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
+                          <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
+                            {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
+                          </Badge>
+                          <Badge variant="accent">{bien.reference}</Badge>
+                          {bien.archiveLe && (
+                            <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-text-3 shrink-0" />
+                    </div>
+                  </Card>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
 
         {!biensDemo && (
