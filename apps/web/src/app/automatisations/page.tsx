@@ -41,6 +41,12 @@ const COULEUR_ETAT_RUN: Record<EtatRunScanAutomatisation, string> = {
 // distinct de la dernière exécution ADR-032 (qui n'existe que si une occurrence a été trouvée).
 const REGLES_TEMPORELLES: CodeRegleAutomatisation[] = ["inactivite_prospect_vendeur"];
 
+// Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx, app/biens/page.tsx) :
+// sans ce flag, next build tente de pré-générer cette page en interrogeant la DB au moment du build —
+// échec garanti dès que la DB n'est pas joignable à cet instant (ex. réseau privé Railway, disponible
+// seulement au runtime, jamais pendant le build).
+export const dynamic = "force-dynamic";
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
