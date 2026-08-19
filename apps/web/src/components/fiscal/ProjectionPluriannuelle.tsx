@@ -1,4 +1,5 @@
 import { formatMontantCentimes } from "@/types/remuneration";
+import { PRODUCT_NAME } from "@/lib/branding";
 import type {
   ConsequencesFiscalesProjetees,
   ProjectionAnneeFiscale,
@@ -113,7 +114,7 @@ function CarteAnnee({ projection }: { projection: ProjectionAnneeFiscale }) {
         </div>
         {projection.statistique.montantCentimes === undefined && (
           <p className="text-[11px] text-text-3 mt-1">
-            Nécessite au moins 6 mois d&apos;historique entièrement couverts par Atlas ({projection.statistique.moisHistoriqueUtilises}{" "}
+            Nécessite au moins 6 mois d&apos;historique entièrement couverts par {PRODUCT_NAME} ({projection.statistique.moisHistoriqueUtilises}{" "}
             disponible{projection.statistique.moisHistoriqueUtilises > 1 ? "s" : ""} aujourd&apos;hui) — jamais mélangée au pipeline connu.
           </p>
         )}
@@ -152,7 +153,7 @@ function CarteAnnee({ projection }: { projection: ProjectionAnneeFiscale }) {
 
       {raisonsUniques.length > 0 && (
         <div className="mt-3 pt-3 border-t border-border">
-          <p className="text-[11px] font-medium text-text-2 mb-1">Ce qu&apos;Atlas ne sait pas encore calculer :</p>
+          <p className="text-[11px] font-medium text-text-2 mb-1">Ce que {PRODUCT_NAME} ne sait pas encore calculer :</p>
           <ul className="flex flex-col gap-1">
             {raisonsUniques.map((texte) => (
               <li key={texte} className="text-[11px] text-text-3 flex gap-1.5">

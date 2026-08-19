@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PRODUCT_NAME } from "@/lib/branding";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -41,7 +42,7 @@ export default function HistoriqueAmorcageFormulaire({
           <label className={labelCls}>Jusqu&apos;à quelle date avez-vous ce total ?</label>
           <input name="dateFinCouverture" type="date" required className={inputCls} />
           <p className="text-[12px] text-text-3 mt-1">
-            Les encaissements suivis par Atlas après cette date s&apos;ajouteront automatiquement, sans
+            Les encaissements suivis par {PRODUCT_NAME} après cette date s&apos;ajouteront automatiquement, sans
             jamais être comptés deux fois.
           </p>
         </div>

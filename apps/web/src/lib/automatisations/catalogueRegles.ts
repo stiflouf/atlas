@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/branding";
 import { getProspectVendeurById, getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
@@ -266,7 +267,7 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
 
       return {
         titre: `Nouveau match — contacter ${acquereur.prenom} ${acquereur.nom} pour ${bien.reference}`,
-        contexte: "Atlas a détecté une nouvelle compatibilité avec ce bien. Vérifier les critères puis contacter l'acquéreur si pertinent.",
+        contexte: `${PRODUCT_NAME} a détecté une nouvelle compatibilité avec ce bien. Vérifier les critères puis contacter l'acquéreur si pertinent.`,
         type: "appel",
         priorite: "normale",
         cible: { type: "acquereur", id: acquereurId },

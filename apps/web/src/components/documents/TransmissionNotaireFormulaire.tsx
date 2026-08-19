@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { Scale } from "lucide-react";
 import IconTile from "@/components/ui/IconTile";
+import { PRODUCT_NAME } from "@/lib/branding";
 import { enregistrerTransmissionDossierNotaireAction, type ResultatActionTransmission } from "@/actions/transmissionDossierNotaire";
 
 const ETAT_INITIAL: ResultatActionTransmission = { statut: "idle" };
@@ -87,8 +88,8 @@ function EcranConfirmationTransmission({
             </p>
           </div>
           <p className="text-[12px] text-text-3">
-            Atlas enregistre cette transmission dans le suivi du dossier. Les documents ne sont pas envoyés par Atlas
-            à cette étape — assurez-vous de les avoir déjà transmis par votre canal habituel.
+            {PRODUCT_NAME} enregistre cette transmission dans le suivi du dossier. Les documents ne sont pas envoyés
+            par {PRODUCT_NAME} à cette étape — assurez-vous de les avoir déjà transmis par votre canal habituel.
           </p>
           <form action={declencher} className="flex items-center gap-2">
             {champsCaches}
@@ -185,7 +186,7 @@ export default function TransmissionNotaireFormulaire({
         <div className="flex flex-col gap-3 bg-surface border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-4">
           <p className="text-[13px] text-text-2">
             Après avoir transmis le pack (ou un sous-ensemble) par votre canal habituel, enregistrez cette
-            transmission pour la retrouver dans le suivi du dossier. Atlas n&apos;envoie aucun fichier à cette étape.
+            transmission pour la retrouver dans le suivi du dossier. {PRODUCT_NAME} n&apos;envoie aucun fichier à cette étape.
           </p>
 
           <div className="flex flex-col gap-1">

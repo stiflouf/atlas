@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/branding";
 import type { ProvenanceRegleProjection } from "@/types/projectionFiscale";
 
 const LABEL_STATUT_VERIFICATION: Record<string, string> = {
@@ -19,7 +20,7 @@ export default function ExplicationCalculProjection({ provenance }: { provenance
           if (p.origine === "indisponible") {
             return (
               <p key={`indisponible-${p.code}-${index}`}>
-                Règle {p.code} : indisponible, aucune valeur n&apos;a jamais été renseignée dans Atlas.
+                Règle {p.code} : indisponible, aucune valeur n&apos;a jamais été renseignée dans {PRODUCT_NAME}.
               </p>
             );
           }

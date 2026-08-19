@@ -1,4 +1,5 @@
 import { formatMontantCentimes } from "@/types/remuneration";
+import { PRODUCT_NAME } from "@/lib/branding";
 import type { ResultatFiscal } from "@/types/resultatFiscal";
 import type { ResultatMicroBnc } from "@/lib/fiscal/microBnc";
 import type { ResultatFranchiseTva } from "@/lib/fiscal/franchiseTva";
@@ -189,7 +190,7 @@ export default function VueAnneeResume({
       {raisonsUniques.length > 0 && (
         <div>
           <h2 className="text-[15px] font-semibold text-text-1 mb-2">
-            Ce qu&apos;Atlas ne sait pas encore calculer, et pourquoi
+            Ce que {PRODUCT_NAME} ne sait pas encore calculer, et pourquoi
           </h2>
           <ul className="flex flex-col gap-1.5">
             {raisonsUniques.map((texte) => (

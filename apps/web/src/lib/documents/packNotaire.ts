@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/branding";
 import { calculerChecklistDossier, type ContexteDossier } from "./checklistDossier";
 import { LABEL_CHARGE_HONORAIRES } from "@/types/bien";
 import { LABEL_TYPE_DOCUMENT, type DocumentBien } from "@/types/documentBien";
@@ -358,7 +359,7 @@ export function genererManifestePackNotaire(
     `Charge des honoraires : ${ctx.bien.chargeHonoraires ? LABEL_CHARGE_HONORAIRES[ctx.bien.chargeHonoraires] : "non renseignée"}`
   );
   lignes.push("");
-  lignes.push(`État de préparation Atlas : ${LABEL_ETAT_PREPARATION_PACK[pack.etatPreparation]}`);
+  lignes.push(`État de préparation ${PRODUCT_NAME} : ${LABEL_ETAT_PREPARATION_PACK[pack.etatPreparation]}`);
   lignes.push("");
   lignes.push(`Documents inclus (${documentsSelectionnes.length})`);
   documentsSelectionnes.forEach((doc, i) => lignes.push(genererNomExport(doc, i, ctx)));

@@ -10,19 +10,27 @@ export default function Sidebar() {
         <BrandMark surNavy avecBaseline taille="lg" />
       </div>
 
-      <div className="flex-1 px-3 py-4">
+      {/* min-h-0 : sans ça un flex item ne peut jamais descendre sous la hauteur de son contenu
+          (min-height:auto par défaut), et le contenu de la nav pousserait alors le bloc photo et
+          le bloc conseiller hors du viewport sur les hauteurs d'écran réduites au lieu de
+          laisser le scroll interne absorber l'excédent. overflow-y-auto : filet de sécurité,
+          n'apparaît en pratique jamais aux hauteurs ciblées (voir zone photo ci-dessous). */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4">
         <NavItems variant="sidebar" />
       </div>
 
       {/* Zone photographique de marque — tiers inférieur, bord à bord (jamais une card collée),
-          fondue dans le navy environnant. Masquée sous une hauteur d'écran réduite (laptop
-          compact) pour ne jamais pousser le bloc conseiller hors champ.
+          fondue dans le navy environnant. Hauteur dérivée de l'espace réellement disponible
+          (100vh moins l'encombrement fixe mesuré du header + nav + bloc conseiller, ~562px, plus
+          une marge de sécurité de 32px) plutôt qu'un simple seuil binaire visible/masqué : la
+          photo se réduit en continu avec la hauteur d'écran et ne disparaît que si l'espace
+          restant tombe à 0, jamais avant que ce soit réellement nécessaire.
           Placeholder généré (SVG) en couche de base, TOUJOURS présent ; la photo de marque
           (public/brand/sidebar-night-house.webp) est superposée en `background-image` CSS — tant
           que le fichier n'existe pas, un `background-image` échoue silencieusement (aucune icône
           cassée, contrairement à une balise <img>) et le placeholder reste visible tel quel.
           Aucun JS nécessaire : l'image s'active automatiquement dès que le fichier est déposé. */}
-      <div className="hidden md:block [@media(max-height:720px)]:!hidden relative h-64 lg:h-72 overflow-hidden shrink-0">
+      <div className="hidden md:block relative h-[clamp(0px,calc(100vh_-_594px),256px)] lg:h-[clamp(0px,calc(100vh_-_594px),288px)] overflow-hidden shrink-0">
         <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 w-full h-full">
           <defs>
             <linearGradient id="sbv-bg" x1="0" y1="0" x2="1" y2="1">

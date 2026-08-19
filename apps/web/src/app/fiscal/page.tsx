@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/branding";
 import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
 import { chargerProfilFiscalActuel } from "@/lib/profilFiscalRepository";
 import { chargerHistoriqueAmorcage } from "@/lib/historiqueAmorcageRepository";
@@ -75,7 +76,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
             Ma situation fiscale
           </h1>
           <p className="text-[13px] text-text-2 mt-1">
-            Ces informations permettent à Atlas de situer vos encaissements par rapport aux règles
+            Ces informations permettent à {PRODUCT_NAME} de situer vos encaissements par rapport aux règles
             fiscales et sociales applicables.
           </p>
         </div>
@@ -128,7 +129,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
         <h2 className="text-[15px] font-semibold text-text-1 mb-1">Recettes des années précédentes</h2>
         <p className="text-[12px] text-text-3 mb-3">
           Optionnel — utile pour situer votre chiffre d&apos;affaires par rapport aux seuils légaux dès
-          votre arrivée sur Atlas, même si votre activité a commencé avant.
+          votre arrivée sur {PRODUCT_NAME}, même si votre activité a commencé avant.
         </p>
         {historique.length > 0 && (
           <ul className="mb-4 flex flex-col gap-1">
@@ -151,7 +152,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
       <section id="rfr" className="border-t border-border pt-6">
         <h2 className="text-[15px] font-semibold text-text-1 mb-1">Revenu fiscal de référence du foyer</h2>
         <p className="text-[12px] text-text-3 mb-3">
-          Optionnel — utile seulement si vous voulez qu&apos;Atlas surveille votre éligibilité au
+          Optionnel — utile seulement si vous voulez que {PRODUCT_NAME} surveille votre éligibilité au
           versement libératoire pour les années à venir. Ignorez si vous ne voulez pas ce suivi.
         </p>
         {rfr.length > 0 && (

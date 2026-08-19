@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/branding";
 import { construireIdAlerte } from "@/lib/alertes/id";
 import { raisonsDe } from "@/lib/alertes/raisons";
 import { SEUIL_MOIS_MINIMUM_RUN_RATE } from "@/lib/fiscal/runRate";
@@ -27,7 +28,7 @@ const regleProfilAbsent: RegleAlerteDonnees = {
         niveau: "action_requise",
         titre: "Situation fiscale non renseignée",
         explication:
-          "Aucun profil fiscal n'est renseigné : Atlas ne peut calculer ni cotisations, ni seuils, ni projections fiscales tant que cette situation n'est pas connue.",
+          `Aucun profil fiscal n'est renseigné : ${PRODUCT_NAME} ne peut calculer ni cotisations, ni seuils, ni projections fiscales tant que cette situation n'est pas connue.`,
         donneesDeclencheuses: { dossierFiscalId: contexte.dossierFiscalId },
         provenance: [],
         action: { libelle: "Compléter ma situation fiscale", href: "/fiscal#profil" },
@@ -84,7 +85,7 @@ const regleRegimeNonCouvert: RegleAlerteDonnees = {
         categorie: "donnees_incompletes",
         niveau: "attention",
         titre: "Régime fiscal non couvert par le moteur de calcul",
-        explication: `Votre régime fiscal ("${LABEL_REGIME_FISCAL[profil.regimeFiscal]}") est bien renseigné, mais Atlas ne sait aujourd'hui calculer cotisations, CFP, versement libératoire et suivi du plafond que pour le micro-BNC. Ce n'est pas une anomalie de votre situation, seulement une limite actuelle d'Atlas.`,
+        explication: `Votre régime fiscal ("${LABEL_REGIME_FISCAL[profil.regimeFiscal]}") est bien renseigné, mais ${PRODUCT_NAME} ne sait aujourd'hui calculer cotisations, CFP, versement libératoire et suivi du plafond que pour le micro-BNC. Ce n'est pas une anomalie de votre situation, seulement une limite actuelle de ${PRODUCT_NAME}.`,
         donneesDeclencheuses: { dossierFiscalId, code: "regime_fiscal" },
         provenance: [
           {
@@ -101,7 +102,7 @@ const regleRegimeNonCouvert: RegleAlerteDonnees = {
         categorie: "donnees_incompletes",
         niveau: "information",
         titre: "Suivi de TVA non couvert par le moteur de calcul",
-        explication: `Votre régime de TVA ("${LABEL_REGIME_TVA[profil.regimeTva]}") est bien renseigné, mais Atlas ne suit aujourd'hui que la franchise en base. Ce n'est pas une anomalie de votre situation, seulement une limite actuelle d'Atlas.`,
+        explication: `Votre régime de TVA ("${LABEL_REGIME_TVA[profil.regimeTva]}") est bien renseigné, mais ${PRODUCT_NAME} ne suit aujourd'hui que la franchise en base. Ce n'est pas une anomalie de votre situation, seulement une limite actuelle de ${PRODUCT_NAME}.`,
         donneesDeclencheuses: { dossierFiscalId, code: "regime_tva" },
         provenance: [{ source: "raison_indisponibilite", raison: { type: "regime_tva_non_supporte", regimeTva: profil.regimeTva } }],
       });
@@ -127,7 +128,7 @@ const regleAssietteIncomplete: RegleAlerteDonnees = {
         niveau: "action_requise",
         titre: `Couverture ${annee} incomplète`,
         explication:
-          "Une partie des encaissements de l'année n'est pas couverte par les données disponibles. Certains calculs fiscaux et projections restent donc incomplets. L'absence d'historique n'est pas anormale en soi : une activité commencée en même temps qu'Atlas peut légitimement n'avoir aucun amorçage à renseigner.",
+          `Une partie des encaissements de l'année n'est pas couverte par les données disponibles. Certains calculs fiscaux et projections restent donc incomplets. L'absence d'historique n'est pas anormale en soi : une activité commencée en même temps que ${PRODUCT_NAME} peut légitimement n'avoir aucun amorçage à renseigner.`,
         donneesDeclencheuses: { dossierFiscalId, annee },
         provenance: [
           { source: "raison_indisponibilite", raison: { type: "assiette_incomplete", periodesInconnues: assiette.periodesInconnues } },
@@ -243,8 +244,8 @@ const regleRegleLegaleAbsente: RegleAlerteDonnees = {
       type: "regle_legale_absente" as const,
       categorie: "donnees_incompletes" as const,
       niveau: "attention" as const,
-      titre: "Règle légale non renseignée dans Atlas",
-      explication: `Atlas ne dispose pas encore, dans son référentiel légal, de la règle nécessaire à un calcul de votre situation (référence "${raison.code}"). Ce n'est pas une action à faire de votre côté : c'est le référentiel Atlas qui doit être complété.`,
+      titre: `Règle légale non renseignée dans ${PRODUCT_NAME}`,
+      explication: `${PRODUCT_NAME} ne dispose pas encore, dans son référentiel légal, de la règle nécessaire à un calcul de votre situation (référence "${raison.code}"). Ce n'est pas une action à faire de votre côté : c'est le référentiel ${PRODUCT_NAME} qui doit être complété.`,
       donneesDeclencheuses: { dossierFiscalId, code: raison.code },
       provenance: [{ source: "raison_indisponibilite" as const, raison }],
     }));
@@ -268,7 +269,7 @@ const regleHistoriqueRunRateInsuffisant: RegleAlerteDonnees = {
         categorie: "donnees_incompletes",
         niveau: "information",
         titre: "Tendance statistique pas encore disponible",
-        explication: `La tendance statistique utilisée pour les projections sera disponible après ${SEUIL_MOIS_MINIMUM_RUN_RATE} mois d'historique mensuel entièrement couvert. Atlas dispose actuellement de ${runRate.moisHistoriqueUtilises} mois. Rien à corriger de votre côté : l'historique est simplement encore jeune.`,
+        explication: `La tendance statistique utilisée pour les projections sera disponible après ${SEUIL_MOIS_MINIMUM_RUN_RATE} mois d'historique mensuel entièrement couvert. ${PRODUCT_NAME} dispose actuellement de ${runRate.moisHistoriqueUtilises} mois. Rien à corriger de votre côté : l'historique est simplement encore jeune.`,
         donneesDeclencheuses: { dossierFiscalId },
         provenance: [],
       },

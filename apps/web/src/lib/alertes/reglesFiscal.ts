@@ -1,3 +1,4 @@
+import { PRODUCT_NAME } from "@/lib/branding";
 import { construireIdAlerte } from "@/lib/alertes/id";
 import { vflActif } from "@/lib/fiscal/versementLiberatoire";
 import { formatMontantCentimes } from "@/types/remuneration";
@@ -69,7 +70,7 @@ const regleDeuxAnneesDepassement: RegleAlerteFiscal = {
         categorie: "fiscal_constate",
         niveau: "attention",
         titre: `Deux années consécutives au-delà du plafond micro-BNC`,
-        explication: `${annee - 1} et ${annee} dépassent toutes les deux, sur leur période connue, la valeur de référence applicable au régime micro-BNC. Atlas expose ce constat factuel — il ne détermine pas si cela déclenche juridiquement une sortie du régime.`,
+        explication: `${annee - 1} et ${annee} dépassent toutes les deux, sur leur période connue, la valeur de référence applicable au régime micro-BNC. ${PRODUCT_NAME} expose ce constat factuel — il ne détermine pas si cela déclenche juridiquement une sortie du régime.`,
         donneesDeclencheuses: { dossierFiscalId, annee },
         provenance: [{ source: "regle_composee", regle: "microBnc.anneeCourante + microBnc.anneeMoins1" }],
       },

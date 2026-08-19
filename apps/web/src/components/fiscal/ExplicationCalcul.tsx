@@ -1,4 +1,5 @@
 import { formatMontantCentimes } from "@/types/remuneration";
+import { PRODUCT_NAME } from "@/lib/branding";
 import type { AssietteAnnuelle } from "@/types/assietteFiscale";
 import type { ProvenanceRegle } from "@/types/resultatFiscal";
 
@@ -32,11 +33,11 @@ export default function ExplicationCalcul({
             {assiette.origines.map((o) =>
               o.source === "historique_amorcage" ? (
                 <p key={o.source}>
-                  Recettes avant Atlas jusqu&apos;au {o.jusquAuInclus} : {formatMontantCentimes(o.montantCentimes)}
+                  Recettes avant {PRODUCT_NAME} jusqu&apos;au {o.jusquAuInclus} : {formatMontantCentimes(o.montantCentimes)}
                 </p>
               ) : (
                 <p key={o.source}>
-                  {o.nombreEncaissements} encaissement{o.nombreEncaissements > 1 ? "s" : ""} Atlas du{" "}
+                  {o.nombreEncaissements} encaissement{o.nombreEncaissements > 1 ? "s" : ""} {PRODUCT_NAME} du{" "}
                   {o.premierEncaissement} au {o.dernierEncaissement} : {formatMontantCentimes(o.montantCentimes)}
                 </p>
               )

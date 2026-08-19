@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import Badge from "@/components/ui/Badge";
+import { PRODUCT_NAME } from "@/lib/branding";
 import SectionTitle from "@/components/ui/SectionTitle";
 import VieAutourDuBien from "@/components/visite/VieAutourDuBien";
 import PatrimoineEtHistoire from "@/components/visite/PatrimoineEtHistoire";
@@ -117,7 +118,7 @@ export default async function PreparerVisite({ params }: PageProps) {
           {rdv.titre}
         </h1>
         <p className="text-[14px] text-text-2 leading-relaxed">
-          Atlas n'a pas pu identifier avec une confiance suffisante le bien et/ou l'acquéreur
+          {PRODUCT_NAME} n'a pas pu identifier avec une confiance suffisante le bien et/ou l'acquéreur
           concernés par ce rendez-vous — aucune préparation ne peut être affichée de façon fiable.
         </p>
       </div>
@@ -276,7 +277,7 @@ export default async function PreparerVisite({ params }: PageProps) {
               {qualiteGeocodage === "a_verifier" ? "Adresse à vérifier" : "Adresse non fiable"}
             </p>
             <p className="text-[13px] text-text-2 leading-snug">
-              Atlas a interprété « {adresseBien} » comme « {localisation.labelTrouve} » — confiance{" "}
+              {PRODUCT_NAME} a interprété « {adresseBien} » comme « {localisation.labelTrouve} » — confiance{" "}
               {Math.round(localisation.score * 100)}%.
             </p>
           </div>

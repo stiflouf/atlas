@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Scale, FileCheck } from "lucide-react";
 import Card from "@/components/ui/Card";
+import { PRODUCT_NAME } from "@/lib/branding";
 import IconTile from "@/components/ui/IconTile";
 import StatTile from "@/components/ui/StatTile";
 import {
@@ -82,12 +83,12 @@ export default async function PageDossierNotaire({ params }: PageProps) {
 
       <Card variant="elevated" className="p-4 mb-6">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-1">
-          État de préparation Atlas
+          État de préparation {PRODUCT_NAME}
         </p>
         <p className="text-[16px] font-medium text-text-1">{LABEL_ETAT_PREPARATION_PACK[pack.etatPreparation]}</p>
         {pack.etatPreparation === "preparation_atlas_complete" && (
           <p className="text-[12px] text-text-3 mt-1">
-            Signifie uniquement qu'aucun constat n'est détecté par les contrôles Atlas actuellement implémentés —
+            Signifie uniquement qu'aucun constat n'est détecté par les contrôles {PRODUCT_NAME} actuellement implémentés —
             pas une garantie de conformité légale ni d'acceptation par le notaire.
           </p>
         )}
