@@ -129,7 +129,7 @@ export default async function BiensPage({ searchParams }: PageProps) {
               {biens.map((bien) => (
                 <Link key={bien.id} href={`/biens/${bien.id}`}>
                   <Card variant="interactive" className="h-full flex flex-col overflow-hidden">
-                    <BienVisualPlaceholder ratio="panoramic" arrondi={false} className="w-full" />
+                    <BienVisualPlaceholder ratio="panoramic" variante="thumbnail" arrondi={false} className="w-full" />
                     <div className="p-4 flex-1 flex flex-col">
                       <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
                         <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
@@ -160,7 +160,7 @@ export default async function BiensPage({ searchParams }: PageProps) {
                 <Link key={bien.id} href={`/biens/${bien.id}`}>
                   <Card variant="interactive">
                     <div className="flex items-center gap-4 p-3">
-                      <BienVisualPlaceholder ratio="thumb" className="w-20 h-20 shrink-0" />
+                      <BienVisualPlaceholder ratio="thumb" variante="thumbnail" className="w-20 h-20 shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>

@@ -141,7 +141,7 @@ export default async function AujourdHui() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       {/* En-tête */}
-      <div className="mb-9 flex items-start justify-between gap-4">
+      <div className="mb-7 flex items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-[26px] md:text-[32px] font-semibold text-text-1 leading-tight">
             Aujourd'hui
@@ -160,18 +160,18 @@ export default async function AujourdHui() {
       {/* Repères chiffrés (chantier fidélité visuelle) — 4 comptages déjà calculés ci-dessus pour
           les sections existantes, aucune requête ni règle supplémentaire : biens.length vient de
           listerBiens() (ligne Promise.all), les trois autres des dérivations déjà en place. */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-        <StatTile icon={Building2} valeur={biens.length} libelle="Biens actifs" />
-        <StatTile icon={ListChecks} valeur={tachesActives.length} libelle="Tâches actives" />
-        <StatTile icon={CalendarCheck} valeur={rdvActifs.length} libelle="RDV aujourd'hui" />
-        <StatTile icon={AlertCircle} valeur={dossiersAttention.length} libelle="Dossiers à traiter" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
+        <StatTile icon={Building2} valeur={biens.length} libelle="Biens actifs" taille="kpi" />
+        <StatTile icon={ListChecks} valeur={tachesActives.length} libelle="Tâches actives" taille="kpi" />
+        <StatTile icon={CalendarCheck} valeur={rdvActifs.length} libelle="RDV aujourd'hui" taille="kpi" />
+        <StatTile icon={AlertCircle} valeur={dossiersAttention.length} libelle="Dossiers à traiter" taille="kpi" />
       </div>
 
       {/* Composition en 2 colonnes sur desktop (passe enrichissement visuel) — colonne principale :
           agenda + dossiers actionnables ; colonne secondaire, plus dense : attention + tâches sans
           bien. Mobile reste empilé (ordre naturel du flux). Aucune section supprimée/ajoutée. */}
-      <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-8 lg:items-start">
-        <div className="flex flex-col gap-8 min-w-0">
+      <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-6 lg:items-start">
+        <div className="flex flex-col gap-6 min-w-0">
           {/* Rendez-vous */}
           <section>
             <SectionTitle>
@@ -277,7 +277,7 @@ export default async function AujourdHui() {
         </div>
 
         {/* Colonne secondaire — plus dense, jamais une card pleine largeur pour 3 lignes. */}
-        <div className="flex flex-col gap-6 mt-8 lg:mt-0">
+        <div className="flex flex-col gap-5 mt-6 lg:mt-0">
           {/* Ce qui mérite mon attention (ADR-026) — dérivé à la lecture, jamais persisté. */}
           {alertesPrioritaires.length > 0 && (
             <section>

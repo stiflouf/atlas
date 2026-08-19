@@ -126,7 +126,7 @@ export default async function FicheBien({ params }: PageProps) {
           largeur, puis informations principales et tuiles métadonnées, plus un header horizontal
           administratif. Layout unique partagé desktop/mobile. */}
       <div className="mb-8">
-        <BienVisualPlaceholder ratio="panoramic" className="w-full h-56 md:h-80 mb-5" />
+        <BienVisualPlaceholder ratio="panoramic" variante="hero" className="w-full h-56 md:h-80 mb-5" />
 
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <Badge variant="accent">{bien.reference}</Badge>
