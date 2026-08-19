@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { echangerCodeContreTokens } from "@/lib/google/oauth";
+import { echangerCodeContreTokens, origineMetierPublique } from "@/lib/google/oauth";
 import { lireEtSupprimerStateTemporaire } from "@/lib/google/state";
 import { ecrireConnexionGoogle } from "@/lib/google/connexion";
 import { lireSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -15,6 +15,7 @@ import { lireSessionAtlas } from "@/lib/auth/sessionAtlas";
 // identifié.
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const origine = origineMetierPublique();
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const erreur = url.searchParams.get("error");
@@ -23,11 +24,11 @@ export async function GET(request: Request) {
   const sessionAtlas = await lireSessionAtlas();
 
   if (!sessionAtlas) {
-    return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", url.origin));
+    return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", origine));
   }
 
   if (erreur || !code || !state || state !== stateAttendu) {
-    return NextResponse.redirect(new URL("/?google=erreur", url.origin));
+    return NextResponse.redirect(new URL("/?google=erreur", origine));
   }
 
   try {
@@ -38,8 +39,8 @@ export async function GET(request: Request) {
     // erreur d'échange de code OAuth peut porter des propriétés enrichies (réponse HTTP externe,
     // URL, métadonnées) au-delà de `.message` — jamais code OAuth, refresh_token, cookie, state.
     console.error("[google-calendar] échec de l'échange de code OAuth :", e instanceof Error ? e.message : "erreur non standard");
-    return NextResponse.redirect(new URL("/?google=erreur", url.origin));
+    return NextResponse.redirect(new URL("/?google=erreur", origine));
   }
 
-  return NextResponse.redirect(new URL("/", url.origin));
+  return NextResponse.redirect(new URL("/", origine));
 }

@@ -13,6 +13,15 @@ function requireEnv(nom: string): string {
   return valeur;
 }
 
+// Origine publique de production — dérivée de GOOGLE_ATLAS_REDIRECT_URI plutôt que de
+// request.url/request.nextUrl (bugfix déploiement) : derrière le proxy Railway, l'origine
+// reconstruite depuis la requête entrante peut ne pas refléter le domaine public (observé en
+// production : redirection post-callback vers localhost, ERR_CONNECTION_REFUSED). Cette variable
+// est déjà l'unique source de vérité du domaine public identité — jamais une variable redondante.
+export function origineIdentitePublique(): string {
+  return new URL(requireEnv("GOOGLE_ATLAS_REDIRECT_URI")).origin;
+}
+
 export function construireUrlAutorisationIdentite(state: string, nonce: string): string {
   const params = new URLSearchParams({
     client_id: requireEnv("GOOGLE_CLIENT_ID"),

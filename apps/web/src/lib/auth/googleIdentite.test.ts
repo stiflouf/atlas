@@ -102,3 +102,28 @@ describe("googleIdentite (ADR-047) — flux d'identité Atlas, distinct des scop
     await expect(echangerCodeEtVerifierIdentite("code-1", "nonce-attendu")).rejects.toThrow();
   });
 });
+
+// Bugfix déploiement Railway — origineIdentitePublique() doit dériver l'origine EXCLUSIVEMENT de
+// GOOGLE_ATLAS_REDIRECT_URI, jamais d'une requête entrante (request.url/request.nextUrl), pour
+// rester fiable derrière un proxy qui peut réécrire le Host vu par le processus Node (observé en
+// production : redirection post-callback vers localhost).
+describe("origineIdentitePublique() — dérivée uniquement de GOOGLE_ATLAS_REDIRECT_URI", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("retourne l'origine HTTPS publique configurée en production", async () => {
+    vi.stubEnv("GOOGLE_ATLAS_REDIRECT_URI", "https://domiora-production.up.railway.app/api/auth/atlas/callback");
+    const { origineIdentitePublique } = await import("./googleIdentite");
+    expect(origineIdentitePublique()).toBe("https://domiora-production.up.railway.app");
+  });
+
+  it("retourne localhost en développement (ne casse pas le flux local)", async () => {
+    vi.stubEnv("GOOGLE_ATLAS_REDIRECT_URI", "http://localhost:3000/api/auth/atlas/callback");
+    const { origineIdentitePublique } = await import("./googleIdentite");
+    expect(origineIdentitePublique()).toBe("http://localhost:3000");
+  });
+
+  it("variable absente : échoue explicitement, jamais un fallback silencieux", async () => {
+    const { origineIdentitePublique } = await import("./googleIdentite");
+    expect(() => origineIdentitePublique()).toThrow(/GOOGLE_ATLAS_REDIRECT_URI/);
+  });
+});

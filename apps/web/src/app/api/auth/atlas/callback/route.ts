@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { echangerCodeEtVerifierIdentite } from "@/lib/auth/googleIdentite";
+import { echangerCodeEtVerifierIdentite, origineIdentitePublique } from "@/lib/auth/googleIdentite";
 import { lireEtSupprimerStateOidcAtlas } from "@/lib/auth/atlasOidcState";
 import { estEmailAutorise } from "@/lib/auth/allowlist";
 import { creerSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -12,6 +12,7 @@ import { creerSessionAtlas } from "@/lib/auth/sessionAtlas";
 // fonction (voir googleIdentite.ts) — seule la session Atlas minimale (sub, email) survit.
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const origine = origineIdentitePublique();
   const code = url.searchParams.get("code");
   const stateRecu = url.searchParams.get("state");
   const erreurGoogle = url.searchParams.get("error");
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
   const chargeAttendue = await lireEtSupprimerStateOidcAtlas();
 
   if (erreurGoogle || !code || !stateRecu || !chargeAttendue || stateRecu !== chargeAttendue.state) {
-    return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", url.origin));
+    return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", origine));
   }
 
   try {
@@ -27,7 +28,7 @@ export async function GET(request: Request) {
 
     if (!estEmailAutorise(identite.email)) {
       // Réponse honnête sans révéler l'adresse attendue (ADR-047, correction n°10 de l'audit).
-      return NextResponse.redirect(new URL("/connexion?erreur=compte_non_autorise", url.origin));
+      return NextResponse.redirect(new URL("/connexion?erreur=compte_non_autorise", origine));
     }
 
     await creerSessionAtlas({ sub: identite.sub, email: identite.email });
@@ -37,8 +38,8 @@ export async function GET(request: Request) {
     // enrichies (réponse HTTP externe, URL, métadonnées) au-delà de `.message` — jamais id_token,
     // access_token, code, cookie, session, state, nonce, Authorization ou secret.
     console.error("[atlas-auth] échec de la vérification d'identité Google :", e instanceof Error ? e.message : "erreur non standard");
-    return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", url.origin));
+    return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", origine));
   }
 
-  return NextResponse.redirect(new URL("/", url.origin));
+  return NextResponse.redirect(new URL("/", origine));
 }

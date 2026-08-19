@@ -19,6 +19,13 @@ function requireEnv(nom: string): string {
   return valeur;
 }
 
+// Même rationale que googleIdentite.ts::origineIdentitePublique() (bugfix déploiement) —
+// GOOGLE_REDIRECT_URI est déjà l'unique source de vérité du domaine public pour le flux métier
+// Calendar/Gmail, jamais request.url/request.nextUrl derrière un proxy.
+export function origineMetierPublique(): string {
+  return new URL(requireEnv("GOOGLE_REDIRECT_URI")).origin;
+}
+
 // `scopes` explicite plutôt qu'une constante unique (ADR-031-bis) : Calendar et Gmail sont deux
 // capacités demandées indépendamment, jamais couplées dans ce code — chaque flux d'autorisation
 // demande exactement ce dont il a besoin. `include_granted_scopes=true` (toujours actif) laisse
