@@ -42,17 +42,64 @@ n'est reproduite ici.
 
 ## 5. Jobs périodiques
 
-| Job | Route | Méthode | Secret | Cadence | Résultat attendu | Vérification |
-|---|---|---|---|---|---|---|
-| JOB-01 | `/api/automatisations/scan` | POST | `AUTOMATISATIONS_SCAN_SECRET` | Quotidien | 200, run journalisé dans `/automatisations` | Consulter `/automatisations` après le déclenchement, vérifier un run récent sans `erreurTechnique`. |
-| JOB-02 | `/api/automatisations/reprise` | POST | `AUTOMATISATIONS_REPRISE_SECRET` | Horaire | 200, aucune exécution restée bloquée | Vérifier `/automatisations` : aucune exécution en `a_traiter` anormalement ancienne. |
-| JOB-03 | `/api/compatibilite/scan` | POST | `COMPATIBILITE_SCAN_SECRET` | Horaire | 200 | Réponse 200 constatée (pas d'UI dédiée de vérification fine en V1). |
+Trois jobs déclenchés par des **Railway Functions cron** (projet `sparkling-rejoicing`,
+environnement `production`, région EU West), chacune un wrapper TypeScript minimal (aucune
+dépendance npm, runtime Bun fourni par Railway) qui fait un seul `fetch` POST vers DOMIORA puis se
+termine (`process.exit(0)`/`process.exit(1)`) — jamais de processus/serveur laissé actif entre deux
+exécutions. Sources versionnées : `ops/railway/functions/*.ts` (voir aussi
+`ops/railway/functions/wrappers.test.mjs` pour les tests locaux).
 
-`/api/compatibilite/baseline` (`COMPATIBILITE_BASELINE_SECRET`) — **jamais un cron**, geste manuel
-explicite (dry-run par défaut). Ne pas le configurer comme un 4ᵉ job périodique.
+| Job (Railway Function) | Route DOMIORA | Secret (`JOB_SECRET`, référence Railway vers DOMIORA) | Cron (UTC) | Résultat attendu |
+|---|---|---|---|---|
+| `domiora-automatisations-scan` | `POST /api/automatisations/scan` | `AUTOMATISATIONS_SCAN_SECRET` | `15 5 * * *` (quotidien) | 200, `{"execute":...}` — `false` si aucune règle `active` en base (ADR-032), normal tant qu'aucune règle n'est activée depuis `/automatisations`. |
+| `domiora-automatisations-reprise` | `POST /api/automatisations/reprise` | `AUTOMATISATIONS_REPRISE_SECRET` | `17 * * * *` (horaire) | 200, `{"examinees":N,"traitees":N,"plafondAtteint":N}` — `0` partout est un résultat normal (filet de reprise, généralement no-op). |
+| `domiora-compatibilite-scan` | `POST /api/compatibilite/scan` | `COMPATIBILITE_SCAN_SECRET` | `47 * * * *` (horaire) | 200, `{"demandesExaminees":N,"demandesTraitees":N,"evenementsEmis":N}` — `0` partout est un résultat normal. |
 
-Un Bearer invalide/absent sur ces 4 endpoints doit être refusé (jamais un traitement silencieux) —
-vérifié une fois avant le premier jour de pilote (checklist ADR-047, section Validation).
+Horaires volontairement décalés (`:15`, `:17`, `:47`) pour ne jamais déclencher les trois jobs
+horaires/quotidien simultanément.
+
+`/api/compatibilite/baseline` (`COMPATIBILITE_BASELINE_SECRET`) — **jamais un cron, aucune Railway
+Function créée pour cette route**, geste manuel exclusif (dry-run par défaut, `apply` refusé sur
+table non vide sans confirmation explicite). Si une future Function `*baseline*` apparaît dans
+`railway functions list`, c'est une anomalie de configuration à corriger, pas un état normal.
+
+Chaque `JOB_SECRET` est une **référence Railway native** vers le secret correspondant du service
+DOMIORA (ex. `JOB_SECRET -> DOMIORA.AUTOMATISATIONS_SCAN_SECRET`), jamais une copie manuelle
+dupliquée — évite toute divergence si le secret DOMIORA est un jour renouvelé. Un Bearer
+invalide/absent sur ces 4 endpoints doit être refusé (jamais un traitement silencieux) — vérifié
+avant le premier jour de pilote (checklist ADR-047, section Validation).
+
+### Diagnostic / run manuel
+
+- **Lister les Functions et leurs horaires** : `railway functions list` (lecture seule).
+- **Statut du dernier déploiement d'une Function** : `railway service status --service <nom> --environment production`.
+- **Logs d'un run** (dernier passage, pas besoin d'en déclencher un nouveau) : `railway logs --service <nom> --environment production --lines 30`. Un run réussi affiche exactement une ligne
+  `[<nom-job>] ok status=200 duree_ms=<n> resultat=<json>` ; un échec affiche
+  `[<nom-job>] échec ...` sur stderr et se termine par un code de sortie non nul — jamais de secret
+  ni d'en-tête `Authorization` dans ces logs (voir `ops/railway/functions/*.ts`).
+- **Run manuel de validation** : déclenchable depuis l'UI Railway (bouton "Run now" sur la
+  Function) — `railway functions new`/`push` en CLI a été refusé pendant la mise en place initiale
+  (voir Limitation CLI ci-dessous) ; un run manuel via l'UI reste possible et a été utilisé pour
+  valider les 3 jobs avant configuration définitive du cron.
+- **Une Function reste "active"/ne se termine pas** : investiguer avant de relancer quoi que ce
+  soit — un wrapper qui ne se termine jamais indique un problème réseau (DOMIORA injoignable) ou un
+  bug du wrapper lui-même, jamais relancer en boucle sans diagnostic.
+- **Piège observé pendant la mise en place** : le cron de `domiora-automatisations-scan` avait été
+  temporairement réglé à `*/5 * * * *` pour faciliter son test manuel initial — vérifié remis à
+  `15 5 * * *` avant la clôture du pilote. Toujours vérifier `railway functions list` après un test
+  manuel pour s'assurer qu'aucun cron de test n'est resté en place.
+
+### Limitation CLI observée (pas une propriété garantie de Railway)
+
+Lors de la mise en place initiale, `railway functions new` (CLI, binaire `~/.railway/bin/railway`
+et `npx @railway/cli`, v5.41.2) a été systématiquement refusé avec `You do not have access to this
+resource`, malgré un compte confirmé Admin du workspace, une authentification propre (sans
+`RAILWAY_TOKEN`/`RAILWAY_API_TOKEN` parasite) et un projet/environnement correctement résolus
+(`railway status`/`whoami` fonctionnels). Toutes les opérations de lecture CLI fonctionnaient
+normalement ; seule la création d'une nouvelle ressource via `functions new` échouait. Les 3
+Functions ont donc été créées manuellement via l'UI Railway officielle. C'est l'incident constaté
+lors de cette mise en production, pas un comportement documenté ou garanti de Railway — à
+réévaluer si une prochaine Function doit être créée en CLI.
 
 ## 6. Stockage documentaire et backup
 

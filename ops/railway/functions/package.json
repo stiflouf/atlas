@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Marqueur ESM local pour tsx (top-level await) — n'est jamais envoyé à Railway : `railway functions push -p <fichier>` ne déploie que le fichier unique ciblé, jamais ce dossier."
+}
