@@ -59,6 +59,7 @@ describe("TacheItem — Voir la fiche (ADR-039)", () => {
 describe("TacheItem — nouveau match ADR-037 : non-régression", () => {
   it("Voir la fiche pointe vers l'acquéreur, Préparer un email reste disponible, aucun lien Bien reconstruit", () => {
     const tache = tacheTest({
+      id: "8f14e45f-ceea-4d1a-8e4b-0f3d5a2c1b90",
       titre: "Nouveau match — contacter Julie Martin pour HOU-2026-014",
       type: "appel",
       origine: "automatique",
@@ -73,13 +74,22 @@ describe("TacheItem — nouveau match ADR-037 : non-régression", () => {
 });
 
 describe("TacheItem — Préparer un email (non-régression)", () => {
-  it("disponible dès qu'une cible existe, quel que soit son type", () => {
-    const html = render(tacheTest({ bienId: "bien-1" }));
+  it("disponible dès qu'une cible existe, quel que soit son type, pour une tâche réelle (id UUID)", () => {
+    const html = render(tacheTest({ id: "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e", bienId: "bien-1" }));
     expect(html).toContain("Préparer un email");
   });
 
   it("absent si aucune cible", () => {
-    const html = render(tacheTest());
+    const html = render(tacheTest({ id: "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e" }));
+    expect(html).not.toContain("Préparer un email");
+  });
+
+  // Bugfix pilote : tant qu'aucune tâche réelle n'existe en base, listerTaches() (tacheRepository.ts)
+  // se replie sur les tâches de démonstration (id non-UUID, ex. "tache-001") — communications/nouveau
+  // résout la tâche via getTacheById, qui rejette tout id non-UUID et renvoie donc un 404. Le lien ne
+  // doit jamais être proposé pour une tâche que la page cible ne pourra pas résoudre.
+  it("absent pour une tâche de démonstration (id non-UUID) — la page cible 404rait sinon", () => {
+    const html = render(tacheTest({ id: "tache-001", bienId: "bien-1" }));
     expect(html).not.toContain("Préparer un email");
   });
 });

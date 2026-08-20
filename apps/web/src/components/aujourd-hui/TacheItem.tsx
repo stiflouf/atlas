@@ -6,6 +6,12 @@ import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, deriverRouteFicheCible, type
 import type { CodeRegleAutomatisation } from "@/types/automatisation";
 import Badge from "@/components/ui/Badge";
 
+// communications/nouveau résout la tâche via getTacheById, qui exige un id UUID (tacheRepository.ts)
+// — une tâche de démonstration (id non-UUID, repli listerTaches() tant qu'aucune tâche réelle
+// n'existe en base) y renvoie donc systématiquement un 404 (bugfix pilote). Jamais un lien qui mène
+// à une page inexistante.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // "Sans échéance" (ADR-028) — jamais "En attente" : une tâche ouverte sans échéance n'est pas une
 // tâche "en attente" au sens métier (réservé à une future notion d'attente client/notaire/document,
 // voir types/tache.ts). Simple constat factuel sur la présence ou non d'une échéance.
@@ -75,7 +81,7 @@ export default function TacheItem({
               Voir la fiche
             </Link>
           )}
-          {cible && (
+          {cible && UUID_REGEX.test(tache.id) && (
             <Link
               href={`/communications/nouveau?tacheId=${tache.id}`}
               className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors inline-block"
