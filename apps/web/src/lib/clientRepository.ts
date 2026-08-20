@@ -9,6 +9,13 @@ type LigneAcquereur = typeof acquereursTable.$inferSelect;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Bugfix pilote : le repli mock ci-dessous ne doit jamais atteindre la production (id non-UUID
+// comme "client-001" inutilisable comme FK réelle — voir la contamination Postgres SQLSTATE 22P02
+// constatée). Hors production (dev/tests), comportement historique inchangé.
+function estProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 // NULL Postgres -> undefined métier, jamais interprété comme false — même principe que
 // bienRepository.ts.
 function ligneVersAcquereur(ligne: LigneAcquereur): ProfilAcquereur {
@@ -41,8 +48,11 @@ export async function listerClients(): Promise<ProfilAcquereur[]> {
     const lignes = await getDb().select().from(acquereursTable);
     if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersAcquereur);
   } catch (erreur) {
-    console.error("[acquereurs] lecture Postgres indisponible, repli sur les mocks :", erreur);
+    console.error("[acquereurs] lecture Postgres indisponible :", erreur);
+    if (estProduction()) throw erreur;
+    return clientsDemo;
   }
+  if (estProduction()) return [];
   return clientsDemo;
 }
 
@@ -119,9 +129,11 @@ export async function getClientById(id: string): Promise<ProfilAcquereur | undef
     const [{ total }] = await getDb().select({ total: sql<number>`count(*)::int` }).from(acquereursTable);
     if (total > 0) return undefined;
   } catch (erreur) {
-    console.error("[acquereurs] lecture Postgres indisponible, repli sur les mocks :", erreur);
+    console.error("[acquereurs] lecture Postgres indisponible :", erreur);
+    if (estProduction()) throw erreur;
     return getClientDemoById(id);
   }
+  if (estProduction()) return undefined;
   return getClientDemoById(id);
 }
 

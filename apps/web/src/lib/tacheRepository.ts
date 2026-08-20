@@ -7,6 +7,13 @@ import type { CibleTache, OrigineTache, PrioriteTache, Tache, TypeTache } from "
 type LigneTache = typeof tachesTable.$inferSelect;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Bugfix pilote : le repli mock ci-dessous ne doit jamais atteindre la production (des id non-UUID
+// comme "tache-001" y sont inutilisables comme FK réelle — voir la contamination Postgres
+// SQLSTATE 22P02 constatée). Hors production (dev/tests), comportement historique inchangé.
+function estProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 // NULL Postgres -> undefined métier, jamais interprété comme false/"aucun" — même principe que
 // bienRepository.ts.
 function ligneVersTache(ligne: LigneTache): Tache {
@@ -33,14 +40,18 @@ function ligneVersTache(ligne: LigneTache): Tache {
 }
 
 // Tâches réelles si au moins une existe, sinon les tâches de démonstration — jamais un mélange,
-// même principe que listerBiens()/listerClients().
+// même principe que listerBiens()/listerClients(). Repli mock désactivé en production (voir
+// estProduction ci-dessus) : une DB vide y rend un tableau vide, un vrai état vide, jamais fictif.
 export async function listerTaches(): Promise<Tache[]> {
   try {
     const lignes = await getDb().select().from(tachesTable);
     if (lignes.length > 0) return lignes.map(ligneVersTache);
   } catch (erreur) {
-    console.error("[taches] lecture Postgres indisponible, repli sur les mocks :", erreur);
+    console.error("[taches] lecture Postgres indisponible :", erreur);
+    if (estProduction()) throw erreur;
+    return tachesDemo;
   }
+  if (estProduction()) return [];
   return tachesDemo;
 }
 

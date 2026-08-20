@@ -9,6 +9,14 @@ type LigneBien = typeof biensTable.$inferSelect;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Bugfix pilote : le repli mock ci-dessous ne doit jamais atteindre la production (des id non-UUID
+// comme "bien-001" y sont inutilisables comme FK réelle — voir la contamination Postgres
+// SQLSTATE 22P02 constatée sur un id de démonstration analogue). Hors production (dev/tests),
+// comportement historique inchangé.
+function estProduction(): boolean {
+  return process.env.NODE_ENV === "production";
+}
+
 // NULL Postgres -> undefined métier, jamais interprété comme false/"aucun" : c'est la seule
 // traduction qui préserve la sémantique "champ absent = inconnu" au-delà de la frontière DB.
 function ligneVersBien(ligne: LigneBien): Bien {
@@ -51,8 +59,11 @@ export async function listerBiens(): Promise<Bien[]> {
     const lignes = await getDb().select().from(biensTable);
     if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersBien);
   } catch (erreur) {
-    console.error("[biens] lecture Postgres indisponible, repli sur les mocks :", erreur);
+    console.error("[biens] lecture Postgres indisponible :", erreur);
+    if (estProduction()) throw erreur;
+    return biensDemo;
   }
+  if (estProduction()) return [];
   return biensDemo;
 }
 
@@ -134,9 +145,11 @@ export async function getBienById(id: string): Promise<Bien | undefined> {
     const [{ total }] = await getDb().select({ total: sql<number>`count(*)::int` }).from(biensTable);
     if (total > 0) return undefined;
   } catch (erreur) {
-    console.error("[biens] lecture Postgres indisponible, repli sur les mocks :", erreur);
+    console.error("[biens] lecture Postgres indisponible :", erreur);
+    if (estProduction()) throw erreur;
     return getBienDemoById(id);
   }
+  if (estProduction()) return undefined;
   return getBienDemoById(id);
 }
 
