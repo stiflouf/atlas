@@ -77,3 +77,81 @@ describe("envoyerMessageGmail", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+// Bugfix pilote (envoi Gmail en échec sans aucune trace Railway) : un échec HTTP non-2xx ne
+// journalisait rien et ne lisait même pas le corps de la réponse Google — impossible de
+// distinguer scope manquant / API désactivée / quota / payload rejeté depuis les logs seuls.
+describe("envoyerMessageGmail — diagnostic sécurisé (bugfix pilote)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("403 accessNotConfigured (Gmail API non activée) : journalise status/code/reason, jamais le token", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              error: {
+                code: 403,
+                status: "PERMISSION_DENIED",
+                errors: [{ reason: "accessNotConfigured", message: "Gmail API has not been used in project ... before" }],
+              },
+            }),
+            { status: 403 }
+          )
+      )
+    );
+    const secretToken = "ya29.secret-access-token-ne-doit-jamais-apparaitre";
+    const resultat = await envoyerMessageGmail(secretToken, "jean@test.local", "Objet", "Corps");
+
+    expect(resultat.type).toBe("echec");
+    expect(spy).toHaveBeenCalledTimes(1);
+    const logLigne = spy.mock.calls[0].join(" ");
+    expect(logLigne).toContain("status=403");
+    expect(logLigne).toContain("reason=accessNotConfigured");
+    expect(logLigne).not.toContain(secretToken);
+    spy.mockRestore();
+  });
+
+  it("400 (payload rejeté par Google) : journalise status=400, jamais de secret", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: { code: 400, status: "INVALID_ARGUMENT" } }), { status: 400 }))
+    );
+    const resultat = await envoyerMessageGmail("token", "jean@test.local", "Objet", "Corps");
+
+    expect(resultat.type).toBe("echec");
+    const logLigne = spy.mock.calls[0].join(" ");
+    expect(logLigne).toContain("status=400");
+    expect(logLigne).toContain("code=INVALID_ARGUMENT");
+    spy.mockRestore();
+  });
+
+  it("401 (token invalide) : journalise status=401, jamais l'en-tête Authorization ni le token", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { code: 401 } }), { status: 401 })));
+    const secretToken = "ya29.autre-secret-access-token";
+    await envoyerMessageGmail(secretToken, "jean@test.local", "Objet", "Corps");
+
+    const logLigne = spy.mock.calls[0].join(" ");
+    expect(logLigne).toContain("status=401");
+    expect(logLigne).not.toContain(secretToken);
+    expect(logLigne).not.toContain("Authorization");
+    expect(logLigne).not.toContain("Bearer");
+    spy.mockRestore();
+  });
+
+  it("corps d'erreur illisible : aucune exception, log au statut seul", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("pas du json", { status: 500 })));
+    const resultat = await envoyerMessageGmail("token", "jean@test.local", "Objet", "Corps");
+
+    expect(resultat.type).toBe("echec");
+    expect(spy.mock.calls[0].join(" ")).toContain("status=500");
+    spy.mockRestore();
+  });
+});

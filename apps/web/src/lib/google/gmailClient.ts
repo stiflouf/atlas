@@ -13,6 +13,23 @@ export type ResultatEnvoiGmail =
   | { type: "echec"; erreurTechnique: string }
   | { type: "incertain"; erreurTechnique: string };
 
+// Format d'erreur documenté de l'API Gmail : {"error":{"code":403,"status":"...", "errors":[
+// {"reason":"accessNotConfigured", ...}]}}. Ne lit jamais `error.message` (pourrait, en théorie,
+// écho une partie du payload envoyé) — uniquement les champs catégoriels code/status/reason.
+async function lireErreurGmail(reponse: Response): Promise<{ code?: string; reason?: string }> {
+  try {
+    const corps = (await reponse.json()) as {
+      error?: { code?: number; status?: string; errors?: { reason?: string }[] };
+    };
+    return {
+      code: corps.error?.status ?? (corps.error?.code !== undefined ? String(corps.error.code) : undefined),
+      reason: corps.error?.errors?.[0]?.reason,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function envoyerMessageGmail(
   accessToken: string,
   destinataireEmail: string,
@@ -24,6 +41,7 @@ export async function envoyerMessageGmail(
     raw = construireMessageRaw(destinataireEmail, objet, corps);
   } catch (erreur) {
     const message = erreur instanceof ErreurConstructionEmail ? erreur.message : "message_invalide";
+    console.error(`[gmail] envoi échoué avant tout appel réseau : ${message}`);
     return { type: "echec", erreurTechnique: message };
   }
 
@@ -41,6 +59,7 @@ export async function envoyerMessageGmail(
   } catch {
     // Rupture réseau ou timeout AVANT toute réponse HTTP exploitable : impossible de savoir si
     // Google a reçu et traité l'appel — jamais un échec net.
+    console.error("[gmail] envoi incertain : réseau ou timeout avant réponse HTTP");
     return { type: "incertain", erreurTechnique: "reseau_ou_timeout" };
   } finally {
     clearTimeout(delai);
@@ -48,6 +67,14 @@ export async function envoyerMessageGmail(
 
   if (!reponse.ok) {
     // Réponse HTTP effectivement reçue et refusée par Google : un résultat CONNU, pas ambigu.
+    // Bugfix pilote : ce cas ne laissait auparavant AUCUNE trace dans les logs (le corps de la
+    // réponse Google n'était même pas lu) — code/reason ci-dessous (jamais de token, de header
+    // Authorization ni de contenu d'email) sont le seul moyen de distinguer une cause (API non
+    // activée, scope manquant, quota, payload rejeté...) sans email réel supplémentaire.
+    const { code, reason } = await lireErreurGmail(reponse);
+    console.error(
+      `[gmail] envoi échoué status=${reponse.status}${code ? ` code=${code}` : ""}${reason ? ` reason=${reason}` : ""}`
+    );
     const categorie = reponse.status === 401 || reponse.status === 403 ? "authentification_google_invalide" : "erreur_google";
     return { type: "echec", erreurTechnique: `${categorie}_${reponse.status}` };
   }

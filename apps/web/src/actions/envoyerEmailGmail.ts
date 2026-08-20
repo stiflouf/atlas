@@ -121,6 +121,9 @@ export async function envoyerEmailGmailAction(
 
   const connexion = await lireConnexionGoogle();
   if (!connexion) {
+    // Bugfix pilote : auparavant silencieux — soit aucune connexion en base, soit déchiffrement
+    // impossible (déjà journalisé séparément par lireConnexionGoogle() dans ce second cas).
+    console.error("[gmail] envoi échoué étape=connexion raison=absente_ou_indechiffrable");
     await marquerEnvoiEchoue(idempotencyKey, "authentification_google_absente");
     return { statut: "echec", message: "Gmail n'est plus connecté." };
   }
@@ -128,7 +131,14 @@ export async function envoyerEmailGmailAction(
   let accessToken: string;
   try {
     ({ accessToken } = await rafraichirAccessToken(connexion.refreshToken));
-  } catch {
+  } catch (erreur) {
+    // Bugfix pilote : le message (ex. "Rafraîchissement du token Google échoué (400) :
+    // invalid_grant — Token has been expired or revoked.") ne contient jamais le refresh_token
+    // lui-même, uniquement le statut HTTP et le couple error/error_description de Google.
+    console.error(
+      "[gmail] envoi échoué étape=refresh_token :",
+      erreur instanceof Error ? erreur.message : "erreur inconnue"
+    );
     await marquerEnvoiEchoue(idempotencyKey, "authentification_google_invalide");
     return { statut: "echec", message: "La connexion Gmail a expiré — reconnectez Gmail." };
   }

@@ -87,6 +87,18 @@ export async function echangerCodeContreTokens(code: string): Promise<TokensGoog
   };
 }
 
+// Ne lit jamais un access_token/refresh_token dans le corps d'erreur (l'endpoint token n'en
+// renvoie jamais sur un échec) — uniquement le couple {error, error_description} documenté par
+// Google (ex. "invalid_grant" / "Token has been expired or revoked."), sûr à journaliser.
+async function lireErreurTokenGoogle(res: Response): Promise<string> {
+  try {
+    const corps = (await res.json()) as { error?: string; error_description?: string };
+    return [corps.error, corps.error_description].filter(Boolean).join(" — ") || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
 export async function rafraichirAccessToken(
   refreshToken: string
 ): Promise<{ accessToken: string; expiresAt: number }> {
@@ -100,7 +112,7 @@ export async function rafraichirAccessToken(
       grant_type: "refresh_token",
     }),
   });
-  if (!res.ok) throw new Error(`Rafraîchissement du token Google échoué (${res.status})`);
+  if (!res.ok) throw new Error(`Rafraîchissement du token Google échoué (${res.status}) : ${await lireErreurTokenGoogle(res)}`);
 
   const data = (await res.json()) as GoogleTokenResponse;
   return { accessToken: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };

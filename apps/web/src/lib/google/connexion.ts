@@ -53,8 +53,15 @@ export async function lireConnexionGoogle(): Promise<ConnexionGoogle | undefined
 
   try {
     return { refreshToken: dechiffrer(ligne.refreshTokenChiffre), scope: ligne.scope };
-  } catch {
-    // Ligne corrompue ou clé de chiffrement changée : traité comme non connecté.
+  } catch (erreur) {
+    // Ligne corrompue ou clé de chiffrement changée : traité comme non connecté. Le message
+    // d'erreur crypto (ex. "Unsupported state or unable to authenticate data") ne contient jamais
+    // la clé ni le texte chiffré/déchiffré — sûr à journaliser tel quel (bugfix pilote : ce cas
+    // était auparavant totalement invisible des logs).
+    console.error(
+      "[gmail] déchiffrement de la connexion Google impossible :",
+      erreur instanceof Error ? erreur.message : "erreur inconnue"
+    );
     return undefined;
   }
 }

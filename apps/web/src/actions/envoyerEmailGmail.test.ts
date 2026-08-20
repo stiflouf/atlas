@@ -205,6 +205,46 @@ describe("envoyerEmailGmailAction", () => {
     expect(notes.some((n) => n.type === "email")).toBe(true);
   });
 
+  it("bugfix pilote : refresh_token révoqué -> échec journalisé (étape=refresh_token), jamais de secret dans le log", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL) => {
+        if (String(url) === TOKEN_URL) {
+          return new Response(
+            JSON.stringify({ error: "invalid_grant", error_description: "Token has been expired or revoked." }),
+            { status: 400 }
+          );
+        }
+        throw new Error("Gmail ne doit jamais être appelé si le refresh échoue");
+      })
+    );
+
+    const id = randomUUID();
+    idsEnvois.push(id);
+    const resultat = await envoyerEmailGmailAction(null, formulaire({
+      idempotencyKey: id,
+      destinataireEmail: "sophie@test.local",
+      objet: "Objet",
+      corps: "Corps",
+    }));
+
+    expect(resultat.statut).toBe("echec");
+    if (resultat.statut === "echec") {
+      expect(resultat.message).toBe("La connexion Gmail a expiré — reconnectez Gmail.");
+    }
+    const envoi = await getEnvoiEmailById(id);
+    expect(deriverEtatEnvoiEmail(envoi!)).toBe("echec");
+
+    const journalComplet = spy.mock.calls.map((appel) => appel.join(" ")).join("\n");
+    expect(journalComplet).toContain("étape=refresh_token");
+    expect(journalComplet).toContain("invalid_grant");
+    expect(journalComplet).not.toContain("refresh-token-test");
+    expect(journalComplet).not.toContain(process.env.GOOGLE_TOKEN_ENCRYPTION_KEY);
+    expect(journalComplet).not.toContain(process.env.GOOGLE_CLIENT_SECRET);
+    spy.mockRestore();
+  });
+
   it("double soumission avec la même clé d'idempotence : un seul appel Gmail réellement déclenché", async () => {
     const compteur = mockFetchRoute(() => new Response(JSON.stringify({ id: "gmail-msg-double" }), { status: 200 }));
 
