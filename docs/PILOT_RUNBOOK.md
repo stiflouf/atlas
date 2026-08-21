@@ -114,6 +114,56 @@ réévaluer si une prochaine Function doit être créée en CLI.
   document → comparer les octets/le SHA-256 → régénérer un Pack Notaire → vérifier que l'historique
   des transmissions (ADR-049) reste intact après le redéploiement.
 
+### Validation pilote — backup et restore réels (2026-08-21)
+
+Backup et restore réels effectués et vérifiés sur le projet Railway `sparkling-rejoicing`
+(environnement `production`, service `Postgres` PostgreSQL 18.6). Restauration systématiquement
+locale/jetable — jamais sur la production.
+
+**Procédure backup DB** — `pg_dump` exécuté directement sur le service `Postgres` via
+`railway ssh --service Postgres` (évite d'exposer `DATABASE_URL` localement) :
+
+```
+pg_dump "$DATABASE_URL" --format=custom --no-owner -f domiora-prod-<horodatage>.dump
+```
+
+Dump téléchargé vers un poste local via `railway ssh --service Postgres -- cat <dump> > ...`,
+intégrité vérifiée par comparaison SHA-256 avant/après transfert, puis fichier temporaire supprimé
+du conteneur `Postgres` une fois le téléchargement confirmé.
+
+**Procédure restore DB** — instance PostgreSQL 18 locale et jetable via Docker
+(`docker run postgres:18`, base `domiora_restore_test`, aucun lien réseau vers la production),
+restauration avec `pg_restore --no-owner --exit-on-error`. Comparaison des counts avant/après :
+29 tables (`public`), 30 migrations (`drizzle.__drizzle_migrations`), et les tables métier
+(`biens`, `acquereurs`, `taches`, `documents_bien`, `connexions_google`, `envois_email`)
+identiques entre la production (lecture seule) et la base restaurée. Contraintes (74) et index
+(50) présents après restauration. Conteneur Docker supprimé après validation (jetable par
+construction).
+
+**Procédure backup documents** — archive `tar.gz` du contenu de
+`ATLAS_DOCUMENT_STORAGE_DIR` (`/data/stockage-documents`) créée directement sur le service
+`DOMIORA` via `railway ssh --service DOMIORA` (répertoire `lost+found` exclu, vide, artefact
+ext4), sans modification des documents existants. Téléchargée puis vérifiée par SHA-256, fichier
+temporaire supprimé du conteneur une fois le téléchargement confirmé.
+
+**Procédure restore documents** — extraction locale dans un dossier jetable
+(`~/domiora-restore-test/documents/`). Nombre de fichiers, taille et SHA-256 du document de test
+identiques entre la source et le fichier restauré.
+
+**Emplacements locaux** : sauvegardes conservées dans `~/domiora-backups/railway/` (jamais
+committées dans Git). Répertoire de restauration jetable : `~/domiora-restore-test/`.
+
+**Contrôles SHA-256** : appliqués systématiquement à chaque étape (dump avant/après transfert,
+archive documents avant/après transfert, document restauré vs hash de référence).
+
+**Fréquence/recommandation opérationnelle** : à l'échelle mono-conseiller du pilote, un export
+manuel hebdomadaire (DB + documents) est suffisant ; formaliser un automatisme si l'usage
+grandit après le pilote (voir aussi le rappel ci-dessus : un volume Railway persistant n'est pas
+une sauvegarde).
+
+**Rappel** : toute restauration doit systématiquement être testée dans un environnement isolé
+avant toute procédure de crise réelle — ne jamais restaurer directement sur la production.
+
 ## 7. Séquence de déploiement
 
 1. Vérifier le commit/tag à déployer (section 2).
