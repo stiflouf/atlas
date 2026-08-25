@@ -71,5 +71,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)"],
+  // brand/ : assets statiques publics de marque (public/brand/*, PropertyVisual/sidebar) — jamais
+  // de donnée métier, jamais besoin de session pour s'afficher (contrairement à
+  // /api/photos-bien/[photoId], qui reste privé). Même famille d'exclusion que les chemins
+  // d'infrastructure Next déjà exclus ci-dessous, pas une entrée de CHEMINS_PUBLICS (qui documente
+  // les seuls points permettant d'obtenir une session, pas les assets statiques).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|brand/).*)"],
 };

@@ -102,3 +102,34 @@ describe("proxy (ADR-047) — PRIVATE BY DEFAULT", () => {
     expect(new URL(reponse.headers.get("location")!).pathname).toBe("/connexion");
   });
 });
+
+// Régression ADR-052 : /brand/*.webp (PropertyVisual, sidebar) recevait un 307 vers /connexion —
+// le fichier existait bien sur disque, mais aucune exclusion du matcher ne couvrait
+// public/brand/*, donc le Proxy interceptait la requête AVANT même d'atteindre proxy() ci-dessus
+// (le Proxy ne s'exécute jamais sur un chemin exclu par `config.matcher` — impossible à observer
+// en appelant proxy() directement, contrairement aux tests "PRIVATE BY DEFAULT" plus haut, qui
+// testent la logique interne une fois le Proxy déjà invoqué). Ce test compile le pattern regex
+// réel de `config.matcher` (syntaxe regex directe, pas path-to-regexp — cf. commentaire dans
+// proxy.ts) exactement comme Next.js l'utilise, pour vérifier explicitement quels chemins le
+// déclenchent.
+describe("config.matcher (ADR-052) — /brand/* public, routes privées inchangées", () => {
+  async function matcherDeclenchePourLeProxy(pathname: string): Promise<boolean> {
+    const { config } = await import("./proxy");
+    const regex = new RegExp(`^${config.matcher[0]}$`);
+    return regex.test(pathname);
+  }
+
+  it.each(["/brand/bien-maison.webp", "/brand/bien-appartement.webp", "/brand/sidebar-night-house.webp"])(
+    "%s est exclu du matcher (public, jamais intercepté par le Proxy)",
+    async (chemin) => {
+      expect(await matcherDeclenchePourLeProxy(chemin)).toBe(false);
+    }
+  );
+
+  it.each(["/clients", "/biens", "/api/photos-bien/00000000-0000-0000-0000-000000000000"])(
+    "%s reste couvert par le matcher (le Proxy continue de s'exécuter dessus)",
+    async (chemin) => {
+      expect(await matcherDeclenchePourLeProxy(chemin)).toBe(true);
+    }
+  );
+});
