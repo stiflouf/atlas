@@ -3,11 +3,14 @@ import { CalendarCheck, Building2, ListChecks, AlertCircle } from "lucide-react"
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
+import ConnexionsGoogle from "@/components/aujourd-hui/ConnexionsGoogle";
 import AlerteCard from "@/components/alertes/AlerteCard";
 import SectionTitle from "@/components/ui/SectionTitle";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import StatTile from "@/components/ui/StatTile";
+import IconTile from "@/components/ui/IconTile";
+import EmptyState from "@/components/ui/EmptyState";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import { listerTaches } from "@/lib/tacheRepository";
@@ -141,17 +144,16 @@ export default async function AujourdHui() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       {/* En-tête */}
-      <div className="mb-7 flex items-start justify-between gap-4">
+      <div className="mb-7 flex items-end justify-between gap-4 border-b border-border pb-5">
         <div>
-          <h1 className="font-serif text-[26px] md:text-[32px] font-semibold text-text-1 leading-tight">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-champagne">{greeting}</p>
+          <h1 className="font-serif text-[28px] md:text-[34px] font-semibold text-text-1 leading-[1.05] mt-1.5">
             Aujourd'hui
           </h1>
-          <p className="text-[13px] text-text-3 mt-1.5 capitalize">
-            {greeting} — {dateStr}
-          </p>
+          <p className="text-[13px] text-text-3 mt-1.5 first-letter:uppercase">{dateStr}</p>
         </div>
-        <Link href="/taches/nouveau" className="shrink-0 mt-0.5">
-          <Button variant="primary" size="sm">
+        <Link href="/taches/nouveau" className="shrink-0">
+          <Button variant="primary" size="md">
             + Nouvelle tâche
           </Button>
         </Link>
@@ -161,10 +163,10 @@ export default async function AujourdHui() {
           les sections existantes, aucune requête ni règle supplémentaire : biens.length vient de
           listerBiens() (ligne Promise.all), les trois autres des dérivations déjà en place. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
-        <StatTile icon={Building2} valeur={biens.length} libelle="Biens actifs" taille="kpi" />
+        <StatTile icon={AlertCircle} valeur={dossiersAttention.length} libelle="Dossiers à traiter" taille="lead" />
+        <StatTile icon={CalendarCheck} valeur={rdvActifs.length} libelle="RDV restants" taille="kpi" />
         <StatTile icon={ListChecks} valeur={tachesActives.length} libelle="Tâches actives" taille="kpi" />
-        <StatTile icon={CalendarCheck} valeur={rdvActifs.length} libelle="RDV aujourd'hui" taille="kpi" />
-        <StatTile icon={AlertCircle} valeur={dossiersAttention.length} libelle="Dossiers à traiter" taille="kpi" />
+        <StatTile icon={Building2} valeur={biens.length} libelle="Biens actifs" taille="kpi" />
       </div>
 
       {/* Composition en 2 colonnes sur desktop (passe enrichissement visuel) — colonne principale :
@@ -180,50 +182,6 @@ export default async function AujourdHui() {
                 : "Aucun rendez-vous restant aujourd'hui"}
             </SectionTitle>
 
-            {source === "google_calendar" && (
-              <div className="text-[12px] text-text-3 mb-1">
-                Google Calendar : connecté ·{" "}
-                <form action="/api/auth/google/logout" method="POST" className="inline">
-                  {/* La révocation Google est globale (ADR-031-bis) : ce bouton déconnecte aussi
-                      Gmail s'il a été autorisé — le libellé le dit explicitement, jamais
-                      "Déconnecter Calendar" seul une fois Gmail accordé. */}
-                  <button type="submit" className="font-medium underline">
-                    {gmailAutorise ? "Déconnecter Google (Calendar + Gmail)" : "Déconnecter"}
-                  </button>
-                </form>
-              </div>
-            )}
-            {source === "demo" && (
-              <div className="text-[12px] text-text-3 mb-1">
-                Source : Données de démonstration ·{" "}
-                <a href="/api/auth/google/login" className="text-accent font-medium">
-                  Connecter Google Calendar
-                </a>
-              </div>
-            )}
-            {source === "demo_erreur" && (
-              <div className="text-[12px] text-warning mb-1">
-                Google Calendar indisponible — données de démonstration affichées ·{" "}
-                <a href="/api/auth/google/login?reconnexion=1" className="font-medium underline">
-                  Se reconnecter
-                </a>
-              </div>
-            )}
-            {/* Capacité distincte de Calendar (ADR-031-bis) : jamais un simple "Google connecté" —
-                le conseiller doit voir explicitement ce qui est autorisé pour l'envoi d'emails. */}
-            <div className="text-[12px] text-text-3 mb-4">
-              Gmail : {gmailAutorise ? "autorisé" : "non autorisé"}
-              {!gmailAutorise && (
-                <>
-                  {" "}
-                  ·{" "}
-                  <a href="/api/auth/google/gmail/login" className="text-accent font-medium">
-                    Autoriser Gmail
-                  </a>
-                </>
-              )}
-            </div>
-
             {rdvActifs.length > 0 && (
               <div className="flex flex-col">
                 {rdvActifs.map(({ rdv, statut, contexte }, i) => (
@@ -237,11 +195,26 @@ export default async function AujourdHui() {
                 ))}
               </div>
             )}
+            {rdvActifs.length === 0 && (
+              <Card className="p-4">
+                <div className="flex items-center gap-3">
+                  <IconTile icon={CalendarCheck} tone="champagne" size={34} iconSize={16} />
+                  <p className="text-[13.5px] leading-snug text-text-2">
+                    Plus aucun rendez-vous d'ici ce soir.
+                    {rdvAVenirAvecContexte.length > 0 && (
+                      <span className="text-text-3"> La suite est en « à venir » ci-dessous.</span>
+                    )}
+                  </p>
+                </div>
+              </Card>
+            )}
             {rdvTermines > 0 && (
               <p className="text-[12px] text-text-3 mt-1">
                 {rdvTermines} déjà terminé{rdvTermines > 1 ? "s" : ""} aujourd'hui
               </p>
             )}
+
+            <ConnexionsGoogle source={source} gmailAutorise={gmailAutorise} />
           </section>
 
           {/* À venir (7 prochains jours, hors aujourd'hui) */}
@@ -323,7 +296,13 @@ export default async function AujourdHui() {
           les alertes ont par ailleurs du contenu, seulement quand il n'y a structurellement rien à
           traiter dans les deux sections ci-dessus. */}
       {dossiersAttention.length === 0 && autresTaches.length === 0 && (
-        <p className="text-[13px] text-text-3 mt-8">Rien à traiter pour le moment.</p>
+        <div className="mt-8">
+          <EmptyState
+            icon={ListChecks}
+            titre="Rien à traiter pour le moment"
+            message="Aucun dossier ni tâche n'attend d'action. Les nouveaux rendez-vous et relances apparaîtront ici."
+          />
+        </div>
       )}
     </div>
   );

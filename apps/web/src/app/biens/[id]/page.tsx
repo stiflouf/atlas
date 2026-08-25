@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Ruler, DoorOpen, Building, TreePine, Car } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import BienVisualPlaceholder from "@/components/ui/BienVisualPlaceholder";
+import PropertyVisual from "@/components/ui/PropertyVisual";
 import StatTile from "@/components/ui/StatTile";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
@@ -126,7 +126,7 @@ export default async function FicheBien({ params }: PageProps) {
           largeur, puis informations principales et tuiles métadonnées, plus un header horizontal
           administratif. Layout unique partagé desktop/mobile. */}
       <div className="mb-8">
-        <BienVisualPlaceholder ratio="panoramic" variante="hero" className="w-full h-56 md:h-80 mb-5" />
+        <PropertyVisual type={bien.type} format="hero" className="w-full h-56 md:h-80 mb-5" />
 
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <Badge variant="accent">{bien.reference}</Badge>

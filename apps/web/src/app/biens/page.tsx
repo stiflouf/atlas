@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Plus, Building2, SearchX, Archive } from "lucide-react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
-import BienVisualPlaceholder from "@/components/ui/BienVisualPlaceholder";
+import PropertyVisual from "@/components/ui/PropertyVisual";
+import Button from "@/components/ui/Button";
+import EmptyState from "@/components/ui/EmptyState";
 import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
 import { deriverStatutCommercial, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
 
@@ -76,32 +78,34 @@ export default async function BiensPage({ searchParams }: PageProps) {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
-      <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-5">
         <div>
-          <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-champagne">
+            {modeArchives ? "Archives" : "Portefeuille"}
+          </p>
+          <h1 className="font-serif text-[28px] md:text-[34px] font-semibold text-text-1 leading-[1.05] mt-1.5">
             {modeArchives ? "Biens archivés" : "Biens"}
           </h1>
-          <p className="text-[14px] text-text-3 mt-1">
+          <p className="text-[13px] text-text-3 mt-1.5">
             {totalAffiche} {modeArchives ? "biens archivés" : "mandats actifs"}
+            {" · "}
+            <Link
+              href={construireHref({ archives: !modeArchives, q: texte })}
+              className="font-medium text-accent hover:text-accent-hover transition-colors"
+            >
+              {modeArchives ? "voir les biens actifs" : "voir les archives"}
+            </Link>
           </p>
         </div>
         {!modeArchives && (
-          <Link
-            href="/biens/nouveau"
-            className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg shrink-0"
-          >
-            <Plus size={14} />
-            Ajouter un bien
+          <Link href="/biens/nouveau" className="shrink-0">
+            <Button variant="primary" size="md" className="inline-flex items-center gap-1.5">
+              <Plus size={14} />
+              Ajouter un bien
+            </Button>
           </Link>
         )}
       </div>
-
-      <Link
-        href={construireHref({ archives: !modeArchives, q: texte })}
-        className="inline-block text-[13px] font-medium text-accent hover:text-accent-hover transition-colors mb-6"
-      >
-        {modeArchives ? "← Voir les biens actifs" : "Voir les archives →"}
-      </Link>
 
       <ChampRecherche
         action="/biens"
@@ -114,13 +118,28 @@ export default async function BiensPage({ searchParams }: PageProps) {
       <section>
         <SectionTitle>{modeArchives ? "Biens archivés" : "Mandats en cours"}</SectionTitle>
         {biens.length === 0 ? (
-          <p className="text-[14px] text-text-3">
-            {texte
-              ? `Aucun résultat pour « ${texte} ».`
-              : modeArchives
-                ? "Aucun bien archivé."
-                : "Aucun bien actif."}
-          </p>
+          texte ? (
+            <EmptyState
+              icon={SearchX}
+              titre={`Aucun résultat pour « ${texte} »`}
+              message="Aucune référence, adresse ou ville ne correspond. Essayez un terme plus court, ou effacez la recherche."
+              cta={{ href: construireHref({ archives: modeArchives }), libelle: "Effacer la recherche" }}
+            />
+          ) : modeArchives ? (
+            <EmptyState
+              icon={Archive}
+              titre="Aucun bien archivé"
+              message="Les biens que vous archivez sortent des flux actifs sans être supprimés. Ils apparaîtront ici."
+              cta={{ href: "/biens", libelle: "Voir les biens actifs" }}
+            />
+          ) : (
+            <EmptyState
+              icon={Building2}
+              titre="Votre portefeuille est vide"
+              message="Le premier mandat que vous ajoutez ouvre son suivi documentaire, ses visites et ses projections."
+              cta={{ href: "/biens/nouveau", libelle: "Ajouter un bien" }}
+            />
+          )
         ) : (
           <>
             {/* Desktop/tablette — vraies cards immobilières (média pleine largeur en haut), jamais
@@ -129,25 +148,37 @@ export default async function BiensPage({ searchParams }: PageProps) {
               {biens.map((bien) => (
                 <Link key={bien.id} href={`/biens/${bien.id}`}>
                   <Card variant="interactive" className="h-full flex flex-col overflow-hidden">
-                    <BienVisualPlaceholder ratio="panoramic" variante="thumbnail" arrondi={false} className="w-full" />
-                    <div className="p-4 flex-1 flex flex-col">
-                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                    <div className="relative">
+                      <PropertyVisual type={bien.type} format="card" scrim arrondi={false} className="w-full" />
+                      {/* Un seul badge sur le média : le statut commercial. La référence redevient
+                          une métadonnée, en pied de card. */}
+                      <span className="absolute left-2.5 top-2.5">
                         <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
                           {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
                         </Badge>
-                        <Badge variant="accent">{bien.reference}</Badge>
-                        {bien.archiveLe && (
-                          <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>
-                        )}
-                      </div>
+                      </span>
+                      {/* Le prix sur le voile : c'est l'information cherchée en premier, et elle
+                          libère le bloc texte. font-serif, comme les chiffres porteurs ailleurs. */}
+                      <span className="absolute left-3 bottom-2.5 font-serif text-[19px] font-semibold text-white drop-shadow-[0_1px_8px_rgba(3,10,28,0.6)]">
+                        {formatPrix(bien.prix)}
+                      </span>
+                    </div>
+                    <div className="p-4 flex-1 flex flex-col">
                       <p className="text-[15px] font-medium text-text-1 truncate">{bien.titre}</p>
                       <p className="text-[13px] text-text-2 truncate mt-0.5">
                         {bien.adresse}, {bien.codePostal} {bien.ville}
                       </p>
-                      <div className="flex items-center gap-3 mt-auto pt-3">
-                        <span className="text-[15px] font-semibold text-text-1">{formatPrix(bien.prix)}</span>
-                        <span className="text-[12px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
+                      <div className="flex items-baseline justify-between gap-2 mt-auto pt-3">
+                        <span className="text-[12px] text-text-2">
+                          {bien.surface} m² · {bien.pieces} pièces
+                        </span>
+                        <span className="text-[11px] tracking-[0.06em] text-text-3 tabular-nums">
+                          {bien.reference}
+                        </span>
                       </div>
+                      {bien.archiveLe && (
+                        <p className="text-[11px] text-text-3 mt-1.5">Archivé le {formatDate(bien.archiveLe)}</p>
+                      )}
                     </div>
                   </Card>
                 </Link>
@@ -159,22 +190,28 @@ export default async function BiensPage({ searchParams }: PageProps) {
               {biens.map((bien) => (
                 <Link key={bien.id} href={`/biens/${bien.id}`}>
                   <Card variant="interactive">
-                    <div className="flex items-center gap-4 p-3">
-                      <BienVisualPlaceholder ratio="thumb" variante="thumbnail" className="w-20 h-20 shrink-0" />
+                    <div className="flex items-center gap-3.5 p-3">
+                      <PropertyVisual type={bien.type} format="thumb" className="w-20 h-20 shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
-                        </div>
+                        <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
                         <p className="text-[13px] text-text-2 truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
-                          <span className="text-[13px] font-medium text-text-1">{formatPrix(bien.prix)}</span>
-                          <span className="text-[12px] text-text-3">{bien.surface} m² · {bien.pieces} pièces</span>
+                        <div className="flex items-baseline gap-2.5 mt-1.5">
+                          <span className="font-serif text-[16px] font-semibold text-text-1">
+                            {formatPrix(bien.prix)}
+                          </span>
+                          <span className="text-[12px] text-text-3">
+                            {bien.surface} m² · {bien.pieces} pièces
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
                           <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
                             {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
                           </Badge>
-                          <Badge variant="accent">{bien.reference}</Badge>
+                          <span className="text-[11px] tracking-[0.06em] text-text-3 tabular-nums">
+                            {bien.reference}
+                          </span>
                           {bien.archiveLe && (
-                            <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>
+                            <span className="text-[11px] text-text-3">Archivé le {formatDate(bien.archiveLe)}</span>
                           )}
                         </div>
                       </div>
