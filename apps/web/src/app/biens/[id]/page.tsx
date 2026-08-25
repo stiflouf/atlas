@@ -3,10 +3,11 @@ import Link from "next/link";
 import { ArrowLeft, Ruler, DoorOpen, Building, TreePine, Car } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import PropertyVisual from "@/components/ui/PropertyVisual";
+import PhotoPrincipale from "@/components/bien/PhotoPrincipale";
 import StatTile from "@/components/ui/StatTile";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
+import { getPhotoPrincipaleBien } from "@/lib/photoBienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getTachesPourBien } from "@/lib/tacheRepository";
@@ -64,6 +65,7 @@ export default async function FicheBien({ params }: PageProps) {
   const bien = await getBienById(id);
   if (!bien) notFound();
 
+  const photoPrincipale = await getPhotoPrincipaleBien(bien.id);
   const dossier = getDossierByBienId(bien.id);
   const taches = await getTachesPourBien(bien.id);
   const notes = await listerNotesPourBien(bien.id);
@@ -126,7 +128,22 @@ export default async function FicheBien({ params }: PageProps) {
           largeur, puis informations principales et tuiles métadonnées, plus un header horizontal
           administratif. Layout unique partagé desktop/mobile. */}
       <div className="mb-8">
-        <PropertyVisual type={bien.type} format="hero" className="w-full h-56 md:h-80 mb-5" />
+        <div className="relative w-full h-56 md:h-80 mb-5">
+          <PhotoPrincipale
+            type={bien.type}
+            photoPrincipaleId={photoPrincipale?.id}
+            format="hero"
+            className="w-full h-full"
+          />
+          {UUID_REGEX.test(bien.id) && (
+            <Link
+              href={`/biens/${bien.id}/photos`}
+              className="absolute right-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full bg-[#030a1c]/[0.74] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#030a1c]/[0.9] transition-colors"
+            >
+              Gérer les photos
+            </Link>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <Badge variant="accent">{bien.reference}</Badge>

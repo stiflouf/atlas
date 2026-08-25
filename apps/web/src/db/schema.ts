@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, check, primaryKey, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // Produit mono-conseiller pour l'instant (voir ADR-006) : une seule ligne possible,
@@ -304,6 +304,59 @@ export const documentsBien = pgTable(
       "documents_bien_etat_verification_check",
       sql`${table.etatVerification} IN ('non_verifie','confirme','a_verifier','rejete')`
     ),
+  ]
+);
+
+// Galerie photo réelle d'un bien (ADR-052) — table dédiée, distincte de documents_bien : une photo
+// n'a ni catégorie juridique, ni rattachement compromis/acquéreur/prospect vendeur, et surtout
+// supporte une opération que documents_bien n'a jamais implémentée (suppression). Mélanger les deux
+// aurait importé un vocabulaire et un cycle de vie qui ne correspondent pas à une photo.
+//
+// cleStockage désigne l'ORIGINAL (photos/originaux/<cleStockage>) et sert aussi de base au nom de
+// la version optimisée (photos/optimisees/<cleStockage>.webp) — un seul identifiant opaque généré
+// côté serveur pour les deux fichiers, jamais dérivé d'un nom fourni par l'utilisateur (même
+// garantie que documents_bien.cleStockage).
+//
+// largeur/hauteur volontairement absentes (ADR-052) : Sharp les lit pendant la validation/
+// optimisation, mais aucune fonctionnalité V1 ne les consomme (rendu en `fill` + ratio CSS fixe,
+// comme PropertyVisual) — les ajouter maintenant aurait posé une ambiguïté prématurée (dimensions
+// originales vs après auto-orientation vs optimisées) pour un gain nul. Migration additive triviale
+// si un besoin produit apparaît.
+//
+// ordre : entier NON unique (ADR-052) — filet de simplicité volontaire, jamais de contrainte
+// UNIQUE(bienId, ordre) qui imposerait une transaction de swap à chaque réorganisation. Le tri
+// total ordre ASC, creeLe ASC, id ASC (identique en galerie et pour la photo principale) reste
+// déterministe même en cas de collision d'ordre — voir photoBienRepository.ts.
+//
+// Photo principale : DÉRIVÉE (MIN de ce tri total), aucune colonne est_principale — source de
+// vérité unique, aucun invariant d'unicité supplémentaire à maintenir : « définir comme
+// principale » est une réorganisation (déplacement en position 0), pas une mutation d'un flag
+// séparé qui pourrait diverger de l'ordre réel.
+export const photosBien = pgTable(
+  "photos_bien",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id, { onDelete: "cascade" }),
+    cleStockage: text("cle_stockage").notNull(),
+    nomFichierOriginal: text("nom_fichier_original").notNull(),
+    typeMimeOriginal: text("type_mime_original").notNull(),
+    tailleOctetsOriginal: integer("taille_octets_original").notNull(),
+    hashSha256: text("hash_sha256").notNull(),
+    ordre: integer("ordre").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "photos_bien_type_mime_original_check",
+      sql`${table.typeMimeOriginal} IN ('image/jpeg','image/png','image/webp')`
+    ),
+    check("photos_bien_taille_octets_original_check", sql`${table.tailleOctetsOriginal} > 0`),
+    check("photos_bien_ordre_check", sql`${table.ordre} >= 0`),
+    // Couvre exactement le tri utilisé par la galerie et la résolution de la photo principale —
+    // pas de contrainte d'unicité (voir commentaire ci-dessus).
+    index("photos_bien_bien_id_ordre_cree_le_id_idx").on(table.bienId, table.ordre, table.creeLe, table.id),
   ]
 );
 

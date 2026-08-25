@@ -6,7 +6,7 @@ import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
-import PropertyVisual from "@/components/ui/PropertyVisual";
+import PhotoPrincipale from "@/components/bien/PhotoPrincipale";
 import Button from "@/components/ui/Button";
 import EmptyState from "@/components/ui/EmptyState";
 import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
@@ -149,7 +149,14 @@ export default async function BiensPage({ searchParams }: PageProps) {
                 <Link key={bien.id} href={`/biens/${bien.id}`}>
                   <Card variant="interactive" className="h-full flex flex-col overflow-hidden">
                     <div className="relative">
-                      <PropertyVisual type={bien.type} format="card" scrim arrondi={false} className="w-full" />
+                      <PhotoPrincipale
+                        type={bien.type}
+                        photoPrincipaleId={bien.photoPrincipaleId}
+                        format="card"
+                        scrim
+                        arrondi={false}
+                        className="w-full"
+                      />
                       {/* Un seul badge sur le média : le statut commercial. La référence redevient
                           une métadonnée, en pied de card. */}
                       <span className="absolute left-2.5 top-2.5">
@@ -191,7 +198,12 @@ export default async function BiensPage({ searchParams }: PageProps) {
                 <Link key={bien.id} href={`/biens/${bien.id}`}>
                   <Card variant="interactive">
                     <div className="flex items-center gap-3.5 p-3">
-                      <PropertyVisual type={bien.type} format="thumb" className="w-20 h-20 shrink-0" />
+                      <PhotoPrincipale
+                        type={bien.type}
+                        photoPrincipaleId={bien.photoPrincipaleId}
+                        format="thumb"
+                        className="w-20 h-20 shrink-0"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
                         <p className="text-[13px] text-text-2 truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>

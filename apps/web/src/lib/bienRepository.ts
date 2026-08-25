@@ -1,11 +1,22 @@
-import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { biens as biensTable } from "@/db/schema";
 import { biens as biensDemo, getBienById as getBienDemoById } from "@/data/biens";
 import type { Bien, TypeBien, StatutMandat, Exterieur, ChargeHonoraires } from "@/types/bien";
 import type { PageResultat } from "@/types/pagination";
+import { photoPrincipaleIdSubquery } from "./photoBienRepository";
 
 type LigneBien = typeof biensTable.$inferSelect;
+
+// Étend Bien d'un unique champ optionnel, additif — jamais posé sur Bien lui-même (ADR-052 : pas
+// de photoUrl, pas de couplage du type métier de base à la galerie photo). Seuls listerBiens() et
+// rechercherBiensPage() le renseignent (§16) : les repères chiffrés/`getBienById`/toutes les
+// mutations continuent de manipuler `Bien` tel quel, sans changement.
+export type BienAvecPhotoPrincipale = Bien & { photoPrincipaleId?: string };
+
+function ligneVersBienAvecPhoto(ligne: LigneBien & { photoPrincipaleId: string | null }): BienAvecPhotoPrincipale {
+  return { ...ligneVersBien(ligne), photoPrincipaleId: ligne.photoPrincipaleId ?? undefined };
+}
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,10 +65,12 @@ function ligneVersBien(ligne: LigneBien): Bien {
 // biens fictifs. La bascule elle-même compte TOUTES les lignes réelles (archivées comprises) —
 // seul le résultat retourné exclut les archivés (ADR-012) : un catalogue entièrement archivé ne
 // doit jamais retomber sur les mocks.
-export async function listerBiens(): Promise<Bien[]> {
+export async function listerBiens(): Promise<BienAvecPhotoPrincipale[]> {
   try {
-    const lignes = await getDb().select().from(biensTable);
-    if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersBien);
+    const lignes = await getDb()
+      .select({ ...getTableColumns(biensTable), photoPrincipaleId: photoPrincipaleIdSubquery })
+      .from(biensTable);
+    if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersBienAvecPhoto);
   } catch (erreur) {
     console.error("[biens] lecture Postgres indisponible :", erreur);
     if (estProduction()) throw erreur;
@@ -101,7 +114,7 @@ export async function rechercherBiensPage(params: {
   archives: boolean;
   page: number;
   parPage: number;
-}): Promise<PageResultat<Bien>> {
+}): Promise<PageResultat<BienAvecPhotoPrincipale>> {
   const texte = params.q?.trim();
   const conditionArchive = params.archives ? isNotNull(biensTable.archiveLe) : isNull(biensTable.archiveLe);
   const conditionTexte: SQL | undefined = texte
@@ -118,7 +131,7 @@ export async function rechercherBiensPage(params: {
 
   const [lignes, [{ total }]] = await Promise.all([
     getDb()
-      .select()
+      .select({ ...getTableColumns(biensTable), photoPrincipaleId: photoPrincipaleIdSubquery })
       .from(biensTable)
       .where(conditions)
       .orderBy(desc(biensTable.creeLe), desc(biensTable.id))
@@ -127,7 +140,7 @@ export async function rechercherBiensPage(params: {
     getDb().select({ total: count() }).from(biensTable).where(conditions),
   ]);
 
-  return { lignes: lignes.map(ligneVersBien), total };
+  return { lignes: lignes.map(ligneVersBienAvecPhoto), total };
 }
 
 // Suit le même état global que listerBiens() : si au moins un bien réel existe, le repli mock

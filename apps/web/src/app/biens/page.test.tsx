@@ -11,6 +11,7 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 const { getDb } = await import("@/db/client");
 const { biens: biensTable } = await import("@/db/schema");
 const { creerBien, archiverBien } = await import("@/lib/bienRepository");
+const { ajouterPhotoBien } = await import("@/lib/photoBienRepository");
 const BiensPage = (await import("./page")).default;
 
 const REFERENCE_PREFIX = "[test réel] ADR048-PAGE-BIEN";
@@ -81,5 +82,46 @@ describe("/biens (ADR-048)", () => {
 
     expect(html).toContain("Biens archivés");
     expect(html).toContain(archive.reference);
+  });
+
+  // ADR-052 — la galerie photo (photos_bien) est cascadée à la suppression du bien via
+  // ON DELETE CASCADE : aucun nettoyage dédié nécessaire dans afterAll ci-dessus.
+  it("bien sans photo → fallback PropertyVisual, jamais une image /api/photos-bien", async () => {
+    const bien = await creerBien(bienTest("SANS-PHOTO"));
+    idsCrees.push(bien.id);
+
+    const element = await BiensPage({ searchParams: Promise.resolve({ q: bien.reference }) });
+    const html = renderToStaticMarkup(element);
+
+    expect(html).toContain(bien.reference);
+    expect(html).not.toContain("/api/photos-bien/");
+    expect(html).toContain("Visuel DOMIORA");
+  });
+
+  it("bien avec photo principale → image réelle /api/photos-bien/<id>, pas de N+1 (une seule requête de liste)", async () => {
+    const bienA = await creerBien(bienTest("AVEC-PHOTO-A"));
+    idsCrees.push(bienA.id);
+    const bienB = await creerBien(bienTest("AVEC-PHOTO-B"));
+    idsCrees.push(bienB.id);
+
+    const photo = await ajouterPhotoBien({
+      bienId: bienA.id,
+      cleStockage: "cle-test-page-photo",
+      nomFichierOriginal: "photo.jpg",
+      typeMimeOriginal: "image/jpeg",
+      tailleOctetsOriginal: 1024,
+      hashSha256: "hash-test-page",
+    });
+
+    // rechercherBiensPage() elle-même récupère photoPrincipaleId dans SA requête de liste (une
+    // sous-requête corrélée SQL, pas un aller-retour JS par bien) — la page ne fait ensuite plus
+    // aucun accès DB par card, vérifié ici indirectement par le contenu rendu pour les deux biens.
+    const element = await BiensPage({
+      searchParams: Promise.resolve({ q: `${REFERENCE_PREFIX}-AVEC-PHOTO` }),
+    });
+    const html = renderToStaticMarkup(element);
+
+    expect(html).toContain(`/api/photos-bien/${photo.id}`);
+    expect(html).toContain(bienB.reference); // bienB sans photo reste listé, fallback DOMIORA
   });
 });
