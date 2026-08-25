@@ -20,17 +20,23 @@ export default function Sidebar() {
       </div>
 
       {/* Zone photographique de marque — tiers inférieur, bord à bord (jamais une card collée),
-          fondue dans le navy environnant. Hauteur dérivée de l'espace réellement disponible
-          (100vh moins l'encombrement fixe mesuré du header + nav + bloc conseiller, ~562px, plus
-          une marge de sécurité de 32px) plutôt qu'un simple seuil binaire visible/masqué : la
-          photo se réduit en continu avec la hauteur d'écran et ne disparaît que si l'espace
-          restant tombe à 0, jamais avant que ce soit réellement nécessaire.
+          fondue dans le navy environnant. Hauteur en `vh` bornée par un clamp, PAS un
+          `calc(100vh - Npx)` : ce calcul exigeait par construction la hauteur du contenu de la
+          nav NON scrollée (header ~89px + 7 items de nav ~392px + bloc conseiller ~81px, mesurés
+          sur le layout réel ci-dessous) avant d'accorder le moindre pixel à la photo — la
+          faisant disparaître dès qu'un viewport de navigateur réel (chrome inclus) descend sous
+          ~594px de haut, alors que la nav porte déjà `flex-1 min-h-0 overflow-y-auto` précisément
+          pour absorber ce cas par un scroll interne. Le minimum (140px / 150px lg) reste
+          délibérément au-dessus des deux fondus haut/bas (`h-14`+`h-10` = 96px) qui se
+          chevaucheraient sinon ; le maximum (256px / 288px lg, inchangé) plafonne sur les très
+          grands écrans. Priorité UX : logo > nav (scrollable si nécessaire) > photo (toujours
+          visible, taille minimale garantie) > bloc conseiller.
           Placeholder généré (SVG) en couche de base, TOUJOURS présent ; la photo de marque
           (public/brand/sidebar-night-house.webp) est superposée en `background-image` CSS — tant
           que le fichier n'existe pas, un `background-image` échoue silencieusement (aucune icône
           cassée, contrairement à une balise <img>) et le placeholder reste visible tel quel.
           Aucun JS nécessaire : l'image s'active automatiquement dès que le fichier est déposé. */}
-      <div className="hidden md:block relative h-[clamp(0px,calc(100vh_-_594px),256px)] lg:h-[clamp(0px,calc(100vh_-_594px),288px)] overflow-hidden shrink-0">
+      <div className="hidden md:block relative h-[clamp(140px,22vh,256px)] lg:h-[clamp(150px,22vh,288px)] overflow-hidden shrink-0">
         <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 w-full h-full">
           <defs>
             <linearGradient id="sbv-bg" x1="0" y1="0" x2="1" y2="1">
