@@ -60,10 +60,14 @@ export default function BienStatutAction({
       );
     }
     if (!bien.compromisSigneLe) {
+      // Poids visuel réduit (ghost, au lieu de secondary) quand ce n'est pas l'action primaire —
+      // polish hiérarchie visuelle : ne rivalise plus avec l'action de jalon vraiment prioritaire
+      // (ex. "Retirer l'offre") affichée à côté. Mêmes conditions/ordre qu'avant, action toujours
+      // présente et cliquable, jamais masquée.
       actionsJalon.push(
         <form key="marquer-compromis" action={marquerCompromisSigneAction}>
           <input type="hidden" name="id" value={bien.id} />
-          <Button type="submit" variant={actionsJalon.length === 0 ? "primary" : "secondary"} size="sm">
+          <Button type="submit" variant={actionsJalon.length === 0 ? "primary" : "ghost"} size="sm">
             Marquer compromis signé
           </Button>
         </form>

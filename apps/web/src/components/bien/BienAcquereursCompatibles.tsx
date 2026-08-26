@@ -84,7 +84,10 @@ export default function BienAcquereursCompatibles({
 
   return (
     <div className="bg-surface border-t-2 border-t-champagne border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-4 md:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3.5">
+      {/* mb-3 (au lieu de mb-3.5) — polish densité : réduit légèrement la carte quand l'état vide
+          ci-dessous ne tient qu'en une ligne, sans toucher au contenu affiché ni à l'accès aux
+          incompatibles masqués. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <p className="text-[15px] font-semibold text-text-1">Acquéreurs compatibles</p>
         <div className="flex items-center gap-1.5">
           {nbCompatibles > 0 && <Badge variant="success">{nbCompatibles} compatible{nbCompatibles > 1 ? "s" : ""}</Badge>}

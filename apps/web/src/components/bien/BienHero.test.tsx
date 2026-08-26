@@ -38,7 +38,7 @@ describe("BienHero", () => {
     expect(html).not.toContain("cle_stockage");
   });
 
-  it("bascule sur le fallback de marque (PropertyVisual) quand aucune photo n'existe", () => {
+  it("bascule sur le fallback de marque (PropertyVisual) quand aucune photo n'existe, avec le CTA Ajouter des photos", () => {
     const html = renderToStaticMarkup(
       <BienHero
         bien={bienTest()}
@@ -50,9 +50,11 @@ describe("BienHero", () => {
     );
     expect(html).not.toContain("/api/photos-bien/");
     expect(html).toContain("Visuel DOMIORA");
+    expect(html).toContain("Ajouter des photos");
+    expect(html).not.toContain("Gérer les photos");
   });
 
-  it("affiche le lien Gérer les photos pour un bien réel (id UUID)", () => {
+  it("affiche le lien Ajouter des photos pour un bien réel sans photo (id UUID), vers la page de gestion existante", () => {
     const html = renderToStaticMarkup(
       <BienHero
         bien={bienTest()}
@@ -62,11 +64,27 @@ describe("BienHero", () => {
         statutCommercialVariant="default"
       />
     );
-    expect(html).toContain("Gérer les photos");
+    expect(html).toContain("Ajouter des photos");
     expect(html).toContain('href="/biens/550e8400-e29b-41d4-a716-446655440000/photos"');
   });
 
-  it("masque le lien Gérer les photos pour un bien mocké (id non-UUID)", () => {
+  it("affiche le lien Gérer les photos (jamais Visuel DOMIORA) dès qu'une vraie photo principale existe", () => {
+    const html = renderToStaticMarkup(
+      <BienHero
+        bien={bienTest()}
+        photoPrincipaleId="photo-1"
+        nombrePhotos={1}
+        statutCommercialLabel="En commercialisation"
+        statutCommercialVariant="default"
+      />
+    );
+    expect(html).toContain("Gérer les photos");
+    expect(html).not.toContain("Ajouter des photos");
+    expect(html).not.toContain("Visuel DOMIORA");
+    expect(html).toContain('href="/biens/550e8400-e29b-41d4-a716-446655440000/photos"');
+  });
+
+  it("masque tout lien de gestion des photos pour un bien mocké (id non-UUID)", () => {
     const html = renderToStaticMarkup(
       <BienHero
         bien={bienTest({ id: "bien-001" })}
@@ -77,6 +95,7 @@ describe("BienHero", () => {
       />
     );
     expect(html).not.toContain("Gérer les photos");
+    expect(html).not.toContain("Ajouter des photos");
   });
 
   it("n'affiche le compteur de photos que s'il y a plus d'une photo", () => {

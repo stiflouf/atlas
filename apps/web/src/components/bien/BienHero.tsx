@@ -37,6 +37,10 @@ export default function BienHero({
   statutCommercialVariant: "default" | "accent" | "success";
 }) {
   const bienReel = UUID_REGEX.test(bien.id);
+  // Signal direct "y a-t-il une vraie photo principale ?" — même source que PhotoPrincipale
+  // ci-dessous (jamais nombrePhotos, qui ne sert qu'au compteur de galerie). Pilote uniquement le
+  // libellé et la position du CTA ci-dessous, jamais une seconde logique de fallback (ADR-052).
+  const aPhoto = Boolean(photoPrincipaleId);
 
   return (
     <div className="relative w-full h-56 md:h-[280px]">
@@ -49,10 +53,14 @@ export default function BienHero({
       {bienReel && (
         <Link
           href={`/biens/${bien.id}/photos`}
-          className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-white/[0.16] backdrop-blur-sm border border-white/35 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/[0.26] transition-colors"
+          // Décalé vers le bas quand il n'y a aucune photo (top-11 au lieu de top-3) : sans photo,
+          // PropertyVisual affiche son propre repère "Visuel DOMIORA" au même coin (right-2 top-2,
+          // voir PropertyVisual.tsx) — sans ce décalage les deux se superposent et le repère devient
+          // illisible, exactement l'ambiguïté "photo réelle ?" que ce repère doit lever.
+          className={`absolute right-3 ${aPhoto ? "top-3" : "top-11"} inline-flex items-center gap-1.5 rounded-full bg-white/[0.16] backdrop-blur-sm border border-white/35 px-3 py-1.5 text-[12px] font-medium text-white hover:bg-white/[0.26] transition-colors`}
         >
           <Camera size={14} />
-          Gérer les photos
+          {aPhoto ? "Gérer les photos" : "Ajouter des photos"}
         </Link>
       )}
 

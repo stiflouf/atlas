@@ -147,7 +147,10 @@ export default async function FicheBien({ params }: PageProps) {
           statutCommercialLabel={statutAffiche}
           statutCommercialVariant={statutAfficheVariant}
         />
-        {bien.titre && <p className="text-[13px] text-text-2 mt-2">{bien.titre}</p>}
+        {/* bien.titre volontairement non ré-affiché ici (polish visuel) — le Hero porte déjà
+            type/pièces et la bande Repères juste en dessous porte déjà surface/pièces : une
+            troisième restitution de la même information entre les deux n'apportait rien. La
+            valeur réelle du champ n'est pas supprimée du modèle, seulement de cet emplacement. */}
       </div>
 
       {/* Filmstrip galerie (design validé Claude Design, artifact ec9f41b8) — 0 ou 1 photo : aucun
@@ -160,8 +163,11 @@ export default async function FicheBien({ params }: PageProps) {
       )}
 
       {/* Repères — uniquement les attributs réellement renseignés sur le Bien, jamais une valeur
-          inventée pour compléter la grille. */}
-      <div className="bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] px-4 py-3.5 md:px-5 mb-4">
+          inventée pour compléter la grille. `inline-flex` (au lieu d'un bloc pleine largeur) :
+          la carte doit se contracter à son contenu réel (parfois seulement 2 tuiles) plutôt que
+          laisser une bande blanche disproportionnée sur un Bien peu renseigné, tout en restant
+          capable de s'élargir naturellement dès que plus de champs/caractéristiques existent. */}
+      <div className="inline-flex flex-col max-w-full bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] px-4 py-3.5 md:px-5 mb-4">
         <div className="flex flex-wrap gap-x-8 gap-y-3">
           <StatTile icon={Ruler} valeur={`${bien.surface} m²`} libelle="Surface" />
           <StatTile icon={DoorOpen} valeur={bien.pieces} libelle="Pièces" />
