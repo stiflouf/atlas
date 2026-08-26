@@ -13,6 +13,12 @@ export const LABEL_CHARGE_HONORAIRES: Record<ChargeHonoraires, string> = {
   acquereur: "Acquéreur",
 };
 
+export const LABEL_STATUT_MANDAT: Record<StatutMandat, string> = {
+  actif: "Actif",
+  suspendu: "Suspendu",
+  expire: "Expiré",
+};
+
 export type Bien = {
   id: string;
   reference: string;

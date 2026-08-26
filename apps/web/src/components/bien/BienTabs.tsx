@@ -8,11 +8,6 @@ import Button from "@/components/ui/Button";
 import IconTile from "@/components/ui/IconTile";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
-import {
-  LABEL_STATUT_COMPATIBILITE,
-  LABEL_STATUT_CRITERE,
-  type ResultatCompatibilite,
-} from "@/lib/compatibilite/types";
 import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, deriverStatutTache, type Tache } from "@/types/tache";
 import type { NoteBien } from "@/types/noteBien";
 import type { ProfilAcquereur } from "@/types/client";
@@ -129,21 +124,7 @@ type Tab =
   | "documents"
   | "offres"
   | "compromis"
-  | "taches"
-  | "compatibilite";
-
-const VARIANT_PAR_STATUT_COMPATIBILITE = {
-  compatible: "success",
-  incompatible: "danger",
-  a_verifier: "default",
-} as const;
-
-const VARIANT_PAR_STATUT_CRITERE = {
-  compatible: "success",
-  incompatible: "danger",
-  a_verifier: "default",
-  non_concerne: "muted",
-} as const;
+  | "taches";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -168,7 +149,6 @@ export default function BienTabs({
   prospectVendeurOrigine,
   checklist,
   labelRegleAutomatisation,
-  compatibilites = [],
 }: {
   bien: Bien;
   dossier?: DossierBien;
@@ -192,9 +172,6 @@ export default function BienTabs({
   prospectVendeurOrigine?: ProspectVendeur;
   checklist?: ChecklistDossier;
   labelRegleAutomatisation: Record<CodeRegleAutomatisation, string>;
-  // ADR-034 : résultats déjà calculés côté serveur (evaluerCompatibiliteBien) — BienTabs ne fait
-  // jamais lui-même appel au moteur, il affiche uniquement.
-  compatibilites?: ResultatCompatibilite[];
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
@@ -244,17 +221,6 @@ export default function BienTabs({
     remunerationParCompromis.set(r.compromisId, r);
   }
 
-  // Même population que celle sur laquelle evaluerCompatibiliteBien() a itéré côté serveur
-  // (listerClients()) — reconstruit ici uniquement pour résoudre le nom affiché, jamais pour
-  // recalculer la compatibilité elle-même.
-  const acquereursCompatibiliteParId = new Map(acquereursActifs.map((a) => [a.id, a]));
-  // Compatible en premier (candidats les plus actionnables), incompatible en dernier — jamais un
-  // score, uniquement un ordre d'affichage sur le statut discret.
-  const ORDRE_STATUT_COMPATIBILITE = { compatible: 0, a_verifier: 1, incompatible: 2 } as const;
-  const compatibilitesTriees = [...compatibilites].sort(
-    (a, b) => ORDRE_STATUT_COMPATIBILITE[a.statutGlobal] - ORDRE_STATUT_COMPATIBILITE[b.statutGlobal]
-  );
-
   // Contexte, Tâches, Notes, Visites et Documents reposent tous sur des données réelles (bien,
   // tacheRepository, noteBienRepository, compteRenduVisiteRepository, documentBienRepository),
   // toujours disponibles — Notes, Visites et Documents restent affichés même vides, c'est
@@ -276,7 +242,8 @@ export default function BienTabs({
     ...(!dossier ? ([{ id: "offres", label: "Offres" }] as const) : []),
     ...(!dossier ? ([{ id: "compromis", label: "Compromis" }] as const) : []),
     { id: "taches", label: "Tâches" },
-    { id: "compatibilite", label: "Acquéreurs compatibles" },
+    // "Acquéreurs compatibles" n'est plus un onglet (design validé Claude Design, artifact
+    // 7615625f) — promu au-dessus des onglets dans page.tsx, voir BienAcquereursCompatibles.
   ];
 
   // Mock uniquement pour un bien mocké (dossier) — un bien réel n'a jamais de visite persistée
@@ -1481,49 +1448,6 @@ export default function BienTabs({
         </div>
       )}
 
-      {/* ADR-034 — moteur canonique et déterministe, déjà calculé côté serveur. Jamais de score,
-          jamais "a_verifier" présenté comme une incompatibilité : chaque critère non_concerne est
-          simplement absent du détail plutôt que listé comme neutre. */}
-      {active === "compatibilite" && (
-        <div className="flex flex-col gap-2">
-          {compatibilitesTriees.length === 0 ? (
-            <p className="text-[14px] text-text-3">Aucun acquéreur à comparer pour l'instant.</p>
-          ) : (
-            compatibilitesTriees.map((resultat) => {
-              const acquereur = acquereursCompatibiliteParId.get(resultat.acquereurId);
-              const criteresPertinents = resultat.criteres.filter((c) => c.statut !== "non_concerne");
-              return (
-                <details key={resultat.acquereurId} className="bg-surface rounded-lg border border-border p-4">
-                  <summary className="cursor-pointer flex items-center justify-between gap-3 list-none">
-                    <span className="text-[14px] font-medium text-text-1">
-                      {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
-                    </span>
-                    <Badge variant={VARIANT_PAR_STATUT_COMPATIBILITE[resultat.statutGlobal]}>
-                      {LABEL_STATUT_COMPATIBILITE[resultat.statutGlobal]}
-                    </Badge>
-                  </summary>
-                  <div className="mt-3 pt-3 border-t border-border flex flex-col gap-2">
-                    {criteresPertinents.length === 0 ? (
-                      <p className="text-[13px] text-text-3">
-                        Aucune exigence structurée déclarée par cet acquéreur pour ce bien.
-                      </p>
-                    ) : (
-                      criteresPertinents.map((critere) => (
-                        <div key={critere.critere} className="flex items-start gap-2">
-                          <Badge variant={VARIANT_PAR_STATUT_CRITERE[critere.statut]}>
-                            {LABEL_STATUT_CRITERE[critere.statut]}
-                          </Badge>
-                          <p className="text-[13px] text-text-2 leading-snug">{critere.explication}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </details>
-              );
-            })
-          )}
-        </div>
-      )}
     </div>
   );
 }

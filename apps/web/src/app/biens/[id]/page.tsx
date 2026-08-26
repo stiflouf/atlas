@@ -2,12 +2,15 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Ruler, DoorOpen, Building, TreePine, Car } from "lucide-react";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
-import PhotoPrincipale from "@/components/bien/PhotoPrincipale";
 import StatTile from "@/components/ui/StatTile";
+import BienHero from "@/components/bien/BienHero";
+import BienGaleriePhotos from "@/components/bien/BienGaleriePhotos";
+import BienStatutAction from "@/components/bien/BienStatutAction";
+import BienVendeurMandat from "@/components/bien/BienVendeurMandat";
+import BienAcquereursCompatibles from "@/components/bien/BienAcquereursCompatibles";
 import BienTabs from "@/components/bien/BienTabs";
 import { getBienById } from "@/lib/bienRepository";
-import { getPhotoPrincipaleBien } from "@/lib/photoBienRepository";
+import { getPhotoPrincipaleBien, listerPhotosBien } from "@/lib/photoBienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
 import { getTachesPourBien } from "@/lib/tacheRepository";
@@ -26,20 +29,7 @@ import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegle
 import { calculerChecklistDossier } from "@/lib/documents/checklistDossier";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { rendezVousDuJour } from "@/data/agenda";
-import { archiverBienAction, desarchiverBienAction } from "@/actions/archivageBien";
-import {
-  annulerCompromisAction,
-  marquerCompromisSigneAction,
-  marquerOffreEnCoursAction,
-  retirerOffreAction,
-} from "@/actions/statutCommercialBien";
 import { deriverStatutCommercial, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function formatPrix(prix: number): string {
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
-}
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -66,6 +56,10 @@ export default async function FicheBien({ params }: PageProps) {
   if (!bien) notFound();
 
   const photoPrincipale = await getPhotoPrincipaleBien(bien.id);
+  // Compteur affiché dans le hero + filmstrip galerie (design validé Claude Design, artifact
+  // ec9f41b8) — jamais cle_stockage exposé : seuls les id (déjà dans l'ordre déterministe ADR-052,
+  // ordre ASC/cree_le ASC/id ASC) traversent la frontière vers BienGaleriePhotos.
+  const photosBien = await listerPhotosBien(bien.id);
   const dossier = getDossierByBienId(bien.id);
   const taches = await getTachesPourBien(bien.id);
   const notes = await listerNotesPourBien(bien.id);
@@ -113,6 +107,24 @@ export default async function FicheBien({ params }: PageProps) {
     year: "numeric",
   });
 
+  // Statut affiché dans le hero et le bandeau statut/action — mock (dossier) si présent, sinon
+  // dérivé des jalons réels (statutCommercial, ADR-014), exactement comme avant ce chantier.
+  const { label: statutAffiche, variant: statutAfficheVariant } = dossier
+    ? statutConfig[dossier.statut]
+    : { label: LABEL_STATUT_COMMERCIAL[statutCommercial], variant: variantStatutCommercial[statutCommercial] };
+
+  const statutLabelNode = (
+    <>
+      <Badge variant={statutAfficheVariant}>{statutAffiche}</Badge>
+      {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
+    </>
+  );
+
+  // Dérivé de la tâche prioritaire réelle (tachePriority.ts, inchangé) — vide pour un bien mocké
+  // (getTachesPourBien ne retourne rien pour un id non-UUID), pas une régression de ce chantier.
+  const raisonTacheTexte = tachePrincipale ? raisonTache(tachePrincipale) : undefined;
+  const prochaineVisiteHref = prochaineVisite ? `/visites/${prochaineVisite.id}/preparer` : undefined;
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       {/* Retour */}
@@ -124,43 +136,33 @@ export default async function FicheBien({ params }: PageProps) {
         Biens
       </Link>
 
-      {/* En-tête du bien — véritable hero immobilier (chantier fidélité visuelle) : média pleine
-          largeur, puis informations principales et tuiles métadonnées, plus un header horizontal
-          administratif. Layout unique partagé desktop/mobile. */}
-      <div className="mb-8">
-        <div className="relative w-full h-56 md:h-80 mb-5">
-          <PhotoPrincipale
-            type={bien.type}
-            photoPrincipaleId={photoPrincipale?.id}
-            format="hero"
-            className="w-full h-full"
-          />
-          {UUID_REGEX.test(bien.id) && (
-            <Link
-              href={`/biens/${bien.id}/photos`}
-              className="absolute right-2.5 top-2.5 inline-flex items-center gap-1.5 rounded-full bg-[#030a1c]/[0.74] px-2.5 py-1 text-[11px] font-medium text-white hover:bg-[#030a1c]/[0.9] transition-colors"
-            >
-              Gérer les photos
-            </Link>
-          )}
-        </div>
+      {/* Hero — design validé Claude Design (artifact 7615625f) : photo réelle prioritaire (ADR-052,
+          via photoPrincipaleId/PhotoPrincipale, jamais de seconde logique de galerie), statut et
+          prix en overlay, cohérent avec le traitement déjà validé sur la Liste Biens. */}
+      <div className="mb-6">
+        <BienHero
+          bien={bien}
+          photoPrincipaleId={photoPrincipale?.id}
+          nombrePhotos={photosBien.length}
+          statutCommercialLabel={statutAffiche}
+          statutCommercialVariant={statutAfficheVariant}
+        />
+        {bien.titre && <p className="text-[13px] text-text-2 mt-2">{bien.titre}</p>}
+      </div>
 
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <Badge variant="accent">{bien.reference}</Badge>
-          <Badge variant="default">Mandat depuis le {dateMandat}</Badge>
-          {bien.archiveLe && <Badge variant="muted">Archivé le {formatDate(bien.archiveLe)}</Badge>}
+      {/* Filmstrip galerie (design validé Claude Design, artifact ec9f41b8) — 0 ou 1 photo : aucun
+          filmstrip, jamais un faux état de galerie. Pas de lightbox dans ce chantier (hors
+          périmètre) : voir BienGaleriePhotos, chaque vignette renvoie vers la gestion des photos. */}
+      {photosBien.length > 1 && (
+        <div className="mb-4">
+          <BienGaleriePhotos bienId={bien.id} photoIds={photosBien.map((photo) => photo.id)} />
         </div>
-        <h1 className="font-serif text-[24px] md:text-[30px] font-semibold text-text-1 leading-tight">
-          {bien.titre}
-        </h1>
-        <p className="text-[14px] text-text-2 mt-1">
-          {bien.adresse}, {bien.codePostal} {bien.ville}
-        </p>
-        <p className="text-[24px] md:text-[28px] font-semibold text-text-1 mt-3">{formatPrix(bien.prix)}</p>
+      )}
 
-        {/* Tuiles métadonnées — uniquement les attributs réellement renseignés sur le Bien, jamais
-            une valeur inventée pour compléter la grille. */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 mt-4 max-w-2xl">
+      {/* Repères — uniquement les attributs réellement renseignés sur le Bien, jamais une valeur
+          inventée pour compléter la grille. */}
+      <div className="bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] px-4 py-3.5 md:px-5 mb-4">
+        <div className="flex flex-wrap gap-x-8 gap-y-3">
           <StatTile icon={Ruler} valeur={`${bien.surface} m²`} libelle="Surface" />
           <StatTile icon={DoorOpen} valeur={bien.pieces} libelle="Pièces" />
           {bien.etage != null && <StatTile icon={Building} valeur={bien.etage} libelle="Étage" />}
@@ -173,114 +175,57 @@ export default async function FicheBien({ params }: PageProps) {
           )}
           {bien.parking && <StatTile icon={Car} valeur="Oui" libelle="Parking" />}
         </div>
-
-        {/* État du dossier — visible immédiatement. Mock inchangé si dossier existe ; sinon dérivé
-            des jalons réels offreEnCoursLe/compromisSigneLe (ADR-014), sans "dernière activité"
-            (aucune donnée équivalente réelle pour l'instant). */}
-        {dossier ? (
-          <div className="mt-4 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={statutConfig[dossier.statut].variant}>
-                {statutConfig[dossier.statut].label}
-              </Badge>
-              <span className="text-[12px] text-text-3">
-                Dernière activité le {formatDate(dossier.derniereActivite)}
-              </span>
+        {/* Caractéristiques (design validé Claude Design, artifact ec9f41b8) — extrait de
+            bien.caracteristiques (déjà chargé, jusque-là visible seulement dans l'onglet Contexte,
+            inchangé). Plafonné à 3 pour rester une bande de repères, jamais un remplacement : la
+            liste complète reste dans l'onglet Contexte. Jamais affiché si le tableau est vide.
+            Libellé volontairement distinct de « Points forts » : ce terme désigne déjà, ailleurs
+            dans le produit (src/lib/pointsForts/moteur.ts, page Préparer une visite), un bonus
+            Bien × Acquéreur relatif aux critères d'un acquéreur précis — un concept différent de
+            cette liste de caractéristiques brutes du bien, jamais réutilisé ici pour ne pas créer
+            d'ambiguïté entre les deux. */}
+        {bien.caracteristiques.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap border-t border-border mt-3.5 pt-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-text-3 shrink-0">
+              Caractéristiques
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {bien.caracteristiques.slice(0, 3).map((caracteristique) => (
+                <span
+                  key={caracteristique}
+                  className="text-[12px] text-text-2 bg-surface-muted border border-border rounded-full px-2.5 py-1"
+                >
+                  {caracteristique}
+                </span>
+              ))}
             </div>
-            {tachePrincipale && (
-              <p className="text-[14px] text-text-1 leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
-            )}
-          </div>
-        ) : (
-          <div className="mt-4 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={variantStatutCommercial[statutCommercial]}>
-                {LABEL_STATUT_COMMERCIAL[statutCommercial]}
-              </Badge>
-            </div>
-            {tachePrincipale && (
-              <p className="text-[14px] text-text-1 leading-snug mt-2">{raisonTache(tachePrincipale)}</p>
-            )}
-            {UUID_REGEX.test(bien.id) && !bien.archiveLe && (
-              <div className="flex flex-wrap gap-3 mt-3">
-                {!bien.offreEnCoursLe && (
-                  <form action={marquerOffreEnCoursAction}>
-                    <input type="hidden" name="id" value={bien.id} />
-                    <Button type="submit" variant="primary" size="sm">
-                      Marquer une offre en cours
-                    </Button>
-                  </form>
-                )}
-                {bien.offreEnCoursLe && !bien.compromisSigneLe && (
-                  <form action={retirerOffreAction}>
-                    <input type="hidden" name="id" value={bien.id} />
-                    <Button type="submit" variant="danger" size="sm">
-                      Retirer l'offre
-                    </Button>
-                  </form>
-                )}
-                {!bien.compromisSigneLe && (
-                  <form action={marquerCompromisSigneAction}>
-                    <input type="hidden" name="id" value={bien.id} />
-                    <Button type="submit" variant="secondary" size="sm">
-                      Marquer compromis signé
-                    </Button>
-                  </form>
-                )}
-                {bien.compromisSigneLe && (
-                  <form action={annulerCompromisAction}>
-                    <input type="hidden" name="id" value={bien.id} />
-                    <Button type="submit" variant="danger" size="sm">
-                      Annuler le compromis
-                    </Button>
-                  </form>
-                )}
-              </div>
-            )}
           </div>
         )}
+      </div>
 
-        <div className="flex flex-wrap gap-3 mt-4">
-          {prochaineVisite && (
-            <Link
-              href={`/visites/${prochaineVisite.id}/preparer`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
-            >
-              Préparer une visite →
-            </Link>
-          )}
-          {!bien.archiveLe && (
-            <Link
-              href={`/taches/nouveau?bienId=${bien.id}`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg"
-            >
-              + Ajouter une tâche
-            </Link>
-          )}
-          {UUID_REGEX.test(bien.id) && (
-            <>
-              <Link
-                href={`/biens/${bien.id}/modifier`}
-                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg"
-              >
-                Modifier
-              </Link>
-              <form action={bien.archiveLe ? desarchiverBienAction : archiverBienAction}>
-                <input type="hidden" name="id" value={bien.id} />
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 text-[13px] font-medium text-text-2 bg-surface border border-border-md hover:border-danger hover:text-danger transition-colors px-3.5 py-2 rounded-lg"
-                >
-                  {bien.archiveLe ? "Désarchiver" : "Archiver"}
-                </button>
-              </form>
-            </>
-          )}
-        </div>
+      <div className="mb-4">
+        <BienStatutAction
+          bien={bien}
+          statutLabel={statutLabelNode}
+          raisonTacheTexte={raisonTacheTexte}
+          dateMandatFormatee={dateMandat}
+          prochaineVisiteHref={prochaineVisiteHref}
+        />
+      </div>
+
+      <div className="mb-4">
+        <BienVendeurMandat bien={bien} prospectVendeurOrigine={prospectVendeurOrigine} />
+      </div>
+
+      <div className="mb-8">
+        <BienAcquereursCompatibles compatibilites={compatibilites} acquereursActifs={acquereursActifs} />
       </div>
 
       {/* Onglets — Contexte, Notes, Visites, Documents et Tâches sont tous réels (voir BienTabs,
-          aucun DossierBien artificiel fabriqué ici). */}
+          aucun DossierBien artificiel fabriqué ici). Structure de navigation de BienTabs inchangée
+          dans ce chantier (canvas ec9f41b8) : Contexte reste le premier onglet, aucun regroupement/
+          renommage — la consolidation en ancres explorée séparément est hors périmètre ici.
+          Acquéreurs compatibles n'est plus un onglet, voir BienAcquereursCompatibles ci-dessus. */}
       <BienTabs
         bien={bien}
         dossier={dossier}
@@ -300,7 +245,6 @@ export default async function FicheBien({ params }: PageProps) {
         prospectVendeurOrigine={prospectVendeurOrigine}
         checklist={checklist}
         labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
-        compatibilites={compatibilites}
       />
     </div>
   );

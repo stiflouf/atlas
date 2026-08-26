@@ -43,10 +43,12 @@ function dossierTest(): DossierBien {
   };
 }
 
-const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Tâches", "Acquéreurs compatibles"];
+// "Acquéreurs compatibles" n'est plus un onglet de BienTabs (design validé Claude Design, artifact
+// 7615625f) — promu au-dessus des onglets dans page.tsx, voir BienAcquereursCompatibles.test.tsx.
+const TOUS_LES_ONGLETS = ["Contexte", "Historique", "Notes", "Visites", "Documents", "Tâches"];
 
 describe("BienTabs", () => {
-  it("n'affiche que Contexte, Notes, Visites, Documents, Offres, Compromis, Tâches et Acquéreurs compatibles pour un bien réel sans dossier", () => {
+  it("n'affiche que Contexte, Notes, Visites, Documents, Offres, Compromis et Tâches pour un bien réel sans dossier (Acquéreurs compatibles n'est plus un onglet)", () => {
     const html = renderToStaticMarkup(
       <BienTabs
         bien={bienTest()}
@@ -67,7 +69,7 @@ describe("BienTabs", () => {
     expect(html).toContain("Offres");
     expect(html).toContain("Compromis");
     expect(html).toContain("Tâches");
-    expect(html).toContain("Acquéreurs compatibles");
+    expect(html).not.toContain("Acquéreurs compatibles");
     expect(html).not.toContain("Historique");
   });
 
