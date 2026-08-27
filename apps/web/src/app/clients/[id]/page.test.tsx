@@ -14,7 +14,14 @@ const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
 const { ajouterSecteurRecherche } = await import("@/lib/secteurRechercheRepository");
 const { materialiserVisite, marquerVisiteRealisee } = await import("@/lib/visiteRepository");
+const { creerTache, terminerTache, getTacheById } = await import("@/lib/tacheRepository");
 const FicheClient = (await import("./page")).default;
+
+// Toutes les pages de ce fichier n'utilisent pas tacheTerminee : ce helper évite de le répéter à
+// chaque appel existant.
+function rendreFiche(id: string, tacheTerminee?: string) {
+  return FicheClient({ params: Promise.resolve({ id }), searchParams: Promise.resolve({ tacheTerminee }) });
+}
 
 const REFERENCE_PREFIX = "[test réel] FICHE-ACQUEREUR";
 const idsBiensCrees: string[] = [];
@@ -69,7 +76,7 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
   it("brief incomplet et aucun secteur : Hero réel, Non renseigné honnête, conséquence réelle expliquée", async () => {
     const acquereur = await acquereurDeTest("BRIEF-INCOMPLET");
 
-    const element = await FicheClient({ params: Promise.resolve({ id: acquereur.id }) });
+    const element = await rendreFiche(acquereur.id);
     const html = renderToStaticMarkup(element);
 
     expect(html).toContain("Julien");
@@ -110,7 +117,7 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
       codeInseeCommune: "69381",
     });
 
-    const element = await FicheClient({ params: Promise.resolve({ id: acquereur.id }) });
+    const element = await rendreFiche(acquereur.id);
     const html = renderToStaticMarkup(element);
 
     expect(html).toContain(bien.titre);
@@ -134,7 +141,7 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
     });
 
     const avantRealisation = renderToStaticMarkup(
-      await FicheClient({ params: Promise.resolve({ id: acquereur.id }) })
+      await rendreFiche(acquereur.id)
     );
     expect(avantRealisation).toContain(`href="/visites/${visite.id}/preparer"`);
     expect(avantRealisation).toContain(bien.titre);
@@ -142,10 +149,63 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
     await marquerVisiteRealisee(visite.id);
 
     const apresRealisation = renderToStaticMarkup(
-      await FicheClient({ params: Promise.resolve({ id: acquereur.id }) })
+      await rendreFiche(acquereur.id)
     );
     expect(apresRealisation).not.toContain(`href="/visites/${visite.id}/preparer"`);
     expect(apresRealisation).toContain("Réalisée");
     expect(apresRealisation).not.toMatch(/compte[\s-]?rendu/i);
+  });
+});
+
+describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)", () => {
+  it("tâche active : visible dans la liste, aucun encart de confirmation, section terminées absente", async () => {
+    const acquereur = await acquereurDeTest("TACHE-ACTIVE");
+    const tache = await creerTache({
+      titre: "[test réel] Relancer avant vendredi",
+      type: "appel",
+      priorite: "normale",
+      origine: "manuelle",
+      cible: { type: "acquereur", id: acquereur.id },
+    });
+
+    const html = renderToStaticMarkup(await rendreFiche(acquereur.id));
+    expect(html).toContain(tache.titre);
+    expect(html).not.toMatch(/tâche terminée/i);
+    expect(html).not.toMatch(/tâches? terminées? — afficher/i);
+  });
+
+  it("?tacheTerminee=<id> après complétion réelle : encart de confirmation, section terminées ouverte automatiquement, tâche réellement conservée (jamais supprimée)", async () => {
+    const acquereur = await acquereurDeTest("TACHE-TERMINEE");
+    const tache = await creerTache({
+      titre: "[test réel] Envoyer les diagnostics",
+      type: "document",
+      priorite: "normale",
+      origine: "manuelle",
+      cible: { type: "acquereur", id: acquereur.id },
+    });
+    await terminerTache(tache.id);
+
+    const html = renderToStaticMarkup(await rendreFiche(acquereur.id, tache.id));
+
+    // Feedback explicite, jamais un simple silence après disparition de la liste active.
+    expect(html).toContain(`Tâche terminée : « ${tache.titre} »`);
+    // Section repliée ouverte automatiquement (attribut natif <details open>), et la tâche
+    // apparaît bien à l'intérieur de cette section ouverte.
+    const indexDetailsOuvert = html.indexOf('<details class="mt-2" open="">');
+    expect(indexDetailsOuvert).toBeGreaterThan(-1);
+    expect(html.indexOf(tache.titre, indexDetailsOuvert)).toBeGreaterThan(indexDetailsOuvert);
+    // Liste active réellement vide désormais (seule tâche de cet acquéreur, maintenant terminée).
+    expect(html).toContain("Aucune tâche en cours.");
+
+    // Jamais une suppression physique : la tâche existe toujours réellement en base.
+    const tacheEnBase = await getTacheById(tache.id);
+    expect(tacheEnBase).toBeDefined();
+    expect(tacheEnBase?.termineeLe).toBeTruthy();
+  });
+
+  it("id de query param non lié à une vraie tâche terminée de cet acquéreur : aucun encart, jamais une fausse confirmation", async () => {
+    const acquereur = await acquereurDeTest("TACHE-ID-INVALIDE");
+    const html = renderToStaticMarkup(await rendreFiche(acquereur.id, "id-inexistant-ou-etranger"));
+    expect(html).not.toMatch(/tâche terminée/i);
   });
 });

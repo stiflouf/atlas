@@ -29,7 +29,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ tacheTerminee?: string }> };
 
 // Fiche Acquéreur Premium — "le brief d'achat" (design validé). Raconte un projet d'achat : qui
 // (AcquereurHero), où (secteurs), où en est le projet (stade, dans le hero), quels biens
@@ -37,14 +37,21 @@ type PageProps = { params: Promise<{ id: string }> };
 // visites, tâches, offres/compromis) en contexte autour. Pas de bandeau "Prochaine étape" : aucune
 // action contextuelle unique n'est fiable ici sans construire un moteur de recommandation (hors
 // périmètre explicite de ce chantier) — un bandeau absent plutôt qu'une recommandation inventée.
-export default async function FicheClient({ params }: PageProps) {
+export default async function FicheClient({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { tacheTerminee } = await searchParams;
   const client = await getClientById(id);
   if (!client) notFound();
 
   const taches = await getTachesPourAcquereur(client.id);
   const tachesAFaire = taches.filter((t) => deriverStatutTache(t) === "a_faire");
   const tachesTerminees = taches.filter((t) => deriverStatutTache(t) === "terminee");
+  // Feedback de complétion (correctif UX) — jamais un id de requête pris tel quel : ne confirme
+  // que si l'id correspond réellement à une tâche désormais terminée pour CET acquéreur, sinon
+  // ignoré silencieusement (lien obsolète/copié-collé), même garde que le préremplissage de
+  // /taches/nouveau. Sans ce garde-fou, un query param arbitraire pourrait afficher une fausse
+  // confirmation.
+  const tacheTermineeConfirmee = tachesTerminees.find((t) => t.id === tacheTerminee);
 
   const offres = (await listerOffresPourAcquereur(client.id)).sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
   const compromis = (await listerCompromisPourAcquereur(client.id)).sort((a, b) =>
@@ -131,17 +138,34 @@ export default async function FicheClient({ params }: PageProps) {
               <IconTile icon={ListChecks} tone="champagne" size={26} iconSize={13} />
               <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">Tâches</p>
             </div>
+            {/* Feedback de complétion (correctif UX) — sans lui, cocher une tâche la fait
+                disparaître instantanément de cette liste au rechargement de page qui suit
+                terminerTacheAction (redirect serveur), donnant l'impression d'une suppression
+                alors qu'elle est seulement déplacée ci-dessous. Pas de toast/flash message dans
+                DOMIORA aujourd'hui (aucun composant de ce type dans le design system) : ce simple
+                encart inline, porté par le query param déjà validé ci-dessus, reste cohérent avec
+                les patrons déjà en place plutôt que d'en introduire un nouveau. */}
+            {tacheTermineeConfirmee && (
+              <p className="text-[13px] text-success bg-success-light rounded-lg px-3 py-2 mb-2">
+                Tâche terminée : « {tacheTermineeConfirmee.titre} » — déplacée dans les tâches
+                terminées ci-dessous.
+              </p>
+            )}
             {tachesAFaire.length === 0 ? (
               <p className="text-[13px] text-text-3">Aucune tâche en cours.</p>
             ) : (
               <Card className="px-4 divide-y divide-border">
                 {tachesAFaire.map((tache) => (
-                  <TacheItem key={tache.id} tache={tache} redirectTo={`/clients/${client.id}`} />
+                  <TacheItem
+                    key={tache.id}
+                    tache={tache}
+                    redirectTo={`/clients/${client.id}?tacheTerminee=${tache.id}`}
+                  />
                 ))}
               </Card>
             )}
             {tachesTerminees.length > 0 && (
-              <details className="mt-2">
+              <details className="mt-2" open={Boolean(tacheTermineeConfirmee)}>
                 <summary className="text-[12px] text-text-3 hover:text-text-2 cursor-pointer select-none">
                   {tachesTerminees.length} tâche{tachesTerminees.length > 1 ? "s" : ""} terminée
                   {tachesTerminees.length > 1 ? "s" : ""} — afficher
