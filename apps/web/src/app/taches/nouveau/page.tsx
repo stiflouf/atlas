@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { creerTacheAction } from "@/actions/creerTache";
+import CibleTacheSelecteur from "@/components/tache/CibleTacheSelecteur";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
@@ -25,12 +26,31 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
 
   // Préremplissage depuis une fiche (?bienId=/?acquereurId=/?prospectVendeurId=) : uniquement si
   // l'id correspond réellement à une entrée chargée, sinon le select reste sur "Aucun" — pas
-  // d'erreur pour un id obsolète ou mal formé.
-  const bienIdPreselectionne = biens.some((b) => b.id === params.bienId) ? params.bienId : "";
-  const acquereurIdPreselectionne = clients.some((c) => c.id === params.acquereurId) ? params.acquereurId : "";
-  const prospectVendeurIdPreselectionne = prospects.some((p) => p.id === params.prospectVendeurId)
+  // d'erreur pour un id obsolète ou mal formé. Priorité bien > acquéreur > prospect vendeur si
+  // plusieurs paramètres étaient malgré tout présents simultanément dans l'URL (aucun point
+  // d'entrée actuel — BienStatutAction/AcquereurHero — n'en génère qu'un seul à la fois ; garde
+  // défensive uniquement, cohérente avec le garde backend "au plus une cible").
+  const bienIdValide = biens.some((b) => b.id === params.bienId) ? params.bienId : undefined;
+  const acquereurIdValide = clients.some((c) => c.id === params.acquereurId) ? params.acquereurId : undefined;
+  const prospectVendeurIdValide = prospects.some((p) => p.id === params.prospectVendeurId)
     ? params.prospectVendeurId
-    : "";
+    : undefined;
+
+  const bienIdPreselectionne = bienIdValide ?? "";
+  const acquereurIdPreselectionne = !bienIdValide && acquereurIdValide ? acquereurIdValide : "";
+  const prospectVendeurIdPreselectionne =
+    !bienIdValide && !acquereurIdValide && prospectVendeurIdValide ? prospectVendeurIdValide : "";
+
+  // Retour dérivé de la cible réellement préremplie (correctif UX) — jamais un returnUrl
+  // arbitraire pris depuis l'URL : uniquement l'un des trois ids déjà validés ci-dessus contre les
+  // entités réellement chargées. Sans contexte, comportement générique inchangé (retour "/").
+  const redirectTo = bienIdPreselectionne
+    ? `/biens/${bienIdPreselectionne}`
+    : acquereurIdPreselectionne
+      ? `/clients/${acquereurIdPreselectionne}`
+      : prospectVendeurIdPreselectionne
+        ? `/prospects-vendeurs/${prospectVendeurIdPreselectionne}`
+        : "/";
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -89,48 +109,19 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
           <input name="echeance" type="date" className={inputCls} placeholder="Sans échéance" />
         </div>
 
-        <div className="border-t border-border pt-4 mt-2">
-          <p className="text-[12px] text-text-3 mb-3">
-            Une tâche peut être rattachée à un bien, un acquéreur ou un prospect vendeur — une seule
-            cible à la fois — ou à aucun des trois pour une tâche générale.
-          </p>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className={labelCls}>Bien</label>
-              <select name="bienId" defaultValue={bienIdPreselectionne} className={inputCls}>
-                <option value="">Aucun</option>
-                {biens.map((bien) => (
-                  <option key={bien.id} value={bien.id}>
-                    {bien.titre}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Acquéreur</label>
-              <select name="acquereurId" defaultValue={acquereurIdPreselectionne} className={inputCls}>
-                <option value="">Aucun</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.prenom} {client.nom}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className={labelCls}>Prospect vendeur</label>
-              <select name="prospectVendeurId" defaultValue={prospectVendeurIdPreselectionne} className={inputCls}>
-                <option value="">Aucun</option>
-                {prospects.map((prospect) => (
-                  <option key={prospect.id} value={prospect.id}>
-                    {prospect.prenom ? `${prospect.prenom} ` : ""}
-                    {prospect.nom}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
+        <input type="hidden" name="redirectTo" value={redirectTo} />
+
+        <CibleTacheSelecteur
+          biens={biens.map((bien) => ({ id: bien.id, label: bien.titre }))}
+          acquereurs={clients.map((client) => ({ id: client.id, label: `${client.prenom} ${client.nom}` }))}
+          prospectsVendeurs={prospects.map((prospect) => ({
+            id: prospect.id,
+            label: `${prospect.prenom ? `${prospect.prenom} ` : ""}${prospect.nom}`,
+          }))}
+          bienIdInitial={bienIdPreselectionne}
+          acquereurIdInitial={acquereurIdPreselectionne}
+          prospectVendeurIdInitial={prospectVendeurIdPreselectionne}
+        />
 
         <button
           type="submit"
