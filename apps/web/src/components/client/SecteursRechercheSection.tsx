@@ -151,7 +151,13 @@ export default function SecteursRechercheSection({
       </p>
 
       {secteurs.length === 0 ? (
-        <p className="text-[14px] text-text-3 mb-3">Aucun secteur de recherche renseigné.</p>
+        // Conséquence réelle côté moteur (criteres.ts, evaluerSecteur) — jamais une pénalité
+        // inventée : sans secteur, ce critère reste "non_concerne" pour tout bien comparé, il ne
+        // bloque ni n'avantage jamais aucun résultat.
+        <p className="text-[14px] text-text-3 mb-3">
+          Aucun secteur de recherche renseigné — le critère géographique ne sera évalué pour aucun
+          bien comparé (ni compatible, ni incompatible) jusqu&#39;à l&#39;ajout d&#39;un secteur.
+        </p>
       ) : (
         <div className="flex flex-col gap-2 mb-3">
           {secteurs.map((secteur) => (

@@ -39,6 +39,15 @@ export async function listerVisitesPourBien(bienId: string): Promise<Visite[]> {
   return lignes.map(ligneVersVisite);
 }
 
+// Symétrique de listerVisitesPourBien ci-dessus (Fiche Acquéreur Premium) — même lecture pure,
+// aucune nouvelle règle métier : l'entité Visite porte déjà acquereurId (ADR-040), il manquait
+// uniquement cette requête.
+export async function listerVisitesPourAcquereur(acquereurId: string): Promise<Visite[]> {
+  if (!UUID_REGEX.test(acquereurId)) return [];
+  const lignes = await getDb().select().from(visitesTable).where(eq(visitesTable.acquereurId, acquereurId));
+  return lignes.map(ligneVersVisite);
+}
+
 // Signal exploité par la règle nouveau_match_bien_acquereur (ADR-037/040) : seule une visite
 // encore 'planifiee' rend l'action redondante — une visite 'realisee' ou 'annulee' ne doit jamais
 // bloquer indéfiniment un futur cycle de compatibilité légitime (même rationale que

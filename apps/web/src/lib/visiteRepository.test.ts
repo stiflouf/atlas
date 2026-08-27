@@ -18,6 +18,7 @@ const {
   getVisiteById,
   getVisiteParRendezVousCalendarId,
   listerVisitesPourBien,
+  listerVisitesPourAcquereur,
   existeVisitePlanifieePourPaire,
   marquerVisiteRealisee,
   annulerVisite,
@@ -212,6 +213,31 @@ describe("existeVisitePlanifieePourPaire — signal exploité par ADR-037/040", 
 
     await marquerVisiteRealisee(visite.id);
     expect(await existeVisitePlanifieePourPaire(bien.id, acquereur.id)).toBe(false);
+  });
+});
+
+describe("listerVisitesPourAcquereur — Fiche Acquéreur Premium", () => {
+  it("retourne uniquement les visites de cet acquéreur, quel que soit le bien", async () => {
+    const bienA = await creerBienDeTest("ACQ1-A");
+    const bienB = await creerBienDeTest("ACQ1-B");
+    const acquereur = await creerAcquereurDeTest("ACQ1");
+    const autreAcquereur = await creerAcquereurDeTest("ACQ1-AUTRE");
+
+    const v1 = await materialiserVisite({ bienId: bienA.id, acquereurId: acquereur.id, datePrevue: "2026-09-01", rendezVousCalendarId: `gcal-acq1-a-${bienA.id}` });
+    const v2 = await materialiserVisite({ bienId: bienB.id, acquereurId: acquereur.id, datePrevue: "2026-09-02", rendezVousCalendarId: `gcal-acq1-b-${bienB.id}` });
+    await materialiserVisite({ bienId: bienA.id, acquereurId: autreAcquereur.id, datePrevue: "2026-09-03", rendezVousCalendarId: `gcal-acq1-autre-${bienA.id}` });
+
+    const visites = await listerVisitesPourAcquereur(acquereur.id);
+    expect(visites.map((v) => v.id).sort()).toEqual([v1.id, v2.id].sort());
+  });
+
+  it("acquéreur sans aucune visite : tableau vide, jamais une erreur", async () => {
+    const acquereur = await creerAcquereurDeTest("ACQ2-VIDE");
+    expect(await listerVisitesPourAcquereur(acquereur.id)).toEqual([]);
+  });
+
+  it("id non-UUID (acquéreur mocké) : tableau vide", async () => {
+    expect(await listerVisitesPourAcquereur("acquereur-mocke-001")).toEqual([]);
   });
 });
 
