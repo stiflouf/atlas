@@ -179,14 +179,19 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
                           (audit) : ce span n'est ni un <button> ni un <form>, aucun onClick, rien
                           à décocher. role="img" + aria-label portent l'information sans dépendre
                           uniquement de la couleur (accessibilité) ni surcharger la ligne d'un
-                          texte visible en plus de l'icône. */}
+                          texte visible en plus de l'icône.
+                          Fond plein bg-success (pas success-light) + icône claire text-surface :
+                          même convention de contraste que IconTile tone="navy" (fond sombre plein,
+                          icône claire) déjà validée dans le produit — success-light sur success
+                          (pâle sur pâle) rendait le check à peine visible à 16px en navigateur
+                          réel, un test DOM seul ne pouvait pas le révéler. */}
                       <span
                         role="img"
                         aria-label="Tâche terminée"
                         title="Tâche terminée"
-                        className="w-4 h-4 mt-0.5 rounded-full shrink-0 bg-success-light text-success flex items-center justify-center"
+                        className="w-4 h-4 mt-0.5 rounded-full shrink-0 bg-success text-surface flex items-center justify-center"
                       >
-                        <Check size={11} strokeWidth={3} />
+                        <Check size={12} strokeWidth={3.5} />
                       </span>
                       <div>
                         <p className="text-[14px] text-text-1">{tache.titre}</p>

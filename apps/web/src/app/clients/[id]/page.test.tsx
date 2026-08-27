@@ -205,6 +205,10 @@ describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)"
     // terminée -> active n'existe côté modèle).
     const zoneTerminee = html.slice(indexDetailsOuvert);
     expect(zoneTerminee).toContain('aria-label="Tâche terminée"');
+    // Une vraie icône Check (lucide) est rendue, jamais juste un fond coloré sans symbole — un
+    // test DOM ne prouve pas la lisibilité visuelle réelle, mais garantit au moins la présence du
+    // bon SVG plutôt qu'un marqueur vide.
+    expect(zoneTerminee).toContain("lucide-check");
     expect(zoneTerminee).not.toContain("<form");
     expect(zoneTerminee).not.toContain("<button");
 
