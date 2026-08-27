@@ -172,6 +172,8 @@ describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)"
     expect(html).toContain(tache.titre);
     expect(html).not.toMatch(/tâche terminée/i);
     expect(html).not.toMatch(/tâches? terminées? — afficher/i);
+    // Contrôle interactif de complétion réellement présent (TacheItem), jamais un marqueur inerte.
+    expect(html).toContain('aria-label="Marquer comme terminée"');
   });
 
   it("?tacheTerminee=<id> après complétion réelle : encart de confirmation, section terminées ouverte automatiquement, tâche réellement conservée (jamais supprimée)", async () => {
@@ -196,6 +198,15 @@ describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)"
     expect(html.indexOf(tache.titre, indexDetailsOuvert)).toBeGreaterThan(indexDetailsOuvert);
     // Liste active réellement vide désormais (seule tâche de cet acquéreur, maintenant terminée).
     expect(html).toContain("Aucune tâche en cours.");
+
+    // Marqueur Check non interactif (correctif polish) — un carré vide ressemblait trop à la case
+    // active. L'information ne dépend jamais uniquement de la couleur (aria-label), et la zone ne
+    // contient aucun contrôle de réouverture (aucun <form>/<button> : aucune transition
+    // terminée -> active n'existe côté modèle).
+    const zoneTerminee = html.slice(indexDetailsOuvert);
+    expect(zoneTerminee).toContain('aria-label="Tâche terminée"');
+    expect(zoneTerminee).not.toContain("<form");
+    expect(zoneTerminee).not.toContain("<button");
 
     // Jamais une suppression physique : la tâche existe toujours réellement en base.
     const tacheEnBase = await getTacheById(tache.id);

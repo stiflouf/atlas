@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Handshake, FileSignature, ListChecks } from "lucide-react";
+import { ArrowLeft, Handshake, FileSignature, ListChecks, Check } from "lucide-react";
 import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
 import AcquereurHero from "@/components/client/AcquereurHero";
@@ -173,7 +173,21 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
                 <Card className="flex flex-col divide-y divide-border px-4 mt-2">
                   {tachesTerminees.map((tache) => (
                     <div key={tache.id} className="flex items-start gap-3 py-3">
-                      <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-border border-border-md" />
+                      {/* Marqueur non interactif (correctif polish) — un carré vide bg-border
+                          ressemblait trop à la case active cochable, laissant croire à une
+                          réouverture possible. Aucune transition terminée → active n'existe
+                          (audit) : ce span n'est ni un <button> ni un <form>, aucun onClick, rien
+                          à décocher. role="img" + aria-label portent l'information sans dépendre
+                          uniquement de la couleur (accessibilité) ni surcharger la ligne d'un
+                          texte visible en plus de l'icône. */}
+                      <span
+                        role="img"
+                        aria-label="Tâche terminée"
+                        title="Tâche terminée"
+                        className="w-4 h-4 mt-0.5 rounded-full shrink-0 bg-success-light text-success flex items-center justify-center"
+                      >
+                        <Check size={11} strokeWidth={3} />
+                      </span>
                       <div>
                         <p className="text-[14px] text-text-1">{tache.titre}</p>
                         {tache.contexte && <p className="text-[13px] text-text-3 mt-0.5">{tache.contexte}</p>}
