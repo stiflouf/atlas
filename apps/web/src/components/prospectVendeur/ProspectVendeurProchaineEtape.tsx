@@ -38,6 +38,19 @@ function valeurDateTimeLocale(iso: string | undefined): string | undefined {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Préremplissage du « rendez-vous tenu » : la date PRÉVUE n'est un défaut utile que si elle est
+// déjà passée (le rendez-vous a eu lieu comme prévu, on l'enregistre après coup). La proposer
+// alors qu'elle est encore à venir prérempli un champ que la Server Action refuse désormais
+// (ADR-027, aucun jalon franchi dans le futur) : on retombe sur l'instant présent, que le
+// conseiller corrige si besoin. Confort de saisie uniquement — la règle reste côté serveur.
+function defautRendezVousTenu(prospect: ProspectVendeur): string | undefined {
+  const candidat = prospect.rdvEstimationRealiseLe ?? prospect.rdvEstimationPrevuLe;
+  if (!candidat) return valeurDateTimeLocale(new Date().toISOString());
+  return new Date(candidat).getTime() > Date.now()
+    ? valeurDateTimeLocale(new Date().toISOString())
+    : valeurDateTimeLocale(candidat);
+}
+
 // Bande « Prochaine étape » — pièce centrale du cockpit (design validé), seul aplat navy de la
 // fiche : une seule action primaire, celle que deriverProchaineEtape a déduite du stade dérivé.
 //
@@ -110,7 +123,7 @@ export default function ProspectVendeurProchaineEtape({
                   name="rdvEstimationRealiseLe"
                   type="datetime-local"
                   required
-                  defaultValue={valeurDateTimeLocale(prospect.rdvEstimationPrevuLe)}
+                  defaultValue={defautRendezVousTenu(prospect)}
                   className={inputSurNavyCls}
                 />
                 <button type="submit" className={boutonJalonCls}>
@@ -249,7 +262,7 @@ export default function ProspectVendeurProchaineEtape({
               name="rdvEstimationRealiseLe"
               type="datetime-local"
               required
-              defaultValue={valeurDateTimeLocale(prospect.rdvEstimationRealiseLe ?? prospect.rdvEstimationPrevuLe)}
+              defaultValue={defautRendezVousTenu(prospect)}
               className={inputSurNavyCls}
             />
             {idCache}

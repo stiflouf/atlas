@@ -256,6 +256,37 @@ describe("Fiche prospect vendeur — journal", () => {
   });
 });
 
+describe("Fiche prospect vendeur — cohérence temporelle du rendez-vous", () => {
+  it("affiche la date réellement persistée du rendez-vous tenu, jamais celle qui était prévue", async () => {
+    // Régression smoke (28/08/2026) : le journal doit refléter rdv_estimation_realise_le tel qu'il
+    // est en base. Ici prévu le 24, tenu le 25 : les deux entrées coexistent avec leur vraie date.
+    const prospect = await prospectDeTest("RDV-TENU");
+    await qualifierProspectVendeur(prospect.id);
+    await planifierRdvEstimationProspectVendeur(prospect.id, new Date("2026-07-24T08:00:00.000Z"));
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-07-25T15:30:00.000Z"));
+    const html = await rendre(prospect.id);
+
+    expect(html).toContain("Rendez-vous d&#x27;estimation planifié");
+    expect(html).toContain("Rendez-vous d&#x27;estimation réalisé");
+    expect(html).toContain("24 juillet 2026");
+    expect(html).toContain("25 juillet 2026");
+  });
+
+  it("ne fabrique jamais une date de réalisation à partir de la date prévue", async () => {
+    // Le rendez-vous est planifié dans le futur et n'a pas été marqué réalisé : aucune entrée
+    // « réalisé » ne doit exister, et le jalon ne doit pas être franchi.
+    const prospect = await prospectDeTest("PREVU-SEUL");
+    await qualifierProspectVendeur(prospect.id);
+    await planifierRdvEstimationProspectVendeur(prospect.id, new Date(Date.now() + 24 * 60 * 60 * 1000));
+    const html = await rendre(prospect.id);
+
+    expect(html).toContain("Rendez-vous d&#x27;estimation planifié");
+    expect(html).not.toContain("Rendez-vous d&#x27;estimation réalisé —");
+    // Le stade reste Qualification tant que le rendez-vous n'est pas tenu.
+    expect(html).toContain("Marquer le rendez-vous d&#x27;estimation réalisé");
+  });
+});
+
 describe("Fiche prospect vendeur — mandat signé", () => {
   it("clôt le pipeline et ouvre un pont vers le bien réellement créé", async () => {
     const prospect = await prospectDeTest("SIGNE");

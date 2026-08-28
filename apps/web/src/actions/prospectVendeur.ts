@@ -115,6 +115,19 @@ export async function marquerRdvEstimationRealiseProspectVendeurAction(formData:
   const rdvEstimationRealiseLe = parseDateHeure(formData.get("rdvEstimationRealiseLe"));
   if (!rdvEstimationRealiseLe) throw new Error("La date et l'heure du rendez-vous réalisé sont obligatoires.");
 
+  // ADR-027 : « un rendez-vous planifié dans le futur n'est jamais un jalon commercial franchi ».
+  // rdv_estimation_realise_le est une date DÉCLARÉE (le conseiller saisit quand le rendez-vous a
+  // réellement eu lieu) : sans cette garde, valider le formulaire prérempli avec la date PRÉVUE
+  // persiste un rendez-vous « tenu » à une date qui n'est pas encore arrivée, fait avancer le
+  // statut vers `rendez_vous` et pose dernier_contact_le à l'instant serveur — deux dates
+  // contradictoires pour le même fait. Même règle et même tolérance d'horloge cliente que
+  // transmissionDossierNotaire.ts (date déclarée d'un fait accompli). Ne borne jamais le passé :
+  // enregistrer a posteriori un rendez-vous ancien reste légitime.
+  const maintenant = new Date();
+  if (rdvEstimationRealiseLe.getTime() > maintenant.getTime() + 5 * 60 * 1000) {
+    throw new Error("Un rendez-vous ne peut pas être marqué réalisé à une date future.");
+  }
+
   // Événement `rdv_estimation_realise` émis UNIQUEMENT sur une vraie transition (ADR-032,
   // correction n°1) — jamais si le rendez-vous était déjà marqué réalisé (ce repository autorise
   // toujours une correction de date, qui ne doit jamais réémettre l'événement).

@@ -22,16 +22,22 @@ const {
   evenementsMetier: evenementsMetierTable,
   executionsAutomatisation: executionsAutomatisationTable,
 } = await import("@/db/schema");
-const { creerProspectVendeur, marquerProspectVendeurPerdu, signerMandatProspectVendeur } = await import(
-  "@/lib/prospectVendeurRepository"
-);
+const {
+  creerProspectVendeur,
+  getProspectVendeurById,
+  marquerProspectVendeurPerdu,
+  planifierRdvEstimationProspectVendeur,
+  signerMandatProspectVendeur,
+} = await import("@/lib/prospectVendeurRepository");
 const {
   qualifierProspectVendeurAction,
   enregistrerEstimationProspectVendeurAction,
+  marquerRdvEstimationRealiseProspectVendeurAction,
   marquerProspectVendeurPerduAction,
   signerMandatProspectVendeurAction,
   ajouterNoteProspectVendeurAction,
 } = await import("./prospectVendeur");
+const { deriverStatutProspectVendeur } = await import("@/types/prospectVendeur");
 
 const idsProspectsCrees: string[] = [];
 const idsBiensCrees: string[] = [];
@@ -99,6 +105,75 @@ function formData(champs: Record<string, string>): FormData {
   for (const [cle, valeur] of Object.entries(champs)) fd.set(cle, valeur);
   return fd;
 }
+
+// Régression smoke (28/08/2026) : un rendez-vous prévu le lendemain a été marqué réalisé le jour
+// même. Le formulaire proposait la date PRÉVUE en valeur par défaut et aucune garde ne bornait le
+// futur : la base a persisté un rendez-vous « tenu » daté du lendemain, le statut est passé à
+// `rendez_vous`, et dernier_contact_le a été posé à l'instant serveur — deux dates contradictoires
+// pour un même fait. ADR-027 : « un rendez-vous planifié dans le futur n'est jamais un jalon
+// commercial franchi ».
+describe("marquerRdvEstimationRealiseProspectVendeurAction — aucun jalon franchi dans le futur", () => {
+  it("refuse de marquer réalisé un rendez-vous encore à venir, et ne persiste rien", async () => {
+    const prospect = await creerProspectDeTest("R01");
+    const demain = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await planifierRdvEstimationProspectVendeur(prospect.id, demain);
+
+    await expect(
+      marquerRdvEstimationRealiseProspectVendeurAction(
+        formData({ id: prospect.id, rdvEstimationRealiseLe: demain.toISOString() })
+      )
+    ).rejects.toThrow(/date future/);
+
+    // La donnée reste intacte : ni jalon franchi, ni dernier contact avancé par une action refusée.
+    const apres = await getProspectVendeurById(prospect.id);
+    expect(apres?.rdvEstimationRealiseLe).toBeUndefined();
+    expect(apres?.dernierContactLe).toBeUndefined();
+    expect(deriverStatutProspectVendeur(apres!)).toBe("prospect");
+  });
+
+  it("refuse aussi une date future sans rendez-vous préalablement planifié", async () => {
+    const prospect = await creerProspectDeTest("R02");
+    const dansUneHeure = new Date(Date.now() + 60 * 60 * 1000);
+
+    await expect(
+      marquerRdvEstimationRealiseProspectVendeurAction(
+        formData({ id: prospect.id, rdvEstimationRealiseLe: dansUneHeure.toISOString() })
+      )
+    ).rejects.toThrow(/date future/);
+  });
+
+  it("accepte un rendez-vous réellement tenu, même enregistré longtemps après", async () => {
+    const prospect = await creerProspectDeTest("R03");
+    const ilYaDeuxMois = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+
+    // redirect() lève NEXT_REDIRECT sur le chemin de succès (même style que les autres actions).
+    await expect(
+      marquerRdvEstimationRealiseProspectVendeurAction(
+        formData({ id: prospect.id, rdvEstimationRealiseLe: ilYaDeuxMois.toISOString() })
+      )
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+
+    const apres = await getProspectVendeurById(prospect.id);
+    // La date persistée est exactement celle saisie, jamais l'instant serveur.
+    expect(apres?.rdvEstimationRealiseLe).toBe(ilYaDeuxMois.toISOString());
+    expect(deriverStatutProspectVendeur(apres!)).toBe("rendez_vous");
+    // dernier_contact_le reste l'horodatage serveur de l'interaction (ADR-027), distinct de la
+    // date déclarée du rendez-vous : il ne prend jamais la date saisie.
+    expect(apres?.dernierContactLe).toBeDefined();
+    expect(apres?.dernierContactLe).not.toBe(ilYaDeuxMois.toISOString());
+  });
+
+  it("tolère une dérive d'horloge cliente de quelques minutes", async () => {
+    const prospect = await creerProspectDeTest("R04");
+    const dansDeuxMinutes = new Date(Date.now() + 2 * 60 * 1000);
+
+    await expect(
+      marquerRdvEstimationRealiseProspectVendeurAction(
+        formData({ id: prospect.id, rdvEstimationRealiseLe: dansDeuxMinutes.toISOString() })
+      )
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+  });
+});
 
 describe("prospectVendeur Server Actions — gardes de transition", () => {
   it("qualifierProspectVendeurAction rejette un prospect déjà perdu", async () => {
