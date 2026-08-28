@@ -1,67 +1,90 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, User } from "lucide-react";
-import Badge from "@/components/ui/Badge";
+import { ArrowLeft } from "lucide-react";
+import ProspectVendeurHero from "@/components/prospectVendeur/ProspectVendeurHero";
+import ProspectVendeurProgression from "@/components/prospectVendeur/ProspectVendeurProgression";
+import ProspectVendeurProchaineEtape from "@/components/prospectVendeur/ProspectVendeurProchaineEtape";
+import ProspectVendeurJournal from "@/components/prospectVendeur/ProspectVendeurJournal";
+import ProspectVendeurTaches from "@/components/prospectVendeur/ProspectVendeurTaches";
+import ProspectVendeurBienCree from "@/components/prospectVendeur/ProspectVendeurBienCree";
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import { listerNotesProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
-import { deriverStatutProspectVendeur, LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
+import { getBienById } from "@/lib/bienRepository";
+import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
+import { deriverStatutTache } from "@/types/tache";
 import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
-import { MOTIFS_PERTE_PROSPECT_VENDEUR, LABEL_MOTIF_PERTE_PROSPECT_VENDEUR } from "@/types/motifPerteProspectVendeur";
-import { TYPES_NOTE_PROSPECT_VENDEUR, LABEL_TYPE_NOTE_PROSPECT_VENDEUR, TYPES_NOTE_INTERACTION } from "@/types/noteProspectVendeur";
-import { deriverStatutTache, LABEL_ECHEANCE_ABSENTE, LABEL_TYPE_TACHE } from "@/types/tache";
-import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
-import type { CodeRegleAutomatisation } from "@/types/automatisation";
-import { formatMontantCentimes } from "@/types/remuneration";
+import {
+  MOTIFS_PERTE_PROSPECT_VENDEUR,
+  LABEL_MOTIF_PERTE_PROSPECT_VENDEUR,
+} from "@/types/motifPerteProspectVendeur";
+import { TYPES_NOTE_INTERACTION } from "@/types/noteProspectVendeur";
+import {
+  deriverJournalProspectVendeur,
+  deriverParcoursProspectVendeur,
+  joursDepuisDernierEchange,
+} from "@/lib/prospectVendeurParcours";
+import { deriverProchaineEtape } from "@/lib/prospectVendeurProchaineEtape";
 import {
   archiverProspectVendeurAction,
   desarchiverProspectVendeurAction,
-  qualifierProspectVendeurAction,
-  enregistrerEstimationProspectVendeurAction,
-  planifierRdvEstimationProspectVendeurAction,
-  marquerRdvEstimationRealiseProspectVendeurAction,
-  proposerMandatProspectVendeurAction,
   marquerProspectVendeurPerduAction,
-  ajouterNoteProspectVendeurAction,
 } from "@/actions/prospectVendeur";
-import { creerTacheAction } from "@/actions/creerTache";
-import { terminerTacheAction } from "@/actions/terminerTache";
-import { annulerTacheAction } from "@/actions/annulerTache";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
-const boutonCls =
-  "text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg";
-const boutonSecondaireCls =
-  "text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-function formatDateHeure(iso: string): string {
-  return new Date(iso).toLocaleString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tacheTerminee?: string }>;
+};
 
-type PageProps = { params: Promise<{ id: string }> };
-
-// Fiche prospect vendeur (ADR-027) : identité, bien potentiel, jalons de pipeline (chacun sa
-// propre Server Action, aucune séquence stricte imposée), issue commerciale, prochaine action,
-// notes append-only. La conversion en bien vit sur une page dédiée (/signer-mandat) — formulaire
-// trop long pour tenir ici sans nuire à la lisibilité du reste de la fiche.
-export default async function FicheProspectVendeur({ params }: PageProps) {
+// Cockpit de prise de mandat (design validé) — un prospect vendeur est une PERSONNE, un PROJET DE
+// VENTE et une PROGRESSION vers un mandat. La page répond dans cet ordre à trois questions : où en
+// est-on (hero + rail de progression), que faire maintenant (bande navy, action unique dérivée du
+// stade), et que s'est-il passé (journal). Les commandes de jalon existantes restent toutes
+// atteignables sous « Corriger un jalon » — aucune séquence n'est imposée à la saisie (ADR-027).
+//
+// Aucune mutation n'a été ajoutée par ce chantier : la page ne fait que réordonner et hiérarchiser
+// des Server Actions existantes, avec leurs gardes existantes.
+export default async function FicheProspectVendeur({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { tacheTerminee } = await searchParams;
   const prospect = await getProspectVendeurById(id);
   if (!prospect) notFound();
 
   const notes = await listerNotesProspectVendeur(prospect.id);
   const taches = await getTachesPourProspectVendeur(prospect.id);
   const tachesOuvertes = taches.filter((t) => deriverStatutTache(t) === "a_faire");
+  const tachesTerminees = taches.filter((t) => deriverStatutTache(t) === "terminee");
+  const tacheTermineeConfirmee = tachesTerminees.find((t) => t.id === tacheTerminee);
+
   const statut = deriverStatutProspectVendeur(prospect);
+  const parcours = deriverParcoursProspectVendeur(prospect);
+  const journal = deriverJournalProspectVendeur(prospect, notes);
+  const prochaineEtape = deriverProchaineEtape(prospect);
+
+  // Le bien n'est chargé que lorsqu'il existe réellement (bienId n'est posé qu'à la signature du
+  // mandat, ADR-027) — jamais un lien construit à l'aveugle vers une fiche inexistante.
+  const bienCree = prospect.bienId ? await getBienById(prospect.bienId) : undefined;
+
+  const jours = joursDepuisDernierEchange(prospect);
+  const nombreEchanges = notes.filter((n) => TYPES_NOTE_INTERACTION.includes(n.type)).length;
+  const nombreNotesInternes = notes.length - nombreEchanges;
+
+  // « À compléter » ne liste que des champs réellement éditables par le formulaire existant
+  // (NouveauProspectVendeur) — jamais un score de complétion, jamais un champ inexistant.
+  const champsACompleter: string[] = [];
+  if (!prospect.email && !prospect.telephone) champsACompleter.push("Téléphone ou email");
+  if (!prospect.adresseBienPotentiel) champsACompleter.push("Adresse précise du bien");
+  if (!prospect.typeBien) champsACompleter.push("Type de bien");
+  if (!prospect.origineLead) champsACompleter.push("Origine du lead");
+
   const enCours = statut !== "perdu" && statut !== "mandat_signe";
-  const localisation = [prospect.adresseBienPotentiel ?? prospect.secteurBienPotentiel, prospect.ville, prospect.codePostal]
-    .filter(Boolean)
-    .join(", ");
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
@@ -73,355 +96,183 @@ export default async function FicheProspectVendeur({ params }: PageProps) {
         Prospects vendeurs
       </Link>
 
-      <div className="mb-8">
-        <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-accent-light flex items-center justify-center shrink-0 mt-0.5">
-            <User size={18} className="text-accent" strokeWidth={1.8} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
-              {prospect.prenom ? `${prospect.prenom} ` : ""}
-              {prospect.nom}
-            </h1>
-            <p className="text-[14px] text-text-2 mt-0.5">
-              {[prospect.email, prospect.telephone].filter(Boolean).join(" · ") || "Aucune coordonnée renseignée"}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 mt-4">
-          <Badge variant="default">{LABEL_STATUT_PROSPECT_VENDEUR[statut]}</Badge>
-          {prospect.origineLead && (
-            <Badge variant="muted">
-              {LABEL_ORIGINE_LEAD[prospect.origineLead]}
-              {prospect.origineLeadDetail ? ` — ${prospect.origineLeadDetail}` : ""}
-            </Badge>
-          )}
-          {prospect.archiveLe && <Badge variant="muted">Archivé le {formatDate(prospect.archiveLe)}</Badge>}
-        </div>
-
-        <div className="flex flex-wrap gap-3 mt-4">
-          <Link href={`/prospects-vendeurs/${prospect.id}/modifier`} className={boutonSecondaireCls}>
-            Modifier
-          </Link>
-          <form action={prospect.archiveLe ? desarchiverProspectVendeurAction : archiverProspectVendeurAction}>
-            <input type="hidden" name="id" value={prospect.id} />
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-text-2 bg-surface border border-border-md hover:border-danger hover:text-danger transition-colors px-3.5 py-2 rounded-lg"
-            >
-              {prospect.archiveLe ? "Désarchiver" : "Archiver"}
-            </button>
-          </form>
+      <div className="mb-4">
+        <div className="bg-surface border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] overflow-hidden">
+          <ProspectVendeurHero prospect={prospect} />
+          <ProspectVendeurProgression jalons={parcours} />
         </div>
       </div>
 
-      {/* Bien potentiel */}
-      <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Bien potentiel</p>
-        <div className="bg-surface rounded-lg border border-border p-4 text-[14px] text-text-1 flex flex-col gap-1">
-          <p>{localisation || "Aucune localisation renseignée"}</p>
-          {prospect.typeBien && <p className="text-text-2">{prospect.typeBien}</p>}
-          {prospect.estimationProposeeCentimes !== undefined && (
-            <p className="font-medium">
-              Estimation proposée : {formatMontantCentimes(prospect.estimationProposeeCentimes)}
-              {prospect.estimationProposeeLe && ` (${formatDate(prospect.estimationProposeeLe)})`}
-            </p>
-          )}
+      {/* Bande navy réservée à la prochaine transition — absente dès qu'il n'y en a plus, jamais un
+          bandeau vide ni un bouton mort. */}
+      {prochaineEtape && (
+        <div className="mb-6">
+          <ProspectVendeurProchaineEtape prospect={prospect} etape={prochaineEtape} />
         </div>
-      </section>
-
-      {/* Conversion */}
-      {statut === "mandat_signe" && prospect.bienId && (
-        <section className="mb-8">
-          <div className="bg-success-light border border-success/30 rounded-lg p-4">
-            <p className="text-[14px] text-success font-medium">Mandat signé — bien créé</p>
-            <Link href={`/biens/${prospect.bienId}`} className="text-[13px] text-accent font-medium hover:text-accent-hover">
-              Voir la fiche du bien →
-            </Link>
-          </div>
-        </section>
       )}
 
-      {/* Pipeline */}
-      {enCours && (
-        <section className="mb-8">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Pipeline</p>
-          <div className="flex flex-col gap-2">
-            {!prospect.qualifieLe && (
-              <form action={qualifierProspectVendeurAction}>
-                <input type="hidden" name="id" value={prospect.id} />
-                <button type="submit" className={boutonSecondaireCls}>
-                  Marquer comme qualifié
-                </button>
-              </form>
-            )}
-            {prospect.qualifieLe && <p className="text-[13px] text-text-3">Qualifié le {formatDate(prospect.qualifieLe)}</p>}
+      {bienCree && (
+        <div className="mb-6">
+          <ProspectVendeurBienCree bien={bienCree} />
+        </div>
+      )}
 
-            <details className="bg-surface rounded-lg border border-border p-3">
-              <summary className="text-[13px] font-medium text-text-1 cursor-pointer">
-                {prospect.estimationProposeeLe ? "Mettre à jour l'estimation" : "Enregistrer une estimation"}
-              </summary>
-              <form action={enregistrerEstimationProspectVendeurAction} className="flex flex-col gap-3 mt-3">
-                <input type="hidden" name="id" value={prospect.id} />
-                <div>
-                  <label className="text-[12px] font-medium text-text-2 mb-1 block">Montant estimé (€) *</label>
-                  <input name="estimationProposeeCentimes" required placeholder="ex. 350000" className={inputCls} />
+      {/* Mandat signé sans bien résolvable : cas anormal (bienId pointe vers un bien introuvable).
+          Un constat honnête plutôt qu'un silence ou un lien cassé. */}
+      {statut === "mandat_signe" && !bienCree && (
+        <div className="mb-6 bg-warning-light border border-warning/30 rounded-xl p-4">
+          <p className="text-[13px] text-warning">
+            Mandat signé le {prospect.mandatSigneLe ? formatDate(prospect.mandatSigneLe) : "—"} — le bien associé est
+            introuvable.
+          </p>
+        </div>
+      )}
+
+      {statut === "perdu" && (
+        <div className="mb-6 bg-danger-light border border-danger/30 rounded-xl p-4">
+          <p className="text-[14px] font-medium text-danger">
+            {prospect.motifPerte ? LABEL_MOTIF_PERTE_PROSPECT_VENDEUR[prospect.motifPerte] : "Opportunité perdue"}
+          </p>
+          {prospect.datePerte && (
+            <p className="text-[13px] text-danger mt-0.5">Perdue le {formatDate(prospect.datePerte)}</p>
+          )}
+          <p className="text-[12px] text-danger/80 mt-1.5">
+            Le parcours reste consultable ; aucun jalon ne peut plus être posé.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_316px] gap-6 items-start">
+        {/* Corps — le parcours et la relation sont le cœur de cette fiche. */}
+        <div className="flex flex-col gap-6 min-w-0">
+          <section>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Parcours et échanges</p>
+            <ProspectVendeurJournal prospectId={prospect.id} entrees={journal} />
+          </section>
+        </div>
+
+        {/* Rail — contexte de travail, puis sortie du pipeline, hors du flux principal. */}
+        <div className="flex flex-col gap-5 min-w-0">
+          <ProspectVendeurTaches
+            prospectId={prospect.id}
+            tachesOuvertes={tachesOuvertes}
+            tachesTerminees={tachesTerminees}
+            tacheTerminee={tacheTermineeConfirmee}
+          />
+
+          <section>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Relation</p>
+            <div className="bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] p-4 flex flex-col gap-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[12.5px] text-text-2">Dernier échange</span>
+                <span className="text-[12.5px] font-medium text-text-1">
+                  {prospect.dernierContactLe ? `il y a ${jours} j` : "jamais"}
+                </span>
+              </div>
+              {/* Nombre de notes RÉELLEMENT enregistrées — jamais un nombre de relances, jamais une
+                  activité détectée automatiquement : Atlas ne détecte aucun appel ni email entrant. */}
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[12.5px] text-text-2">Échanges enregistrés</span>
+                <span className="text-[12.5px] font-medium text-text-1">{nombreEchanges}</span>
+              </div>
+              {nombreNotesInternes > 0 && (
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[12.5px] text-text-2">Notes internes</span>
+                  <span className="text-[12.5px] font-medium text-text-1">{nombreNotesInternes}</span>
                 </div>
-                <div>
-                  <label className="text-[12px] font-medium text-text-2 mb-1 block">Date *</label>
+              )}
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[12.5px] text-text-2">Origine</span>
+                <span className="text-[12.5px] font-medium text-text-1">
+                  {prospect.origineLead ? LABEL_ORIGINE_LEAD[prospect.origineLead] : "Non déterminée"}
+                </span>
+              </div>
+              {statut === "mandat_signe" && prospect.mandatSigneLe && (
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[12.5px] text-text-2">Du premier contact à la signature</span>
+                  <span className="text-[12.5px] font-medium text-text-1">
+                    {Math.floor(
+                      (new Date(prospect.mandatSigneLe).getTime() - new Date(prospect.creeLe).getTime()) /
+                        (1000 * 60 * 60 * 24)
+                    )}{" "}
+                    j
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {champsACompleter.length > 0 && enCours && (
+            <section>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">À compléter</p>
+              <div className="bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] p-4 flex flex-col gap-1.5">
+                {champsACompleter.map((champ) => (
+                  <p key={champ} className="text-[12.5px] text-text-2">
+                    {champ}
+                  </p>
+                ))}
+                <Link
+                  href={`/prospects-vendeurs/${prospect.id}/modifier`}
+                  className="text-[12.5px] font-medium text-accent hover:text-accent-hover transition-colors mt-1"
+                >
+                  Compléter la fiche →
+                </Link>
+              </div>
+            </section>
+          )}
+
+          {/* Sortie du pipeline — visuellement détachée : ce ne sont pas des étapes. */}
+          <div className="border-t border-dashed border-border-md pt-4 flex flex-col gap-2">
+            {statut !== "mandat_signe" && statut !== "perdu" && (
+              <details>
+                <summary className="list-none cursor-pointer select-none text-[13px] font-medium text-text-2 hover:text-danger transition-colors">
+                  Marquer comme perdu
+                </summary>
+                <form action={marquerProspectVendeurPerduAction} className="flex flex-col gap-2.5 mt-2.5">
+                  <input type="hidden" name="id" value={prospect.id} />
+                  <select name="motifPerte" defaultValue="" required className={inputCls}>
+                    <option value="" disabled>
+                      Motif
+                    </option>
+                    {MOTIFS_PERTE_PROSPECT_VENDEUR.map((m) => (
+                      <option key={m} value={m}>
+                        {LABEL_MOTIF_PERTE_PROSPECT_VENDEUR[m]}
+                      </option>
+                    ))}
+                  </select>
                   <input
-                    name="estimationProposeeLe"
+                    name="datePerte"
                     type="date"
                     required
-                    defaultValue={prospect.estimationProposeeLe ?? new Date().toISOString().slice(0, 10)}
+                    defaultValue={new Date().toISOString().slice(0, 10)}
                     className={inputCls}
                   />
-                </div>
-                <button type="submit" className={`self-start ${boutonCls}`}>
-                  Enregistrer
-                </button>
-              </form>
-            </details>
-
-            <details className="bg-surface rounded-lg border border-border p-3">
-              <summary className="text-[13px] font-medium text-text-1 cursor-pointer">
-                {prospect.rdvEstimationPrevuLe ? "Replanifier le rendez-vous" : "Planifier un rendez-vous d'estimation"}
-              </summary>
-              <form action={planifierRdvEstimationProspectVendeurAction} className="flex flex-col gap-3 mt-3">
-                <input type="hidden" name="id" value={prospect.id} />
-                <input name="rdvEstimationPrevuLe" type="datetime-local" required className={inputCls} />
-                <button type="submit" className={`self-start ${boutonCls}`}>
-                  Planifier
-                </button>
-              </form>
-              {prospect.rdvEstimationPrevuLe && (
-                <p className="text-[12px] text-text-3 mt-2">Prévu le {formatDateHeure(prospect.rdvEstimationPrevuLe)}</p>
-              )}
-            </details>
-
-            {!prospect.rdvEstimationRealiseLe && (
-              <details className="bg-surface rounded-lg border border-border p-3">
-                <summary className="text-[13px] font-medium text-text-1 cursor-pointer">Marquer le rendez-vous comme réalisé</summary>
-                <form action={marquerRdvEstimationRealiseProspectVendeurAction} className="flex flex-col gap-3 mt-3">
-                  <input type="hidden" name="id" value={prospect.id} />
-                  <input
-                    name="rdvEstimationRealiseLe"
-                    type="datetime-local"
-                    required
-                    defaultValue={prospect.rdvEstimationPrevuLe?.slice(0, 16)}
-                    className={inputCls}
-                  />
-                  <button type="submit" className={`self-start ${boutonCls}`}>
-                    Marquer réalisé
+                  <button
+                    type="submit"
+                    className="self-start text-[12.5px] font-medium text-danger bg-surface border border-border-md hover:border-danger transition-colors px-3 py-1.5 rounded-lg"
+                  >
+                    Confirmer la perte
                   </button>
                 </form>
               </details>
             )}
-            {prospect.rdvEstimationRealiseLe && (
-              <p className="text-[13px] text-text-3">Rendez-vous réalisé le {formatDateHeure(prospect.rdvEstimationRealiseLe)}</p>
-            )}
 
-            {!prospect.mandatProposeLe && (
-              <form action={proposerMandatProspectVendeurAction}>
-                <input type="hidden" name="id" value={prospect.id} />
-                <button type="submit" className={boutonSecondaireCls}>
-                  Marquer le mandat comme proposé
-                </button>
-              </form>
-            )}
-            {prospect.mandatProposeLe && (
-              <p className="text-[13px] text-text-3">Mandat proposé le {formatDate(prospect.mandatProposeLe)}</p>
-            )}
-
-            <Link href={`/prospects-vendeurs/${prospect.id}/signer-mandat`} className={`self-start ${boutonCls}`}>
-              Signer le mandat et créer le bien
-            </Link>
-          </div>
-        </section>
-      )}
-
-      {/* Perte */}
-      {statut === "perdu" ? (
-        <section className="mb-8">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Perte</p>
-          <div className="bg-danger-light border border-danger/30 rounded-lg p-4 text-[14px] text-text-1">
-            <p className="font-medium">{prospect.motifPerte && LABEL_MOTIF_PERTE_PROSPECT_VENDEUR[prospect.motifPerte]}</p>
-            {prospect.datePerte && <p className="text-text-2 text-[13px]">{formatDate(prospect.datePerte)}</p>}
-          </div>
-        </section>
-      ) : (
-        enCours && (
-          <details className="mb-8 bg-surface rounded-lg border border-border p-3">
-            <summary className="text-[13px] font-medium text-danger cursor-pointer">Marquer comme perdu</summary>
-            <form action={marquerProspectVendeurPerduAction} className="flex flex-col gap-3 mt-3">
+            <form action={prospect.archiveLe ? desarchiverProspectVendeurAction : archiverProspectVendeurAction}>
               <input type="hidden" name="id" value={prospect.id} />
-              <div>
-                <label className="text-[12px] font-medium text-text-2 mb-1 block">Motif *</label>
-                <select name="motifPerte" required className={inputCls} defaultValue="">
-                  <option value="" disabled>
-                    Choisir...
-                  </option>
-                  {MOTIFS_PERTE_PROSPECT_VENDEUR.map((m) => (
-                    <option key={m} value={m}>
-                      {LABEL_MOTIF_PERTE_PROSPECT_VENDEUR[m]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-[12px] font-medium text-text-2 mb-1 block">Date *</label>
-                <input name="datePerte" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} className={inputCls} />
-              </div>
-              <button type="submit" className="self-start text-[13px] font-medium text-white bg-danger hover:bg-danger transition-colors px-3.5 py-2 rounded-lg">
-                Marquer comme perdu
+              <button
+                type="submit"
+                className="text-[12.5px] font-medium text-text-3 hover:text-text-1 transition-colors"
+              >
+                {prospect.archiveLe ? "Désarchiver la fiche" : "Archiver la fiche"}
               </button>
             </form>
-          </details>
-        )
-      )}
 
-      {/* Tâches (ADR-028 — remplace l'ancien champ simple prochaineAction/prochaineActionLe,
-          migré vers `taches` lors de l'introduction de cette table). */}
-      <section className="mb-8">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Tâches</p>
-        <div className="flex flex-col gap-2 mb-3">
-          {tachesOuvertes.length === 0 ? (
-            <p className="text-[14px] text-text-3">Aucune tâche en cours.</p>
-          ) : (
-            tachesOuvertes.map((tache) => (
-              <div key={tache.id} className="bg-surface rounded-lg border border-border p-4">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[11px] font-medium text-accent">{LABEL_TYPE_TACHE[tache.type]}</span>
-                  <span className="text-[11px] text-text-3">·</span>
-                  <span className="text-[11px] text-text-3">
-                    {tache.echeance ? formatDate(tache.echeance) : LABEL_ECHEANCE_ABSENTE}
-                  </span>
-                </div>
-                <p className="text-[14px] text-text-1">{tache.titre}</p>
-                {tache.contexte && <p className="text-[13px] text-text-3 mt-0.5">{tache.contexte}</p>}
-                {tache.origine === "automatique" && (
-                  <p className="text-[11px] text-text-3 mt-0.5">
-                    Créée automatiquement — Règle :{" "}
-                    {tache.origineCode && LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
-                      ? LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
-                      : "inconnue"}
-                  </p>
-                )}
-                <Link
-                  href={`/communications/nouveau?tacheId=${tache.id}`}
-                  className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors mt-1 inline-block"
-                >
-                  Préparer un email
-                </Link>
-
-                <details className="mt-3 pt-3 border-t border-border">
-                  <summary className="text-[12px] font-medium text-accent cursor-pointer">
-                    Terminer cette tâche
-                  </summary>
-                  <form action={terminerTacheAction} className="flex flex-col gap-3 mt-3">
-                    <input type="hidden" name="id" value={tache.id} />
-                    <input type="hidden" name="redirectTo" value={`/prospects-vendeurs/${prospect.id}`} />
-                    <label className="flex items-center gap-2 text-[12px] text-text-2">
-                      <input type="checkbox" name="enregistrerInteraction" />
-                      Enregistrer aussi une interaction avec ce vendeur
-                    </label>
-                    <select name="typeInteraction" defaultValue="" className={inputCls}>
-                      <option value="" disabled>
-                        Type d&apos;interaction
-                      </option>
-                      {TYPES_NOTE_INTERACTION.map((t) => (
-                        <option key={t} value={t}>
-                          {LABEL_TYPE_NOTE_PROSPECT_VENDEUR[t]}
-                        </option>
-                      ))}
-                    </select>
-                    <textarea
-                      name="contenuInteraction"
-                      rows={2}
-                      placeholder="Contenu de l'interaction (uniquement si la case ci-dessus est cochée)"
-                      className={inputCls}
-                    />
-                    <button type="submit" className={`self-start ${boutonCls}`}>
-                      Marquer terminée
-                    </button>
-                  </form>
-                </details>
-                <form action={annulerTacheAction} className="mt-2">
-                  <input type="hidden" name="id" value={tache.id} />
-                  <input type="hidden" name="redirectTo" value={`/prospects-vendeurs/${prospect.id}`} />
-                  <button type="submit" className="text-[12px] text-text-3 hover:text-danger transition-colors">
-                    Annuler la tâche
-                  </button>
-                </form>
-              </div>
-            ))
-          )}
-        </div>
-
-        <details className="bg-surface rounded-lg border border-border p-3">
-          <summary className="text-[13px] font-medium text-text-1 cursor-pointer">Ajouter une tâche</summary>
-          <form action={creerTacheAction} className="flex flex-col gap-3 mt-3">
-            <input type="hidden" name="prospectVendeurId" value={prospect.id} />
-            <input type="hidden" name="redirectTo" value={`/prospects-vendeurs/${prospect.id}`} />
-            <input name="titre" required placeholder="ex. Rappeler pour confirmer le RDV" className={inputCls} />
-            <div className="grid grid-cols-2 gap-3">
-              <select name="type" defaultValue="autre" className={inputCls}>
-                <option value="appel">Appel</option>
-                <option value="email">Email</option>
-                <option value="message">Message</option>
-                <option value="document">Document</option>
-                <option value="relance">Relance</option>
-                <option value="autre">Autre</option>
-              </select>
-              <select name="priorite" defaultValue="normale" className={inputCls}>
-                <option value="haute">Haute</option>
-                <option value="normale">Normale</option>
-                <option value="basse">Basse</option>
-              </select>
-            </div>
-            <input name="echeance" type="date" className={inputCls} />
-            <button type="submit" className={`self-start ${boutonCls}`}>
-              Ajouter
-            </button>
-          </form>
-        </details>
-      </section>
-
-      {/* Notes */}
-      <section>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Notes</p>
-        <form action={ajouterNoteProspectVendeurAction} className="flex flex-col gap-3 mb-4 bg-surface rounded-lg border border-border p-4">
-          <input type="hidden" name="id" value={prospect.id} />
-          <select name="type" defaultValue="note_interne" className={inputCls}>
-            {TYPES_NOTE_PROSPECT_VENDEUR.map((t) => (
-              <option key={t} value={t}>
-                {LABEL_TYPE_NOTE_PROSPECT_VENDEUR[t]}
-              </option>
-            ))}
-          </select>
-          <textarea name="contenu" required rows={3} className={inputCls} placeholder="Contenu de la note..." />
-          <button type="submit" className={`self-start ${boutonSecondaireCls}`}>
-            Ajouter la note
-          </button>
-        </form>
-
-        {notes.length === 0 ? (
-          <p className="text-[14px] text-text-3">Aucune note pour l&apos;instant.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {notes.map((note) => (
-              <div key={note.id} className="bg-surface rounded-lg border border-border p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant={note.type === "note_interne" ? "muted" : "accent"}>{LABEL_TYPE_NOTE_PROSPECT_VENDEUR[note.type]}</Badge>
-                  <span className="text-[12px] text-text-3">{formatDateHeure(note.creeLe)}</span>
-                </div>
-                <p className="text-[14px] text-text-1 whitespace-pre-wrap">{note.contenu}</p>
-              </div>
-            ))}
+            {statut === "mandat_signe" && (
+              <p className="text-[11.5px] text-text-3">Une signature ne peut pas être annulée.</p>
+            )}
           </div>
-        )}
-      </section>
+        </div>
+      </div>
     </div>
   );
 }

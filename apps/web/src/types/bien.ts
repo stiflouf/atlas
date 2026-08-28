@@ -13,6 +13,14 @@ export const LABEL_CHARGE_HONORAIRES: Record<ChargeHonoraires, string> = {
   acquereur: "Acquéreur",
 };
 
+export const LABEL_TYPE_BIEN: Record<TypeBien, string> = {
+  appartement: "Appartement",
+  maison: "Maison",
+  studio: "Studio",
+  loft: "Loft",
+  local_commercial: "Local commercial",
+};
+
 export const LABEL_STATUT_MANDAT: Record<StatutMandat, string> = {
   actif: "Actif",
   suspendu: "Suspendu",
