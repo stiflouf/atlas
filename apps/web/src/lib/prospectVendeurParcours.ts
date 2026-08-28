@@ -68,6 +68,11 @@ function dateFranchissement(prospect: ProspectVendeur, cle: CleJalon): string | 
 // marqué réalisé, et le rail doit le représenter fidèlement plutôt que de le corriger.
 export function deriverParcoursProspectVendeur(prospect: ProspectVendeur): JalonParcours[] {
   const statut: StatutProspectVendeur = deriverStatutProspectVendeur(prospect);
+  // « Actuel » désigne l'étape où le travail se trouve maintenant. `mandat_signe` est terminal
+  // (aucune transition ne lui succède, les Server Actions les refusent toutes) : le rail doit s'y
+  // lire entièrement franchi, jamais avec un dernier segment « en cours » qui suggérerait un
+  // travail restant.
+  const pipelineTermine = statut === "mandat_signe";
 
   return ORDRE_JALONS.map((cle) => {
     const franchi = dateFranchissement(prospect, cle);
@@ -78,7 +83,7 @@ export function deriverParcoursProspectVendeur(prospect: ProspectVendeur): Jalon
       libelle: LIBELLE_JALON[cle],
       // `perdu` n'est aucun de ces six jalons : aucun segment n'est alors "actuel", le rail montre
       // seulement le chemin réellement parcouru avant la perte.
-      etat: cle === statut ? "actuel" : franchi ? "passe" : "futur",
+      etat: cle === statut && !pipelineTermine ? "actuel" : franchi ? "passe" : "futur",
       date: franchi ?? (previsionnel ? prospect.rdvEstimationPrevuLe : undefined),
       previsionnel,
     };

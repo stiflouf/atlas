@@ -330,6 +330,73 @@ describe("Fiche prospect vendeur — mandat signé", () => {
   });
 });
 
+describe("Fiche prospect vendeur — sémantique contact / échange", () => {
+  it("un rendez-vous tenu sans note affiche un contact, jamais un échange enregistré fantôme", async () => {
+    // Régression smoke (28/08/2026) : le bloc Relation affichait « Dernier échange : il y a 0 j »
+    // alors qu'« Échanges enregistrés » valait 0. dernierContactLe est avancé par un rendez-vous
+    // marqué réalisé (ADR-027) sans qu'aucune note existe — « contact » et « échange » ne
+    // désignent pas la même chose.
+    const prospect = await prospectDeTest("CONTACT-SANS-NOTE");
+    await qualifierProspectVendeur(prospect.id);
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date(Date.now() - 60 * 60 * 1000));
+    const html = await rendre(prospect.id);
+
+    expect(html).toContain("Dernier contact");
+    expect(html).not.toContain("Dernier échange");
+    expect(html).not.toContain("dernier échange il y a");
+    expect(html).not.toContain("échange aujourd&#x27;hui");
+    // Le compteur d'échanges reste à zéro : aucune note n'a été enregistrée.
+    expect(html).toContain("Échanges enregistrés");
+    expect(html).not.toContain("Notes internes");
+  });
+
+  it("le header suit la même sémantique que le bloc Relation", async () => {
+    const prospect = await prospectDeTest("HEADER-CONTACT");
+    await qualifierProspectVendeur(prospect.id);
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date(Date.now() - 60 * 60 * 1000));
+    const html = await rendre(prospect.id);
+
+    expect(html).toContain("contact aujourd&#x27;hui");
+  });
+
+  it("un vrai échange noté est bien compté et daté", async () => {
+    const prospect = await prospectDeTest("ECHANGE-REEL");
+    await ajouterNoteProspectVendeur(prospect.id, "appel", "Point téléphonique avec le vendeur.");
+    const html = await rendre(prospect.id);
+
+    expect(html).toContain("Dernier contact");
+    expect(html).toContain("contact aujourd&#x27;hui");
+    expect(html).toContain("Point téléphonique avec le vendeur.");
+  });
+
+  it("ne présente jamais la date de création comme un premier contact", async () => {
+    // ProspectVendeur n'a aucune datePremiereContact (contrairement à ProfilAcquereur) : creeLe
+    // est la création de l'opportunité. Le libellé reprend le vocabulaire du dashboard.
+    const prospect = await prospectDeTest("PREMIER-CONTACT");
+    await proposerMandatProspectVendeur(prospect.id);
+    const resultat = await signerMandatProspectVendeur(prospect.id, {
+      reference: `${NOM_PREFIX}-REF-DELAI`,
+      titre: "Studio test délai",
+      type: "studio",
+      adresse: "3 rue du Délai",
+      ville: "Rennes",
+      codePostal: "35000",
+      surface: 30,
+      pieces: 1,
+      prix: 150000,
+      statutMandat: "actif",
+      dateMandat: "2026-08-11",
+      caracteristiques: [],
+      description: "",
+    });
+    if (resultat) idsBiens.push(resultat.bien.id);
+    const html = await rendre(prospect.id);
+
+    expect(html).toContain("Du prospect au mandat signé");
+    expect(html).not.toContain("premier contact");
+  });
+});
+
 describe("Fiche prospect vendeur — sortie du pipeline", () => {
   it("propose perte et archivage hors du flux, jamais comme des étapes", async () => {
     const prospect = await prospectDeTest("SORTIE");

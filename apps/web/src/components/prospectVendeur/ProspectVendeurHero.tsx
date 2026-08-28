@@ -84,12 +84,15 @@ export default function ProspectVendeurHero({ prospect }: { prospect: ProspectVe
               {prospect.origineLeadDetail && ` — ${prospect.origineLeadDetail}`}
               {" · "}Créée le {formatDate(prospect.creeLe)}
               {" · "}
+              {/* Même sémantique que le bloc Relation : dernierContactLe couvre une note
+                  d'interaction ET un rendez-vous tenu sans note (ADR-027) — « contact », jamais
+                  « échange », qui laisserait croire qu'une note existe. */}
               <span className={`font-medium ${tonSilence}`}>
                 {jamaisContacte
                   ? "jamais contacté"
                   : jours === 0
-                    ? "échange aujourd'hui"
-                    : `dernier échange il y a ${jours} jour${jours > 1 ? "s" : ""}`}
+                    ? "contact aujourd'hui"
+                    : `dernier contact il y a ${jours} jour${jours > 1 ? "s" : ""}`}
               </span>
             </p>
           </div>

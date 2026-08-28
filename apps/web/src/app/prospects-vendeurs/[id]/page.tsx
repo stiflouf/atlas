@@ -163,8 +163,12 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
           <section>
             <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Relation</p>
             <div className="bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] p-4 flex flex-col gap-2">
+              {/* « Dernier contact », jamais « dernier échange » : dernierContactLe est avancé par
+                  une note d'interaction ET par un rendez-vous marqué réalisé (ADR-027 — un
+                  rendez-vous tenu est un contact même sans note). L'étiqueter « échange »
+                  contredisait le compteur ci-dessous, qui ne compte que les notes. */}
               <div className="flex items-baseline justify-between gap-3">
-                <span className="text-[12.5px] text-text-2">Dernier échange</span>
+                <span className="text-[12.5px] text-text-2">Dernier contact</span>
                 <span className="text-[12.5px] font-medium text-text-1">
                   {prospect.dernierContactLe ? `il y a ${jours} j` : "jamais"}
                 </span>
@@ -187,9 +191,13 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
                   {prospect.origineLead ? LABEL_ORIGINE_LEAD[prospect.origineLead] : "Non déterminée"}
                 </span>
               </div>
+              {/* ProspectVendeur n'a AUCUNE date de premier contact (contrairement à
+                  ProfilAcquereur.datePremiereContact) : creeLe est la création de l'opportunité,
+                  jamais un premier contact. Même mesure et même vocabulaire que le dashboard
+                  (« Délai moyen prospect → mandat signé », chargerPipelineVendeur). */}
               {statut === "mandat_signe" && prospect.mandatSigneLe && (
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[12.5px] text-text-2">Du premier contact à la signature</span>
+                  <span className="text-[12.5px] text-text-2">Du prospect au mandat signé</span>
                   <span className="text-[12.5px] font-medium text-text-1">
                     {Math.floor(
                       (new Date(prospect.mandatSigneLe).getTime() - new Date(prospect.creeLe).getTime()) /

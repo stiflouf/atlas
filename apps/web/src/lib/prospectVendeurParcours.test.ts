@@ -90,6 +90,38 @@ describe("deriverParcoursProspectVendeur — ordre réel du code", () => {
     expect(par.estimation.etat).toBe("actuel");
   });
 
+  it("mandat signé : les six segments sont franchis, aucun n'est « actuel »", () => {
+    // Régression smoke (28/08/2026) : le dernier segment s'affichait en « actuel » (champagne)
+    // alors que le pipeline est terminal — le design validé demande un rail entièrement franchi.
+    const jalons = deriverParcoursProspectVendeur(
+      prospect({
+        qualifieLe: "2026-07-16T09:00:00.000Z",
+        rdvEstimationRealiseLe: "2026-07-24T10:00:00.000Z",
+        estimationProposeeLe: "2026-07-28",
+        mandatProposeLe: "2026-08-04T09:00:00.000Z",
+        mandatSigneLe: "2026-08-11T09:00:00.000Z",
+        bienId: "22222222-2222-4222-8222-222222222222",
+      })
+    );
+
+    expect(jalons).toHaveLength(6);
+    expect(jalons.every((j) => j.etat === "passe")).toBe(true);
+    expect(jalons.some((j) => j.etat === "actuel")).toBe(false);
+  });
+
+  it("un jalon jamais franchi reste « futur » même après la signature", () => {
+    // Saisie hors séquence : le mandat est signé sans qu'un rendez-vous ait été marqué réalisé.
+    // Le rail ne doit pas combler rétroactivement un jalon qui n'a jamais eu lieu.
+    const jalons = deriverParcoursProspectVendeur(
+      prospect({ mandatSigneLe: "2026-08-11T09:00:00.000Z", bienId: "22222222-2222-4222-8222-222222222222" })
+    );
+    const par = Object.fromEntries(jalons.map((j) => [j.cle, j]));
+
+    expect(par.mandat_signe.etat).toBe("passe");
+    expect(par.rendez_vous.etat).toBe("futur");
+    expect(par.rendez_vous.date).toBeUndefined();
+  });
+
   it("un prospect perdu n'a aucun jalon « actuel » mais conserve son chemin parcouru", () => {
     const jalons = deriverParcoursProspectVendeur(
       prospect({ qualifieLe: "2026-07-18T09:00:00.000Z", datePerte: "2026-08-06", motifPerte: "injoignable" })
