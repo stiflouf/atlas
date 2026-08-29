@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Users, Building2, ShieldCheck, Landmark, Handshake, Scale, FileText } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import IconTile from "@/components/ui/IconTile";
+import Tabs, { getTabId, getTabPanelId } from "@/components/ui/Tabs";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, deriverStatutTache, type Tache } from "@/types/tache";
@@ -175,40 +176,6 @@ export default function BienTabs({
 }) {
   const [active, setActive] = useState<Tab>("contexte");
 
-  // Affordance de scroll des onglets (passe design RC2, chantier A) — purement visuel, aucune
-  // logique métier : l'onglet actif est ramené dans la zone visible, et un dégradé signale s'il
-  // reste du contenu caché de chaque côté. Rôle/comportement des onglets eux-mêmes inchangés.
-  const barreOngletsRef = useRef<HTMLDivElement>(null);
-  const ongletActifRef = useRef<HTMLButtonElement>(null);
-  const [debordementGauche, setDebordementGauche] = useState(false);
-  const [debordementDroite, setDebordementDroite] = useState(false);
-
-  function mettreAJourDebordement() {
-    const conteneur = barreOngletsRef.current;
-    if (!conteneur) return;
-    setDebordementGauche(conteneur.scrollLeft > 2);
-    setDebordementDroite(conteneur.scrollLeft + conteneur.clientWidth < conteneur.scrollWidth - 2);
-  }
-
-  useEffect(() => {
-    mettreAJourDebordement();
-    ongletActifRef.current?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
-
-  useEffect(() => {
-    const conteneur = barreOngletsRef.current;
-    if (!conteneur) return;
-    mettreAJourDebordement();
-    conteneur.addEventListener("scroll", mettreAJourDebordement, { passive: true });
-    window.addEventListener("resize", mettreAJourDebordement);
-    return () => {
-      conteneur.removeEventListener("scroll", mettreAJourDebordement);
-      window.removeEventListener("resize", mettreAJourDebordement);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const liensParOffre = new Map<string, { lienId: string; visite: CompteRenduVisite }[]>();
   for (const lien of liens) {
     const liste = liensParOffre.get(lien.offreId) ?? [];
@@ -268,54 +235,36 @@ export default function BienTabs({
 
   return (
     <div>
-      {/* Onglets — affordance de scroll (chantier A) : dégradé de bord dès qu'il reste du contenu
-          caché, jamais affiché quand tous les onglets tiennent (ex. desktop large, chantier B). */}
-      <div className="relative mb-6">
-        <div
-          ref={barreOngletsRef}
-          role="tablist"
-          className="flex overflow-x-auto gap-0 border-b border-border scrollbar-none scroll-smooth"
-        >
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              ref={active === tab.id ? ongletActifRef : undefined}
-              role="tab"
-              aria-selected={active === tab.id}
-              onClick={() => setActive(tab.id)}
-              className={`shrink-0 px-4 py-3 text-[13px] font-medium border-b-2 transition-colors duration-100 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent ${
-                active === tab.id
-                  ? "border-accent text-accent"
-                  : "border-transparent text-text-3 hover:text-text-2"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        {debordementGauche && (
-          <div className="pointer-events-none absolute left-0 top-0 bottom-[1px] w-8 bg-gradient-to-r from-surface to-transparent" />
-        )}
-        {debordementDroite && (
-          <div className="pointer-events-none absolute right-0 top-0 bottom-[1px] w-8 bg-gradient-to-l from-surface to-transparent" />
+      <Tabs tabs={TABS} active={active} onChange={setActive} idBase="bien-tabs" />
+
+      {/* Contenu */}
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "contexte")}
+        aria-labelledby={getTabId("bien-tabs", "contexte")}
+        hidden={active !== "contexte"}
+      >
+        {active === "contexte" && (
+          <div className="max-w-2xl">
+            <p className="text-[14px] text-text-2 leading-relaxed mb-6">{bien.description}</p>
+            <ul className="flex flex-col gap-2">
+              {bien.caracteristiques.map((c) => (
+                <li key={c} className="flex items-start gap-2 text-[14px] text-text-1">
+                  <span className="text-accent mt-0.5 shrink-0">·</span>
+                  {c}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
-      {/* Contenu */}
-      {active === "contexte" && (
-        <div className="max-w-2xl">
-          <p className="text-[14px] text-text-2 leading-relaxed mb-6">{bien.description}</p>
-          <ul className="flex flex-col gap-2">
-            {bien.caracteristiques.map((c) => (
-              <li key={c} className="flex items-start gap-2 text-[14px] text-text-1">
-                <span className="text-accent mt-0.5 shrink-0">·</span>
-                {c}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "historique")}
+        aria-labelledby={getTabId("bien-tabs", "historique")}
+        hidden={active !== "historique"}
+      >
       {active === "historique" && dossier && (
         <div className="flex flex-col">
           {dossier.historique.map((evt, i) => (
@@ -353,7 +302,14 @@ export default function BienTabs({
           ))}
         </div>
       )}
+      </div>
 
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "notes")}
+        aria-labelledby={getTabId("bien-tabs", "notes")}
+        hidden={active !== "notes"}
+      >
       {active === "notes" && dossier && (
         <div>
           <div className="bg-surface-muted rounded-lg p-4 border border-border">
@@ -407,7 +363,14 @@ export default function BienTabs({
           <p className="text-[11px] text-text-3">Notes privées — non communiquées aux acquéreurs.</p>
         </div>
       )}
+      </div>
 
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "visites")}
+        aria-labelledby={getTabId("bien-tabs", "visites")}
+        hidden={active !== "visites"}
+      >
       {active === "visites" && (
         <div className="flex flex-col gap-6">
           <div>
@@ -498,7 +461,14 @@ export default function BienTabs({
           </div>
         </div>
       )}
+      </div>
 
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "documents")}
+        aria-labelledby={getTabId("bien-tabs", "documents")}
+        hidden={active !== "documents"}
+      >
       {active === "documents" && dossier && (
         <div className="flex flex-col divide-y divide-border bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           {dossier.documents.map((doc) => (
@@ -865,7 +835,14 @@ export default function BienTabs({
           )}
         </div>
       )}
+      </div>
 
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "offres")}
+        aria-labelledby={getTabId("bien-tabs", "offres")}
+        hidden={active !== "offres"}
+      >
       {active === "offres" && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
@@ -1054,7 +1031,14 @@ export default function BienTabs({
           )}
         </div>
       )}
+      </div>
 
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "compromis")}
+        aria-labelledby={getTabId("bien-tabs", "compromis")}
+        hidden={active !== "compromis"}
+      >
       {active === "compromis" && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
@@ -1380,7 +1364,14 @@ export default function BienTabs({
           )}
         </div>
       )}
+      </div>
 
+      <div
+        role="tabpanel"
+        id={getTabPanelId("bien-tabs", "taches")}
+        aria-labelledby={getTabId("bien-tabs", "taches")}
+        hidden={active !== "taches"}
+      >
       {active === "taches" && (
         <div className="flex flex-col divide-y divide-border bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
           {taches.length === 0 ? (
@@ -1447,6 +1438,7 @@ export default function BienTabs({
           )}
         </div>
       )}
+      </div>
 
     </div>
   );
