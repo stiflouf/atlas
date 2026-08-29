@@ -1373,16 +1373,16 @@ export default function BienTabs({
         hidden={active !== "taches"}
       >
       {active === "taches" && (
-        <div className="flex flex-col divide-y divide-border bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
+        <div className="flex flex-col divide-y divide-border-subtle bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] px-4">
           {taches.length === 0 ? (
-            <p className="text-[14px] text-text-3 py-3">Aucune tâche en cours sur ce dossier.</p>
+            <p className="text-[14px] text-text-muted py-3">Aucune tâche en cours sur ce dossier.</p>
           ) : (
             taches.map((tache) => {
               const statut = deriverStatutTache(tache);
               return (
                 <div key={tache.id} className="flex items-start gap-3 py-3">
                   {statut !== "a_faire" ? (
-                    <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-border border-border-md" />
+                    <div className="w-4 h-4 mt-0.5 rounded border shrink-0 bg-border-subtle border-border-default" />
                   ) : (
                     <form action={terminerTacheAction} className="mt-0.5 shrink-0">
                       <input type="hidden" name="id" value={tache.id} />
@@ -1390,14 +1390,14 @@ export default function BienTabs({
                       <button
                         type="submit"
                         aria-label="Marquer comme terminée"
-                        className="w-4 h-4 rounded border border-border-md hover:border-accent hover:bg-accent-light transition-colors"
+                        className="w-4 h-4 rounded border border-border-default hover:border-action-primary hover:bg-surface-subtle transition-colors"
                       />
                     </form>
                   )}
                   <div className="flex-1">
-                    <p className="text-[14px] text-text-1">{tache.titre}</p>
-                    {tache.contexte && <p className="text-[13px] text-text-3 mt-0.5">{tache.contexte}</p>}
-                    <p className="text-[11px] text-text-3 mt-0.5">
+                    <p className="text-[14px] text-text-primary">{tache.titre}</p>
+                    {tache.contexte && <p className="text-[13px] text-text-muted mt-0.5">{tache.contexte}</p>}
+                    <p className="text-[11px] text-text-muted mt-0.5">
                       {statut === "annulee"
                         ? "Annulée"
                         : tache.echeance
@@ -1405,7 +1405,7 @@ export default function BienTabs({
                           : LABEL_ECHEANCE_ABSENTE}
                     </p>
                     {tache.origine === "automatique" && (
-                      <p className="text-[11px] text-text-3 mt-0.5">
+                      <p className="text-[11px] text-text-muted mt-0.5">
                         Créée automatiquement — Règle :{" "}
                         {tache.origineCode && labelRegleAutomatisation[tache.origineCode as CodeRegleAutomatisation]
                           ? labelRegleAutomatisation[tache.origineCode as CodeRegleAutomatisation]
@@ -1416,7 +1416,7 @@ export default function BienTabs({
                       {deriverCibleTache(tache) && (
                         <Link
                           href={`/communications/nouveau?tacheId=${tache.id}`}
-                          className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors"
+                          className="text-[11px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
                         >
                           Préparer un email
                         </Link>
@@ -1425,7 +1425,7 @@ export default function BienTabs({
                         <form action={annulerTacheAction}>
                           <input type="hidden" name="id" value={tache.id} />
                           <input type="hidden" name="redirectTo" value={`/biens/${bien.id}`} />
-                          <button type="submit" className="text-[11px] text-text-3 hover:text-danger transition-colors">
+                          <button type="submit" className="text-[11px] text-text-muted hover:text-status-danger transition-colors">
                             Annuler
                           </button>
                         </form>
