@@ -309,7 +309,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | 2 ✅ | `Button` (+ `loading`), `ButtonLink` (nouveau), `Card`, `EmptyState` sur sémantiques | `globals.css`, `Button.tsx`, `ButtonLink.tsx` (créé), `Card.tsx`, `EmptyState.tsx`, `app/page.tsx`, `app/biens/page.tsx`, `ProspectVendeurBienCree.tsx`, `AcquereurHero.tsx`, `BienStatutAction.tsx` |
 | 3 ✅ | `IconTile`, `StatTile`, `SectionTitle`, `Pagination` (`Avatar` : aucune modification recommandée) | `IconTile.tsx`, `StatTile.tsx`, `SectionTitle.tsx`, `Pagination.tsx` |
 | 4 ✅ | `Input` / `Textarea` / `Select` créés (natifs, sans hook, Server Component compatibles) + `ChampRecherche` adopté | `fieldStyles.ts` (créé), `Input.tsx`, `Textarea.tsx`, `Select.tsx` (créés), `ChampRecherche.tsx` |
-| 5 | `Sidebar`, navigation, shell, headers — `BrandMark` exclu | ~4 fichiers |
+| 5 ✅ | `NavItems` + `BottomNav` (tokens + `aria-label`/`aria-current`) + une ligne texte de `Sidebar` — `BrandMark`/`AppShell` exclus, pas de `PageHeader` créé | `NavItems.tsx`, `BottomNav.tsx`, `Sidebar.tsx` (1 ligne) |
 | 6 | Écran **Aujourd'hui** | `app/page.tsx` + `components/aujourd-hui/` |
 | 7 | Écran **Biens** + les 2 sorties de serif sur les prix | `app/biens/page.tsx` |
 | 8A | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
@@ -407,6 +407,19 @@ Trois primitives natives minimales (`InputHTMLAttributes`/`TextareaHTMLAttribute
 **Aucun état error/disabled/readonly stylé** — audit exhaustif confirmé : zéro usage réel de `aria-invalid`, `disabled`, `readOnly` sur un champ dans tout le produit. Ces attributs natifs restent transmis mécaniquement par le spread, simplement non stylés tant qu'aucun consommateur réel n'en a besoin.
 
 **Dettes documentées, non traitées ce lot :** les 69 autres occurrences de l'ancienne recette (`border-border-md`/`text-text-1`/`ring-accent`) dans 21 fichiers (dont `BienTabs.tsx`, réservé au Lot 10) ; ~22 `<label>` non associés via `htmlFor`/`id` (correction écran par écran, pas une primitive) ; le `placeholder` de `ChampRecherche` comme seul indice textuel (décision de contenu, pas ajouté arbitrairement) ; la variante compacte entrevue dans 3 `<select>` de `BienTabs.tsx` (`size`, à réévaluer au Lot 10 avec le contexte réel).
+
+### J.12 ✅ Lot 5 appliqué — shell/navigation, périmètre volontairement réduit
+
+L'audit a montré que les Lots 1-3 avaient déjà propagé la quasi-totalité des corrections mécaniques possibles au shell : `bg-navy` et le dégradé SVG de `Sidebar.tsx` étaient déjà corrects depuis le Lot 1. Le Lot 5 réel se limite donc à `NavItems.tsx`, `BottomNav.tsx` et une seule ligne de `Sidebar.tsx` :
+
+- `aria-label="Navigation principale"` et `aria-current={active ? "page" : undefined}` ajoutés aux deux variantes (`sidebar`/`bottom`) de `NavItems` — purement additif, la logique `active` (`pathname === "/"` / `pathname.startsWith(href)`) reste strictement inchangée.
+- `text-white`/`text-white/65`/`text-white/55`/`hover:text-white` → `text-text-inverse` (et ses variantes d'opacité) pour le foreground texte/icône de la navigation sidebar sur navy ; `text-white/90` → `text-text-inverse/90` pour le nom du conseiller dans `Sidebar.tsx`. `#FFFFFF` devient `#FFFCF7`, conformément à § 2.3 du Design System — écart imperceptible, vérifié dans le CSS compilé (`color-mix`/`lab()` corrects pour chaque opacité).
+- `text-text-3` → `text-text-muted` (nav bottom, état inactif) ; `border-border` → `border-border-subtle` (`BottomNav`). `text-navy` (état actif nav bottom) volontairement conservé — aucun token `navigation-active` dédié n'existe, pas inventé.
+- **Overlays blancs conservés à l'identique** (`bg-white/[0.08]`, `hover:bg-white/5`, `border-white/10`) : `text-inverse` est un token de texte, pas un remplacement générique du blanc translucide — aucun token sémantique pour ces overlays n'existe dans le DS, aucun inventé.
+- Champagne/or entièrement intacts (barre + pastille active de nav, avatar conseiller, silhouette SVG) — bloqués comme prévu.
+- `BrandMark.tsx` et `AppShell.tsx` absents du diff, aucune exception.
+- Aucune primitive `PageHeader` créée : les `<h1>` des 7 écrans principaux utilisent 3 tailles différentes et un mélange serif/Inter incohérent (Aujourd'hui/Biens/Clients/Fiscal/Automatisations en `font-serif`, Prospects vendeurs/Tableau de bord en Inter, sans règle documentée) — dette réelle, non résolue ici, renvoyée aux Lots 8A/8B puis à la propagation écran par écran.
+- **Dette fonctionnelle documentée, hors sujet tokens** : aucun contrôle de déconnexion visible dans le shell (le bloc « Steven Gausset » est un texte statique) — l'action serveur `/api/auth/atlas/logout` existe mais n'est reliée à aucune UI. À qualifier pour un chantier fonctionnel séparé, pas un lot de migration visuelle.
 
 ### J.7 Note — scission du lot typographique
 

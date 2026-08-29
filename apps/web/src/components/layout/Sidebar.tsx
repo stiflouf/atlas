@@ -72,7 +72,7 @@ export default function Sidebar() {
           <span className="inline-flex items-center justify-center shrink-0 w-8 h-8 rounded-full bg-champagne text-[13px] font-semibold text-navy">
             SG
           </span>
-          <p className="text-[13px] text-white/90 truncate">Steven Gausset</p>
+          <p className="text-[13px] text-text-inverse/90 truncate">Steven Gausset</p>
         </div>
       </div>
     </aside>

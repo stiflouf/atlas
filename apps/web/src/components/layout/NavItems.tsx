@@ -21,15 +21,18 @@ export default function NavItems({ variant }: Props) {
 
   if (variant === "sidebar") {
     return (
-      <nav className="flex flex-col gap-1">
+      <nav aria-label="Navigation principale" className="flex flex-col gap-1">
         {items.map(({ label, href, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
             <Link
               key={href}
               href={href}
+              aria-current={active ? "page" : undefined}
               className={`relative flex items-center gap-3 pl-3.5 pr-3 py-2.5 rounded-lg text-[13px] transition-colors duration-100 ${
-                active ? "bg-white/[0.08] text-white font-medium" : "text-white/65 hover:bg-white/5 hover:text-white"
+                active
+                  ? "bg-white/[0.08] text-text-inverse font-medium"
+                  : "text-text-inverse/65 hover:bg-white/5 hover:text-text-inverse"
               }`}
             >
               {/* Repère d'onglet actif — champagne, discret (§4 : subtil, jamais un bloc plein). */}
@@ -38,7 +41,7 @@ export default function NavItems({ variant }: Props) {
               )}
               <span
                 className={`inline-flex items-center justify-center shrink-0 w-7 h-7 rounded-md transition-colors ${
-                  active ? "bg-champagne/15 text-champagne" : "text-white/55"
+                  active ? "bg-champagne/15 text-champagne" : "text-text-inverse/55"
                 }`}
               >
                 <Icon size={15} strokeWidth={active ? 2.2 : 1.8} />
@@ -52,15 +55,16 @@ export default function NavItems({ variant }: Props) {
   }
 
   return (
-    <nav className="flex items-center justify-around h-full">
+    <nav aria-label="Navigation principale" className="flex items-center justify-around h-full">
       {items.map(({ label, href, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
+            aria-current={active ? "page" : undefined}
             className={`flex flex-col items-center gap-1 py-2 px-6 transition-colors duration-100 ${
-              active ? "text-navy" : "text-text-3"
+              active ? "text-navy" : "text-text-muted"
             }`}
           >
             <Icon size={20} strokeWidth={active ? 2.2 : 1.8} />
