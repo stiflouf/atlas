@@ -20,12 +20,13 @@ export default function ConnexionsGoogle({
   source: SourceAgenda;
   gmailAutorise: boolean;
 }) {
-  const pastille = "inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-[11.5px] text-text-2";
+  const pastille =
+    "inline-flex items-center gap-1.5 rounded-full bg-surface-subtle px-2.5 py-1 text-[11.5px] text-text-secondary";
   const point = "h-1.5 w-1.5 rounded-full shrink-0";
-  const lien = "font-medium text-accent hover:text-accent-hover transition-colors";
+  const lien = "font-medium text-action-primary hover:text-action-primary-hover transition-colors";
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-2 border-t border-border pt-3">
+    <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-2 border-t border-border-subtle pt-3">
       {source === "google_calendar" && (
         <span className={pastille}>
           <span className={`${point} bg-success`} />

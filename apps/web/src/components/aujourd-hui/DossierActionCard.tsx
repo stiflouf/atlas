@@ -23,10 +23,10 @@ export default function DossierActionCard({ bien, raison }: { bien: Bien; raison
         <div className="flex items-center gap-3.5 p-3.5">
           <span aria-hidden className="h-9 w-[3px] shrink-0 rounded-full bg-champagne" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[14px] font-medium text-text-1">{labelCourt(bien)}</p>
-            <p className="mt-0.5 text-[13px] leading-snug text-text-2">{raison}</p>
+            <p className="truncate text-[14px] font-medium text-text-primary">{labelCourt(bien)}</p>
+            <p className="mt-0.5 text-[13px] leading-snug text-text-secondary">{raison}</p>
           </div>
-          <ChevronRight size={16} className="shrink-0 text-text-3" />
+          <ChevronRight size={16} className="shrink-0 text-text-muted" />
         </div>
       </Card>
     </Link>

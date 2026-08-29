@@ -96,8 +96,8 @@ export default async function AgendaCard({
     <div className="flex gap-3">
       {/* Heure — colonne fixe alignée sur toute la timeline. */}
       <div className="w-14 shrink-0 text-right pt-0.5">
-        <span className="text-[12px] font-medium text-text-2 tabular-nums leading-tight">
-          {dateLabel && <span className="block text-[11px] text-text-3">{dateLabel}</span>}
+        <span className="text-[12px] font-medium text-text-secondary tabular-nums leading-tight">
+          {dateLabel && <span className="block text-[11px] text-text-muted">{dateLabel}</span>}
           {rdv.journeeEntiere ? "Toute la journée" : rdv.heure}
         </span>
       </div>
@@ -105,7 +105,7 @@ export default async function AgendaCard({
       {/* Rail — point coloré par type + ligne de connexion vers l'item suivant. */}
       <div className="flex flex-col items-center shrink-0">
         <span className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${DOT_COLOR[variant]}`} />
-        {!dernier && <span className="w-px flex-1 bg-border mt-1" />}
+        {!dernier && <span className="w-px flex-1 bg-border-subtle mt-1" />}
       </div>
 
       <div className="flex-1 min-w-0 pb-6">
@@ -118,10 +118,10 @@ export default async function AgendaCard({
             </span>
           )}
         </div>
-        <p className="text-[14px] font-medium text-text-1 leading-snug">{rdv.titre}</p>
-        {rdv.lieu && <p className="text-[13px] text-text-2 mt-0.5 truncate">{rdv.lieu}</p>}
+        <p className="text-[14px] font-medium text-text-primary leading-snug">{rdv.titre}</p>
+        {rdv.lieu && <p className="text-[13px] text-text-secondary mt-0.5 truncate">{rdv.lieu}</p>}
         {rdv.client && (
-          <p className="text-[13px] text-text-3 mt-0.5">
+          <p className="text-[13px] text-text-muted mt-0.5">
             {rdv.client.prenom} {rdv.client.nom}
           </p>
         )}
@@ -129,7 +129,7 @@ export default async function AgendaCard({
         {preparationDisponible && (
           <Link
             href={`/visites/${rdv.id}/preparer`}
-            className="inline-block mt-1.5 text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
+            className="inline-block mt-1.5 text-[13px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
           >
             Préparer&nbsp;→
           </Link>
@@ -137,7 +137,7 @@ export default async function AgendaCard({
         {!preparationDisponible && rdv.type === "appel" && callHref && (
           <a
             href={callHref}
-            className="inline-block mt-1.5 text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
+            className="inline-block mt-1.5 text-[13px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
           >
             Appeler&nbsp;→
           </a>

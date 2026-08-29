@@ -310,7 +310,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | 3 ✅ | `IconTile`, `StatTile`, `SectionTitle`, `Pagination` (`Avatar` : aucune modification recommandée) | `IconTile.tsx`, `StatTile.tsx`, `SectionTitle.tsx`, `Pagination.tsx` |
 | 4 ✅ | `Input` / `Textarea` / `Select` créés (natifs, sans hook, Server Component compatibles) + `ChampRecherche` adopté | `fieldStyles.ts` (créé), `Input.tsx`, `Textarea.tsx`, `Select.tsx` (créés), `ChampRecherche.tsx` |
 | 5 ✅ | `NavItems` + `BottomNav` (tokens + `aria-label`/`aria-current`) + une ligne texte de `Sidebar` — `BrandMark`/`AppShell` exclus, pas de `PageHeader` créé | `NavItems.tsx`, `BottomNav.tsx`, `Sidebar.tsx` (1 ligne) |
-| 6 | Écran **Aujourd'hui** | `app/page.tsx` + `components/aujourd-hui/` |
+| 6 ✅ | Écran **Aujourd'hui** | `app/page.tsx`, `AgendaCard.tsx`, `TacheItem.tsx`, `DossierActionCard.tsx`, `ConnexionsGoogle.tsx`, `ConfirmationBienRdv.tsx`, `AlerteCard.tsx` |
 | 7 | Écran **Biens** + les 2 sorties de serif sur les prix | `app/biens/page.tsx` |
 | 8A | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
 | 8B | **Activation Cormorant** + recalage serif atomique, une seule PR cohérente | `layout.tsx`, `globals.css`, 7 fichiers de titres |
@@ -420,6 +420,19 @@ L'audit a montré que les Lots 1-3 avaient déjà propagé la quasi-totalité de
 - `BrandMark.tsx` et `AppShell.tsx` absents du diff, aucune exception.
 - Aucune primitive `PageHeader` créée : les `<h1>` des 7 écrans principaux utilisent 3 tailles différentes et un mélange serif/Inter incohérent (Aujourd'hui/Biens/Clients/Fiscal/Automatisations en `font-serif`, Prospects vendeurs/Tableau de bord en Inter, sans règle documentée) — dette réelle, non résolue ici, renvoyée aux Lots 8A/8B puis à la propagation écran par écran.
 - **Dette fonctionnelle documentée, hors sujet tokens** : aucun contrôle de déconnexion visible dans le shell (le bloc « Steven Gausset » est un texte statique) — l'action serveur `/api/auth/atlas/logout` existe mais n'est reliée à aucune UI. À qualifier pour un chantier fonctionnel séparé, pas un lot de migration visuelle.
+
+### J.13 ✅ Lot 6 appliqué — écran pilote « Aujourd'hui »
+
+L'écran était déjà largement composé avec les primitives V1 (`Card`, `IconTile`, `StatTile`, `SectionTitle`, `EmptyState`, `ButtonLink`) depuis les Lots 2-3. Le Lot 6 se limite donc à la migration lexicale des alias historiques restants vers les tokens sémantiques, dans `app/page.tsx` et `components/aujourd-hui/` (+ `components/alertes/AlerteCard.tsx`, seul consommateur = Aujourd'hui) :
+
+- `text-text-1/2/3` → `text-text-primary/secondary/muted`, `border-border` → `border-border-subtle`, `divide-border` → `divide-border-subtle`, `border-border-md` → `border-border-default`, `bg-surface-muted` → `bg-surface-subtle`, `text-accent`(`-hover`) → `text-action-primary`(`-hover`), `hover:border-accent` → `hover:border-action-primary` — appliqués dans `page.tsx`, `AgendaCard.tsx`, `TacheItem.tsx`, `DossierActionCard.tsx`, `ConnexionsGoogle.tsx`, `ConfirmationBienRdv.tsx`, `AlerteCard.tsx`.
+- `TacheItem.tsx` : hover de la case à cocher `hover:bg-accent-light` → `hover:bg-surface-subtle` (destination déjà validée en § J.4). Se propage visuellement à la Fiche Acquéreur (`app/clients/[id]/page.tsx`, consommateur non modifié) — testé (`page.test.tsx` de cette route, vert).
+- Greeting (`text-champagne`), H1 (`font-serif`), rail champagne de `DossierActionCard`, et tous les tons champagne/navy/muted de `TON_ICONE_NIVEAU` (`AlerteCard`) laissés strictement intacts — bloqués comme prévu (asset logo, § J.3) ou hors sujet (typographie, Lots 8A/8B).
+- `AgendaCard.tsx` : `DOT_COLOR.muted = "bg-text-3"` volontairement conservé tel quel — aucun token sémantique de statut neutre n'existe encore pour cet usage d'indicateur (pas de texte), dette déjà actée en § J.8bis, non ré-ouverte ici.
+- `Badge.tsx` non touché (registres reportés au Lot 12, § I) ; aucune primitive stabilisée (`Card`, `IconTile`, `StatTile`) rouverte ; aucune logique métier modifiée.
+- Tests : suites existantes `AgendaCard.test.tsx`, `TacheItem.test.tsx`, `app/page.test.tsx`, `app/clients/[id]/page.test.tsx` (propagation TacheItem) vertes sans modification ; suite Vitest complète 182/182 fichiers, 1454/1454 tests ; `tsc --noEmit` et `next build` propres.
+- E2E : Chromium installé (`pnpm exec playwright install chromium`, aucun fichier versionné modifié) ; `coeur.smoke.spec.ts` exécuté — l'assertion `heading "Aujourd'hui"` (seule concernée par ce lot) passe ; un échec sans rapport avec ce lot subsiste plus loin dans le même parcours, sur la fiche Bien (`/biens/[id]`, fichier non touché par le Lot 6) — dette distincte à qualifier séparément.
+- Validation visuelle desktop/mobile réalisée via session authentifiée réelle (script Playwright jetable, non conservé) : aucune anomalie constatée.
 
 ### J.7 Note — scission du lot typographique
 

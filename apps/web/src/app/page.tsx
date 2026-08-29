@@ -143,13 +143,13 @@ export default async function AujourdHui() {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       {/* En-tête */}
-      <div className="mb-7 flex items-end justify-between gap-4 border-b border-border pb-5">
+      <div className="mb-7 flex items-end justify-between gap-4 border-b border-border-subtle pb-5">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-champagne">{greeting}</p>
-          <h1 className="font-serif text-[28px] md:text-[34px] font-semibold text-text-1 leading-[1.05] mt-1.5">
+          <h1 className="font-serif text-[28px] md:text-[34px] font-semibold text-text-primary leading-[1.05] mt-1.5">
             Aujourd'hui
           </h1>
-          <p className="text-[13px] text-text-3 mt-1.5 first-letter:uppercase">{dateStr}</p>
+          <p className="text-[13px] text-text-muted mt-1.5 first-letter:uppercase">{dateStr}</p>
         </div>
         <ButtonLink href="/taches/nouveau" variant="primary" size="md">
           + Nouvelle tâche
@@ -196,17 +196,17 @@ export default async function AujourdHui() {
               <Card className="p-4">
                 <div className="flex items-center gap-3">
                   <IconTile icon={CalendarCheck} tone="champagne" size={34} iconSize={16} />
-                  <p className="text-[13.5px] leading-snug text-text-2">
+                  <p className="text-[13.5px] leading-snug text-text-secondary">
                     Plus aucun rendez-vous d'ici ce soir.
                     {rdvAVenirAvecContexte.length > 0 && (
-                      <span className="text-text-3"> La suite est en « à venir » ci-dessous.</span>
+                      <span className="text-text-muted"> La suite est en « à venir » ci-dessous.</span>
                     )}
                   </p>
                 </div>
               </Card>
             )}
             {rdvTermines > 0 && (
-              <p className="text-[12px] text-text-3 mt-1">
+              <p className="text-[12px] text-text-muted mt-1">
                 {rdvTermines} déjà terminé{rdvTermines > 1 ? "s" : ""} aujourd'hui
               </p>
             )}
@@ -259,7 +259,7 @@ export default async function AujourdHui() {
               </div>
               {autresAlertes.length > 0 && (
                 <details className="mt-2">
-                  <summary className="text-[13px] text-accent font-medium cursor-pointer">
+                  <summary className="text-[13px] text-action-primary font-medium cursor-pointer">
                     Afficher les autres ({autresAlertes.length})
                   </summary>
                   <div className="flex flex-col gap-2 mt-2">
@@ -279,7 +279,7 @@ export default async function AujourdHui() {
                 {autresTaches.length} autre{autresTaches.length > 1 ? "s" : ""} tâche
                 {autresTaches.length > 1 ? "s" : ""}
               </SectionTitle>
-              <Card className="px-4 divide-y divide-border">
+              <Card className="px-4 divide-y divide-border-subtle">
                 {autresTaches.map((tache) => (
                   <TacheItem key={tache.id} tache={tache} />
                 ))}

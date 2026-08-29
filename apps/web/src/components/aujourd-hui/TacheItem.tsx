@@ -33,15 +33,15 @@ export default function TacheItem({
         <button
           type="submit"
           aria-label="Marquer comme terminée"
-          className="w-4 h-4 rounded border border-border-md hover:border-accent hover:bg-accent-light transition-colors"
+          className="w-4 h-4 rounded border border-border-default hover:border-action-primary hover:bg-surface-subtle transition-colors"
         />
       </form>
       <div className="flex-1 min-w-0">
-        <p className="text-[14px] text-text-1">{tache.titre}</p>
+        <p className="text-[14px] text-text-primary">{tache.titre}</p>
         {tache.contexte && (
-          <p className="text-[13px] text-text-3 mt-0.5">{tache.contexte}</p>
+          <p className="text-[13px] text-text-muted mt-0.5">{tache.contexte}</p>
         )}
-        <p className="text-[11px] text-text-3 mt-0.5 flex items-center gap-1.5 flex-wrap">
+        <p className="text-[11px] text-text-muted mt-0.5 flex items-center gap-1.5 flex-wrap">
           <span>
             {tache.echeance ? (
               <>
@@ -61,7 +61,7 @@ export default function TacheItem({
           {estEnRetard(tache) && <Badge variant="danger">En retard</Badge>}
         </p>
         {tache.origine === "automatique" && (
-          <p className="text-[11px] text-text-3 mt-0.5">
+          <p className="text-[11px] text-text-muted mt-0.5">
             Créée automatiquement — Règle :{" "}
             {tache.origineCode && LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
               ? LABEL_REGLE_AUTOMATISATION[tache.origineCode as CodeRegleAutomatisation]
@@ -76,7 +76,7 @@ export default function TacheItem({
           {routeFiche && (
             <Link
               href={routeFiche}
-              className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors inline-block"
+              className="text-[11px] font-medium text-action-primary hover:text-action-primary-hover transition-colors inline-block"
             >
               Voir la fiche
             </Link>
@@ -84,7 +84,7 @@ export default function TacheItem({
           {cible && UUID_REGEX.test(tache.id) && (
             <Link
               href={`/communications/nouveau?tacheId=${tache.id}`}
-              className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors inline-block"
+              className="text-[11px] font-medium text-action-primary hover:text-action-primary-hover transition-colors inline-block"
             >
               Préparer un email
             </Link>
