@@ -74,7 +74,7 @@ export default function PhotosUploader({ bienId, placesRestantes }: { bienId: st
       <label
         className={`inline-flex w-fit items-center gap-1.5 text-[13px] font-medium transition-colors px-3.5 py-2 rounded-lg border ${
           enCours || placesRestantes <= 0
-            ? "text-text-3 bg-surface-muted border-border cursor-not-allowed"
+            ? "text-text-disabled bg-surface-muted border-border cursor-not-allowed"
             : "text-accent bg-surface border-border-md hover:border-accent cursor-pointer"
         }`}
       >

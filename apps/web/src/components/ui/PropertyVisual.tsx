@@ -104,7 +104,7 @@ export default function PropertyVisual({
         // aucune promesse visuelle fausse sur la nature du bien.
         <span
           aria-hidden
-          className="absolute inset-0 bg-gradient-to-b from-[#0b1f42] to-[#020817] after:absolute after:inset-x-0 after:bottom-1/3 after:h-px after:bg-champagne/25"
+          className="absolute inset-0 bg-gradient-to-b from-ink-800 to-ink-900 after:absolute after:inset-x-0 after:bottom-1/3 after:h-px after:bg-champagne/25"
         />
       )}
 

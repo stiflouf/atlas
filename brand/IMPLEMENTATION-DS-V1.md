@@ -1,0 +1,389 @@
+# DOMIORA — Plan d'implémentation du Design System V1
+
+**Source de vérité — Plan d'implémentation Design System V1**
+
+Date de consolidation : 29 août 2026.
+
+Aucun code produit à ce stade. Plan seul. Adossé à `brand/FONDATIONS.md` et `brand/DESIGN-SYSTEM-V1.md`.
+
+Établi le 29 août 2026 sur `stiflouf/atlas@main` (arbre `1c92c8ad4922`). Décisions humaines complémentaires validées le 29 août 2026, intégrées ci-dessous directement dans les sections concernées.
+
+---
+
+## 0. Le levier mécanique, et le piège qui va avec
+
+Tout le plan repose sur une propriété de Tailwind v4 : les classes du produit référencent des **noms** de tokens (`text-text-3`, `bg-surface-muted`, `border-border-md`), pas des valeurs.
+
+**Conséquence favorable.** Changer la *valeur* d'un token en gardant son *nom* propage le changement dans tout le produit sans toucher un seul fichier d'écran. Le passage au navy `#02152B` se fait ainsi : une ligne de `globals.css`, et les ~474 occurrences relevées suivent.
+
+**Conséquence défavorable, symétrique.** *Renommer* un token casse chaque classe qui le porte. Une recherche partielle — 400 fichiers scannés sur 556 candidats, arrêtée au budget de temps — a déjà relevé **474 occurrences** de `accent-light|champagne|text-3|surface-muted|border-md|navy-hover`. Le total réel est supérieur. Un renommage sec est donc exclu : ce serait une PR de plusieurs centaines de lignes mêlant tokens, écrans et composants, impossible à relire.
+
+D'où la stratégie : **on change les valeurs tôt, on renomme tard, jamais dans la même PR.**
+
+### ⚠ Piège de collision : l'échelle de rayons
+
+Le DS nomme `sm 6 / md 8 / lg 12 / xl 16`. Tailwind nomme `lg = 8px` et `xl = 12px`. Ce sont deux échelles décalées d'un cran, et le produit utilise massivement `rounded-lg` (champs, boutons) et `rounded-xl` (cartes).
+
+Redéfinir `--radius-lg: 12px` pour coller au DS ferait passer **tous les champs du produit de 8 à 12 px** silencieusement, sans qu'aucun fichier ne change — exactement l'effet de bord qu'on cherche à éviter.
+
+**Décision : ne pas toucher à l'échelle Tailwind.** On mappe les noms du DS sur les utilitaires existants et on documente la correspondance :
+
+| DS | px | Utilitaire Tailwind |
+|---|---|---|
+| sm | 6 | `rounded-md` |
+| md | 8 | `rounded-lg` |
+| lg | 12 | `rounded-xl` |
+| xl | 16 | `rounded-2xl` |
+| pill | ∞ | `rounded-full` |
+
+Le produit est déjà conforme : champs en `rounded-lg` (8), cartes en `rounded-xl` (12). Rien à migrer sur les rayons — seulement à cesser de choisir au hasard dans les nouveaux composants.
+
+---
+
+## A. Fichiers de fondation à modifier
+
+Trois fichiers, plusieurs PR (voir § F et § I pour le découpage exact en lots).
+
+### A.1 `apps/web/src/app/globals.css`
+
+**Bloc 1 — ajout des primitifs.** Une seule famille chiffrée : `ink` (`ink-900/800/700/600`), conformément à `brand/DESIGN-SYSTEM-V1.md` § 2.1. **Correction (sources désormais disponibles) :** les familles `ivory` / `stone` / `blue` évoquées dans une version antérieure de ce plan n'existent dans aucune source de vérité — elles ne sont pas créées. Chaque nouvelle surface neutre (`bg-page`, `bg-surface`, `bg-surface-subtle`, `bg-data`) est une valeur sémantique directe, sans primitif intermédiaire, exactement comme le fait déjà le produit pour `--color-page`/`--color-surface`. Purement additif : aucun consommateur, aucun risque.
+
+**Bloc 2 — repointage des valeurs sur les tokens existants**, noms inchangés :
+
+| Token (nom conservé) | Ancienne valeur | Nouvelle |
+|---|---|---|
+| `--color-navy` | `#071a3a` | `var(--color-ink-900)` = `#02152B` |
+| `--color-navy-hover` | `#102a54` | `var(--color-ink-800)` = `#0B2440` |
+| `--color-accent` | `#071a3a` | `var(--color-ink-900)` |
+| `--color-accent-hover` | `#102a54` | `var(--color-ink-800)` |
+| `--color-surface-muted` | `#f1ead9` | `var(--color-surface-subtle)` = `#F0EBE0` *(corrigé : pas de primitif `ivory-100`, voir Bloc 1)* |
+| `--color-text-3` | `#8b8d9e` | `var(--color-text-muted)` = **`#696B7B`** *(décision validée, voir § J.1)* |
+| `--color-warning` | `#92692c` | `var(--color-status-warning)` = **`#8A5E22`** *(décision validée, voir § J.2)* |
+| `--color-warning-light` | `#f5ead4` | `var(--color-status-warning-subtle)` — valeur inchangée, déjà conforme |
+| `--color-danger`, `--color-danger-light` | inchangées | aliasées vers `--color-status-danger`/`-subtle` — valeurs inchangées |
+| `--color-success`, `--color-success-light` | inchangées | aliasées vers `--color-status-success`/`-subtle` — valeurs inchangées |
+| `--color-border`, `--color-border-md` | inchangées | aliasées vers `--color-border-subtle`/`--color-border-default` — valeurs inchangées |
+
+**Bloc 3 — ajout des sémantiques**, valeurs et noms tirés intégralement de `brand/DESIGN-SYSTEM-V1.md` § 2.2 à § 2.6 : `--color-surface-subtle`, `--color-data`, `--color-inverse` (surfaces) ; `--color-text-primary/-secondary/-muted/-disabled/-inverse` (texte) ; `--color-border-subtle/-default/-strong`, `--color-focus-ring` (bordures/focus) ; `--color-action-primary/-hover/-active` (actions) ; `--color-status-success/-warning/-danger/-info` + leurs variantes `-subtle`/`-border` (statuts, y compris `info`, nouvellement documenté et sans équivalent legacy). Additif. Les anciens noms deviennent alias — voir § D. Aucune valeur n'est déduite : chacune est recopiée depuis le Design System, sans invention.
+
+**Bloc 4 — durées de mouvement** (`--motion-micro/enter/exit/move` + la courbe). Additif ; le produit utilise aujourd'hui `transition-colors` sans durée explicite, donc rien ne casse.
+
+**Bloc 5 — emplacements or.** Commentaires seuls, `PENDING_MASTER_LOGO_ASSET`. Aucune valeur. Toujours bloqué — voir § J.3.
+
+**Ce qui n'entre PAS dans ce fichier :** l'espacement. Tailwind le dérive de `--spacing` ; le produit utilise l'échelle par défaut (base 4), donc l'échelle du DS est **déjà en place**. Y toucher redimensionnerait tout le produit. Rien à faire — c'est une bonne nouvelle, pas un oubli.
+
+### A.2 `apps/web/src/app/layout.tsx` — stratégie typographique corrigée
+
+Substitution `Fraunces` → `Cormorant_Garamond` via `next/font/google`, variable CSS renommée en `--font-cormorant`, et `--font-serif` repointé dans `globals.css`.
+
+**Contrainte non négociable : ne jamais déployer volontairement un état intermédiaire visuellement dégradé sur `develop` ou `main`.** La bascule seule (avant recalage des tailles) produit un rendu mesurablement dégradé — elle ne doit donc jamais être visible en production seule. D'où la scission en deux lots étanches (remplace l'ancienne mention d'une simple « PR distincte », § F.4b) :
+
+- **Lot 8A — préparation technique.** Charger Cormorant Garamond via `next/font/google`, préparer la variable `--font-cormorant`. Ne **pas** repointer `--font-serif` si cela modifie le rendu visible. Cette PR doit être fusionnable sans aucun changement visuel notable.
+- **Lot 8B — activation atomique.** Après validation des écrans Aujourd'hui et Biens, dans **une seule PR cohérente** : repointer `--font-serif` vers Cormorant Garamond, recalibrer tailles / line-height / weights des 7 fichiers concernés, produire une comparaison Fraunces avant / Cormorant après, vérifier desktop et mobile.
+
+### A.3 `apps/web/tailwind` — rien
+
+Pas de fichier de config à modifier : `@theme inline` dans le CSS est la config. Les breakpoints restent ceux de Tailwind, conformément à la validation.
+
+---
+
+## B. Primitives — à créer, à harmoniser, à ne pas créer
+
+### B.1 À créer
+
+**`Input` — priorité absolue.** La recherche a relevé la même chaîne de classes répétée dans au moins **40 emplacements** :
+
+```
+w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1
+focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent
+```
+
+Présente dans `BienTabs.tsx` (une trentaine d'occurrences à elle seule), `BienFormulaire.tsx`, `AcquereurFormulaire.tsx`, `SecteursRechercheSection.tsx`, `ChampRecherche.tsx`, `visites/[id]/preparer/page.tsx`, `taches/nouveau/page.tsx`, `prospects-vendeurs/[id]/page.tsx`, `automatisations/page.tsx`. Trois fichiers l'ont déjà extraite en constante locale `const champ = …` — trois fois, séparément. C'est la dette la plus concentrée du produit.
+
+`Textarea` et `Select` partagent la même base : même composant socle, trois wrappers.
+
+**`Table`.** Aucun composant ; `dashboard/page.tsx` construit ses `<table>` à la main.
+
+**`Tabs`.** `BienTabs.tsx` porte sa propre logique d'onglets (ligne 289 : `border-transparent text-text-3 hover:text-text-2`). La primitive doit **reprendre cette API**, pas la remplacer.
+
+**`Dialog`, `Toast`, `Skeleton`, `Spinner`, `Tooltip`.** Aucun équivalent. `PhotosUploader.tsx` a une gestion d'état d'envoi (`succes` / `erreur` / `en_cours`) qui préfigure `Toast` : à lire avant.
+
+### B.2 À harmoniser — API existante à préserver
+
+**`Button`** — API saine (`variant` × `size`). Ajouts seuls : état `loading`, variante `link`. Le `secondary` cesse de changer de teinte au survol (déplacement de bordure). Aucune signature cassée.
+
+**`Badge`** — c'est ici que le travail est réel. Six variantes de couleur portent quatre registres métier (statut, catégorie, système, priorité). Le DS leur donne une forme distincte. Cela change l'API : un `tone` devient un `registre` + un `ton`. À faire en dernier parmi les primitives, avec relecture des usages un par un.
+
+**`Card`, `EmptyState`, `IconTile`, `StatTile`, `PropertyVisual`, `Avatar`, `SectionTitle`, `Pagination`** — passage aux tokens sémantiques uniquement. Aucun changement d'API.
+
+**`ChampRecherche`** — à **conserver tel quel** dans son principe. Formulaire GET natif, sans JS obligatoire, partageable par URL (ADR-048). Il consomme simplement le futur `Input` à la place de sa chaîne de classes inline. Ne pas le transformer en composant client.
+
+### B.3 À ne pas créer
+
+Pas de `Section`, pas de `Stack`, pas de `Grid`, pas de `Text`. Le produit compose correctement en Tailwind ; ces wrappers ajouteraient une couche d'indirection sans rien résoudre.
+
+---
+
+## C. Dépendances entre étapes
+
+```
+A.1 globals.css (valeurs + sémantiques)
+ ├──► B.2 primitives existantes → tokens sémantiques
+ │     └──► F.4 écrans pilotes
+ ├──► B.1 Input / Textarea / Select
+ │     └──► remplacement des champs inline (par écran)
+ └──► B.1 Table, Tabs, Dialog, Toast, Skeleton
+
+A.2 layout.tsx (Cormorant) — Lot 8A
+ └──► Lot 8B : recalage des tailles serif  [PR distincte, obligatoirement]
+
+Sidebar / navigation ──► dépend de A.1 seul
+BrandMark ────────────► BLOQUÉ, asset logo maître
+Badge (refonte des registres) ──► après tous les autres composants
+Suppression des alias ─────────► après migration complète
+```
+
+Deux chemins sont parallélisables sans conflit : tokens/primitives d'un côté, police/typographie de l'autre. Ils ne se croisent qu'aux écrans pilotes.
+
+---
+
+## D. Alias de compatibilité
+
+Aucun ancien nom n'est supprimé avant § E. Chaque alias est une ligne de `globals.css` :
+
+```css
+--color-text-1: var(--color-text-primary);
+--color-text-2: var(--color-text-secondary);
+--color-text-3: var(--color-text-muted);
+
+--color-surface-muted: var(--color-surface-subtle);
+
+--color-border: var(--color-border-subtle);
+--color-border-md: var(--color-border-default);
+
+--color-navy: var(--color-ink-900);
+--color-navy-hover: var(--color-ink-800);
+
+--color-accent: var(--color-action-primary);
+--color-accent-hover: var(--color-action-primary-hover);
+
+--color-danger: var(--color-status-danger);
+--color-danger-light: var(--color-status-danger-subtle);
+--color-success: var(--color-status-success);
+--color-success-light: var(--color-status-success-subtle);
+--color-warning: var(--color-status-warning);
+--color-warning-light: var(--color-status-warning-subtle);
+
+--color-champagne / -light → PENDING (voir § J.3, or officiel)
+```
+
+`--color-text-disabled` (`#8B8D9E`) n'est **pas** un alias : c'est une valeur sémantique autonome (§ 2.3 du Design System), distincte de `text-muted`. Elle n'a aucun consommateur dans ce lot — voir § D.3 et § J.1.
+
+**Trois cas qui ne sont pas de simples alias.**
+
+**D.1 — `--color-accent-light` (`#f0e4cc`) — arbitrage définitif (décision validée).** Trois rôles sous un nom, identifiés dans le code :
+
+| Usage relevé | Fichier | Destination |
+|---|---|---|
+| Fond de bouton d'onglet actif | `automatisations/page.tsx:109` | `bg-surface-subtle` |
+| Survol de case à cocher | `TacheItem.tsx:36`, `BienTabs.tsx:1402` | `bg-surface-subtle` |
+| Fond d'avatar/pastille | `prospects-vendeurs/page.tsx:165` | `stone-100` ou token neutre sémantique équivalent |
+
+Le troisième usage **ne dépend plus de l'or** : un avatar n'est pas un marqueur de marque. Il reste néanmoins en alias inchangé jusqu'à la migration effective des trois consommateurs. Avant suppression de `--color-accent-light` (§ E), une recherche exhaustive de ses consommateurs est obligatoire — un premier passage a déjà trouvé des usages supplémentaires non recensés ici (`Badge.tsx`, `BrouillonEmailFormulaire.tsx`, `PrepObjections.tsx`, `ProspectVendeurTaches.tsx`) : la liste ci-dessus n'est probablement pas complète.
+
+**D.2 — `--color-champagne` a des consommateurs de deux natures.** Certains sont décoratifs et peuvent attendre (`IconTile tone="champagne"`, ~12 emplacements). D'autres sont des **marqueurs sémantiques de marque** : le rail de `DossierActionCard.tsx:24` (« un rail champagne — marque, pas décor », dit le commentaire du code), le `border-t-2 border-t-champagne` de `BienAcquereursCompatibles.tsx:86`, les sur-titres de section (`page.tsx:149`, `biens/page.tsx:83`). Ceux-là sont précisément ce que l'or officiel devra porter. **Ne rien y toucher avant l'asset** (§ J.3).
+
+**D.3 — Inventaire exhaustif des consommateurs de `--color-text-3` et décision finale (audit complet, 283 occurrences relevées sur `apps/web/src`, dont 282 consommateurs réels + 1 déclaration dans `globals.css`).**
+
+| Catégorie | Nombre | Traitement |
+|---|---:|---|
+| A — texte muted réel | 278 | Migration mécanique, aucune ligne éditée : suit `--color-text-3 → var(--color-text-muted)` |
+| B — texte disabled réel | 1 | `PhotosUploader.tsx:77` : `<label>` de bouton d'upload désactivé (`disabled` HTML + `cursor-not-allowed`) — migré explicitement vers `text-text-disabled` dans le Lot 1, seule ligne éditée pour ce point |
+| C — objet / indicateur décoratif | 3 | `PhotosUploader.tsx:99`, `AgendaCard.tsx:18` (`muted: "bg-text-3"`), `pack-notaire/page.tsx:38` (`information: "bg-text-3"`) — **non édités**, voir décision ci-dessous |
+| D — ambigu | 0 | — |
+
+**Décision validée pour les 3 cas C :** ne pas les renommer en `bg-text-disabled` (un indicateur/pastille n'est pas un élément disabled — ce serait résoudre une dette de nommage en en créant une autre) et ne pas inventer un token neutre/`stone-400` dédié maintenant pour trois usages seulement. Ils conservent `bg-text-3` tel quel. **Conséquence explicitement acceptée :** ces trois pastilles passeront mécaniquement de `#8B8D9E` à `#696B7B` en même temps que tous les usages A, par héritage du repointage global — aucun enjeu WCAG (ce ne sont pas du texte), différence visuelle faible, fonction pleinement lisible dans les deux valeurs. Ce n'est donc plus un effet de bord silencieux mais une **dette sémantique documentée** : `bg-text-3` reste un token de texte utilisé comme couleur d'objet à ces trois emplacements, à remapper vers un vrai token neutre/indicateur **lorsque leurs composants respectifs (`PhotosUploader`, `AgendaCard`, le pack notaire) seront eux-mêmes migrés** dans un lot ultérieur — pas avant.
+
+**D.4 — `#030A1C` (scrim média) — classification tranchée (décision validée, confirmée par `brand/DESIGN-SYSTEM-V1.md` § 2.8).** Présent dans `PropertyVisual.tsx` (3 occurrences), `PhotoPrincipale.tsx`, `BienHero.tsx`, `BienGaleriePhotos.tsx`, `app/biens/[id]/photos/page.tsx` — toujours en overlay translucide sur photographie (lisibilité de badges/textes), jamais en aplat de marque. Ce n'est **pas** le navy de marque : c'est une « **couleur fonctionnelle de lisibilité** » au sens du Design System. **Ne rien modifier sur ces cinq usages dans le Lot 1**, y compris dans `PropertyVisual.tsx` : les traiter isolément créerait la même incohérence visuelle que le plan cherche à éviter (H.1/H.2), puisque les quatre autres fichiers resteraient sur l'ancienne valeur. Un token `--color-media-scrim` est explicitement envisagé par le Design System (§ 2.8, § 14) mais **reporté à un lot ultérieur** ; ne pas l'introduire tant qu'il n'est pas nécessaire pour migrer les cinq consommateurs de façon atomique.
+
+---
+
+## E. Supprimable après migration
+
+Dans cet ordre, et seulement après vérification qu'aucun consommateur ne subsiste :
+
+1. `--color-accent` et `--color-accent-hover` — une fois `action-primary` adopté partout. Leur suppression est le vrai marqueur de fin : c'est l'alias qui masque la confusion marque/action.
+2. `--color-accent-light` — une fois les trois consommateurs de D.1 effectivement migrés (arbitrages tranchés, plus les consommateurs supplémentaires identifiés à retrouver par la recherche exhaustive exigée en D.1).
+3. `--color-text-1/2/3`, `--color-surface-muted`, `--color-border-md`, `--color-navy*` — renommage mécanique, une PR par famille, jamais toutes ensemble.
+4. Les trois constantes locales `const champ = "w-full border border-border-md…"` — après adoption d'`Input`.
+5. La logique d'onglets interne de `BienTabs.tsx` — après adoption de `Tabs`.
+6. `--color-champagne` / `-light` — **en dernier**, une fois l'or officiel en place.
+
+---
+
+## F. Ordre exact des écrans
+
+### F.1 → F.3 avant tout écran
+
+1. **Lot 1** — `globals.css`, `PropertyVisual.tsx` et `Sidebar.tsx` selon le périmètre exact corrigé au § F.6 ci-dessous. Aucun autre fichier.
+2. **Lot 2** — primitives existantes sur tokens sémantiques (`Button`, `Card`, `EmptyState`).
+3. **Lot 3** — `IconTile`, `StatTile`, `Avatar`, `SectionTitle`, `Pagination` sur tokens sémantiques.
+4. **Lot 4** — `Input` / `Textarea` / `Select` créés et adoptés par `ChampRecherche`.
+5. **Lot 5** — `Sidebar`, navigation, shell, headers. `BrandMark` **non touché**.
+
+### F.4 Écrans pilotes, dans l'ordre validé
+
+1. **Aujourd'hui** (`app/page.tsx` + `components/aujourd-hui/`) — le plus vu, et le plus petit périmètre : 5 composants, 2 tests unitaires existants.
+2. **Biens** (`app/biens/page.tsx`) — introduit les deux sorties de serif sur les prix, donc la première vérification réelle du choix Inter tabulaire.
+3. **Fiche Bien** (`app/biens/[id]/page.tsx` + `components/bien/`) — le plus lourd : `BienTabs.tsx` fait ~1450 lignes et concentre l'essentiel des champs inline. Migration progressive obligatoire — voir § J.5 (décision validée).
+
+**Lots 8A / 8B — recalage serif**, insérés entre Biens (lot 7) et Tabs/Table/Skeleton (lot 9) : voir § A.2 pour le détail de la scission en deux PR étanches. Remplace l'ancienne mention d'une PR unique « F.4b ».
+
+### F.5 Propagation
+
+Clients → Fiche Acquéreur → Prospects vendeurs → Visites → Fiscal → Automatisations → Pack Notaire → Dashboard → Communications.
+
+`Dashboard` en fin de liste volontairement : c'est le seul écran à tableaux manuels, donc le premier consommateur réel de `Table` — il sert de validation de la primitive, pas de banc d'essai des tokens.
+
+### F.6 Périmètre exact du Lot 1 (correction de contradiction — décision validée)
+
+Le plan original était contradictoire : une section indiquait « `globals.css` seul » tandis que les risques (§ H.2) et le tableau des lots (§ I) identifiaient des navy hardcodés à corriger dans le même lot. Décision finale, qui fait foi :
+
+Le **Lot 1** contient exactement :
+- `apps/web/src/app/globals.css` ;
+- `PropertyVisual.tsx`, **uniquement** pour les valeurs navy hardcodées correspondant réellement au navy de marque DOMIORA ;
+- `Sidebar.tsx`, **uniquement** pour le dégradé navy hardcodé correspondant réellement au navy de marque DOMIORA ;
+- `PhotosUploader.tsx`, **uniquement** la ligne 77 (`text-text-3` → `text-text-disabled`, seul vrai usage disabled identifié par l'audit exhaustif de § D.3).
+
+Aucune autre modification structurelle ou fonctionnelle de ces quatre fichiers dans ce lot. Objectif : ne jamais déployer simultanément le nouveau navy canonique `#02152B` et d'anciens navy visuellement divergents servant au même rôle. L'audit préalable détaillant les occurrences exactes et leur classification fait l'objet d'une livraison séparée (hors de ce document).
+
+**Arbitrages finaux, une fois `brand/FONDATIONS.md` et `brand/DESIGN-SYSTEM-V1.md` disponibles :**
+- `PropertyVisual.tsx` : le dégradé `#0b1f42 → #020817` (panneau « neutre », H.2) est du navy de marque et devient `ink-800 → ink-900` (`from-ink-800 to-ink-900`), par cohérence avec le traitement de `Sidebar.tsx`.
+- `Sidebar.tsx` : dégradé SVG `#102a54 → #071a3a` devient `#0B2440 → #02152B` (valeurs littérales, attribut `stopColor` non stylable par classe Tailwind).
+- `#030A1C` (scrim média, `PropertyVisual.tsx` inclus) : classé couleur fonctionnelle distincte, **hors périmètre du Lot 1** — voir § D.4.
+
+---
+
+## G. Tests à prévoir
+
+Le dépôt contient **~200 fichiers de test** (Vitest + Playwright). Presque tous portent sur la logique métier et ne sont pas concernés. Trois catégories le sont.
+
+**G.1 — Tests structurels qui lisent le source.** `Sidebar.structurel.test.ts` parse `Sidebar.tsx` au `readFileSync` et vérifie qu'aucune classe `h-[clamp(...)]` n'autorise un minimum de `0px`, et qu'aucun `calc(100vh - Npx)` ne réapparaît dans une classe de hauteur. C'est un garde-fou de régression sur la zone photographique de la sidebar. **Toute retouche de `Sidebar.tsx` en Lot 1 ou Lot 5 doit le laisser vert sans le modifier.** S'il devient rouge, c'est le code qui a tort, pas le test.
+
+**G.2 — Tests de rendu qui interrogent le DOM.** `page.test.tsx`, `biens/page.test.tsx`, `BienHero.test.tsx`, `AcquereurHero.test.tsx`, `TacheItem.test.tsx`, `AgendaCard.test.tsx`, etc. Ils cherchent des textes et des rôles, pas des classes — donc a priori insensibles au restyling. **À vérifier avant chaque PR** : un test qui assertait une classe deviendrait un faux négatif.
+
+**G.3 — E2E.** `coeur.smoke.spec.ts` et `documents-adr049.smoke.spec.ts`. À exécuter après chaque PR de fondation (Lots 1, 2, 5) et après chaque écran pilote. Ce sont eux qui attraperont une régression de navigation ou de formulaire.
+
+**Tests à ajouter.** Trois, pas plus :
+
+1. Un test de non-régression sur `globals.css` : chaque alias déprécié résout vers un token existant (attrape une suppression prématurée — le risque du § E).
+2. Un test de contraste automatisé sur les paires du DS, calculé sur `bg-page` — y compris désormais `text-muted #696B7B` et `warning #8A5E22`/`#F5EAD4` (§ J.1, § J.2). C'est exactement l'erreur commise dans la planche initiale en mesurant sur `bg-surface` : un test l'aurait vue.
+3. Un test structurel sur `BrandMark.tsx` vérifiant qu'il **n'est pas modifié** tant que l'asset n'est pas là — un garde-fou contre le contournement du blocage, dans l'esprit de G.1.
+
+---
+
+## H. Risques de régression
+
+| # | Risque | Probabilité | Détection |
+|---|---|---|---|
+| H.1 | Le navy `#02152B` change **toutes** les surfaces navy d'un coup (sidebar, boutons, hero, dégradés). Effet voulu, mais massif et immédiat. | certaine | revue visuelle, Lot 1 |
+| H.2 | Valeurs navy **en dur** hors tokens : `#0b1f42`→`#020817` dans `PropertyVisual.tsx` (devient `ink-800`→`ink-900`), dégradé `#102a54`→`#071a3a` dans le SVG de `Sidebar.tsx` (devient `#0B2440`→`#02152B`). Elles ne suivront pas et créeraient un écart de teinte visible si non corrigées. | certaine | corrigé dans Lot 1 (valeurs de remplacement tranchées, § F.6) |
+| H.3 | `#F0EBE0` remplaçant `#F1EAD9` : écart faible mais présent sur des dizaines de surfaces. | certaine | revue visuelle |
+| H.4 | Redéfinir l'échelle de rayons Tailwind ferait passer tous les champs de 8 à 12 px sans qu'aucun fichier ne change. | évitée par § 0 | — |
+| H.5 | `BienTabs.tsx` (~1450 lignes, ~30 champs inline) migré en une PR : impossible à relire. | élevée | découpage par onglet imposé (§ J.5, décision validée) |
+| H.6 | Refonte de `Badge` : changement d'API sur un composant partagé par presque tous les écrans. | élevée | migration en dernier, usage par usage |
+| H.7 | Bascule Cormorant sans recalage : hiérarchie visuellement dégradée entre l'activation et le recalage. | anciennement certaine — **éliminée par la scission Lot 8A / Lot 8B** (§ A.2) | aucun état dégradé ne doit plus être déployé |
+| H.8 | `text-text-3` utilisé comme fond (D.3) : renommage trompeur à trois endroits, une fois `text-3` réaliasé vers `text-muted`. | moyenne, sans risque de régression visuelle | décision validée : migration différée à la PR qui touchera ces composants (§ D.3), pas dans le Lot 1 |
+| H.9 | Migration d'un composant partagé sans mesurer ses consommateurs — `IconTile` est utilisé dans au moins 12 fichiers. | moyenne | recherche avant chaque PR |
+| H.10 | Mobile non vérifié : la sidebar a une navigation mobile distincte, et `Sidebar.structurel.test.ts` documente un bug de viewport bas déjà survenu. | moyenne | vérification 390 px + viewport court |
+
+---
+
+## I. Lots / commits recommandés
+
+Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisible seul et déployable seul.
+
+| Lot | Contenu | Fichiers touchés |
+|---|---|---|
+| 1 | Fondations couleur : primitifs + sémantiques + alias + navy canonique `#02152B` + surfaces + `text-muted #696B7B` + `text-disabled #8B8D9E` + `warning #8A5E22`/`#F5EAD4` + navy hardcodés pertinents (§ F.6) | `globals.css`, `PropertyVisual.tsx`, `Sidebar.tsx`, `PhotosUploader.tsx` (périmètre exact § F.6) |
+| 2 | `Button` (+ `loading`), `Card`, `EmptyState` sur sémantiques | 3 fichiers |
+| 3 | `IconTile`, `StatTile`, `Avatar`, `SectionTitle`, `Pagination` | 5 fichiers |
+| 4 | `Input` / `Textarea` / `Select` créés + `ChampRecherche` adopté | 4 fichiers |
+| 5 | `Sidebar`, navigation, shell, headers — `BrandMark` exclu | ~4 fichiers |
+| 6 | Écran **Aujourd'hui** | `app/page.tsx` + `components/aujourd-hui/` |
+| 7 | Écran **Biens** + les 2 sorties de serif sur les prix | `app/biens/page.tsx` |
+| 8A | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
+| 8B | **Activation Cormorant** + recalage serif atomique, une seule PR cohérente | `layout.tsx`, `globals.css`, 7 fichiers de titres |
+| 9 | `Tabs` + `Table` + `Skeleton` créés | 3 fichiers |
+| 10 | **Fiche Bien**, une PR par onglet ou unité fonctionnelle de `BienTabs` (§ J.5) | `components/bien/` |
+| 11 | `Dialog` + `Toast` créés, adoptés sur les flux destructifs | ~5 fichiers |
+| 12 | Refonte `Badge` (registres) | transverse, en dernier |
+
+Puis, hors séquence : propagation § F.5, arbitrage effectif des consommateurs de `accent-light` (§ D.1, décision déjà tranchée — reste la migration), suppression des alias (§ E). Et, **quand l'asset logo arrivera** : tokens or → `BrandMark` → marqueurs de marque de D.2.
+
+Workflow de dépôt à respecter pour chaque lot, sans exception : **feature → develop → main**, jamais de branche longue dédiée à toute une famille de lots (§ J.5).
+
+---
+
+## J. Décisions et points de validation
+
+### J.1 ✅ Résolu — `text-muted`
+
+*Historique (pour mémoire) :* la validation initiale fixait `text-muted: #6E7080`. Mesure sur `bg-page #F6F2EA` : 4,38:1, sous le seuil AA de 4,5:1 pour du texte courant — elle ne passait que sur `bg-surface` (4,78:1), alors que `text-3` porte aujourd'hui des messages affichés sur le fond de page (dont ceux d'`EmptyState`). La planche initiale avait mesuré par erreur sur la surface plutôt que sur le fond de page.
+
+**Décision validée :** `text-muted = #696B7B` (≈ 4,71:1 sur `bg-page`, conformité AA, écart visuel négligeable avec `#6E7080`). `#6E7080` est abandonné. `#8B8D9E` devient `text-disabled` — un token sémantique autonome et documenté (`brand/DESIGN-SYSTEM-V1.md` § 2.3), pas un texte courant. Les usages de `text-3` qui servent aujourd'hui de couleur d'objet plutôt que de texte (§ D.3) ne sont pas rebasculés vers `text-disabled` dans le Lot 1 — ils suivent `text-muted` par l'alias existant, sans régression visuelle, et seront retraités avec leurs composants.
+
+### J.2 ✅ Résolu — `warning`
+
+*Historique (pour mémoire) :* la validation initiale demandait de conserver `#92692C` / `#F5EAD4` provisoirement, l'arbitrage face à l'or étant reporté après extraction. Mais `#92692C` sur `#F5EAD4` ne donne que 4,11:1 — non conforme AA, indépendamment de toute question d'or, donc non conforme **dès aujourd'hui en production**.
+
+**Décision validée :** `warning foreground = #8A5E22` (4,75:1 sur `#F5EAD4`), `warning subtle background = #F5EAD4` (inchangé). Le contraste est corrigé maintenant, sans attendre l'or. La proximité visuelle éventuelle avec le futur or officiel DOMIORA reste réévaluable une fois l'asset maître disponible — ce point-là seul reste ouvert, pas le contraste.
+
+### J.3 ⛔ Toujours bloqué — asset du logo maître
+
+Rien à valider, tout à fournir. Vectoriel d'origine, ou PNG ≥ 1024 px, symbole seul, fond transparent, sans texte ni cadre. Bloque : les tokens or, `BrandMark`, et les marqueurs de marque de D.2.
+
+Interdictions absolues, maintenues sans exception :
+- aucun substitut ;
+- aucun SVG approximatif ;
+- aucun D typographique ;
+- aucune flamme recréée ;
+- aucune extraction de couleur depuis la vignette ;
+- aucune génération IA ;
+- aucune approximation CSS.
+
+`BrandMark` reste intact tant que l'asset maître propre n'est pas fourni.
+
+### J.4 ✅ Résolu — arbitrage de `--color-accent-light`
+
+Voir détail complet en § D.1. Les trois usages identifiés sont tranchés (deux vers `bg-surface-subtle`, un vers `stone-100`/équivalent neutre) ; le troisième ne dépend plus de l'or. Reste à exécuter : la migration effective des consommateurs, précédée d'une recherche exhaustive avant toute suppression de `--color-accent-light` — un premier passage a déjà trouvé des consommateurs non recensés dans le tableau initial (`Badge.tsx`, `BrouillonEmailFormulaire.tsx`, `PrepObjections.tsx`, `ProspectVendeurTaches.tsx`).
+
+### J.5 ✅ Résolu — ampleur du découpage de `BienTabs.tsx`
+
+**Décision validée :** migration progressive, une PR par onglet ou unité fonctionnelle suffisamment petite. Pas de branche longue dédiée contenant toute la migration avant revue. Chaque étape doit être relisible, testable, déployable, réversible, sans changement métier simultané, et permettre au fichier de fonctionner avec une partie ancienne et une partie migrée. Workflow normal du dépôt : feature → develop → main.
+
+### J.6 Ce qui n'est toujours PAS dans ce plan, faute d'information
+
+- **Le nombre exact de consommateurs par token.** Le scan a été borné (400 fichiers sur 556, arrêt au budget de temps). 474 occurrences relevées, total réel supérieur. Un inventaire exhaustif est à produire côté dépôt avant le lot de renommage — pas avant le Lot 1, qui ne renomme rien.
+- **Le comportement de la navigation mobile.** `Sidebar.tsx` n'a pas été lu en entier au-delà de sa zone structurelle testée. Le plan la traite comme une boîte noire à ne pas casser (§ G.1), pas comme un objet à redessiner.
+- **Les valeurs or.** Par construction — bloquées par § J.3.
+- **La primitive `stone-400`** évoquée en § D.3 pour les trois usages « couleur d'objet » de `text-3` reste non chiffrée — décision validée : ne pas l'inventer maintenant, la définir seulement quand ces composants seront migrés.
+- **Le token `--color-media-scrim`** (§ D.4) : envisagé par le Design System (§ 2.8, § 14) mais sans valeur ni périmètre de migration définis. Reporté à un lot ultérieur.
+
+### J.8bis ✅ Résolu — inventaire exhaustif de `--color-text-3` et arbitrage final
+
+Voir détail complet en § D.3. Sur 282 consommateurs réels : 278 migrent mécaniquement vers `text-muted` (`#696B7B`), 1 (`PhotosUploader.tsx:77`) migre explicitement vers `text-disabled` (`#8B8D9E`) dans le Lot 1, et 3 (`PhotosUploader.tsx:99`, `AgendaCard.tsx:18`, `pack-notaire/page.tsx:38`) restent sur `bg-text-3` — dette sémantique documentée et acceptée, sans enjeu WCAG, à remapper vers un token neutre lors de la migration de leurs composants respectifs.
+
+### J.8 ✅ Résolu — sources de vérité disponibles
+
+`brand/FONDATIONS.md` et `brand/DESIGN-SYSTEM-V1.md` sont désormais présents dans le dépôt et font foi pour toutes les valeurs de primitifs et de sémantiques citées dans ce document. Le Lot 1 n'est plus limité à un sous-ensemble minimal : l'intégralité des primitifs `ink` et des sémantiques de couleur documentés (§ 2.1 à § 2.6 du Design System) est incluse, à l'exclusion des points explicitement hors périmètre (or § J.3, scrim média § D.4, usages différés § D.3).
+
+### J.7 Note — scission du lot typographique
+
+Le lot de recalage serif, initialement prévu comme une PR unique (« F.4b »), est scindé en deux lots étanches (8A/8B) pour respecter la contrainte de § A.2 : ne jamais déployer un état visuel intermédiaire connu comme dégradé. Voir § A.2, § F.4 et § I pour le détail.
+
+---
+
+## Annexe — correspondance des lettres de section
+
+Ce document reprend la structure originale du plan (§ A à § J) sans renumérotation, les décisions complémentaires ayant été intégrées directement dans les sections qu'elles concernent plutôt qu'ajoutées en appendice séparé.

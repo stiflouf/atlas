@@ -40,8 +40,8 @@ export default function Sidebar() {
         <svg viewBox="0 0 200 200" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 w-full h-full">
           <defs>
             <linearGradient id="sbv-bg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#102a54" />
-              <stop offset="100%" stopColor="#071a3a" />
+              <stop offset="0%" stopColor="#0B2440" />
+              <stop offset="100%" stopColor="#02152B" />
             </linearGradient>
           </defs>
           <rect width="200" height="200" fill="url(#sbv-bg)" />

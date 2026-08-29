@@ -5,32 +5,58 @@
   /* Grands titres uniquement (classe `font-serif`) — jamais l'UI/les données/les formulaires. */
   --font-serif: var(--font-fraunces);
 
+  /* Primitifs — encre, DESIGN-SYSTEM-V1.md § 2.1 */
+  --color-ink-900: #02152b;
+  --color-ink-800: #0b2440;
+  --color-ink-700: #17354f;
+  --color-ink-600: #2e4a63;
+
   /* Identité premium (direction artistique validée, ajustée après revue maquette) — crème chaud
      plutôt que blanc/gris froid, navy profond comme couleur de marque/CTA, champagne réservé aux
      détails. Le crème doit rester subtil (perçu, pas remarqué) — jamais une grande zone blanche
      pure qui redonnerait une impression de back-office. */
   --color-page: #f6f2ea;
   --color-surface: #fffcf7;
-  --color-surface-muted: #f1ead9;
+  --color-surface-subtle: #f0ebe0;
+  --color-data: #ffffff;
+  --color-inverse: var(--color-ink-900);
+  --color-surface-muted: var(--color-surface-subtle);
 
-  /* text-1/2/3 = primary/secondary/muted (nommage conservé tel quel : des centaines d'usages
-     existants dans le projet, renommer casserait un diff énorme pour un gain nul). */
-  --color-text-1: #122038;
-  --color-text-2: #5a5d70;
-  --color-text-3: #8b8d9e;
+  /* Sémantiques texte — DESIGN-SYSTEM-V1.md § 2.3 */
+  --color-text-primary: #122038;
+  --color-text-secondary: #5a5d70;
+  --color-text-muted: #696b7b;
+  --color-text-disabled: #8b8d9e;
+  --color-text-inverse: #fffcf7;
 
-  --color-border: #e8e0cf;
-  --color-border-md: #d9ceb6;
+  /* text-1/2/3 = alias historiques (nommage conservé tel quel : des centaines d'usages existants
+     dans le projet, renommer casserait un diff énorme pour un gain nul). */
+  --color-text-1: var(--color-text-primary);
+  --color-text-2: var(--color-text-secondary);
+  --color-text-3: var(--color-text-muted);
+
+  /* Sémantiques bordures / focus — DESIGN-SYSTEM-V1.md § 2.4 */
+  --color-border-subtle: #e8e0cf;
+  --color-border-default: #d9ceb6;
+  --color-border-strong: var(--color-ink-600);
+  --color-focus-ring: var(--color-ink-700);
+  --color-border: var(--color-border-subtle);
+  --color-border-md: var(--color-border-default);
 
   /* Marque : navy profond (sidebar + CTA premium). */
-  --color-navy: #071a3a;
-  --color-navy-hover: #102a54;
+  --color-navy: var(--color-ink-900);
+  --color-navy-hover: var(--color-ink-800);
 
-  /* `accent` repointé sur le navy (au lieu de l'indigo précédent) : tous les usages existants
+  /* Sémantiques actions — DESIGN-SYSTEM-V1.md § 2.5 */
+  --color-action-primary: var(--color-ink-900);
+  --color-action-primary-hover: var(--color-ink-800);
+  --color-action-primary-active: var(--color-ink-700);
+
+  /* `accent` alias historique de `action-primary` (au lieu de l'indigo précédent) : tous les usages
      (Button primary, focus rings, onglet actif, badges) deviennent navy sans toucher chaque
      fichier un par un — c'est le seul token dont la VALEUR change de famille de couleur. */
-  --color-accent: #071a3a;
-  --color-accent-hover: #102a54;
+  --color-accent: var(--color-action-primary);
+  --color-accent-hover: var(--color-action-primary-hover);
   --color-accent-light: #f0e4cc;
 
   /* Champagne : accent chaud réservé à l'identité/aux détails — jamais un texte peu contrasté
@@ -38,15 +64,27 @@
   --color-champagne: #c59a5b;
   --color-champagne-light: #f2e6d0;
 
-  --color-danger: #ae4029;
-  --color-danger-light: #f7e6df;
-  --color-success: #3a6b4f;
-  --color-success-light: #e8f0ea;
+  /* Sémantiques statuts — DESIGN-SYSTEM-V1.md § 2.6 */
+  --color-status-success: #3a6b4f;
+  --color-status-success-subtle: #e8f0ea;
+  --color-status-success-border: #d5e2d9;
+  --color-status-warning: #8a5e22;
+  --color-status-warning-subtle: #f5ead4;
+  --color-status-warning-border: #e6d7b8;
+  --color-status-danger: #ae4029;
+  --color-status-danger-subtle: #f7e6df;
+  --color-status-danger-border: #ecd3c9;
+  --color-status-info: #2e5c7a;
+  --color-status-info-subtle: #e6eef3;
+  --color-status-info-border: #d2e0e8;
 
-  /* "À obtenir/à vérifier" (ADR-029) — jamais une anomalie, teinte champagne assombrie pour
-     rester lisible en texte, contraste vérifié sur surface/page (voir BienTabs.tsx). */
-  --color-warning: #92692c;
-  --color-warning-light: #f5ead4;
+  /* Alias historiques — "À obtenir/à vérifier" (ADR-029) inclus (voir BienTabs.tsx). */
+  --color-danger: var(--color-status-danger);
+  --color-danger-light: var(--color-status-danger-subtle);
+  --color-success: var(--color-status-success);
+  --color-success-light: var(--color-status-success-subtle);
+  --color-warning: var(--color-status-warning);
+  --color-warning-light: var(--color-status-warning-subtle);
 }
 
 * {
