@@ -308,7 +308,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | 1 | Fondations couleur : primitifs + sémantiques + alias + navy canonique `#02152B` + surfaces + `text-muted #696B7B` + `text-disabled #8B8D9E` + `warning #8A5E22`/`#F5EAD4` + navy hardcodés pertinents (§ F.6) | `globals.css`, `PropertyVisual.tsx`, `Sidebar.tsx`, `PhotosUploader.tsx` (périmètre exact § F.6) |
 | 2 ✅ | `Button` (+ `loading`), `ButtonLink` (nouveau), `Card`, `EmptyState` sur sémantiques | `globals.css`, `Button.tsx`, `ButtonLink.tsx` (créé), `Card.tsx`, `EmptyState.tsx`, `app/page.tsx`, `app/biens/page.tsx`, `ProspectVendeurBienCree.tsx`, `AcquereurHero.tsx`, `BienStatutAction.tsx` |
 | 3 ✅ | `IconTile`, `StatTile`, `SectionTitle`, `Pagination` (`Avatar` : aucune modification recommandée) | `IconTile.tsx`, `StatTile.tsx`, `SectionTitle.tsx`, `Pagination.tsx` |
-| 4 | `Input` / `Textarea` / `Select` créés + `ChampRecherche` adopté | 4 fichiers |
+| 4 ✅ | `Input` / `Textarea` / `Select` créés (natifs, sans hook, Server Component compatibles) + `ChampRecherche` adopté | `fieldStyles.ts` (créé), `Input.tsx`, `Textarea.tsx`, `Select.tsx` (créés), `ChampRecherche.tsx` |
 | 5 | `Sidebar`, navigation, shell, headers — `BrandMark` exclu | ~4 fichiers |
 | 6 | Écran **Aujourd'hui** | `app/page.tsx` + `components/aujourd-hui/` |
 | 7 | Écran **Biens** + les 2 sorties de serif sur les prix | `app/biens/page.tsx` |
@@ -397,6 +397,16 @@ Ajouts : tokens `--shadow-surface`/`--shadow-floating`/`--shadow-modal` (§ 6 du
 `Pagination` : tokens `border-border`→`border-border-subtle`, `text-accent`→`text-action-primary`, `hover:text-accent-hover`→`hover:text-action-primary-hover`, `text-text-3`→`text-text-muted` (valeurs identiques) ; ajout accessibilité `aria-label="Pagination"` sur le `<nav>` et `aria-current="page"` sur l'indicateur de page — sans changement visuel, sans toucher aux `href`/`construireHref`/architecture ADR-048. Reste volontairement un lien texte simple, non composé avec `ButtonLink`.
 
 **Points laissés ouverts, non tranchés dans ce lot (informationnels uniquement) :** l'écart `text-[15px]`/`text-[22px]` n'était pas propre à un cas bloquant — désormais résolu par l'alignement Data/Data large ci-dessus. Aucun autre point ouvert.
+
+### J.11 ✅ Lot 4 appliqué — Input/Textarea/Select natifs + adoption par ChampRecherche
+
+Trois primitives natives minimales (`InputHTMLAttributes`/`TextareaHTMLAttributes`/`SelectHTMLAttributes` + `className`, aucune prop custom, aucun `variant`/`size`/`error`, aucun hook, aucun `forwardRef` — aucun consommateur réel ne le requiert) partageant `FIELD_BASE_CLASSES` (`apps/web/src/components/ui/fieldStyles.ts`, concaténation simple, aucune dépendance ajoutée) : `w-full border border-border-default rounded-lg px-3 py-2 text-[14px] text-text-primary bg-data`, focus `outline-2 outline-offset-2 outline-focus-ring` sur `:focus` (pas `:focus-visible`, un champ édité doit rester visible même après un clic souris). `bg-data` (`#FFFFFF`) consommé pour la première fois, conformément à DESIGN-SYSTEM-V1.md § 2.2. Nouvelle stratégie de focus adoptée délibérément à la place de l'ancienne recette `ring-accent/20` — abandonnée pour les nouvelles primitives, jamais recréée.
+
+`ChampRecherche.tsx` adopte `Input` (`className="pl-9 pr-3"` pour l'icône) sans devenir client, sans changer `method="GET"`, `action`, `name="q"`, `defaultValue`, `champsCaches` ni l'architecture ADR-048. Cascade `px-3` (base) vs `pl-9`/`pr-3` (override) vérifiée dans le CSS compilé du build : `pl-9`/`pr-3` (propriétés physiques) suivent `px-3` (`padding-inline`) dans l'ordre du fichier généré et l'emportent bien sur leurs côtés respectifs.
+
+**Aucun état error/disabled/readonly stylé** — audit exhaustif confirmé : zéro usage réel de `aria-invalid`, `disabled`, `readOnly` sur un champ dans tout le produit. Ces attributs natifs restent transmis mécaniquement par le spread, simplement non stylés tant qu'aucun consommateur réel n'en a besoin.
+
+**Dettes documentées, non traitées ce lot :** les 69 autres occurrences de l'ancienne recette (`border-border-md`/`text-text-1`/`ring-accent`) dans 21 fichiers (dont `BienTabs.tsx`, réservé au Lot 10) ; ~22 `<label>` non associés via `htmlFor`/`id` (correction écran par écran, pas une primitive) ; le `placeholder` de `ChampRecherche` comme seul indice textuel (décision de contenu, pas ajouté arbitrairement) ; la variante compacte entrevue dans 3 `<select>` de `BienTabs.tsx` (`size`, à réévaluer au Lot 10 avec le contexte réel).
 
 ### J.7 Note — scission du lot typographique
 

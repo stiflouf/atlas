@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import Button from "./Button";
+import Input from "./Input";
 
 // ADR-048 — formulaire GET natif (jamais de JS obligatoire) : partageable par URL, fonctionne à
 // l'identique avec ou sans JavaScript, cohérent avec le reste du produit (aucune dépendance
@@ -19,13 +20,7 @@ export default function ChampRecherche({ action, q, placeholder, champsCaches, h
     <form method="GET" action={action} className="flex items-center gap-2 mb-6">
       <div className="relative flex-1 max-w-xs">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-3" strokeWidth={1.8} />
-        <input
-          type="text"
-          name="q"
-          defaultValue={q ?? ""}
-          placeholder={placeholder}
-          className="w-full border border-border-md rounded-lg pl-9 pr-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-        />
+        <Input type="text" name="q" defaultValue={q ?? ""} placeholder={placeholder} className="pl-9 pr-3" />
       </div>
       {champsCaches &&
         Object.entries(champsCaches).map(([nom, valeur]) => <input key={nom} type="hidden" name={nom} value={valeur} />)}
