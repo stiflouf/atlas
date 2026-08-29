@@ -307,7 +307,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 |---|---|---|
 | 1 | Fondations couleur : primitifs + sémantiques + alias + navy canonique `#02152B` + surfaces + `text-muted #696B7B` + `text-disabled #8B8D9E` + `warning #8A5E22`/`#F5EAD4` + navy hardcodés pertinents (§ F.6) | `globals.css`, `PropertyVisual.tsx`, `Sidebar.tsx`, `PhotosUploader.tsx` (périmètre exact § F.6) |
 | 2 ✅ | `Button` (+ `loading`), `ButtonLink` (nouveau), `Card`, `EmptyState` sur sémantiques | `globals.css`, `Button.tsx`, `ButtonLink.tsx` (créé), `Card.tsx`, `EmptyState.tsx`, `app/page.tsx`, `app/biens/page.tsx`, `ProspectVendeurBienCree.tsx`, `AcquereurHero.tsx`, `BienStatutAction.tsx` |
-| 3 | `IconTile`, `StatTile`, `Avatar`, `SectionTitle`, `Pagination` | 5 fichiers |
+| 3 ✅ | `IconTile`, `StatTile`, `SectionTitle`, `Pagination` (`Avatar` : aucune modification recommandée) | `IconTile.tsx`, `StatTile.tsx`, `SectionTitle.tsx`, `Pagination.tsx` |
 | 4 | `Input` / `Textarea` / `Select` créés + `ChampRecherche` adopté | 4 fichiers |
 | 5 | `Sidebar`, navigation, shell, headers — `BrandMark` exclu | ~4 fichiers |
 | 6 | Écran **Aujourd'hui** | `app/page.tsx` + `components/aujourd-hui/` |
@@ -383,6 +383,20 @@ Voir détail complet en § D.3. Sur 282 consommateurs réels : 278 migrent méca
 Ajouts : tokens `--shadow-surface`/`--shadow-floating`/`--shadow-modal` (§ 6 du Design System, `shadow-modal` non consommé) ; `ButtonLink` (nouveau composant, jamais de `<button>` imbriqué dans un `<a>`) ; `Button` gagne `loading?: boolean` (spinner `LoaderCircle`, `aria-busy`, `disabled` garantis prioritaires sur toute prop contradictoire du consommateur) et la variante canonique `destructive` (`danger` conservé comme alias déprécié, non supprimé). `Card` et `Button` migrent vers les tokens sémantiques directs (`border-subtle`/`-default`, `action-primary`, `text-inverse`, `focus-ring`, `status-danger`) partout où la correspondance était certaine. `secondary` ne recolore plus le texte au hover (uniquement la bordure), conformément à la direction validée. `EmptyState` compose désormais son CTA avec `ButtonLink` et son message utilise directement `text-muted` (plus l'alias `text-3`).
 
 **✅ Résolu (micro-commit séparé, avant Lot 3) :** `ProspectVendeurHero.tsx` contenait le même pattern invalide `<Link><Button></Link>` (2 occurrences) que celui corrigé dans les 4 fichiers du Lot 2, découvert par la recherche exhaustive post-migration mais hors périmètre de ce lot. Migré vers `ButtonLink` dans un commit dédié. Recherche exhaustive relancée après ce correctif : aucune occurrence du pattern ne subsiste dans `apps/web/src`.
+
+### J.10 ✅ Lot 3 appliqué — IconTile/StatTile/SectionTitle/Pagination
+
+`IconTile` : tone `muted` migré vers `bg-surface-subtle text-text-secondary` (valeurs identiques) ; tone `navy` migré vers `bg-inverse text-champagne` (décision validée : `bg-inverse` décrit mieux la fonction d'une petite surface sombre/inversée que l'alias historique `bg-navy`, même valeur `#02152B`) ; tones `champagne` et `sur-navy` **toujours bloqués**, inchangés — y compris leurs usages dans `EmptyState` et `StatTile`.
+
+`StatTile` : `border-border`→`border-border-subtle`, `text-text-1`→`text-text-primary`, `text-text-3`→`text-text-muted`, `text-surface`→`text-text-inverse` (valeurs identiques). Alignement délibéré sur les tailles Data/Data large du Design System (§ 3) : `compact` 15px/600→14px/500, `kpi`/`lead` 22px/600→24px/600 — changement visuel mineur intentionnel, pas un simple renommage de token. `tabular-nums` ajouté sur la valeur. `lead` conserve `bg-navy`/`border-navy`/`text-champagne` inchangés.
+
+`Avatar` : **aucune modification** — confirmé n'utiliser ni `accent-light` ni aucun token nécessitant une migration ; son `text-champagne` reste bloqué comme les autres. La « pastille d'avatar en accent-light » de § D.1 n'est pas ce composant : c'est un `<div>` manuel indépendant dans `prospects-vendeurs/page.tsx`, non touché par ce lot.
+
+`SectionTitle` : uniquement `text-text-3`→`text-text-muted`. Les 13 duplications manuelles de sa classe exacte (`ProspectVendeurHero.tsx`, `PatrimoineEtHistoire.tsx`, `VieAutourDuBien.tsx`, `ProspectVendeurTaches.tsx`, `TransmissionNotaireFormulaire.tsx`, `SecteursRechercheSection.tsx`, `BienTabs.tsx`, `visites/[id]/preparer/page.tsx`, `prospects-vendeurs/[id]/page.tsx`, `dashboard/page.tsx`, `clients/[id]/page.tsx`, `biens/[id]/page.tsx`, `biens/[id]/pack-notaire/page.tsx`) restent une dette connue, non migrées — elles bénéficient déjà de la correction `text-muted` du Lot 1 via le même alias, sans risque de contraste.
+
+`Pagination` : tokens `border-border`→`border-border-subtle`, `text-accent`→`text-action-primary`, `hover:text-accent-hover`→`hover:text-action-primary-hover`, `text-text-3`→`text-text-muted` (valeurs identiques) ; ajout accessibilité `aria-label="Pagination"` sur le `<nav>` et `aria-current="page"` sur l'indicateur de page — sans changement visuel, sans toucher aux `href`/`construireHref`/architecture ADR-048. Reste volontairement un lien texte simple, non composé avec `ButtonLink`.
+
+**Points laissés ouverts, non tranchés dans ce lot (informationnels uniquement) :** l'écart `text-[15px]`/`text-[22px]` n'était pas propre à un cas bloquant — désormais résolu par l'alignement Data/Data large ci-dessus. Aucun autre point ouvert.
 
 ### J.7 Note — scission du lot typographique
 

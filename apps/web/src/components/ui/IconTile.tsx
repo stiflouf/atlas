@@ -11,8 +11,8 @@ type Shape = "square" | "circle";
 
 const TONES: Record<Tone, string> = {
   champagne: "bg-champagne-light text-champagne",
-  navy: "bg-navy text-champagne",
-  muted: "bg-surface-muted text-text-2",
+  navy: "bg-inverse text-champagne",
+  muted: "bg-surface-subtle text-text-secondary",
   "sur-navy": "bg-champagne/15 text-champagne",
 };
 

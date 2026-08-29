@@ -14,24 +14,24 @@ export default function Pagination({ page, totalPages, construireHref }: Props) 
   if (totalPages <= 1) return null;
 
   return (
-    <nav className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+    <nav aria-label="Pagination" className="flex items-center justify-between mt-6 pt-4 border-t border-border-subtle">
       {page > 1 ? (
         <Link
           href={construireHref(page - 1)}
-          className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
+          className="text-[13px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
         >
           ← Précédent
         </Link>
       ) : (
         <span />
       )}
-      <span className="text-[13px] text-text-3">
+      <span aria-current="page" className="text-[13px] text-text-muted">
         Page {page} sur {totalPages}
       </span>
       {page < totalPages ? (
         <Link
           href={construireHref(page + 1)}
-          className="text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
+          className="text-[13px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
         >
           Suivant →
         </Link>

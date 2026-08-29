@@ -20,25 +20,25 @@ type Taille = "compact" | "kpi" | "lead";
 const TAILLE_ICONE: Record<Taille, number> = { compact: 32, kpi: 40, lead: 40 };
 const TAILLE_ICONE_GLYPHE: Record<Taille, number> = { compact: 15, kpi: 18, lead: 18 };
 const TAILLE_VALEUR: Record<Taille, string> = {
-  compact: "text-[15px] font-semibold",
-  kpi: "text-[22px] font-semibold",
-  lead: "text-[22px] font-semibold",
+  compact: "text-[14px] font-medium",
+  kpi: "text-[24px] font-semibold",
+  lead: "text-[24px] font-semibold",
 };
 const TAILLE_PADDING: Record<Taille, string> = { compact: "px-3 py-2.5", kpi: "px-4 py-3.5", lead: "px-4 py-3.5" };
 
 const TAILLE_SURFACE: Record<Taille, string> = {
-  compact: "bg-surface border-border",
-  kpi: "bg-surface border-border",
+  compact: "bg-surface border-border-subtle",
+  kpi: "bg-surface border-border-subtle",
   lead: "bg-navy border-navy",
 };
 const TAILLE_VALEUR_COULEUR: Record<Taille, string> = {
-  compact: "text-text-1",
-  kpi: "text-text-1",
-  lead: "text-surface",
+  compact: "text-text-primary",
+  kpi: "text-text-primary",
+  lead: "text-text-inverse",
 };
 const TAILLE_LIBELLE_COULEUR: Record<Taille, string> = {
-  compact: "text-text-3",
-  kpi: "text-text-3",
+  compact: "text-text-muted",
+  kpi: "text-text-muted",
   lead: "text-champagne",
 };
 const TAILLE_TON_ICONE: Record<Taille, "champagne" | "navy" | "muted" | "sur-navy"> = {
@@ -71,7 +71,7 @@ export default function StatTile({
         iconSize={TAILLE_ICONE_GLYPHE[taille]}
       />
       <div className="min-w-0">
-        <p className={`${TAILLE_VALEUR[taille]} ${TAILLE_VALEUR_COULEUR[taille]} leading-tight`}>{valeur}</p>
+        <p className={`${TAILLE_VALEUR[taille]} ${TAILLE_VALEUR_COULEUR[taille]} leading-tight tabular-nums`}>{valeur}</p>
         <p className={`text-[11px] ${TAILLE_LIBELLE_COULEUR[taille]} truncate mt-0.5`}>{libelle}</p>
       </div>
     </div>
