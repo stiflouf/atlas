@@ -78,20 +78,20 @@ export default async function BiensPage({ searchParams }: PageProps) {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
-      <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-5">
+      <div className="mb-6 flex items-end justify-between gap-4 border-b border-border-subtle pb-5">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-champagne">
             {modeArchives ? "Archives" : "Portefeuille"}
           </p>
-          <h1 className="font-serif text-[28px] md:text-[34px] font-semibold text-text-1 leading-[1.05] mt-1.5">
+          <h1 className="font-serif text-[28px] md:text-[34px] font-semibold text-text-primary leading-[1.05] mt-1.5">
             {modeArchives ? "Biens archivés" : "Biens"}
           </h1>
-          <p className="text-[13px] text-text-3 mt-1.5">
+          <p className="text-[13px] text-text-muted mt-1.5">
             {totalAffiche} {modeArchives ? "biens archivés" : "mandats actifs"}
             {" · "}
             <Link
               href={construireHref({ archives: !modeArchives, q: texte })}
-              className="font-medium text-accent hover:text-accent-hover transition-colors"
+              className="font-medium text-action-primary hover:text-action-primary-hover transition-colors"
             >
               {modeArchives ? "voir les biens actifs" : "voir les archives"}
             </Link>
@@ -164,25 +164,25 @@ export default async function BiensPage({ searchParams }: PageProps) {
                       </span>
                       {/* Le prix sur le voile : c'est l'information cherchée en premier, et elle
                           libère le bloc texte. font-serif, comme les chiffres porteurs ailleurs. */}
-                      <span className="absolute left-3 bottom-2.5 font-serif text-[19px] font-semibold text-white drop-shadow-[0_1px_8px_rgba(3,10,28,0.6)]">
+                      <span className="absolute left-3 bottom-2.5 font-serif text-[19px] font-semibold text-white tabular-nums drop-shadow-[0_1px_8px_rgba(3,10,28,0.6)]">
                         {formatPrix(bien.prix)}
                       </span>
                     </div>
                     <div className="p-4 flex-1 flex flex-col">
-                      <p className="text-[15px] font-medium text-text-1 truncate">{bien.titre}</p>
-                      <p className="text-[13px] text-text-2 truncate mt-0.5">
+                      <p className="text-[15px] font-medium text-text-primary truncate">{bien.titre}</p>
+                      <p className="text-[13px] text-text-secondary truncate mt-0.5">
                         {bien.adresse}, {bien.codePostal} {bien.ville}
                       </p>
                       <div className="flex items-baseline justify-between gap-2 mt-auto pt-3">
-                        <span className="text-[12px] text-text-2">
+                        <span className="text-[12px] text-text-secondary">
                           {bien.surface} m² · {bien.pieces} pièces
                         </span>
-                        <span className="text-[11px] tracking-[0.06em] text-text-3 tabular-nums">
+                        <span className="text-[11px] tracking-[0.06em] text-text-muted tabular-nums">
                           {bien.reference}
                         </span>
                       </div>
                       {bien.archiveLe && (
-                        <p className="text-[11px] text-text-3 mt-1.5">Archivé le {formatDate(bien.archiveLe)}</p>
+                        <p className="text-[11px] text-text-muted mt-1.5">Archivé le {formatDate(bien.archiveLe)}</p>
                       )}
                     </div>
                   </Card>
@@ -203,13 +203,13 @@ export default async function BiensPage({ searchParams }: PageProps) {
                         className="w-20 h-20 shrink-0"
                       />
                       <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-medium text-text-1 truncate">{bien.titre}</p>
-                        <p className="text-[13px] text-text-2 truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
+                        <p className="text-[14px] font-medium text-text-primary truncate">{bien.titre}</p>
+                        <p className="text-[13px] text-text-secondary truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
                         <div className="flex items-baseline gap-2.5 mt-1.5">
-                          <span className="font-serif text-[16px] font-semibold text-text-1">
+                          <span className="font-serif text-[16px] font-semibold text-text-primary tabular-nums">
                             {formatPrix(bien.prix)}
                           </span>
-                          <span className="text-[12px] text-text-3">
+                          <span className="text-[12px] text-text-muted">
                             {bien.surface} m² · {bien.pieces} pièces
                           </span>
                         </div>
@@ -217,15 +217,15 @@ export default async function BiensPage({ searchParams }: PageProps) {
                           <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
                             {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
                           </Badge>
-                          <span className="text-[11px] tracking-[0.06em] text-text-3 tabular-nums">
+                          <span className="text-[11px] tracking-[0.06em] text-text-muted tabular-nums">
                             {bien.reference}
                           </span>
                           {bien.archiveLe && (
-                            <span className="text-[11px] text-text-3">Archivé le {formatDate(bien.archiveLe)}</span>
+                            <span className="text-[11px] text-text-muted">Archivé le {formatDate(bien.archiveLe)}</span>
                           )}
                         </div>
                       </div>
-                      <ChevronRight size={16} className="text-text-3 shrink-0" />
+                      <ChevronRight size={16} className="text-text-muted shrink-0" />
                     </div>
                   </Card>
                 </Link>
