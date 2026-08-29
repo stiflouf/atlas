@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Fraunces } from "next/font/google";
+import { Cormorant_Garamond, Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 import { PRODUCT_NAME } from "@/lib/branding";
 
@@ -21,6 +21,19 @@ const fraunces = Fraunces({
   style: ["normal", "italic"],
 });
 
+// Lot 8A (préparation uniquement, ADR à venir Lot 8B) — police de marque cible du Design System
+// V1, chargée mais volontairement non consommée : `--font-serif` (globals.css) reste relié à
+// Fraunces jusqu'à la bascule atomique du Lot 8B. Poids 600/normal uniquement : c'est le seul
+// poids réellement consommé par les usages serif actuels (audit Lot 8A), aucune variante
+// hypothétique préchargée.
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  display: "swap",
+  weight: ["600"],
+  style: ["normal"],
+});
+
 export const metadata: Metadata = {
   title: PRODUCT_NAME,
   description: "Le compagnon intelligent du conseiller immobilier.",
@@ -30,7 +43,7 @@ import AppShell from "@/components/layout/AppShell";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fr" className={`${inter.variable} ${fraunces.variable} h-full`}>
+    <html lang="fr" className={`${inter.variable} ${fraunces.variable} ${cormorant.variable} h-full`}>
       <body className="h-full">
         <AppShell>{children}</AppShell>
       </body>

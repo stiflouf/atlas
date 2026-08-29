@@ -312,7 +312,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | 5 ✅ | `NavItems` + `BottomNav` (tokens + `aria-label`/`aria-current`) + une ligne texte de `Sidebar` — `BrandMark`/`AppShell` exclus, pas de `PageHeader` créé | `NavItems.tsx`, `BottomNav.tsx`, `Sidebar.tsx` (1 ligne) |
 | 6 ✅ | Écran **Aujourd'hui** | `app/page.tsx`, `AgendaCard.tsx`, `TacheItem.tsx`, `DossierActionCard.tsx`, `ConnexionsGoogle.tsx`, `ConfirmationBienRdv.tsx`, `AlerteCard.tsx` |
 | 7 ✅ | Écran **Biens** (liste) — `font-serif` des prix conservé (précédent réel, pas une sortie), `tabular-nums` ajouté | `app/biens/page.tsx` |
-| 8A | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
+| 8A ✅ | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
 | 8B | **Activation Cormorant** + recalage serif atomique, une seule PR cohérente | `layout.tsx`, `globals.css`, 7 fichiers de titres |
 | 9 | `Tabs` + `Table` + `Skeleton` créés | 3 fichiers |
 | 10 | **Fiche Bien**, une PR par onglet ou unité fonctionnelle de `BienTabs` (§ J.5) | `components/bien/` |
@@ -446,6 +446,27 @@ L'audit a montré que l'écran était déjà entièrement composé avec les prim
 - Fiche Bien (`app/biens/[id]/**`) explicitement hors périmètre. Dette E2E déjà connue avant ce lot (`coeur.smoke.spec.ts` échoue sur le titre de la fiche `/biens/[id]`) confirmée sans aucun rapport avec la liste : ce smoke ne visite jamais la route `/biens` — la liste Biens n'a donc aucune couverture E2E, connue ou nouvelle, et n'a pas été impactée.
 - Tests : `biens/page.test.tsx` (6/6), `ChampRecherche.test.tsx` (3/3), `Pagination.test.tsx` (5/5) verts sans modification ; suite Vitest complète 182/182 fichiers, 1454/1454 tests ; `tsc --noEmit` et `next build` propres.
 - Validation visuelle desktop (1440px, vue actifs + vue archives) et mobile (390px) via script Playwright jetable (session réelle injectée, non conservé) : prix lisibles et alignés (`tabular-nums`), aucune régression de contraste sur le prix en overlay, aucune anomalie constatée.
+
+**Correction (audit Lot 8A)** : l'affirmation ci-dessus selon laquelle le `font-serif` des prix ne serait « pas une incohérence du DS » est erronée — `DESIGN-SYSTEM-V1.md` § 3 précise explicitement que « Prix, budgets, métriques et données comparatives restent en Inter avec chiffres tabulaires lorsque pertinent ». Cette ligne n'avait pas été retrouvée lors de l'audit Lot 7. Le point est donc réouvert et tranché en Lot 8B (§ J.15, décision 8B — data/prix) : les 5 usages serif sur des valeurs numériques devront sortir vers Inter + `tabular-nums`.
+
+### J.15 ✅ Lot 8A appliqué — préparation Cormorant Garamond (zéro activation visuelle)
+
+Chargement technique de Cormorant Garamond via `next/font/google`, strictement sans bascule visuelle — conforme à la scission 8A/8B (§ A.2) :
+
+- `layout.tsx` : ajout de `const cormorant = Cormorant_Garamond({ variable: "--font-cormorant", subsets: ["latin"], display: "swap", weight: ["600"], style: ["normal"] })`, variable ajoutée à la liste de classes de `<html>`. `Inter`/`Fraunces` non modifiés (ni poids, ni style, ni variable).
+- Poids 600/normal uniquement, choix vérifié par audit exhaustif : les 19 usages `font-serif` réels du dépôt consomment tous `font-semibold` (600), aucun italique — aucune variante hypothétique préchargée.
+- `globals.css` **non modifié** : `--font-serif: var(--font-fraunces)` intact, vérifié à la fois dans la source et dans le CSS compilé (`.font-serif{font-family:var(--font-fraunces)}`, byte-identique avant/après).
+- **0 consommateur** de `font-cormorant`/`var(--font-cormorant)` en dehors de `layout.tsx` (recherche exhaustive confirmée) — aucun `h1`, prix, `Card`, `EmptyState`, `BrandMark` ou écran modifié.
+- CSS compilé confirme : `@font-face` Cormorant Garamond présents (weight 600, style normal uniquement), `--font-cormorant` exposée avec fallback automatique (`"Cormorant Garamond Fallback"`), aucun utilitaire `.font-cormorant` généré (rien ne le consomme côté Tailwind).
+- Performance : aucun `<link rel="preload" as="font">` constaté sur une page ne consommant pas Cormorant (`_not-found.html`) — le mécanisme Turbopack ne précharge pas une police non utilisée par un élément rendu ; le seul coût est quelques octets de `@font-face` supplémentaires dans le CSS global déjà partagé par toutes les routes.
+- Validation visuelle « zéro diff » : `/connexion` (témoin sans aucune serif), `/` et `/biens` (desktop 1440px + mobile 390px, session réelle injectée) via script Playwright jetable non conservé — H1 Aujourd'hui/Biens et prix Biens visuellement identiques aux captures des Lots 6/7, aucune différence constatée.
+- Tests : suite Vitest complète 182/182 fichiers, 1454/1454 tests, sans modification ni ajout ; `tsc --noEmit` et `next build` propres (le build valide la disponibilité réelle du poids/style demandé auprès de Google Fonts). Aucun test structurel dédié créé (TypeScript + build + inspection CSS jugés suffisants — un test lisant `layout.tsx` en source aurait été une reproduction fragile sans valeur ajoutée).
+- **Fraunces poids 500 et style italique identifiés comme poids mort réel** (aucun des 19 usages ne les consomme) mais **volontairement conservés tels quels** — leur retrait n'appartient pas à ce lot, seulement à la bascule atomique du Lot 8B.
+- **Décisions actées pour le Lot 8B, non appliquées ici :**
+  - *Data/prix* : les 5 usages serif sur valeurs numériques (prix overlay + mobile liste Biens, prix Fiche Bien hero, budget Fiche Acquéreur hero, estimation Fiche Prospect vendeur hero) devront sortir de `font-serif` vers Inter + `tabular-nums`, conformément à `DESIGN-SYSTEM-V1.md` § 3. Aucune exception « chiffre porteur » ne sera créée dans le Design System — la cohérence data prime sur le précédent historique Fraunces.
+  - *Petits titres de carte* : `ProspectVendeurBienCree.tsx` (titre de carte succès, 17/18px) et `ProspectVendeurProchaineEtape.tsx` (titre d'étape, 18/19px) sont classés UI fonctionnelle, pas moment de marque → Inter en Lot 8B, pas Cormorant.
+  - Inventaire complet des 19 usages `font-serif`/15 fichiers, classification A-F et tableau des H1 (§ audit Lot 8A) conservés pour construire le diff 8B sans refaire la cartographie.
+- `BrandMark.tsx` confirmé hors sujet : n'utilise aucune police serif (mot-symbole en Inter, monogramme SVG géométrique pur) — aucun impact, aucune décision requise avant l'arrivée de l'asset logo maître.
 
 ### J.7 Note — scission du lot typographique
 
