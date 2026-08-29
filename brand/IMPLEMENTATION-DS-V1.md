@@ -314,7 +314,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | 7 ✅ | Écran **Biens** (liste) — `font-serif` des prix conservé (précédent réel, pas une sortie), `tabular-nums` ajouté | `app/biens/page.tsx` |
 | 8A ✅ | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
 | 8B ✅ | **Activation Cormorant** + recalage serif atomique, un seul commit cohérent | `layout.tsx`, `globals.css`, 6 écrans, 5 composants |
-| 9 | `Tabs` + `Table` + `Skeleton` créés | 3 fichiers |
+| 9 | ⚠ **ARBITRÉ — primitives différées faute de consommateurs suffisants** (§ J.17) | aucun fichier runtime, `IMPLEMENTATION-DS-V1.md` seul |
 | 10 | **Fiche Bien**, une PR par onglet ou unité fonctionnelle de `BienTabs` (§ J.5) | `components/bien/` |
 | 11 | `Dialog` + `Toast` créés, adoptés sur les flux destructifs | ~5 fichiers |
 | 12 | Refonte `Badge` (registres) | transverse, en dernier |
@@ -483,6 +483,20 @@ Bascule réalisée en un seul commit, sans état intermédiaire dégradé : `--f
 - **Test nom long** (`AcquereurHero`, remplacement DOM temporaire par « Jean-Baptiste de Montmorency-Villiers ») : passe sur une seule ligne en desktop, passe proprement sur deux lignes en mobile sans débordement horizontal ni collision avec l'avatar/badge — aucun `truncate` nécessaire dans l'immédiat, point à surveiller si des noms réels plus longs apparaissent.
 - `e2e/coeur.smoke.spec.ts` exécuté via la commande officielle : échoue exactement au même endroit et sur la même assertion qu'avant ce lot (texte « Bien smoke » introuvable sur la fiche Bien, qui affiche l'adresse) — dette déjà connue, strictement inchangée, confirmée sans lien avec ce lot (seule la police du titre a changé, jamais son contenu).
 - Aucune couleur, aucun spacing, aucun radius, aucune logique métier modifiée — diff strictement typographique.
+
+### J.17 ⚠ Lot 9 arbitré — Tabs/Table/Skeleton différées faute de consommateurs suffisants
+
+**Statut : CLOS PAR ARBITRAGE / NON-CRÉATION PRÉMATURÉE.** L'audit a été mené intégralement (cartographie exhaustive des trois sujets) mais a abouti à la décision consciente de ne créer aucune des trois primitives dans ce lot. Aucun fichier runtime modifié, uniquement cette entrée de documentation.
+
+**Principe architectural enregistré, à appliquer à tous les lots suivants** : *une primitive du Design System n'est créée que lorsqu'un usage réel permet d'en valider l'API et la sémantique. La roadmap nomme des besoins à examiner, pas des composants à créer obligatoirement.*
+
+**TABS.** Un seul système existe dans tout le dépôt : `BienTabs.tsx` (`role="tablist"`/`role="tab"`/`aria-selected`, liste d'onglets dynamique, `useState<Tab>` local, `overflow-x-auto` avec affordances de scroll gauche/droite et `scrollIntoView` de l'onglet actif — comportement non trivial déjà fonctionnel). Décision : extraction d'une primitive `Tabs` **différée au Lot 10**, à créer et adopter **atomiquement** avec `BienTabs.tsx` dans le même chantier — jamais la barre d'onglets seule avant de traiter réellement les panneaux. Dettes actuelles de `BienTabs.tsx` à traiter par cette même occasion : aucun `role="tabpanel"`, aucun `aria-controls`/`aria-labelledby`, aucune navigation clavier ArrowLeft/ArrowRight/Home/End (focus natif seulement). `BienTabs.tsx` reste strictement intact dans ce lot — aucune modification, pas même de tokens, d'aria ou de commentaires. `documents-adr049.smoke.spec.ts` (clics répétés sur les onglets Documents/Compromis) constitue la couverture E2E réelle actuelle des interactions Tabs — `coeur.smoke.spec.ts` prévoit un clic équivalent (ligne 83) mais ne l'atteint jamais à cause de la dette Fiche Bien déjà connue, sans lien avec ce lot.
+
+**TABLE.** Une seule table HTML native existe dans tout le dépôt : `app/dashboard/page.tsx` (`VentilationAnnuelleTable`, 12 lignes mensuelles fixes, 4 colonnes, aucun tri/filtre/action/badge/lien, déjà enveloppée dans `overflow-x-auto`). Un unique consommateur aussi simple ne justifie pas une primitive : le wrapper `<table className="w-full text-[13px] ...">` envisagé par l'audit n'aurait fait qu'ajouter un niveau d'indirection et figer une convention (`text-[13px]`) sans second usage pour la valider, sans supprimer de duplication réelle. `dashboard/page.tsx` reste strictement intact dans ce lot. Dettes déjà identifiées, réservées au futur chantier Dashboard (propagation § F.5, pas ce lot) : alias historiques (`text-text-1/2/3` → `text-text-primary/secondary/muted`, `border-border` → `border-border-subtle`), `<th>` sans `scope="col"`, absence de `tabular-nums` sur les 3 colonnes monétaires empilées sur 12 lignes. Ce futur chantier devra d'abord améliorer la table native ; une primitive `Table` ne sera créée que si un second usage compatible apparaît réellement ou si l'extraction démontre une valeur.
+
+**SKELETON.** Recherche exhaustive : 0 composant Skeleton, 0 `animate-pulse`, 0 fichier `loading.tsx`, 0 `Suspense` réel, 0 état `isLoading` pertinent dans toute l'application — aucun point d'insertion architectural n'existe (toutes les pages sont des Server Components à chargement synchrone). Créer `Skeleton.tsx` aujourd'hui serait une abstraction spéculative sans consommateur. Décision ferme : non créée. Elle le sera au premier besoin réel de chargement asynchrone, sa forme dérivée du contexte de ce moment-là.
+
+**MOTION (dette transverse, hors périmètre).** L'unique `animate-spin` du produit (`Button.tsx`, spinner de chargement) n'a aucune gestion `prefers-reduced-motion`/`motion-safe`/`motion-reduce` — dette réelle mais indépendante de ce lot, documentée sans correction. `Button.tsx` reste intact.
 
 ### J.7 Note — scission du lot typographique
 
