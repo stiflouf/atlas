@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { CalendarCheck, Building2, ListChecks, AlertCircle } from "lucide-react";
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
@@ -6,7 +5,7 @@ import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
 import ConnexionsGoogle from "@/components/aujourd-hui/ConnexionsGoogle";
 import AlerteCard from "@/components/alertes/AlerteCard";
 import SectionTitle from "@/components/ui/SectionTitle";
-import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
 import StatTile from "@/components/ui/StatTile";
 import IconTile from "@/components/ui/IconTile";
@@ -152,11 +151,9 @@ export default async function AujourdHui() {
           </h1>
           <p className="text-[13px] text-text-3 mt-1.5 first-letter:uppercase">{dateStr}</p>
         </div>
-        <Link href="/taches/nouveau" className="shrink-0">
-          <Button variant="primary" size="md">
-            + Nouvelle tâche
-          </Button>
-        </Link>
+        <ButtonLink href="/taches/nouveau" variant="primary" size="md">
+          + Nouvelle tâche
+        </ButtonLink>
       </div>
 
       {/* Repères chiffrés (chantier fidélité visuelle) — 4 comptages déjà calculés ci-dessus pour

@@ -53,7 +53,7 @@ export default function BienStatutAction({
       actionsJalon.push(
         <form key="retirer-offre" action={retirerOffreAction}>
           <input type="hidden" name="id" value={bien.id} />
-          <Button type="submit" variant="danger" size="sm">
+          <Button type="submit" variant="destructive" size="sm">
             Retirer l&#39;offre
           </Button>
         </form>
@@ -77,7 +77,7 @@ export default function BienStatutAction({
       actionsJalon.push(
         <form key="annuler-compromis" action={annulerCompromisAction}>
           <input type="hidden" name="id" value={bien.id} />
-          <Button type="submit" variant="danger" size="sm">
+          <Button type="submit" variant="destructive" size="sm">
             Annuler le compromis
           </Button>
         </form>

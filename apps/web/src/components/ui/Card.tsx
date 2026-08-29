@@ -4,10 +4,10 @@
 type Variant = "default" | "elevated" | "interactive";
 
 const VARIANTS: Record<Variant, string> = {
-  default: "bg-surface border border-border shadow-[0_1px_2px_rgba(18,32,56,0.04)]",
-  elevated: "bg-surface border border-border shadow-[0_2px_8px_rgba(18,32,56,0.06)]",
+  default: "bg-surface border border-border-subtle shadow-surface",
+  elevated: "bg-surface border border-border-subtle shadow-floating",
   interactive:
-    "bg-surface border border-border shadow-[0_1px_2px_rgba(18,32,56,0.04)] transition-shadow duration-150 hover:shadow-[0_2px_8px_rgba(18,32,56,0.08)] hover:border-border-md",
+    "bg-surface border border-border-subtle shadow-surface transition-shadow duration-150 hover:shadow-floating hover:border-border-default",
 };
 
 export default function Card({

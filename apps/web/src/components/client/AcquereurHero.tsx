@@ -1,7 +1,7 @@
-import Link from "next/link";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
 import { archiverAcquereurAction, desarchiverAcquereurAction } from "@/actions/archivageAcquereur";
 
@@ -62,19 +62,15 @@ export default function AcquereurHero({ client }: { client: ProfilAcquereur }) {
 
       <div className="flex flex-wrap gap-2.5 mt-4 pt-4 border-t border-border">
         {actif && (
-          <Link href={`/taches/nouveau?acquereurId=${client.id}`}>
-            <Button variant="primary" size="md">
-              + Ajouter une tâche
-            </Button>
-          </Link>
+          <ButtonLink href={`/taches/nouveau?acquereurId=${client.id}`} variant="primary" size="md">
+            + Ajouter une tâche
+          </ButtonLink>
         )}
         {clientReel && (
           <>
-            <Link href={`/clients/${client.id}/modifier`}>
-              <Button variant="secondary" size="md">
-                Modifier
-              </Button>
-            </Link>
+            <ButtonLink href={`/clients/${client.id}/modifier`} variant="secondary" size="md">
+              Modifier
+            </ButtonLink>
             <form action={client.archiveLe ? desarchiverAcquereurAction : archiverAcquereurAction}>
               <input type="hidden" name="id" value={client.id} />
               <Button type="submit" variant="ghost" size="md">

@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { Home } from "lucide-react";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import { LABEL_CHARGE_HONORAIRES, LABEL_STATUT_MANDAT, LABEL_TYPE_BIEN, type Bien } from "@/types/bien";
 
 function formatPrix(prix: number): string {
@@ -54,11 +53,9 @@ export default function ProspectVendeurBienCree({ bien }: { bien: Bien }) {
         </div>
 
         <div className="shrink-0">
-          <Link href={`/biens/${bien.id}`}>
-            <Button variant="primary" size="md">
-              Ouvrir la fiche du bien
-            </Button>
-          </Link>
+          <ButtonLink href={`/biens/${bien.id}`} variant="primary" size="md">
+            Ouvrir la fiche du bien
+          </ButtonLink>
         </div>
       </div>
 

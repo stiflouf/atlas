@@ -7,7 +7,7 @@ import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
 import PhotoPrincipale from "@/components/bien/PhotoPrincipale";
-import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import EmptyState from "@/components/ui/EmptyState";
 import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
 import { deriverStatutCommercial, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
@@ -98,12 +98,10 @@ export default async function BiensPage({ searchParams }: PageProps) {
           </p>
         </div>
         {!modeArchives && (
-          <Link href="/biens/nouveau" className="shrink-0">
-            <Button variant="primary" size="md" className="inline-flex items-center gap-1.5">
-              <Plus size={14} />
-              Ajouter un bien
-            </Button>
-          </Link>
+          <ButtonLink href="/biens/nouveau" variant="primary" size="md" className="inline-flex items-center gap-1.5">
+            <Plus size={14} />
+            Ajouter un bien
+          </ButtonLink>
         )}
       </div>
 

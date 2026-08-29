@@ -306,7 +306,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | Lot | Contenu | Fichiers touchés |
 |---|---|---|
 | 1 | Fondations couleur : primitifs + sémantiques + alias + navy canonique `#02152B` + surfaces + `text-muted #696B7B` + `text-disabled #8B8D9E` + `warning #8A5E22`/`#F5EAD4` + navy hardcodés pertinents (§ F.6) | `globals.css`, `PropertyVisual.tsx`, `Sidebar.tsx`, `PhotosUploader.tsx` (périmètre exact § F.6) |
-| 2 | `Button` (+ `loading`), `Card`, `EmptyState` sur sémantiques | 3 fichiers |
+| 2 ✅ | `Button` (+ `loading`), `ButtonLink` (nouveau), `Card`, `EmptyState` sur sémantiques | `globals.css`, `Button.tsx`, `ButtonLink.tsx` (créé), `Card.tsx`, `EmptyState.tsx`, `app/page.tsx`, `app/biens/page.tsx`, `ProspectVendeurBienCree.tsx`, `AcquereurHero.tsx`, `BienStatutAction.tsx` |
 | 3 | `IconTile`, `StatTile`, `Avatar`, `SectionTitle`, `Pagination` | 5 fichiers |
 | 4 | `Input` / `Textarea` / `Select` créés + `ChampRecherche` adopté | 4 fichiers |
 | 5 | `Sidebar`, navigation, shell, headers — `BrandMark` exclu | ~4 fichiers |
@@ -377,6 +377,12 @@ Voir détail complet en § D.3. Sur 282 consommateurs réels : 278 migrent méca
 ### J.8 ✅ Résolu — sources de vérité disponibles
 
 `brand/FONDATIONS.md` et `brand/DESIGN-SYSTEM-V1.md` sont désormais présents dans le dépôt et font foi pour toutes les valeurs de primitifs et de sémantiques citées dans ce document. Le Lot 1 n'est plus limité à un sous-ensemble minimal : l'intégralité des primitifs `ink` et des sémantiques de couleur documentés (§ 2.1 à § 2.6 du Design System) est incluse, à l'exclusion des points explicitement hors périmètre (or § J.3, scrim média § D.4, usages différés § D.3).
+
+### J.9 ✅ Lot 2 appliqué — Button/ButtonLink/Card/EmptyState
+
+Ajouts : tokens `--shadow-surface`/`--shadow-floating`/`--shadow-modal` (§ 6 du Design System, `shadow-modal` non consommé) ; `ButtonLink` (nouveau composant, jamais de `<button>` imbriqué dans un `<a>`) ; `Button` gagne `loading?: boolean` (spinner `LoaderCircle`, `aria-busy`, `disabled` garantis prioritaires sur toute prop contradictoire du consommateur) et la variante canonique `destructive` (`danger` conservé comme alias déprécié, non supprimé). `Card` et `Button` migrent vers les tokens sémantiques directs (`border-subtle`/`-default`, `action-primary`, `text-inverse`, `focus-ring`, `status-danger`) partout où la correspondance était certaine. `secondary` ne recolore plus le texte au hover (uniquement la bordure), conformément à la direction validée. `EmptyState` compose désormais son CTA avec `ButtonLink` et son message utilise directement `text-muted` (plus l'alias `text-3`).
+
+**Point ouvert découvert par la recherche exhaustive post-migration (hors périmètre du Lot 2) :** `ProspectVendeurHero.tsx` (lignes ~104-114) contient le même pattern invalide `<Link><Button></Link>` que celui corrigé dans les 4 fichiers du Lot 2, mais n'était pas dans le périmètre autorisé de ce lot. Non corrigé intentionnellement — à trancher avant ou pendant le Lot 3 : élargir le prochain lot pour l'inclure, ou traiter en micro-correctif séparé.
 
 ### J.7 Note — scission du lot typographique
 
