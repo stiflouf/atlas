@@ -1,7 +1,6 @@
-import Link from "next/link";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
-import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import { deriverStatutProspectVendeur, LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
@@ -101,17 +100,13 @@ export default function ProspectVendeurHero({ prospect }: { prospect: ProspectVe
         {/* Actions secondaires — jamais la transition de pipeline, qui vit dans la bande navy. */}
         <div className="flex flex-wrap gap-2.5 pt-4 border-t border-border">
           {actif && prospectReel && (
-            <Link href={`/taches/nouveau?prospectVendeurId=${prospect.id}`}>
-              <Button variant="secondary" size="md">
-                + Ajouter une tâche
-              </Button>
-            </Link>
+            <ButtonLink href={`/taches/nouveau?prospectVendeurId=${prospect.id}`} variant="secondary" size="md">
+              + Ajouter une tâche
+            </ButtonLink>
           )}
-          <Link href={`/prospects-vendeurs/${prospect.id}/modifier`}>
-            <Button variant="secondary" size="md">
-              Modifier
-            </Button>
-          </Link>
+          <ButtonLink href={`/prospects-vendeurs/${prospect.id}/modifier`} variant="secondary" size="md">
+            Modifier
+          </ButtonLink>
         </div>
       </div>
 
