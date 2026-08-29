@@ -14,7 +14,7 @@ export default function NouvelAcquereurPage() {
         Clients
       </Link>
 
-      <h1 className="font-serif text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-6">
+      <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-6">
         Ajouter un acquéreur
       </h1>
 

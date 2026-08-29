@@ -85,7 +85,7 @@ export default function BienHero({
               {bien.adresse}, {bien.codePostal} {bien.ville}
             </h1>
           </div>
-          <p className="font-serif text-[19px] md:text-[26px] leading-tight text-white font-semibold shrink-0">
+          <p className="text-[19px] md:text-[26px] leading-tight text-white font-semibold shrink-0 tabular-nums">
             {formatPrix(bien.prix)}
           </p>
         </div>

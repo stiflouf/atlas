@@ -79,7 +79,7 @@ export default function ProspectVendeurProchaineEtape({
             <p className="text-[10.5px] font-semibold uppercase tracking-[0.13em] text-champagne mb-1.5">
               Prochaine étape
             </p>
-            <p className="font-serif text-[18px] md:text-[19px] font-semibold text-white leading-tight">{etape.titre}</p>
+            <p className="text-[18px] md:text-[19px] font-semibold text-white leading-tight">{etape.titre}</p>
             {etape.action === "marquer_rdv_realise" && prospect.rdvEstimationPrevuLe && (
               <p className="text-[12.5px] text-white/60 mt-1.5">
                 Rendez-vous prévu le {formatDateHeure(prospect.rdvEstimationPrevuLe)}

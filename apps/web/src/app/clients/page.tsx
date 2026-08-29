@@ -76,7 +76,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="font-serif text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">
+          <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">
             {modeArchives ? "Acquéreurs archivés" : "Clients"}
           </h1>
           <p className="text-[14px] text-text-3 mt-1">

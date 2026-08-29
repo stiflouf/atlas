@@ -32,7 +32,7 @@ export default function ProspectVendeurBienCree({ bien }: { bien: Bien }) {
             <p className="text-[11px] font-semibold uppercase tracking-wider text-success mb-1">
               Bien en commercialisation
             </p>
-            <p className="font-serif text-[17px] md:text-[18px] font-semibold text-text-1 leading-snug">{bien.titre}</p>
+            <p className="text-[17px] md:text-[18px] font-semibold text-text-1 leading-snug">{bien.titre}</p>
             <p className="text-[13px] text-text-2 mt-0.5">
               {bien.adresse} · {bien.codePostal} {bien.ville}
             </p>

@@ -37,7 +37,7 @@ export default async function PhotosBienPage({ params }: PageProps) {
       <div className="mb-6 flex items-end justify-between gap-4 border-b border-border pb-5">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-champagne">Photos</p>
-          <h1 className="font-serif text-[28px] md:text-[34px] font-semibold text-text-1 leading-[1.05] mt-1.5">
+          <h1 className="text-[28px] md:text-[34px] font-semibold text-text-1 leading-[1.05] mt-1.5">
             Gérer les photos
           </h1>
           <p className="text-[13px] text-text-3 mt-1.5">

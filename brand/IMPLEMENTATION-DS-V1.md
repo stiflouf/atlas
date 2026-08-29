@@ -313,7 +313,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | 6 ✅ | Écran **Aujourd'hui** | `app/page.tsx`, `AgendaCard.tsx`, `TacheItem.tsx`, `DossierActionCard.tsx`, `ConnexionsGoogle.tsx`, `ConfirmationBienRdv.tsx`, `AlerteCard.tsx` |
 | 7 ✅ | Écran **Biens** (liste) — `font-serif` des prix conservé (précédent réel, pas une sortie), `tabular-nums` ajouté | `app/biens/page.tsx` |
 | 8A ✅ | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
-| 8B | **Activation Cormorant** + recalage serif atomique, une seule PR cohérente | `layout.tsx`, `globals.css`, 7 fichiers de titres |
+| 8B ✅ | **Activation Cormorant** + recalage serif atomique, un seul commit cohérent | `layout.tsx`, `globals.css`, 6 écrans, 5 composants |
 | 9 | `Tabs` + `Table` + `Skeleton` créés | 3 fichiers |
 | 10 | **Fiche Bien**, une PR par onglet ou unité fonctionnelle de `BienTabs` (§ J.5) | `components/bien/` |
 | 11 | `Dialog` + `Toast` créés, adoptés sur les flux destructifs | ~5 fichiers |
@@ -467,6 +467,22 @@ Chargement technique de Cormorant Garamond via `next/font/google`, strictement s
   - *Petits titres de carte* : `ProspectVendeurBienCree.tsx` (titre de carte succès, 17/18px) et `ProspectVendeurProchaineEtape.tsx` (titre d'étape, 18/19px) sont classés UI fonctionnelle, pas moment de marque → Inter en Lot 8B, pas Cormorant.
   - Inventaire complet des 19 usages `font-serif`/15 fichiers, classification A-F et tableau des H1 (§ audit Lot 8A) conservés pour construire le diff 8B sans refaire la cartographie.
 - `BrandMark.tsx` confirmé hors sujet : n'utilise aucune police serif (mot-symbole en Inter, monogramme SVG géométrique pur) — aucun impact, aucune décision requise avant l'arrivée de l'asset logo maître.
+
+### J.16 ✅ Lot 8B appliqué — activation Cormorant Garamond, bascule atomique
+
+Bascule réalisée en un seul commit, sans état intermédiaire dégradé : `--font-serif` repointé vers Cormorant, Fraunces entièrement retirée, tous les mauvais usages serif nettoyés dans le même diff.
+
+- `globals.css` : `--font-serif: var(--font-fraunces)` → `--font-serif: var(--font-cormorant)`. Aucune autre variable du `@theme` touchée.
+- `layout.tsx` : `Fraunces` entièrement supprimée (import, `const fraunces`, `.variable` sur `<html>`) — confirmé sans consommateur résiduel avant suppression. `Inter`/`Cormorant_Garamond` conservés dans leur configuration exacte (600/normal/latin, aucun poids ajouté).
+- **5 consommateurs `font-serif` finaux, exhaustivement vérifiés** : H1 `app/page.tsx` (Aujourd'hui), H1 `app/biens/page.tsx` (Biens/archivés), titre `BienHero.tsx` (adresse), nom `AcquereurHero.tsx`, nom `ProspectVendeurHero.tsx` — classes de taille/leading/weight strictement inchangées sur les 5.
+- **13 usages repassés en Inter** (simple retrait de `font-serif`, aucun `font-sans` ajouté — héritage du body) : H1 `Clients` (rejoint Prospects vendeurs/Dashboard, même palier visuel 22/28), H1 `Fiscal`/`Automatisations`/`Pack Notaire`/`Ajouter un bien`/`Nouvel acquéreur` (20/24, fonctionnels), H1 `Gérer les photos` (28/34 conservé avec son eyebrow champagne — classé fonctionnel malgré le gabarit visuel partagé avec Aujourd'hui/Biens, décision humaine tranchée en GO), 2 petits titres `ProspectVendeurBienCree`/`ProspectVendeurProchaineEtape`.
+- **5 données numériques repassées en Inter + `tabular-nums`** (conformément à `DESIGN-SYSTEM-V1.md` § 3) : prix overlay + mobile liste Biens (`tabular-nums` déjà présent depuis le Lot 7), prix `BienHero`, budget `AcquereurHero`, estimation `ProspectVendeurHero` (`tabular-nums` ajouté sur ces 3 derniers). Le prix en overlay sur photo conserve `text-white` (scrim média, toujours distinct de la surface inverse de marque).
+- Vérifications post-application : recherche exhaustive confirme exactement 5 consommateurs JSX `font-serif` et 0 occurrence active de `Fraunces`/`--font-fraunces` dans le code. CSS compilé confirme `.font-serif{font-family:var(--font-cormorant)}`, `--font-cormorant` exposée avec fallback, aucun `@font-face` Fraunces résiduel, Cormorant toujours limitée à 600/normal.
+- Tests : suite Vitest complète 182/182 fichiers, 1454/1454 tests, sans aucune modification (aucun test n'asserte de classe de police) ; `tsc --noEmit` et `next build` propres.
+- Validation visuelle desktop (1440px) et mobile (390px) via scripts Playwright jetables non conservés : Aujourd'hui, Biens, Fiche Bien (hero), Clients, Fiche Acquéreur (hero), Fiscal, Automatisations, formulaires Bien/Acquéreur, page Photos, Pack Notaire, `/connexion` (témoin Inter, inchangée) — tous conformes à l'intention, aucune anomalie de layout/wrapping/densité constatée.
+- **Test nom long** (`AcquereurHero`, remplacement DOM temporaire par « Jean-Baptiste de Montmorency-Villiers ») : passe sur une seule ligne en desktop, passe proprement sur deux lignes en mobile sans débordement horizontal ni collision avec l'avatar/badge — aucun `truncate` nécessaire dans l'immédiat, point à surveiller si des noms réels plus longs apparaissent.
+- `e2e/coeur.smoke.spec.ts` exécuté via la commande officielle : échoue exactement au même endroit et sur la même assertion qu'avant ce lot (texte « Bien smoke » introuvable sur la fiche Bien, qui affiche l'adresse) — dette déjà connue, strictement inchangée, confirmée sans lien avec ce lot (seule la police du titre a changé, jamais son contenu).
+- Aucune couleur, aucun spacing, aucun radius, aucune logique métier modifiée — diff strictement typographique.
 
 ### J.7 Note — scission du lot typographique
 

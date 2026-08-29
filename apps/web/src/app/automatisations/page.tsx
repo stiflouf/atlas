@@ -73,7 +73,7 @@ export default async function PageAutomatisations() {
       <div className="flex items-start gap-3 mb-6">
         <IconTile icon={Zap} tone="navy" size={36} iconSize={17} className="mt-0.5" />
         <div>
-          <h1 className="font-serif text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
+          <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight">
             Automatisations
           </h1>
           <p className="text-[14px] text-text-2 mt-1">

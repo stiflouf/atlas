@@ -3,7 +3,7 @@
 @theme inline {
   --font-sans: var(--font-inter);
   /* Grands titres uniquement (classe `font-serif`) — jamais l'UI/les données/les formulaires. */
-  --font-serif: var(--font-fraunces);
+  --font-serif: var(--font-cormorant);
 
   /* Primitifs — encre, DESIGN-SYSTEM-V1.md § 2.1 */
   --color-ink-900: #02152b;

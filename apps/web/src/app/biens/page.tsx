@@ -163,8 +163,8 @@ export default async function BiensPage({ searchParams }: PageProps) {
                         </Badge>
                       </span>
                       {/* Le prix sur le voile : c'est l'information cherchée en premier, et elle
-                          libère le bloc texte. font-serif, comme les chiffres porteurs ailleurs. */}
-                      <span className="absolute left-3 bottom-2.5 font-serif text-[19px] font-semibold text-white tabular-nums drop-shadow-[0_1px_8px_rgba(3,10,28,0.6)]">
+                          libère le bloc texte. */}
+                      <span className="absolute left-3 bottom-2.5 text-[19px] font-semibold text-white tabular-nums drop-shadow-[0_1px_8px_rgba(3,10,28,0.6)]">
                         {formatPrix(bien.prix)}
                       </span>
                     </div>
@@ -206,7 +206,7 @@ export default async function BiensPage({ searchParams }: PageProps) {
                         <p className="text-[14px] font-medium text-text-primary truncate">{bien.titre}</p>
                         <p className="text-[13px] text-text-secondary truncate">{bien.adresse}, {bien.codePostal} {bien.ville}</p>
                         <div className="flex items-baseline gap-2.5 mt-1.5">
-                          <span className="font-serif text-[16px] font-semibold text-text-primary tabular-nums">
+                          <span className="text-[16px] font-semibold text-text-primary tabular-nums">
                             {formatPrix(bien.prix)}
                           </span>
                           <span className="text-[12px] text-text-muted">

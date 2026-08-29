@@ -144,7 +144,7 @@ export default function ProspectVendeurHero({ prospect }: { prospect: ProspectVe
           <p className="text-[11px] text-text-3">Estimation proposée</p>
           {prospect.estimationProposeeCentimes !== undefined ? (
             <>
-              <p className="font-serif text-[22px] font-semibold text-text-1 leading-none mt-1">
+              <p className="text-[22px] font-semibold text-text-1 leading-none mt-1 tabular-nums">
                 {formatMontantCentimes(prospect.estimationProposeeCentimes)}
               </p>
               {prospect.estimationProposeeLe && (

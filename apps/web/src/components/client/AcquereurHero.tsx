@@ -54,7 +54,7 @@ export default function AcquereurHero({ client }: { client: ProfilAcquereur }) {
 
         <div className="shrink-0 md:text-right">
           <p className="text-[11px] text-text-3 mb-0.5">Budget</p>
-          <p className="font-serif text-[22px] md:text-[26px] font-semibold text-text-1 leading-none">
+          <p className="text-[22px] md:text-[26px] font-semibold text-text-1 leading-none tabular-nums">
             {formatPrix(client.budgetMin)} – {formatPrix(client.budgetMax)}
           </p>
         </div>
