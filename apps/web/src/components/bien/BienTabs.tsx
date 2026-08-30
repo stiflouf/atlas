@@ -842,7 +842,7 @@ export default function BienTabs({
       {active === "offres" && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
-            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
+            <p className="text-[13px] text-text-muted bg-surface-subtle rounded-lg border border-border-subtle p-3">
               Ce bien est archivé — impossible d'ajouter une nouvelle offre.
             </p>
           ) : (
@@ -858,38 +858,38 @@ export default function BienTabs({
           )}
 
           {offresTriees.length === 0 ? (
-            <p className="text-[14px] text-text-3">Aucune offre pour l'instant.</p>
+            <p className="text-[14px] text-text-muted">Aucune offre pour l'instant.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {offresTriees.map((offre) => {
                 const acquereur = acquereursParId.get(offre.acquereurId);
                 return (
-                  <div key={offre.id} className="bg-surface rounded-lg border border-border p-4">
+                  <div key={offre.id} className="bg-surface rounded-lg border border-border-subtle p-4">
                     <div className="flex items-start gap-3">
                       <IconTile icon={Handshake} tone="champagne" size={30} iconSize={14} className="mt-0.5" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <p className="text-[13px] font-medium text-text-2">{formatDate(offre.dateOffre)}</p>
-                          <span className="text-[11px] text-text-3">·</span>
-                          <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_OFFRE[offre.statut]}</span>
+                          <p className="text-[13px] font-medium text-text-secondary">{formatDate(offre.dateOffre)}</p>
+                          <span className="text-[11px] text-text-muted">·</span>
+                          <span className="text-[11px] font-medium text-ink-900">{LABEL_STATUT_OFFRE[offre.statut]}</span>
                         </div>
-                        <p className="text-[14px] font-medium text-text-1">
+                        <p className="text-[14px] font-medium text-text-primary">
                           {formatPrix(offre.montant)} —{" "}
                           {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                         </p>
                       </div>
                     </div>
                     {offre.dateValidite && (
-                      <p className="text-[13px] text-text-3 mt-1">Valable jusqu'au {formatDate(offre.dateValidite)}</p>
+                      <p className="text-[13px] text-text-muted mt-1">Valable jusqu'au {formatDate(offre.dateValidite)}</p>
                     )}
                     {offre.dateDecision && (
-                      <p className="text-[13px] text-text-3 mt-1">
+                      <p className="text-[13px] text-text-muted mt-1">
                         Décidée le {formatDate(offre.dateDecision)}
                         {offre.motifPerte && ` — ${LABEL_MOTIF_PERTE[offre.motifPerte]}`}
                       </p>
                     )}
                     {offre.statut === "en_cours" && !bien.archiveLe && (
-                      <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border">
+                      <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border-subtle">
                         {(["acceptee", "refusee", "retiree"] as const).map((statut) => (
                           <form
                             key={statut}
@@ -941,10 +941,10 @@ export default function BienTabs({
                       !bien.archiveLe &&
                       !compromisEnCours &&
                       !idsOffresDejaUtiliseesParCompromis.has(offre.id) && (
-                        <div className="mt-3 pt-3 border-t border-border">
+                        <div className="mt-3 pt-3 border-t border-border-subtle">
                           <Link
                             href={`/compromis/nouveau?bienId=${bien.id}&acquereurId=${offre.acquereurId}&offreId=${offre.id}`}
-                            className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
+                            className="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
                           >
                             Créer le compromis
                           </Link>
@@ -965,24 +965,24 @@ export default function BienTabs({
                           !idsDejaLies.has(cr.id)
                       );
                       return (
-                        <div className="mt-3 pt-3 border-t border-border">
-                          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-1.5">
+                        <div className="mt-3 pt-3 border-t border-border-subtle">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
                             Visites liées
                           </p>
                           {liensDeLOffre.length === 0 ? (
-                            <p className="text-[12px] text-text-3 mb-2">Aucune visite liée pour l'instant.</p>
+                            <p className="text-[12px] text-text-muted mb-2">Aucune visite liée pour l'instant.</p>
                           ) : (
                             <div className="flex flex-col gap-1 mb-2">
                               {liensDeLOffre.map(({ lienId, visite }) => (
                                 <div key={lienId} className="flex items-center justify-between gap-2 text-[13px]">
-                                  <span className="text-text-2">
+                                  <span className="text-text-secondary">
                                     {formatDate(visite.dateVisite)} — {LABEL_INTERET[visite.interet]}
                                   </span>
                                   <form action={delierVisiteAction}>
                                     <input type="hidden" name="lienId" value={lienId} />
                                     <button
                                       type="submit"
-                                      className="text-[11px] font-medium text-text-2 hover:text-danger transition-colors"
+                                      className="text-[11px] font-medium text-text-secondary hover:text-status-danger transition-colors"
                                     >
                                       Retirer le lien
                                     </button>
@@ -1011,7 +1011,7 @@ export default function BienTabs({
                               </select>
                               <button
                                 type="submit"
-                                className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors shrink-0"
+                                className="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors shrink-0"
                               >
                                 Lier
                               </button>

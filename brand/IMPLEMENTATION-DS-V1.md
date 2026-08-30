@@ -315,7 +315,7 @@ Treize lots (le lot 8 est scindé en 8A/8B, § A.2 et § J.7). Chacun est relisi
 | 8A ✅ | **Préparation Cormorant** — chargement de la police, `--font-cormorant`, sans activation visuelle globale | `layout.tsx` |
 | 8B ✅ | **Activation Cormorant** + recalage serif atomique, un seul commit cohérent | `layout.tsx`, `globals.css`, 6 écrans, 5 composants |
 | 9 | ⚠ **ARBITRÉ — primitives différées faute de consommateurs suffisants** (§ J.17) | aucun fichier runtime, `IMPLEMENTATION-DS-V1.md` seul |
-| 10 | **Fiche Bien**, une PR par onglet ou unité fonctionnelle de `BienTabs` (§ J.5) — 10A ✅ (§ J.18), 10B ✅ (§ J.19), 10C ✅ (§ J.20), 10D ✅ (§ J.21), 10E ✅ (§ J.22), 10F ✅ (§ J.23), 10G+ à venir | `components/bien/`, `ui/Tabs.tsx` |
+| 10 | **Fiche Bien**, une PR par onglet ou unité fonctionnelle de `BienTabs` (§ J.5) — 10A ✅ (§ J.18), 10B ✅ (§ J.19), 10C ✅ (§ J.20), 10D ✅ (§ J.21), 10E ✅ (§ J.22), 10F ✅ (§ J.23), 10G scindé en 10G1 ✅ (§ J.26)/10G2/10G3 à venir | `components/bien/`, `ui/Tabs.tsx`, `components/offre/OffreFormulaire.tsx` |
 | 11 | `Dialog` + `Toast` créés, adoptés sur les flux destructifs | ~5 fichiers |
 | 12 | Refonte `Badge` (registres) | transverse, en dernier |
 
@@ -589,6 +589,31 @@ Micro-correctif atomique, découvert pendant l'audit du Lot 10G, sur une dette d
 - **Protection structurelle ajoutée dans `BienTabs.test.tsx`** (4 tests existants enrichis, aucun nouveau `it()`) : vérifie, via `getTabId`/`getTabPanelId` (source unique de vérité, jamais une chaîne dupliquée), que le tab et le panel Historique apparaissent et disparaissent ensemble selon `evenementsHistorique.length`, et que les panels Offres/Compromis n'existent dans le HTML que lorsque `dossier` est absent — jamais l'un sans l'autre. `BienTabs.test.tsx` reste à 5/5 (nombre de tests inchangé).
 - Validation : suite Vitest complète 182/182 fichiers, 1454/1454 tests (total inchangé) ; `tsc --noEmit` et `next build` propres. Contrôle Playwright jetable (`bien-001`, branche mock) : confirmé `#bien-tabs-panel-offres`/`#bien-tabs-panel-compromis` absents du DOM, `#bien-tabs-panel-historique` présent — cohérent avec la tablist affichée. Aucun changement de rendu visible (le correctif ne touche que des wrappers déjà `hidden` ou absents).
 - **Lots 10B à 10F non réouverts** : cette entrée ne modifie aucun panel déjà migré, seulement l'enveloppe conditionnelle de 3 d'entre eux.
+
+### J.25 ⚠ Lot 10G scindé — panel Offres, OffreFormulaire partagé, champs compacts
+
+L'audit du Lot 10G a révélé deux réalités distinctes derrière un seul numéro historique de la roadmap (§ J.5) : un panel de présentation strictement local à `BienTabs.tsx`, et un composant de formulaire (`OffreFormulaire.tsx`) partagé avec un écran hors Fiche Bien (`/offres/nouveau`, exerçant ses deux variantes `verrouille`). L'audit a aussi révélé que 3 champs inline du panel (`dateDecision`, `motifPerte`, `compteRenduVisiteId`) utilisent une densité (`px-2 py-1[.5] text-[12px]`) non couverte proprement par `FIELD_BASE_CLASSES` (`px-3 py-2 text-[14px]`) sans vérification du CSS compilé — un risque de nature différente du reste du panel.
+
+Découpage retenu, pour isoler ces risques distincts :
+- **10G1** — panel Offres : présentation, statuts, actions existantes, tokens (✅, § J.26).
+- **10G2** — `OffreFormulaire.tsx` partagé : adoption d'`Input`/`Select`/`Button`, à valider explicitement sur ses deux consommateurs (`BienTabs.tsx` et `/offres/nouveau`).
+- **10G3** — les 3 champs compacts inline du panel : densité/focus/primitive éventuelle, avec vérification du CSS compilé avant toute adoption de primitive.
+
+### J.26 ✅ Lot 10G1 appliqué — migration du panel Offres (présentation/tokens/actions existantes)
+
+Septième sous-lot de la migration progressive de la Fiche Bien (§ J.5), strictement local au panel Offres de `BienTabs.tsx` (contenu du `tabpanel` posé au Lot 10A, wrapper conditionnel `!dossier` posé au Lot 10A.1 § J.24 — aucun des deux non touché).
+
+- **`OffreFormulaire.tsx` totalement intact** : aucune prop, aucun import, aucun comportement modifié — sa migration vers `Input`/`Select`/`Button` est réservée à 10G2, avec sa propagation vers `/offres/nouveau` explicitement assumée à ce moment-là, pas ici. Confirmé par le diff : ce fichier n'apparaît pas.
+- **3 champs compacts volontairement intacts** (`dateDecision`, `motifPerte` ×2 dans les formulaires de transition, `compteRenduVisiteId`) : classes legacy conservées à l'identique (`border-border-md`, `text-text-1`, `focus:outline-none`/`focus:ring-accent/20`/`focus:border-accent`), réservées à 10G3 — leur présence après ce lot est délibérée, pas une régression.
+- **18 substitutions de classes**, toutes des alias byte-identiques déjà vérifiés : `border-border`→`border-border-subtle` (5 : carte d'offre, message archivé, 3 séparateurs de section), `bg-surface-muted`→`bg-surface-subtle` (1, message bien archivé), `text-text-3`→`text-text-muted` (7), `text-text-2`→`text-text-secondary` (3), `text-text-1`→`text-text-primary` (1 seule occurrence, le bloc montant/acquéreur — les 3 autres restent dans les champs compacts § ci-dessus).
+- **Décision humaine actée : statut d'offre (`LABEL_STATUT_OFFRE`) → `text-ink-900`, pas `text-action-primary`** — même arbitrage qu'aux Lots 10D/10F : emphase uniforme non catégorisée par statut, aucune fausse sémantique d'action, rendu strictement inchangé.
+- **Actions réellement interactives migrées vers `action-primary`** : lien « Créer le compromis » (`text-accent`/`hover:text-accent-hover` → `text-action-primary`/`hover:text-action-primary-hover`), bouton natif « Lier » (idem). Bouton natif « Retirer le lien » : `text-text-2`/`hover:text-danger` → `text-text-secondary`/`hover:text-status-danger`.
+- **« Lier » et « Retirer le lien » restent natifs** (pas de conversion en `Button`) — densité incompatible avec tout variant existant, même constat que le Lot 10B (variant `link` toujours non implémenté). **Les boutons Accepter/Refuser/Retirer, déjà `Button` depuis avant ce lot, ne sont pas touchés** (variants `primary`/`secondary` inchangés — choix produit déjà fait, pas une dette de tokens).
+- **`SectionTitle` non adopté pour « Visites liées »** : micro-label répété une fois par carte d'offre (potentiellement plusieurs occurrences identiques sur une même page), contrairement aux rubriques uniques du Lot 10F — seule sa couleur migre (`text-text-3`→`text-text-muted`), balise `<p>` et spacing `mb-1.5` conservés.
+- **Aucune primitive introduite** : pas de `Card` (carte `rounded-lg` sans ombre, diffère réellement de `Card` `rounded-xl`/`shadow-surface`), pas de `Badge` (statut reste un `<span>` simple, Lot 12), pas d'`EmptyState` (messages compacts « Aucune offre... »/« Aucune visite liée... » conservés).
+- **Aucun changement métier** : `offresTriees` (tri décroissant), `formatPrix`/`formatDate`, contrats `changerStatutOffreAction`/`lierVisiteAOffreAction`/`delierVisiteAction` (noms de champs FormData inchangés), conditions (`bien.archiveLe`, `compromisEnCours`, `idsOffresDejaUtiliseesParCompromis`) — rien de tout cela touché.
+- Validation : `BienTabs.test.tsx` 5/5 sans modification (assertions structurelles du Lot 10A.1 toujours vertes) ; suite Vitest complète 182/182 fichiers, 1454/1454 tests ; `tsc --noEmit` et `next build` propres. Aucun Playwright créé : le panel Offres n'est pas observable visuellement avec les fixtures actuelles (`dossier` toujours présent sur `bien-001`) — limite reconduite depuis 10A ; `/offres/nouveau?bienId=bien-001` confirmé inchangé par lecture directe (`OffreFormulaire.tsx` non modifié).
+- **Dette différée à 10G2/10G3, non traitée ici** : absence de `tabular-nums` sur les montants affichés (`formatPrix`) ; duplication de `formatPrix` entre `BienTabs.tsx` et `OffreFormulaire.tsx` ; absence de focus visible sur les boutons natifs conservés (Lier, Retirer le lien, Créer le compromis) ; sémantique de liste `<div>` plutôt que `<ul>/<li>` ; `border-warning/30` (bloc doublon dans `OffreFormulaire.tsx`) sans alias byte-identique, à arbitrer en 10G2.
 
 ### J.7 Note — scission du lot typographique
 
