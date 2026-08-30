@@ -1031,11 +1031,11 @@ export default function BienTabs({
       {active === "compromis" && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
-            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
+            <p className="text-[13px] text-text-muted bg-surface-subtle rounded-lg border border-border-subtle p-3">
               Ce bien est archivé — impossible d'ajouter un nouveau compromis.
             </p>
           ) : compromisEnCours ? (
-            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
+            <p className="text-[13px] text-text-muted bg-surface-subtle rounded-lg border border-border-subtle p-3">
               Un compromis est déjà en cours pour ce bien — résolvez-le avant d'en ajouter un nouveau.
             </p>
           ) : (
@@ -1050,29 +1050,29 @@ export default function BienTabs({
           )}
 
           {compromisTries.length === 0 ? (
-            <p className="text-[14px] text-text-3">Aucun compromis pour l'instant.</p>
+            <p className="text-[14px] text-text-muted">Aucun compromis pour l'instant.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {compromisTries.map((c) => {
                 const acquereur = acquereursParId.get(c.acquereurId);
                 return (
-                  <div key={c.id} className="bg-surface rounded-lg border border-border p-4">
+                  <div key={c.id} className="bg-surface rounded-lg border border-border-subtle p-4">
                     <div className="flex items-start gap-3">
                       <IconTile icon={Scale} tone="navy" size={30} iconSize={14} className="mt-0.5" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <p className="text-[13px] font-medium text-text-2">{formatDate(c.dateSignature)}</p>
-                          <span className="text-[11px] text-text-3">·</span>
-                          <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
+                          <p className="text-[13px] font-medium text-text-secondary">{formatDate(c.dateSignature)}</p>
+                          <span className="text-[11px] text-text-muted">·</span>
+                          <span className="text-[11px] font-medium text-ink-900">{LABEL_STATUT_COMPROMIS[c.statut]}</span>
                         </div>
-                        <p className="text-[14px] font-medium text-text-1">
+                        <p className="text-[14px] font-medium text-text-primary">
                           {formatPrix(c.prixConvenu)} —{" "}
                           {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                         </p>
                       </div>
                     </div>
                     {c.dateActe && (
-                      <p className="text-[13px] text-text-3 mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
+                      <p className="text-[13px] text-text-muted mt-1">Acte prévu le {formatDate(c.dateActe)}</p>
                     )}
                     {/* Date prévue modifiable tant que le compromis reste en_cours (ADR-046) —
                         un report d'acte est courant et ne doit jamais laisser une date fausse.
@@ -1101,10 +1101,10 @@ export default function BienTabs({
                       </div>
                     )}
                     {c.dateActeReelle && (
-                      <p className="text-[13px] text-success mt-1">Acte signé le {formatDate(c.dateActeReelle)}</p>
+                      <p className="text-[13px] text-status-success mt-1">Acte signé le {formatDate(c.dateActeReelle)}</p>
                     )}
                     {c.dateAnnulation && (
-                      <p className="text-[13px] text-text-3 mt-1">
+                      <p className="text-[13px] text-text-muted mt-1">
                         Annulé le {formatDate(c.dateAnnulation)}
                         {c.motifAnnulation && ` — ${LABEL_MOTIF_PERTE[c.motifAnnulation]}`}
                       </p>
@@ -1304,38 +1304,38 @@ export default function BienTabs({
                       const transmissions = transmissionsParCompromis.get(c.id) ?? [];
                       if (transmissions.length === 0 && c.statut === "annule") return null;
                       return (
-                        <div className="mt-3 pt-3 border-t border-border">
+                        <div className="mt-3 pt-3 border-t border-border-subtle">
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-[12px] font-medium text-text-2">Transmissions notariales</p>
+                            <p className="text-[12px] font-medium text-text-secondary">Transmissions notariales</p>
                             {c.id === compromisActuel?.id && (
                               <Link
                                 href={`/biens/${bien.id}/pack-notaire`}
-                                className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
+                                className="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
                               >
                                 Gérer le dossier notaire →
                               </Link>
                             )}
                           </div>
                           {transmissions.length === 0 ? (
-                            <p className="text-[13px] text-text-3">Aucune transmission enregistrée pour l&apos;instant.</p>
+                            <p className="text-[13px] text-text-muted">Aucune transmission enregistrée pour l&apos;instant.</p>
                           ) : (
                             <ul className="flex flex-col gap-2">
                               {transmissions.map((t) => (
-                                <li key={t.id} className="text-[13px] text-text-1">
+                                <li key={t.id} className="text-[13px] text-text-primary">
                                   <p>
                                     {formatDate(t.transmisLe)} — <span className="font-medium">{t.etudeNom}</span>
                                     {t.destinataireNom && ` (${t.destinataireNom})`}
                                   </p>
-                                  <p className="text-[12px] text-text-3">
+                                  <p className="text-[12px] text-text-muted">
                                     {t.manifesteSnapshot.documents.length} document
                                     {t.manifesteSnapshot.documents.length > 1 ? "s" : ""}
                                     {t.destinataireEmail && ` — ${t.destinataireEmail}`} — enregistré par {t.creeParEmail}
                                   </p>
                                   <details className="mt-1">
-                                    <summary className="text-[12px] text-accent cursor-pointer">
+                                    <summary className="text-[12px] text-action-primary cursor-pointer">
                                       Voir le manifeste transmis
                                     </summary>
-                                    <pre className="whitespace-pre-wrap text-[12px] text-text-2 mt-1 bg-surface-muted rounded-lg p-2 border border-border">
+                                    <pre className="whitespace-pre-wrap text-[12px] text-text-secondary mt-1 bg-surface-subtle rounded-lg p-2 border border-border-subtle">
                                       {t.manifesteSnapshot.manifesteTexte}
                                     </pre>
                                   </details>
