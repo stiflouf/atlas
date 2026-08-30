@@ -6,6 +6,8 @@ import { Users, Building2, ShieldCheck, Landmark, Handshake, Scale, FileText } f
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import IconTile from "@/components/ui/IconTile";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import SectionTitle from "@/components/ui/SectionTitle";
 import Tabs, { getTabId, getTabPanelId } from "@/components/ui/Tabs";
 import Textarea from "@/components/ui/Textarea";
@@ -542,30 +544,21 @@ export default function BienTabs({
           ) : (
             <form action={ajouterDocumentBienAction} className="flex flex-col gap-2 max-w-xl">
               <input type="hidden" name="bienId" value={bien.id} />
-              <input
+              <Input
                 type="text"
                 name="nom"
                 required
                 placeholder="Nom du document (ex. Diagnostics énergétiques)"
-                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <div className="grid grid-cols-2 gap-2">
-                <select
-                  name="categorie"
-                  defaultValue="autre"
-                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                >
+                <Select name="categorie" defaultValue="autre">
                   {CATEGORIES_DOCUMENT.map((categorie) => (
                     <option key={categorie} value={categorie}>
                       {LABEL_CATEGORIE_DOCUMENT[categorie]}
                     </option>
                   ))}
-                </select>
-                <select
-                  name="typeDocument"
-                  defaultValue=""
-                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                >
+                </Select>
+                <Select name="typeDocument" defaultValue="">
                   <option value="">Type — non classé</option>
                   {FAMILLES_DOCUMENT.map((famille) => (
                     <optgroup key={famille} label={LABEL_FAMILLE_DOCUMENT[famille]}>
@@ -576,95 +569,79 @@ export default function BienTabs({
                       ))}
                     </optgroup>
                   ))}
-                </select>
+                </Select>
               </div>
-              <input
+              <Input
                 type="text"
                 name="typeDocumentDetail"
                 placeholder="Précision si type « Autre » (optionnel)"
-                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-text-3">
+                <label className="text-[11px] text-text-muted">
                   Date du document
-                  <input
-                    type="date"
-                    name="dateDocument"
-                    className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                  />
+                  <Input type="date" name="dateDocument" className="mt-1" />
                 </label>
-                <label className="text-[11px] text-text-3">
+                <label className="text-[11px] text-text-muted">
                   Fin de validité (diagnostics)
-                  <input
-                    type="date"
-                    name="dateFinValidite"
-                    className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                  />
+                  <Input type="date" name="dateFinValidite" className="mt-1" />
                 </label>
               </div>
               {(compromisActuel || acquereursActifs.length > 0 || prospectVendeurOrigine) && (
                 <div className="flex flex-col gap-1.5 pt-1">
-                  <p className="text-[11px] font-medium text-text-2">Rattachement (optionnel)</p>
+                  <p className="text-[11px] font-medium text-text-secondary">Rattachement (optionnel)</p>
                   {compromisActuel && (
-                    <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
+                    <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
                       <input type="checkbox" name="compromisId" value={compromisActuel.id} />
                       Rattacher au compromis en cours
                     </label>
                   )}
                   {acquereursActifs.length > 0 && (
-                    <select
-                      name="acquereurId"
-                      defaultValue=""
-                      className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                    >
+                    <Select name="acquereurId" defaultValue="">
                       <option value="">Acquéreur — aucun</option>
                       {acquereursActifs.map((a) => (
                         <option key={a.id} value={a.id}>
                           {a.prenom} {a.nom}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   )}
                   {prospectVendeurOrigine && (
-                    <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
+                    <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
                       <input type="checkbox" name="prospectVendeurId" value={prospectVendeurOrigine.id} />
                       Rattacher au vendeur d&apos;origine ({prospectVendeurOrigine.nom})
                     </label>
                   )}
                 </div>
               )}
-              <input
+              <Input
                 type="text"
                 name="coproprieteDeclaree"
                 placeholder="Copropriété déclarée par le document (optionnel)"
-                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
-              <input
+              <Input
                 type="text"
                 name="adresseDeclaree"
                 placeholder="Adresse déclarée par le document (optionnel)"
-                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
-              <input
+              <Input
                 type="text"
                 name="provenance"
                 placeholder="Provenance (optionnel — agent, vendeur, notaire...)"
-                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
               />
               <input
                 type="file"
                 name="fichier"
                 required
                 accept="application/pdf,image/jpeg,image/png"
-                className="w-full text-[13px] text-text-2"
+                aria-describedby="document-file-help"
+                className="w-full text-[13px] text-text-secondary"
               />
-              <p className="text-[11px] text-text-3">PDF, JPEG ou PNG — 10 Mo maximum.</p>
-              <button
-                type="submit"
-                className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
-              >
+              <p id="document-file-help" className="text-[11px] text-text-muted">
+                PDF, JPEG ou PNG — 10 Mo maximum.
+              </p>
+              <Button type="submit" variant="primary" size="md" className="self-start">
                 Ajouter le document
-              </button>
+              </Button>
             </form>
           )}
 
