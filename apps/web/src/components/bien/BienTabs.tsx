@@ -1180,78 +1180,68 @@ export default function BienTabs({
                         return eligibleMalgreArchivage ? (
                           <form
                             action={ajouterRemunerationAction}
-                            className="flex flex-col gap-2 mt-3 pt-3 border-t border-border"
+                            className="flex flex-col gap-2 mt-3 pt-3 border-t border-border-subtle"
                           >
                             <input type="hidden" name="compromisId" value={c.id} />
-                            <p className="text-[12px] font-medium text-text-2">Rémunération</p>
-                            <input
+                            <p className="text-[12px] font-medium text-text-secondary">Rémunération</p>
+                            <Input
                               type="text"
                               inputMode="decimal"
                               name="montantRemunerationConseiller"
                               required
                               placeholder="Rémunération conseiller (€)"
-                              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             />
-                            <input
+                            <Input
                               type="text"
                               inputMode="decimal"
                               name="montantHonorairesTotal"
                               placeholder="Honoraires totaux (€, optionnel)"
-                              className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                             />
-                            <label className="text-[11px] text-text-3">
+                            <label className="text-[11px] text-text-muted">
                               Date d'encaissement prévue (optionnelle)
-                              <input
-                                type="date"
-                                name="dateEncaissementPrevue"
-                                className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-                              />
+                              <Input type="date" name="dateEncaissementPrevue" className="mt-1" />
                             </label>
-                            <button
-                              type="submit"
-                              className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
-                            >
+                            <Button type="submit" variant="primary" size="md" className="self-start">
                               Ajouter la rémunération
-                            </button>
+                            </Button>
                           </form>
                         ) : null;
                       }
 
                       return (
-                        <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-border">
+                        <div className="flex flex-col gap-2 mt-3 pt-3 border-t border-border-subtle">
                           <div className="flex items-center gap-2">
-                            <p className="text-[12px] font-medium text-text-2">Rémunération</p>
-                            <span className="text-[11px] font-medium text-accent">
+                            <p className="text-[12px] font-medium text-text-secondary">Rémunération</p>
+                            <span className="text-[11px] font-medium text-ink-900">
                               {etatRemuneration ? LABEL_ETAT_REMUNERATION[etatRemuneration] : "Liée à un compromis annulé"}
                             </span>
                           </div>
-                          <p className="text-[14px] font-medium text-text-1">
+                          <p className="text-[14px] font-medium text-text-primary">
                             {formatMontantCentimes(remuneration.montantRemunerationConseillerCentimes)}
                             {remuneration.montantHonorairesTotalCentimes != null &&
                               ` (honoraires totaux ${formatMontantCentimes(remuneration.montantHonorairesTotalCentimes)})`}
                           </p>
                           {remuneration.dateEncaissementPrevue && !remuneration.dateEncaissementReelle && (
-                            <p className="text-[13px] text-text-3">
+                            <p className="text-[13px] text-text-muted">
                               Encaissement prévu le {formatDate(remuneration.dateEncaissementPrevue)}
                             </p>
                           )}
                           {remuneration.dateEncaissementReelle && (
-                            <p className="text-[13px] text-success">
+                            <p className="text-[13px] text-status-success">
                               Encaissée le {formatDate(remuneration.dateEncaissementReelle)}
                             </p>
                           )}
                           {!remuneration.dateEncaissementReelle && eligibleMalgreArchivage && (
                             <form action={modifierRemunerationAction} className="flex flex-col gap-2">
                               <input type="hidden" name="compromisId" value={c.id} />
-                              <input
+                              <Input
                                 type="text"
                                 inputMode="decimal"
                                 name="montantRemunerationConseiller"
                                 required
                                 defaultValue={(remuneration.montantRemunerationConseillerCentimes / 100).toFixed(2)}
-                                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               />
-                              <input
+                              <Input
                                 type="text"
                                 inputMode="decimal"
                                 name="montantHonorairesTotal"
@@ -1261,17 +1251,15 @@ export default function BienTabs({
                                     : ""
                                 }
                                 placeholder="Honoraires totaux (€, optionnel)"
-                                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               />
-                              <input
+                              <Input
                                 type="date"
                                 name="dateEncaissementPrevue"
                                 defaultValue={remuneration.dateEncaissementPrevue ?? ""}
-                                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                               />
                               <button
                                 type="submit"
-                                className="self-start text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
+                                className="self-start text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
                               >
                                 Corriger la rémunération
                               </button>
@@ -1280,18 +1268,18 @@ export default function BienTabs({
                           {!remuneration.dateEncaissementReelle && encaissementDisponible && (
                             <form action={marquerRemunerationEncaisseeAction} className="flex items-end gap-2">
                               <input type="hidden" name="compromisId" value={c.id} />
-                              <label className="text-[11px] text-text-3">
+                              <label className="text-[11px] text-text-muted">
                                 Date d'encaissement réelle
                                 <input
                                   type="date"
                                   name="dateEncaissementReelle"
                                   required
-                                  className="block mt-1 border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                                  className="block mt-1 border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                                 />
                               </label>
                               <button
                                 type="submit"
-                                className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors pb-1.5"
+                                className="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors pb-1.5"
                               >
                                 Marquer encaissée
                               </button>
