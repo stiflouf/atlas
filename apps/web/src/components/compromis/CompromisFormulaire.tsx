@@ -1,6 +1,9 @@
 "use client";
 
 import { ajouterCompromisAction } from "@/actions/compromis";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import type { ProfilAcquereur } from "@/types/client";
 import type { Offre } from "@/types/offre";
 
@@ -37,15 +40,15 @@ export default function CompromisFormulaire(props: Props) {
       {props.verrouille ? (
         <>
           <div>
-            <p className="text-[11px] font-medium text-text-2 mb-1">Acquéreur</p>
-            <p className="text-[14px] font-medium text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
+            <p className="text-[11px] font-medium text-text-secondary mb-1">Acquéreur</p>
+            <p className="text-[14px] font-medium text-text-primary bg-surface-subtle border border-border-subtle rounded-lg px-3 py-2">
               {props.acquereur.prenom} {props.acquereur.nom}
             </p>
             <input type="hidden" name="acquereurId" value={props.acquereur.id} />
           </div>
           <div>
-            <p className="text-[11px] font-medium text-text-2 mb-1">Offre acceptée</p>
-            <p className="text-[14px] font-medium text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
+            <p className="text-[11px] font-medium text-text-secondary mb-1">Offre acceptée</p>
+            <p className="text-[14px] font-medium text-text-primary bg-surface-subtle border border-border-subtle rounded-lg px-3 py-2">
               {formatPrix(props.offre.montant)} — {formatDate(props.offre.dateOffre)}
             </p>
             <input type="hidden" name="offreId" value={props.offre.id} />
@@ -53,12 +56,7 @@ export default function CompromisFormulaire(props: Props) {
         </>
       ) : (
         <>
-          <select
-            name="acquereurId"
-            required
-            defaultValue=""
-            className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-          >
+          <Select name="acquereurId" required defaultValue="">
             <option value="" disabled>
               Acquéreur
             </option>
@@ -67,12 +65,8 @@ export default function CompromisFormulaire(props: Props) {
                 {a.prenom} {a.nom}
               </option>
             ))}
-          </select>
-          <select
-            name="offreId"
-            defaultValue=""
-            className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-          >
+          </Select>
+          <Select name="offreId" defaultValue="">
             <option value="">Aucune (compromis direct)</option>
             {props.offresAcceptees.map((o) => {
               const acq = acquereursParId?.get(o.acquereurId);
@@ -83,41 +77,22 @@ export default function CompromisFormulaire(props: Props) {
                 </option>
               );
             })}
-          </select>
+          </Select>
         </>
       )}
 
-      <input
-        type="number"
-        name="prixConvenu"
-        required
-        min={1}
-        placeholder="Prix convenu (€)"
-        className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-      />
-      <label className="text-[11px] text-text-3">
+      <Input type="number" name="prixConvenu" required min={1} placeholder="Prix convenu (€)" />
+      <label className="text-[11px] text-text-muted">
         Date de signature
-        <input
-          type="date"
-          name="dateSignature"
-          required
-          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-        />
+        <Input type="date" name="dateSignature" required className="mt-1" />
       </label>
-      <label className="text-[11px] text-text-3">
+      <label className="text-[11px] text-text-muted">
         Date d&apos;acte prévue (optionnelle)
-        <input
-          type="date"
-          name="dateActe"
-          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-        />
+        <Input type="date" name="dateActe" className="mt-1" />
       </label>
-      <button
-        type="submit"
-        className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
-      >
+      <Button type="submit" variant="primary" size="md" className="self-start">
         Ajouter le compromis
-      </button>
+      </Button>
     </form>
   );
 }
