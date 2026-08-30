@@ -7,6 +7,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import IconTile from "@/components/ui/IconTile";
 import Tabs, { getTabId, getTabPanelId } from "@/components/ui/Tabs";
+import Textarea from "@/components/ui/Textarea";
 import type { Bien } from "@/types/bien";
 import type { DossierBien } from "@/data/dossier";
 import { LABEL_ECHEANCE_ABSENTE, deriverCibleTache, deriverStatutTache, type Tache } from "@/types/tache";
@@ -312,55 +313,46 @@ export default function BienTabs({
       >
       {active === "notes" && dossier && (
         <div>
-          <div className="bg-surface-muted rounded-lg p-4 border border-border">
+          <div className="bg-surface-subtle rounded-lg p-4 border border-border-subtle">
             {dossier.notes.split("\n\n").map((paragraph, i) => (
-              <p key={i} className={`text-[14px] text-text-2 leading-relaxed ${i > 0 ? "mt-4" : ""}`}>
+              <p key={i} className={`text-[14px] text-text-secondary leading-relaxed ${i > 0 ? "mt-4" : ""}`}>
                 {paragraph}
               </p>
             ))}
           </div>
-          <p className="text-[11px] text-text-3 mt-3">Notes privées — non communiquées aux acquéreurs.</p>
+          <p className="text-[11px] text-text-muted mt-3">Notes privées — non communiquées aux acquéreurs.</p>
         </div>
       )}
 
       {active === "notes" && !dossier && (
         <div className="flex flex-col gap-4">
           {bien.archiveLe ? (
-            <p className="text-[13px] text-text-3 bg-surface-muted rounded-lg border border-border p-3">
+            <p className="text-[13px] text-text-muted bg-surface-subtle rounded-lg border border-border-subtle p-3">
               Ce bien est archivé — impossible d'ajouter une nouvelle note.
             </p>
           ) : (
             <form action={ajouterNoteBienAction} className="flex flex-col gap-2">
               <input type="hidden" name="bienId" value={bien.id} />
-              <textarea
-                name="contenu"
-                rows={3}
-                required
-                placeholder="Ajouter une note..."
-                className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-              />
-              <button
-                type="submit"
-                className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
-              >
+              <Textarea name="contenu" rows={3} required placeholder="Ajouter une note..." />
+              <Button type="submit" variant="primary" size="md" className="self-start">
                 Ajouter une note
-              </button>
+              </Button>
             </form>
           )}
 
           {notes.length === 0 ? (
-            <p className="text-[14px] text-text-3">Aucune note pour l'instant.</p>
+            <p className="text-[14px] text-text-muted">Aucune note pour l'instant.</p>
           ) : (
             <div className="flex flex-col gap-2">
               {notes.map((note) => (
-                <div key={note.id} className="bg-surface rounded-lg border border-border p-4">
-                  <p className="text-[11px] text-text-3 mb-1">{formatDate(note.creeLe)}</p>
-                  <p className="text-[14px] text-text-1 leading-relaxed whitespace-pre-wrap">{note.contenu}</p>
+                <div key={note.id} className="bg-surface rounded-lg border border-border-subtle p-4">
+                  <p className="text-[11px] text-text-muted mb-1">{formatDate(note.creeLe)}</p>
+                  <p className="text-[14px] text-text-primary leading-relaxed whitespace-pre-wrap">{note.contenu}</p>
                 </div>
               ))}
             </div>
           )}
-          <p className="text-[11px] text-text-3">Notes privées — non communiquées aux acquéreurs.</p>
+          <p className="text-[11px] text-text-muted">Notes privées — non communiquées aux acquéreurs.</p>
         </div>
       )}
       </div>
