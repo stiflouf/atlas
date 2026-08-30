@@ -6,6 +6,7 @@ import { Users, Building2, ShieldCheck, Landmark, Handshake, Scale, FileText } f
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import IconTile from "@/components/ui/IconTile";
+import SectionTitle from "@/components/ui/SectionTitle";
 import Tabs, { getTabId, getTabPanelId } from "@/components/ui/Tabs";
 import Textarea from "@/components/ui/Textarea";
 import type { Bien } from "@/types/bien";
@@ -366,22 +367,22 @@ export default function BienTabs({
       {active === "visites" && (
         <div className="flex flex-col gap-6">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">À venir</p>
+            <SectionTitle>À venir</SectionTitle>
             {dossier ? (
               visitesAVenirMock.length === 0 ? (
-                <p className="text-[14px] text-text-3">Aucune visite à venir dans l'agenda.</p>
+                <p className="text-[14px] text-text-muted">Aucune visite à venir dans l'agenda.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {visitesAVenirMock.map((rdv) => (
-                    <div key={rdv.id} className="bg-surface rounded-lg border border-border p-4">
-                      <p className="text-[13px] font-medium text-text-2">{rdv.heure} — Aujourd'hui</p>
-                      <p className="text-[14px] font-medium text-text-1 mt-0.5">{rdv.client?.prenom} {rdv.client?.nom}</p>
+                    <div key={rdv.id} className="bg-surface rounded-lg border border-border-subtle p-4">
+                      <p className="text-[13px] font-medium text-text-secondary">{rdv.heure} — Aujourd'hui</p>
+                      <p className="text-[14px] font-medium text-text-primary mt-0.5">{rdv.client?.prenom} {rdv.client?.nom}</p>
                     </div>
                   ))}
                 </div>
               )
             ) : visitesAVenirReelles.length === 0 ? (
-              <p className="text-[14px] text-text-3">Aucune visite à venir enregistrée pour ce bien.</p>
+              <p className="text-[14px] text-text-muted">Aucune visite à venir enregistrée pour ce bien.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {visitesAVenirReelles.map((v) => {
@@ -390,14 +391,14 @@ export default function BienTabs({
                     <Link
                       key={v.id}
                       href={`/visites/${v.id}`}
-                      className="block bg-surface rounded-lg border border-border p-4 hover:border-accent transition-colors"
+                      className="block bg-surface rounded-lg border border-border-subtle p-4 hover:border-action-primary transition-colors"
                     >
                       <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-[13px] font-medium text-text-2">{formatDate(v.datePrevue)}</p>
-                        <span className="text-[11px] text-text-3">·</span>
-                        <span className="text-[11px] font-medium text-accent">{LABEL_STATUT_VISITE[v.statut]}</span>
+                        <p className="text-[13px] font-medium text-text-secondary">{formatDate(v.datePrevue)}</p>
+                        <span className="text-[11px] text-text-muted">·</span>
+                        <span className="text-[11px] font-medium text-ink-900">{LABEL_STATUT_VISITE[v.statut]}</span>
                       </div>
-                      <p className="text-[14px] font-medium text-text-1">
+                      <p className="text-[14px] font-medium text-text-primary">
                         {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                       </p>
                     </Link>
@@ -408,40 +409,40 @@ export default function BienTabs({
           </div>
 
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">Effectuées</p>
+            <SectionTitle>Effectuées</SectionTitle>
             {dossier ? (
               visitesPasseesMock.length === 0 ? (
-                <p className="text-[14px] text-text-3">Aucune visite effectuée pour l'instant.</p>
+                <p className="text-[14px] text-text-muted">Aucune visite effectuée pour l'instant.</p>
               ) : (
                 <div className="flex flex-col gap-2">
                   {visitesPasseesMock.map((v) => (
-                    <div key={v.id} className="bg-surface rounded-lg border border-border p-4">
-                      <p className="text-[13px] font-medium text-text-2">{formatDate(v.date)}</p>
-                      <p className="text-[14px] font-medium text-text-1 mt-0.5">{v.client}</p>
-                      <p className="text-[13px] text-text-3 mt-1 leading-snug">{v.retour}</p>
+                    <div key={v.id} className="bg-surface rounded-lg border border-border-subtle p-4">
+                      <p className="text-[13px] font-medium text-text-secondary">{formatDate(v.date)}</p>
+                      <p className="text-[14px] font-medium text-text-primary mt-0.5">{v.client}</p>
+                      <p className="text-[13px] text-text-muted mt-1 leading-snug">{v.retour}</p>
                     </div>
                   ))}
                 </div>
               )
             ) : comptesRendusTries.length === 0 ? (
-              <p className="text-[14px] text-text-3">Aucune visite effectuée enregistrée pour ce bien.</p>
+              <p className="text-[14px] text-text-muted">Aucune visite effectuée enregistrée pour ce bien.</p>
             ) : (
               <div className="flex flex-col gap-2">
                 {comptesRendusTries.map((cr) => {
                   const acquereur = acquereursParId.get(cr.acquereurId);
                   return (
-                    <div key={cr.id} className="bg-surface rounded-lg border border-border p-4">
+                    <div key={cr.id} className="bg-surface rounded-lg border border-border-subtle p-4">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <p className="text-[13px] font-medium text-text-2">{formatDate(cr.dateVisite)}</p>
-                        <span className="text-[11px] text-text-3">·</span>
-                        <span className="text-[11px] font-medium text-accent">{LABEL_INTERET[cr.interet]}</span>
+                        <p className="text-[13px] font-medium text-text-secondary">{formatDate(cr.dateVisite)}</p>
+                        <span className="text-[11px] text-text-muted">·</span>
+                        <span className="text-[11px] font-medium text-ink-900">{LABEL_INTERET[cr.interet]}</span>
                       </div>
-                      <p className="text-[14px] font-medium text-text-1">
+                      <p className="text-[14px] font-medium text-text-primary">
                         {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
                       </p>
-                      <p className="text-[13px] text-text-3 mt-1 leading-snug whitespace-pre-wrap">{cr.retour}</p>
+                      <p className="text-[13px] text-text-muted mt-1 leading-snug whitespace-pre-wrap">{cr.retour}</p>
                       {cr.prochaineEtape && (
-                        <p className="text-[13px] text-text-3 mt-2 border-t border-border pt-2">
+                        <p className="text-[13px] text-text-muted mt-2 border-t border-border-subtle pt-2">
                           Prochaine étape : {cr.prochaineEtape}
                         </p>
                       )}
