@@ -246,11 +246,11 @@ export default function BienTabs({
       >
         {active === "contexte" && (
           <div className="max-w-2xl">
-            <p className="text-[14px] text-text-2 leading-relaxed mb-6">{bien.description}</p>
+            <p className="text-[14px] text-text-secondary leading-relaxed mb-6">{bien.description}</p>
             <ul className="flex flex-col gap-2">
               {bien.caracteristiques.map((c) => (
-                <li key={c} className="flex items-start gap-2 text-[14px] text-text-1">
-                  <span className="text-accent mt-0.5 shrink-0">·</span>
+                <li key={c} className="flex items-start gap-2 text-[14px] text-text-primary">
+                  <span className="text-action-primary mt-0.5 shrink-0">·</span>
                   {c}
                 </li>
               ))}
