@@ -1092,7 +1092,7 @@ export default function BienTabs({
                             type="date"
                             name="dateActe"
                             defaultValue={c.dateActe ?? ""}
-                            className="border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                            className="border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                           />
                           <Button type="submit" variant="secondary" size="sm">
                             {c.dateActe ? "Modifier la date" : "Renseigner la date"}
@@ -1121,7 +1121,7 @@ export default function BienTabs({
                               name="dateActeReelle"
                               required
                               defaultValue={c.dateActe ?? ""}
-                              className="block mt-1 border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                              className="block mt-1 border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                             />
                           </label>
                           <Button type="submit" variant="primary" size="sm">
@@ -1138,14 +1138,14 @@ export default function BienTabs({
                               name="dateAnnulation"
                               required
                               defaultValue={new Date().toISOString().slice(0, 10)}
-                              className="block mt-1 border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                              className="block mt-1 border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                             />
                           </label>
                           <select
                             name="motifAnnulation"
                             required
                             defaultValue=""
-                            className="border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                            className="border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                           >
                             <option value="" disabled>
                               Motif
