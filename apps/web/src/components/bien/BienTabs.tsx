@@ -646,15 +646,15 @@ export default function BienTabs({
           )}
 
           {documents.length === 0 ? (
-            <p className="text-[14px] text-text-3">Aucun document pour l'instant.</p>
+            <p className="text-[14px] text-text-muted">Aucun document pour l'instant.</p>
           ) : (
-            <div className="flex flex-col divide-y divide-border bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <div className="flex flex-col divide-y divide-border-subtle bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
               {documents.map((doc) => (
                 <div key={doc.id} className="flex flex-col gap-2 px-4 py-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[14px] text-text-1 truncate">{doc.nom}</p>
-                      <p className="text-[11px] text-text-3">
+                      <p className="text-[14px] text-text-primary truncate">{doc.nom}</p>
+                      <p className="text-[11px] text-text-muted">
                         {doc.typeDocument ? LABEL_TYPE_DOCUMENT[doc.typeDocument] : LABEL_CATEGORIE_DOCUMENT[doc.categorie]}
                         {" · "}
                         {formatTaille(doc.tailleOctets)} · {formatDate(doc.creeLe)}
@@ -662,16 +662,16 @@ export default function BienTabs({
                           ` · ${LABEL_ETAT_VERIFICATION_DOCUMENT[doc.etatVerification]}`}
                       </p>
                     </div>
-                    <a href={`/api/documents/${doc.id}`} className="text-[13px] text-accent font-medium shrink-0">
+                    <a href={`/api/documents/${doc.id}`} className="text-[13px] text-action-primary font-medium shrink-0">
                       Télécharger
                     </a>
                   </div>
 
                   <details className="text-[12px]">
-                    <summary className="text-text-3 cursor-pointer select-none">Corriger le classement</summary>
+                    <summary className="text-text-muted cursor-pointer select-none">Corriger le classement</summary>
                     <form
                       action={corrigerClassementDocumentBienAction}
-                      className="flex flex-col gap-2 mt-2 pt-2 border-t border-border"
+                      className="flex flex-col gap-2 mt-2 pt-2 border-t border-border-subtle"
                     >
                       <input type="hidden" name="id" value={doc.id} />
                       <input
@@ -680,20 +680,20 @@ export default function BienTabs({
                         required
                         defaultValue={doc.bienId}
                         placeholder="Identifiant du bien"
-                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                       />
                       <input
                         type="text"
                         name="nom"
                         required
                         defaultValue={doc.nom}
-                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                       />
                       <div className="grid grid-cols-2 gap-2">
                         <select
                           name="categorie"
                           defaultValue={doc.categorie}
-                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                         >
                           {CATEGORIES_DOCUMENT.map((categorie) => (
                             <option key={categorie} value={categorie}>
@@ -704,7 +704,7 @@ export default function BienTabs({
                         <select
                           name="typeDocument"
                           defaultValue={doc.typeDocument ?? ""}
-                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                         >
                           <option value="">Type — non classé</option>
                           {FAMILLES_DOCUMENT.map((famille) => (
@@ -723,17 +723,17 @@ export default function BienTabs({
                           type="date"
                           name="dateDocument"
                           defaultValue={doc.dateDocument ?? ""}
-                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                         />
                         <input
                           type="date"
                           name="dateFinValidite"
                           defaultValue={doc.dateFinValidite ?? ""}
-                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                         />
                       </div>
                       {compromisActuel && (
-                        <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
+                        <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
                           <input
                             type="checkbox"
                             name="compromisId"
@@ -747,7 +747,7 @@ export default function BienTabs({
                         <select
                           name="acquereurId"
                           defaultValue={doc.acquereurId ?? ""}
-                          className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                         >
                           <option value="">Acquéreur — aucun</option>
                           {acquereursActifs.map((a) => (
@@ -758,7 +758,7 @@ export default function BienTabs({
                         </select>
                       )}
                       {prospectVendeurOrigine && (
-                        <label className="inline-flex items-center gap-2 text-[13px] text-text-1">
+                        <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
                           <input
                             type="checkbox"
                             name="prospectVendeurId"
@@ -773,33 +773,33 @@ export default function BienTabs({
                         name="coproprieteDeclaree"
                         defaultValue={doc.coproprieteDeclaree ?? ""}
                         placeholder="Copropriété déclarée par le document"
-                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                       />
                       <input
                         type="text"
                         name="adresseDeclaree"
                         defaultValue={doc.adresseDeclaree ?? ""}
                         placeholder="Adresse déclarée par le document"
-                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                       />
                       <input
                         type="text"
                         name="typeDocumentDetail"
                         defaultValue={doc.typeDocumentDetail ?? ""}
                         placeholder="Précision si type « Autre » (optionnel)"
-                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                       />
                       <input
                         type="text"
                         name="provenance"
                         defaultValue={doc.provenance ?? ""}
                         placeholder="Provenance (optionnel — agent, vendeur, notaire...)"
-                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                       />
                       <select
                         name="etatVerification"
                         defaultValue={doc.etatVerification}
-                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                       >
                         {ETATS_VERIFICATION_DOCUMENT.map((etat) => (
                           <option key={etat} value={etat}>
@@ -809,7 +809,7 @@ export default function BienTabs({
                       </select>
                       <button
                         type="submit"
-                        className="self-start text-[12px] font-medium text-accent hover:text-accent-hover transition-colors"
+                        className="self-start text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
                       >
                         Enregistrer la correction
                       </button>
