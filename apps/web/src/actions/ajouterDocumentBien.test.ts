@@ -191,16 +191,28 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
 });
 
 describe("corrigerClassementDocumentBienAction — remplacement complet, jamais le fichier", () => {
-  it("corrige le classement sans jamais toucher au fichier physique", async () => {
+  it("corrige le classement sans jamais toucher au fichier physique, et préserve typeDocumentDetail/provenance quand le formulaire les renvoie inchangés", async () => {
     const bien = await creerBienDeTest("[test réel] DOC-CORRECTION-001");
     const fichier = new File([new Uint8Array([1, 2, 3])], "diag.pdf", { type: "application/pdf" });
     await ajouterDocumentBienAction(
-      formDataAvecFichier({ bienId: bien.id, nom: "Diagnostic", categorie: "diagnostic" }, fichier)
+      formDataAvecFichier(
+        {
+          bienId: bien.id,
+          nom: "Diagnostic",
+          categorie: "diagnostic",
+          typeDocumentDetail: "Autre — bail commercial",
+          provenance: "Notaire Dupont",
+        },
+        fichier
+      )
     ).catch(() => {});
 
     const [document] = await listerDocumentsPourBien(bien.id);
     expect(document).toBeDefined();
 
+    // Le formulaire de correction renvoie désormais explicitement typeDocumentDetail/provenance
+    // (dette corrigée : ces deux champs étaient absents du formulaire, ce qui les remettait
+    // silencieusement à NULL via le remplacement complet de corrigerClassementDocumentBienAction).
     await corrigerClassementDocumentBienAction(
       formDataAvecFichier(
         {
@@ -209,6 +221,8 @@ describe("corrigerClassementDocumentBienAction — remplacement complet, jamais 
           nom: "Diagnostic reclassé",
           categorie: "diagnostic",
           typeDocument: "dpe",
+          typeDocumentDetail: "Autre — bail commercial",
+          provenance: "Notaire Dupont",
           etatVerification: "confirme",
         },
         null
@@ -219,6 +233,8 @@ describe("corrigerClassementDocumentBienAction — remplacement complet, jamais 
     expect(corrige).toMatchObject({
       nom: "Diagnostic reclassé",
       typeDocument: "dpe",
+      typeDocumentDetail: "Autre — bail commercial",
+      provenance: "Notaire Dupont",
       etatVerification: "confirme",
       cleStockage: document.cleStockage,
       nomFichierOriginal: document.nomFichierOriginal,

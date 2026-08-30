@@ -782,6 +782,20 @@ export default function BienTabs({
                         placeholder="Adresse déclarée par le document"
                         className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                       />
+                      <input
+                        type="text"
+                        name="typeDocumentDetail"
+                        defaultValue={doc.typeDocumentDetail ?? ""}
+                        placeholder="Précision si type « Autre » (optionnel)"
+                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                      />
+                      <input
+                        type="text"
+                        name="provenance"
+                        defaultValue={doc.provenance ?? ""}
+                        placeholder="Provenance (optionnel — agent, vendeur, notaire...)"
+                        className="w-full border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                      />
                       <select
                         name="etatVerification"
                         defaultValue={doc.etatVerification}
