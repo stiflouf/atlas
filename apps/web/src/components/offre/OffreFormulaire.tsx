@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { ajouterOffreAction } from "@/actions/offre";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { ProfilAcquereur } from "@/types/client";
 import type { Offre } from "@/types/offre";
@@ -63,19 +66,18 @@ export default function OffreFormulaire(props: Props) {
 
       {props.verrouille ? (
         <div>
-          <p className="text-[11px] font-medium text-text-2 mb-1">Acquéreur</p>
-          <p className="text-[14px] font-medium text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
+          <p className="text-[11px] font-medium text-text-secondary mb-1">Acquéreur</p>
+          <p className="text-[14px] font-medium text-text-primary bg-surface-subtle border border-border-subtle rounded-lg px-3 py-2">
             {props.acquereur.prenom} {props.acquereur.nom}
           </p>
           <input type="hidden" name="acquereurId" value={props.acquereur.id} />
         </div>
       ) : (
-        <select
+        <Select
           name="acquereurId"
           required
           defaultValue=""
           onChange={(e) => setAcquereurSelectionne(e.target.value)}
-          className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         >
           <option value="" disabled>
             Acquéreur
@@ -85,13 +87,13 @@ export default function OffreFormulaire(props: Props) {
               {a.prenom} {a.nom}
             </option>
           ))}
-        </select>
+        </Select>
       )}
 
       {compteRenduSource && (
         <div>
-          <p className="text-[11px] font-medium text-text-2 mb-1">Visite associée</p>
-          <p className="text-[13px] text-text-1 bg-surface-muted border border-border rounded-lg px-3 py-2">
+          <p className="text-[11px] font-medium text-text-secondary mb-1">Visite associée</p>
+          <p className="text-[13px] text-text-primary bg-surface-subtle border border-border-subtle rounded-lg px-3 py-2">
             {formatDate(compteRenduSource.dateVisite)} — {LABEL_INTERET[compteRenduSource.interet]}
           </p>
           <input type="hidden" name="compteRenduVisiteIds" value={compteRenduSource.id} />
@@ -100,15 +102,15 @@ export default function OffreFormulaire(props: Props) {
 
       {acquereurId && (comptesRendusPourAcquereur.length > 0 || !compteRenduSource) && (
         <div>
-          <p className="text-[11px] font-medium text-text-2 mb-1">
+          <p className="text-[11px] font-medium text-text-secondary mb-1">
             {compteRenduSource ? "Autres visites à lier (optionnel)" : "Visites à lier à cette offre (optionnel)"}
           </p>
           {comptesRendusPourAcquereur.length === 0 ? (
-            <p className="text-[12px] text-text-3">Aucune visite enregistrée avec cet acquéreur.</p>
+            <p className="text-[12px] text-text-muted">Aucune visite enregistrée avec cet acquéreur.</p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {comptesRendusPourAcquereur.map((cr) => (
-                <label key={cr.id} className="inline-flex items-center gap-2 text-[13px] text-text-1">
+                <label key={cr.id} className="inline-flex items-center gap-2 text-[13px] text-text-primary">
                   <input type="checkbox" name="compteRenduVisiteIds" value={cr.id} />
                   {formatDate(cr.dateVisite)} — {LABEL_INTERET[cr.interet]}
                 </label>
@@ -142,38 +144,18 @@ export default function OffreFormulaire(props: Props) {
         </div>
       )}
 
-      <input
-        type="number"
-        name="montant"
-        required
-        min={1}
-        placeholder="Montant de l'offre (€)"
-        className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-      />
-      <label className="text-[11px] text-text-3">
+      <Input type="number" name="montant" required min={1} placeholder="Montant de l'offre (€)" />
+      <label className="text-[11px] text-text-muted">
         Date de l&apos;offre
-        <input
-          type="date"
-          name="dateOffre"
-          required
-          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-        />
+        <Input type="date" name="dateOffre" required className="mt-1" />
       </label>
-      <label className="text-[11px] text-text-3">
+      <label className="text-[11px] text-text-muted">
         Date de validité (optionnelle)
-        <input
-          type="date"
-          name="dateValidite"
-          className="w-full mt-1 border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
-        />
+        <Input type="date" name="dateValidite" className="mt-1" />
       </label>
-      <button
-        type="submit"
-        disabled={soumissionBloqueeParDoublon}
-        className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors px-3.5 py-2 rounded-lg"
-      >
+      <Button type="submit" variant="primary" size="md" className="self-start" disabled={soumissionBloqueeParDoublon}>
         Ajouter l&apos;offre
-      </button>
+      </Button>
     </form>
   );
 }
