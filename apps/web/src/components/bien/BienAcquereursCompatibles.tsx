@@ -55,17 +55,17 @@ export default function BienAcquereursCompatibles({
     return (
       <div
         key={resultat.acquereurId}
-        className="flex items-center justify-between gap-3 px-3.5 py-3 border-b border-border last:border-b-0"
+        className="flex items-center justify-between gap-3 px-3.5 py-3 border-b border-border-subtle last:border-b-0"
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="w-8 h-8 rounded-full bg-champagne-light text-accent text-[12px] font-semibold flex items-center justify-center shrink-0">
+          <span className="w-8 h-8 rounded-full bg-champagne-light text-ink-900 text-[12px] font-semibold flex items-center justify-center shrink-0">
             {initiales}
           </span>
           <div className="min-w-0">
-            <p className="text-[13px] font-medium text-text-1 truncate">
+            <p className="text-[13px] font-medium text-text-primary truncate">
               {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
             </p>
-            {explication && <p className="text-[12px] text-text-3 truncate">{explication}</p>}
+            {explication && <p className="text-[12px] text-text-muted truncate">{explication}</p>}
           </div>
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
@@ -73,7 +73,7 @@ export default function BienAcquereursCompatibles({
             {LABEL_STATUT_COMPATIBILITE[resultat.statutGlobal]}
           </Badge>
           {acquereur && (
-            <Link href={`/clients/${acquereur.id}`} className="text-[12px] text-accent hover:text-accent-hover">
+            <Link href={`/clients/${acquereur.id}`} className="text-[12px] text-action-primary hover:text-action-primary-hover">
               Ouvrir →
             </Link>
           )}
@@ -83,12 +83,12 @@ export default function BienAcquereursCompatibles({
   }
 
   return (
-    <div className="bg-surface border-t-2 border-t-champagne border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-4 md:p-5">
+    <div className="bg-surface border-t-2 border-t-champagne border border-border-subtle rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-4 md:p-5">
       {/* mb-3 (au lieu de mb-3.5) — polish densité : réduit légèrement la carte quand l'état vide
           ci-dessous ne tient qu'en une ligne, sans toucher au contenu affiché ni à l'accès aux
           incompatibles masqués. */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <p className="text-[15px] font-semibold text-text-1">Acquéreurs compatibles</p>
+        <p className="text-[15px] font-semibold text-text-primary">Acquéreurs compatibles</p>
         <div className="flex items-center gap-1.5">
           {nbCompatibles > 0 && <Badge variant="success">{nbCompatibles} compatible{nbCompatibles > 1 ? "s" : ""}</Badge>}
           {nbAVerifier > 0 && <Badge variant="warning">{nbAVerifier} à vérifier</Badge>}
@@ -96,23 +96,23 @@ export default function BienAcquereursCompatibles({
       </div>
 
       {tries.length === 0 ? (
-        <p className="text-[13px] text-text-3">Aucun acquéreur actif à comparer pour le moment.</p>
+        <p className="text-[13px] text-text-muted">Aucun acquéreur actif à comparer pour le moment.</p>
       ) : visibles.length === 0 ? (
-        <p className="text-[13px] text-text-3">
+        <p className="text-[13px] text-text-muted">
           Aucun acquéreur compatible ou à vérifier pour l&#39;instant — {masques.length} acquéreur
           {masques.length > 1 ? "s" : ""} incompatible{masques.length > 1 ? "s" : ""}.
         </p>
       ) : (
-        <div className="border border-border rounded-lg overflow-hidden">{visibles.map(ligne)}</div>
+        <div className="border border-border-subtle rounded-lg overflow-hidden">{visibles.map(ligne)}</div>
       )}
 
       {masques.length > 0 && (
         <details className="mt-2.5">
-          <summary className="cursor-pointer text-[12px] text-text-3 hover:text-text-2 select-none">
+          <summary className="cursor-pointer text-[12px] text-text-muted hover:text-text-secondary select-none">
             {masques.length} acquéreur{masques.length > 1 ? "s" : ""} non compatible{masques.length > 1 ? "s" : ""} masqué
             {masques.length > 1 ? "s" : ""} — afficher
           </summary>
-          <div className="mt-2 border border-border rounded-lg overflow-hidden">{masques.map(ligne)}</div>
+          <div className="mt-2 border border-border-subtle rounded-lg overflow-hidden">{masques.map(ligne)}</div>
         </details>
       )}
     </div>

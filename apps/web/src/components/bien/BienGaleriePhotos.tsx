@@ -15,7 +15,7 @@ export default function BienGaleriePhotos({ bienId, photoIds }: { bienId: string
   return (
     <div className="flex gap-2 overflow-x-auto pb-1">
       {photoIds.map((id, index) => (
-        <Link key={id} href={hrefGestion} className="relative w-28 h-20 rounded-lg overflow-hidden shrink-0 bg-navy">
+        <Link key={id} href={hrefGestion} className="relative w-28 h-20 rounded-lg overflow-hidden shrink-0 bg-ink-900">
           {/* unoptimized : l'Image Optimizer de Next ne transmet jamais le cookie de session vers
               une route protégée (ADR-052 §19, même contrainte que PhotoPrincipale et la page de
               gestion des photos) — le navigateur charge directement cette URL en same-origin,

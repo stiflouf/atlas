@@ -24,8 +24,8 @@ export default function BienVendeurMandat({
   prospectVendeurOrigine?: ProspectVendeur;
 }) {
   return (
-    <div className="bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] p-4 md:p-5">
-      <p className="text-[15px] font-semibold text-text-1 mb-3.5">Vendeur &amp; mandat</p>
+    <div className="bg-surface border border-border-subtle rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] p-4 md:p-5">
+      <p className="text-[15px] font-semibold text-text-primary mb-3.5">Vendeur &amp; mandat</p>
       {/* flex-wrap (au lieu d'une grille à colonnes fixes) — polish densité adaptative : sur un
           Bien peu renseigné (surtout des "Non renseigné" courts), une grille à 2/4 colonnes égales
           force souvent un retour à la ligne inutile et grandit le bloc pour rien. Chaque champ
@@ -33,34 +33,34 @@ export default function BienVendeurMandat({
           continue de s'étaler naturellement dès que les valeurs sont plus longues. */}
       <div className="flex flex-wrap gap-x-8 gap-y-4">
         <div className="min-w-[120px]">
-          <p className="text-[11px] text-text-3 mb-1">Vendeur</p>
+          <p className="text-[11px] text-text-muted mb-1">Vendeur</p>
           {prospectVendeurOrigine ? (
             <>
-              <p className="text-[13px] font-medium text-text-1 mb-1">
+              <p className="text-[13px] font-medium text-text-primary mb-1">
                 {prospectVendeurOrigine.prenom ? `${prospectVendeurOrigine.prenom} ` : ""}
                 {prospectVendeurOrigine.nom}
               </p>
-              <Link href={`/prospects-vendeurs/${prospectVendeurOrigine.id}`} className="text-[12px] text-accent hover:text-accent-hover">
+              <Link href={`/prospects-vendeurs/${prospectVendeurOrigine.id}`} className="text-[12px] text-action-primary hover:text-action-primary-hover">
                 Voir la fiche vendeur →
               </Link>
             </>
           ) : (
-            <p className="text-[13px] text-text-3">Non renseigné</p>
+            <p className="text-[13px] text-text-muted">Non renseigné</p>
           )}
         </div>
         <div className="min-w-[120px]">
-          <p className="text-[11px] text-text-3 mb-1">Statut du mandat</p>
+          <p className="text-[11px] text-text-muted mb-1">Statut du mandat</p>
           <Badge variant={VARIANT_STATUT_MANDAT[bien.statutMandat]}>{LABEL_STATUT_MANDAT[bien.statutMandat]}</Badge>
         </div>
         <div className="min-w-[120px]">
-          <p className="text-[11px] text-text-3 mb-1">Honoraires à la charge</p>
-          <p className="text-[13px] font-medium text-text-1">
+          <p className="text-[11px] text-text-muted mb-1">Honoraires à la charge</p>
+          <p className="text-[13px] font-medium text-text-primary">
             {bien.chargeHonoraires ? LABEL_CHARGE_HONORAIRES[bien.chargeHonoraires] : "Non renseigné"}
           </p>
         </div>
         <div className="min-w-[120px]">
-          <p className="text-[11px] text-text-3 mb-1">Copropriété</p>
-          <p className="text-[13px] font-medium text-text-1">{bien.nomCopropriete ?? "Non renseigné"}</p>
+          <p className="text-[11px] text-text-muted mb-1">Copropriété</p>
+          <p className="text-[13px] font-medium text-text-primary">{bien.nomCopropriete ?? "Non renseigné"}</p>
         </div>
       </div>
     </div>
