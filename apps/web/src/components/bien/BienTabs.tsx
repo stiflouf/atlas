@@ -261,6 +261,7 @@ export default function BienTabs({
         )}
       </div>
 
+      {evenementsHistorique.length > 0 && (
       <div
         role="tabpanel"
         id={getTabPanelId("bien-tabs", "historique")}
@@ -305,6 +306,7 @@ export default function BienTabs({
         </div>
       )}
       </div>
+      )}
 
       <div
         role="tabpanel"
@@ -830,6 +832,7 @@ export default function BienTabs({
       )}
       </div>
 
+      {!dossier && (
       <div
         role="tabpanel"
         id={getTabPanelId("bien-tabs", "offres")}
@@ -1025,7 +1028,9 @@ export default function BienTabs({
         </div>
       )}
       </div>
+      )}
 
+      {!dossier && (
       <div
         role="tabpanel"
         id={getTabPanelId("bien-tabs", "compromis")}
@@ -1358,6 +1363,7 @@ export default function BienTabs({
         </div>
       )}
       </div>
+      )}
 
       <div
         role="tabpanel"

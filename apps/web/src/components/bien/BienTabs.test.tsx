@@ -9,6 +9,7 @@ import type { DocumentBien } from "@/types/documentBien";
 import type { Offre } from "@/types/offre";
 import type { Compromis } from "@/types/compromis";
 import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
+import { getTabId, getTabPanelId } from "@/components/ui/Tabs";
 import BienTabs from "./BienTabs";
 
 function bienTest(surcharge: Partial<Bien> = {}): Bien {
@@ -71,6 +72,15 @@ describe("BienTabs", () => {
     expect(html).toContain("Tâches");
     expect(html).not.toContain("Acquéreurs compatibles");
     expect(html).not.toContain("Historique");
+
+    // Aucun événement dérivable (pas de creeLe/tâche/visite/offre/compromis/rémunération) : ni le
+    // tab ni le panel Historique ne doivent exister — un panel disponible sans son tab (ou
+    // l'inverse) casserait la relation aria-controls/aria-labelledby (dette corrigée, 10A.1).
+    expect(html).not.toContain(getTabId("bien-tabs", "historique"));
+    expect(html).not.toContain(getTabPanelId("bien-tabs", "historique"));
+    // Offres/Compromis n'existent que sans dossier : tab et panel doivent tous deux être présents.
+    expect(html).toContain(getTabPanelId("bien-tabs", "offres"));
+    expect(html).toContain(getTabPanelId("bien-tabs", "compromis"));
   });
 
   it("conserve tous les onglets existants quand un dossier (mock) est fourni, sans les onglets Offres/Compromis (pas d'équivalent mock)", () => {
@@ -93,6 +103,16 @@ describe("BienTabs", () => {
     }
     expect(html).not.toContain("Offres");
     expect(html).not.toContain("Compromis");
+
+    // Un dossier (mock) fournit toujours au moins un événement d'historique dans cette fixture :
+    // tab et panel Historique doivent tous deux exister.
+    expect(html).toContain(getTabId("bien-tabs", "historique"));
+    expect(html).toContain(getTabPanelId("bien-tabs", "historique"));
+    // Offres/Compromis n'ont pas d'équivalent mock : ni leur tab ni leur panel ne doivent exister
+    // quand un dossier est fourni (dette corrigée, 10A.1 — un panel orphelin référencerait un tab
+    // absent de la tablist).
+    expect(html).not.toContain(getTabPanelId("bien-tabs", "offres"));
+    expect(html).not.toContain(getTabPanelId("bien-tabs", "compromis"));
   });
 
   it("affiche l'onglet Historique pour un bien réel dès qu'un événement dérivé existe (creeLe ou tâches)", () => {
@@ -124,6 +144,8 @@ describe("BienTabs", () => {
     );
 
     expect(html).toContain("Historique");
+    expect(html).toContain(getTabId("bien-tabs", "historique"));
+    expect(html).toContain(getTabPanelId("bien-tabs", "historique"));
   });
 
   it("affiche l'onglet Historique pour un bien réel dès qu'un compte rendu de visite existe, sans creeLe ni tâche", () => {
@@ -152,6 +174,8 @@ describe("BienTabs", () => {
     );
 
     expect(html).toContain("Historique");
+    expect(html).toContain(getTabId("bien-tabs", "historique"));
+    expect(html).toContain(getTabPanelId("bien-tabs", "historique"));
   });
 
   it("affiche l'onglet Notes pour un bien réel même sans aucune note", () => {
