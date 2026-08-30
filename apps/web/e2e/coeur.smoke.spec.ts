@@ -51,7 +51,7 @@ test("tunnel cœur Atlas : session, Bien, Acquéreur, Compromis, déconnexion", 
   await page.getByRole("button", { name: "Créer le bien" }).click();
   await page.waitForURL(/\/biens\/[0-9a-f-]{36}$/);
   bienId = page.url().split("/biens/")[1];
-  await expect(page.getByText(`${prefixe} Bien smoke`)).toBeVisible();
+  await expect(page.getByText(`Réf. ${prefixe} REF`)).toBeVisible();
 
   // 5. Créer un Acquéreur via le vrai formulaire.
   const nomAcquereur = `${prefixe} Acquéreur smoke`;
@@ -81,7 +81,7 @@ test("tunnel cœur Atlas : session, Bien, Acquéreur, Compromis, déconnexion", 
 
   // 7. Le Compromis apparaît bien sur la fiche du Bien (onglet Compromis).
   await page.getByRole("tab", { name: "Compromis", exact: true }).click();
-  await expect(page.getByText(nomAcquereur)).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: "Compromis" }).getByText(nomAcquereur)).toBeVisible();
 
   // 8. Déconnexion réelle (route POST existante, jamais un simple oubli du cookie côté test) →
   // une page privée redemande /connexion, prouvant que la session est bien vérifiée à chaque
