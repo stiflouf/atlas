@@ -270,14 +270,14 @@ export default function BienTabs({
           {dossier.historique.map((evt, i) => (
             <div key={i} className="flex gap-4 pb-6 relative">
               <div className="flex flex-col items-center">
-                <div className="w-2 h-2 rounded-full bg-accent mt-1.5 shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-ink-900 mt-1.5 shrink-0" />
                 {i < dossier.historique.length - 1 && (
-                  <div className="w-px flex-1 bg-border mt-1" />
+                  <div className="w-px flex-1 bg-border-subtle mt-1" />
                 )}
               </div>
               <div className="flex-1 min-w-0 pb-0">
-                <p className="text-[11px] text-text-3 mb-0.5">{formatDate(evt.date)} · {evt.auteur}</p>
-                <p className="text-[14px] text-text-1 leading-snug">{evt.texte}</p>
+                <p className="text-[11px] text-text-muted mb-0.5">{formatDate(evt.date)} · {evt.auteur}</p>
+                <p className="text-[14px] text-text-primary leading-snug">{evt.texte}</p>
               </div>
             </div>
           ))}
@@ -289,14 +289,14 @@ export default function BienTabs({
           {evenementsHistorique.map((evt, i) => (
             <div key={`${bien.id}-${evt.date}`} className="flex gap-4 pb-6 relative">
               <div className="flex flex-col items-center">
-                <div className="w-2 h-2 rounded-full bg-accent mt-1.5 shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-ink-900 mt-1.5 shrink-0" />
                 {i < evenementsHistorique.length - 1 && (
-                  <div className="w-px flex-1 bg-border mt-1" />
+                  <div className="w-px flex-1 bg-border-subtle mt-1" />
                 )}
               </div>
               <div className="flex-1 min-w-0 pb-0">
-                <p className="text-[11px] text-text-3 mb-0.5">{formatDate(evt.date)}</p>
-                <p className="text-[14px] text-text-1 leading-snug">{evt.texte}</p>
+                <p className="text-[11px] text-text-muted mb-0.5">{formatDate(evt.date)}</p>
+                <p className="text-[14px] text-text-primary leading-snug">{evt.texte}</p>
               </div>
             </div>
           ))}
