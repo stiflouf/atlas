@@ -130,7 +130,7 @@ export default async function FicheBien({ params }: PageProps) {
       {/* Retour */}
       <Link
         href="/biens"
-        className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
+        className="inline-flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition-colors mb-6"
       >
         <ArrowLeft size={14} />
         Biens
@@ -167,7 +167,7 @@ export default async function FicheBien({ params }: PageProps) {
           la carte doit se contracter à son contenu réel (parfois seulement 2 tuiles) plutôt que
           laisser une bande blanche disproportionnée sur un Bien peu renseigné, tout en restant
           capable de s'élargir naturellement dès que plus de champs/caractéristiques existent. */}
-      <div className="inline-flex flex-col max-w-full bg-surface border border-border rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] px-4 py-3.5 md:px-5 mb-4">
+      <div className="inline-flex flex-col max-w-full bg-surface border border-border-subtle rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] px-4 py-3.5 md:px-5 mb-4">
         <div className="flex flex-wrap gap-x-8 gap-y-3">
           <StatTile icon={Ruler} valeur={`${bien.surface} m²`} libelle="Surface" />
           <StatTile icon={DoorOpen} valeur={bien.pieces} libelle="Pièces" />
@@ -191,15 +191,15 @@ export default async function FicheBien({ params }: PageProps) {
             cette liste de caractéristiques brutes du bien, jamais réutilisé ici pour ne pas créer
             d'ambiguïté entre les deux. */}
         {bien.caracteristiques.length > 0 && (
-          <div className="flex items-center gap-3 flex-wrap border-t border-border mt-3.5 pt-3">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-text-3 shrink-0">
+          <div className="flex items-center gap-3 flex-wrap border-t border-border-subtle mt-3.5 pt-3">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted shrink-0">
               Caractéristiques
             </span>
             <div className="flex flex-wrap gap-1.5">
               {bien.caracteristiques.slice(0, 3).map((caracteristique) => (
                 <span
                   key={caracteristique}
-                  className="text-[12px] text-text-2 bg-surface-muted border border-border rounded-full px-2.5 py-1"
+                  className="text-[12px] text-text-secondary bg-surface-subtle border border-border-subtle rounded-full px-2.5 py-1"
                 >
                   {caracteristique}
                 </span>
