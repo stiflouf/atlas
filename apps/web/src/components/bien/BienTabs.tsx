@@ -903,14 +903,14 @@ export default function BienTabs({
                               name="dateDecision"
                               required
                               defaultValue={new Date().toISOString().slice(0, 10)}
-                              className="border border-border-md rounded-lg px-2 py-1 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                              className="border border-border-default rounded-lg px-2 py-1 text-[12px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                             />
                             {statut !== "acceptee" && (
                               <select
                                 name="motifPerte"
                                 required
                                 defaultValue=""
-                                className="border border-border-md rounded-lg px-2 py-1 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                                className="border border-border-default rounded-lg px-2 py-1 text-[12px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                               >
                                 <option value="" disabled>
                                   Motif
@@ -998,7 +998,7 @@ export default function BienTabs({
                                 name="compteRenduVisiteId"
                                 required
                                 defaultValue=""
-                                className="flex-1 border border-border-md rounded-lg px-2 py-1.5 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                                className="flex-1 border border-border-default rounded-lg px-2 py-1.5 text-[12px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                               >
                                 <option value="" disabled>
                                   Lier une visite existante
