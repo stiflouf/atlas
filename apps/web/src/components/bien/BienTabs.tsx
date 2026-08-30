@@ -483,9 +483,9 @@ export default function BienTabs({
       {active === "documents" && !dossier && (
         <div className="flex flex-col gap-4">
           {checklist && (
-            <div className="bg-surface-muted rounded-lg border border-border p-4 flex flex-col gap-4">
+            <div className="bg-surface-subtle rounded-lg border border-border-subtle p-4 flex flex-col gap-4">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Dossier documentaire
                 </p>
                 {!checklist.honorairesRenseignes && <Badge variant="warning">Charge des honoraires non renseignée</Badge>}
@@ -499,17 +499,17 @@ export default function BienTabs({
                   <div key={famille}>
                     <div className="flex items-center gap-2 mb-1.5">
                       <IconTile icon={ICONE_FAMILLE_DOCUMENT[famille]} tone="champagne" size={24} iconSize={12} />
-                      <p className="text-[12px] font-medium text-text-2">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
+                      <p className="text-[12px] font-medium text-text-secondary">{LABEL_FAMILLE_DOCUMENT[famille]}</p>
                     </div>
-                    <div className="flex flex-col bg-surface rounded-lg border border-border divide-y divide-border">
+                    <div className="flex flex-col bg-surface rounded-lg border border-border-subtle divide-y divide-border-subtle">
                       {exigencesFamille.map((e) => (
                         <div key={e.code} className="flex items-center justify-between gap-2 text-[13px] px-3 py-2">
-                          <span className="text-text-1">{e.label}</span>
+                          <span className="text-text-primary">{e.label}</span>
                           <span className="flex items-center gap-2 shrink-0">
                             {(e.etat === "manquant" || e.etat === "a_verifier" || e.etat === "perime") && (
                               <Link
                                 href={`/communications/nouveau?bienId=${bien.id}&exigenceCode=${e.code}`}
-                                className="text-[11px] font-medium text-accent hover:text-accent-hover transition-colors"
+                                className="text-[11px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
                               >
                                 Préparer un email
                               </Link>
@@ -522,15 +522,15 @@ export default function BienTabs({
                   </div>
                 );
               })}
-              <div className="flex items-center justify-between text-[13px] pt-2 border-t border-border-md">
-                <span className="text-text-1">PV d&apos;assemblée générale</span>
-                <span className="text-text-2">
+              <div className="flex items-center justify-between text-[13px] pt-2 border-t border-border-default">
+                <span className="text-text-primary">PV d&apos;assemblée générale</span>
+                <span className="text-text-secondary">
                   {checklist.pvAg.presents.length} / {checklist.pvAg.attendus} derniers
                 </span>
               </div>
               <Link
                 href={`/biens/${bien.id}/pack-notaire`}
-                className="self-start text-[13px] font-medium text-accent hover:text-accent-hover transition-colors"
+                className="self-start text-[13px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
               >
                 Préparer le pack notaire →
               </Link>
