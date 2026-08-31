@@ -19,6 +19,61 @@ annuaire), une seule base Postgres, un volume documentaire persistant, aucun sch
 jobs déclenchés par un cron **externe**). Aucune notion de compte multi-utilisateur — voir
 `docs/KNOWN_LIMITATIONS.md#pas-de-multi-utilisateur`.
 
+### 1 bis. Instance de démonstration DOMIORA DEMO (permanente, données fictives)
+
+Environnement **distinct et permanent**, créé le 2026-08-31, destiné aux démonstrations guidées
+(conseillers, partenaires) et aux tests manuels réalistes. Il ne partage **rien** avec l'instance
+pilote décrite dans le reste de ce runbook : autre projet Railway, autre base, autre volume, autre
+secret de session.
+
+| | Pilote (Steven) | DOMIORA DEMO |
+|---|---|---|
+| Projet Railway | `sparkling-rejoicing` | `domiora-demo` (`3d771bb3-f397-4aed-9216-c5587c5232b4`) |
+| URL | `https://domiora-production.up.railway.app` | `https://domiora-demo-production.up.railway.app` |
+| Région | EU West | EU West |
+| Branche | `develop` | `develop` |
+| Volume | `domiora-volume` → `/data/stockage-documents` | `domiora-demo-volume` → `/data/stockage-documents` |
+| Postgres | dédié | dédié, distinct |
+| Jobs cron | 3 Railway Functions | **aucun** |
+| Calendar / Gmail | connectés | **non connectés** |
+
+**Interdiction permanente : aucune donnée personnelle réelle dans DOMIORA DEMO.** Cette instance
+n'accueille que le dataset fictif produit par `apps/web/scripts/seed-demo.mjs`. Le jour où un
+conseiller voudra tester avec ses vrais dossiers, ce sera une troisième instance, jamais celle-ci —
+sans quoi de vraies données personnelles se retrouveraient dans un environnement conçu pour être
+montré à des tiers.
+
+Variables volontairement **absentes** : `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`,
+`PRIM_API_KEY`, les 4 secrets d'endpoints techniques. Vérifié dans le code : toutes les lectures de
+`process.env` sont paresseuses (aucune au niveau module), l'application démarre et le cockpit
+s'affiche sans elles. Conséquence à connaître avant une démonstration : les boutons « Se connecter »
+de Calendar/Gmail sur le cockpit échouent tant que `GOOGLE_REDIRECT_URI` est absente — ne pas les
+cliquer en direct.
+
+Seed (confirmation **ponctuelle**, jamais enregistrée comme variable Railway) — voir
+`apps/web/README.md`, section « Seed de démonstration » :
+
+```
+DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA pnpm db:seed:demo
+```
+
+### 1 ter. Build Railpack — commandes de build/start
+
+Depuis Railpack 0.38.0, les champs `buildCommand`/`startCommand` du service ne suffisent plus : la
+phase *prepare* échoue en amont avec `No start command detected` sur ce monorepo pnpm, dont le
+`package.json` racine n'a pas de script `start`. DOMIORA DEMO porte donc en plus deux variables :
+
+```
+RAILPACK_BUILD_CMD=pnpm install --frozen-lockfile && pnpm --filter web build
+RAILPACK_START_CMD=pnpm --filter web start
+```
+
+**À surveiller sur l'instance pilote** : elle ne porte que `buildCommand`/`startCommand` au niveau
+du service, sans ces deux variables. Son dernier déploiement réussi date du 2026-08-28, avec une
+version antérieure de Railpack. Son prochain redéploiement pourrait donc échouer de la même façon —
+constat de lecture fait pendant la création de DOMIORA DEMO, jamais vérifié en la redéployant (ce
+qui serait un geste à part entière, à décider séparément).
+
 ## 2. Version déployée
 
 - Noter ici, à chaque déploiement réel, le tag ou le hash de commit exact déployé en production
