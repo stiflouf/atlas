@@ -45,7 +45,10 @@ function uuidDemo(index) {
 }
 
 export const IDS = {
-  prospects: [uuidDemo(101), uuidDemo(102), uuidDemo(103)],
+  // 101-103 : pipeline vendeur en cours/perdu. 104-105 : vendeurs DÉJÀ convertis, un par bien seedé
+  // — sans eux, les deux biens s'affichent "Vendeur : Non renseigné", alors qu'un bien réel naît
+  // toujours d'un mandat signé (signerMandatProspectVendeur).
+  prospects: [uuidDemo(101), uuidDemo(102), uuidDemo(103), uuidDemo(104), uuidDemo(105)],
   acquereurs: [uuidDemo(201), uuidDemo(202), uuidDemo(203), uuidDemo(204)],
   biens: [uuidDemo(301), uuidDemo(302)],
   secteurs: [uuidDemo(401), uuidDemo(402), uuidDemo(403), uuidDemo(404)],
@@ -66,6 +69,9 @@ export const IDS = {
   ],
   notesBien: [uuidDemo(1201)],
   notesProspect: [uuidDemo(1202)],
+  // Exactement ce qu'émet signerMandatProspectVendeur dans sa transaction : un événement
+  // 'mandat_signe' par conversion. Aucun autre événement n'est fabriqué.
+  evenements: [uuidDemo(1301), uuidDemo(1302)],
 };
 
 // Tables métier inspectées par la garde n°2. Volontairement limitée aux entités métier réelles :
@@ -88,6 +94,7 @@ const TABLES_METIER = [
   { table: "taches", ids: IDS.taches },
   { table: "notes_bien", ids: IDS.notesBien },
   { table: "notes_prospect_vendeur", ids: IDS.notesProspect },
+  { table: "evenements_metier", ids: IDS.evenements },
   { table: "documents_bien", ids: [] },
   { table: "photos_bien", ids: [] },
 ];
@@ -111,7 +118,7 @@ function instant(base, jours) {
 // les dates relatives ne sont calculées qu'au premier run (le second sort avant toute écriture),
 // l'idempotence ne dépend donc jamais de l'heure d'exécution.
 export function construireDataset(maintenant) {
-  const [p1, p2, p3] = IDS.prospects;
+  const [p1, p2, p3, p4, p5] = IDS.prospects;
   const [a1, a2, a3, a4] = IDS.acquereurs;
   const [b1, b2] = IDS.biens;
   const [v1, v2] = IDS.visites;
@@ -203,6 +210,66 @@ export function construireDataset(maintenant) {
         datePerte: jour(maintenant, -35),
         dernierContactLe: instant(maintenant, -52),
         creeLe: instant(maintenant, -64),
+      },
+      // Les deux vendeurs déjà convertis. Ils reproduisent exactement l'état laissé par
+      // signerMandatProspectVendeur : chaîne complète de jalons, `mandatSigneLe` posé, `bienId`
+      // pointant sur le bien né de ce mandat. Ils n'apparaissent donc jamais dans la vue "en cours"
+      // de /prospects-vendeurs, mais dans "Convertis" — vue qui était vide jusqu'ici. La date de
+      // signature est alignée sur `biens.dateMandat` du bien correspondant : deux dates qui
+      // racontent le même fait ne doivent jamais diverger.
+      {
+        id: p4,
+        nom: "Delcourt",
+        prenom: "Martine",
+        email: "martine.delcourt@example.test",
+        telephone: "0100000104",
+        origineLead: "panneau",
+        origineLeadDetail: "Panneau posé dans la rue voisine",
+        adresseBienPotentiel: "14 rue des Tilleuls Fictifs",
+        secteurBienPotentiel: "Houilles",
+        ville: "Houilles",
+        codePostal: "78800",
+        typeBien: "appartement",
+        qualifieLe: instant(maintenant, -70),
+        rdvEstimationPrevuLe: instant(maintenant, -60),
+        rdvEstimationRealiseLe: instant(maintenant, -60),
+        // Estimée un peu au-dessus du prix finalement affiché (389 000 €) — l'écart entre
+        // estimation et prix de mise en vente est la norme, pas une incohérence.
+        estimationProposeeCentimes: 39_500_000,
+        estimationProposeeLe: jour(maintenant, -58),
+        mandatProposeLe: instant(maintenant, -50),
+        mandatSigneLe: instant(maintenant, -45),
+        bienId: b1,
+        motifPerte: null,
+        datePerte: null,
+        dernierContactLe: instant(maintenant, -45),
+        creeLe: instant(maintenant, -75),
+      },
+      {
+        id: p5,
+        nom: "Reynal",
+        prenom: "Olivier",
+        email: "olivier.reynal@example.test",
+        telephone: "0100000105",
+        origineLead: "ancien_client",
+        origineLeadDetail: "Vendeur accompagné sur une précédente transaction",
+        adresseBienPotentiel: "3 allée des Charmes Fictive",
+        secteurBienPotentiel: "Maisons-Laffitte",
+        ville: "Maisons-Laffitte",
+        codePostal: "78600",
+        typeBien: "maison",
+        qualifieLe: instant(maintenant, -145),
+        rdvEstimationPrevuLe: instant(maintenant, -138),
+        rdvEstimationRealiseLe: instant(maintenant, -138),
+        estimationProposeeCentimes: 76_000_000,
+        estimationProposeeLe: jour(maintenant, -135),
+        mandatProposeLe: instant(maintenant, -128),
+        mandatSigneLe: instant(maintenant, -120),
+        bienId: b2,
+        motifPerte: null,
+        datePerte: null,
+        dernierContactLe: instant(maintenant, -120),
+        creeLe: instant(maintenant, -150),
       },
     ],
 
@@ -484,7 +551,11 @@ export function construireDataset(maintenant) {
       {
         id: IDS.taches[1],
         titre: "Vérifier la présence d'un ascenseur dans l'immeuble",
-        contexte: "Information manquante — bloque un rapprochement acquéreur.",
+        // Dit exactement ce que fait le moteur (ADR-034/ADR-009) : une information inconnue n'exclut
+        // jamais un acquéreur, elle qualifie le rapprochement "À vérifier". Prétendre qu'elle
+        // "bloque" contredirait l'encart Acquéreurs compatibles affiché juste au-dessus.
+        contexte:
+          "Ascenseur non renseigné — le rapprochement avec Yanis Delaunay reste « À vérifier » tant que l'information manque.",
         type: "appel",
         priorite: "normale",
         echeance: jour(maintenant, -1),
@@ -563,6 +634,25 @@ export function construireDataset(maintenant) {
         creeLe: instant(maintenant, -6),
       },
     ],
+
+    // Un seul type d'événement, celui qu'émet réellement la conversion (ADR-032 : l'événement est
+    // posé dans la même transaction que la mutation métier). Aucun événement de visite ou de
+    // compromis n'est fabriqué : ils s'accompagneraient d'`executions_automatisation` que seule une
+    // transaction applicative réelle sait créer, et aucune vue produit ne les lit.
+    evenements: [
+      {
+        id: IDS.evenements[0],
+        typeEvenement: "mandat_signe",
+        prospectVendeurId: p4,
+        survenuLe: instant(maintenant, -45),
+      },
+      {
+        id: IDS.evenements[1],
+        typeEvenement: "mandat_signe",
+        prospectVendeurId: p5,
+        survenuLe: instant(maintenant, -120),
+      },
+    ],
   };
 }
 
@@ -602,6 +692,23 @@ async function inspecterBaseMetier(sql) {
 }
 
 async function insererDataset(sql, dataset) {
+  // Les biens d'abord : deux des cinq prospects portent une FK bien_id (vendeurs convertis).
+  for (const b of dataset.biens) {
+    await sql`
+      insert into biens (
+        id, reference, titre, type, adresse, ville, code_postal, code_insee_commune,
+        surface, pieces, prix, statut_mandat, date_mandat, caracteristiques, description,
+        etage, ascenseur, parking, exterieur, charge_honoraires, nom_copropriete,
+        offre_en_cours_le, compromis_signe_le, cree_le, modifie_le
+      ) values (
+        ${b.id}, ${b.reference}, ${b.titre}, ${b.type}, ${b.adresse}, ${b.ville}, ${b.codePostal}, ${b.codeInseeCommune},
+        ${b.surface}, ${b.pieces}, ${b.prix}, ${b.statutMandat}, ${b.dateMandat}, ${b.caracteristiques}, ${b.description},
+        ${b.etage}, ${b.ascenseur}, ${b.parking}, ${b.exterieur}, ${b.chargeHonoraires}, ${b.nomCopropriete},
+        ${b.offreEnCoursLe}, ${b.compromisSigneLe}, ${b.creeLe}, ${b.creeLe}
+      )
+    `;
+  }
+
   for (const p of dataset.prospects) {
     await sql`
       insert into prospects_vendeurs (
@@ -616,22 +723,6 @@ async function insererDataset(sql, dataset) {
         ${p.qualifieLe}, ${p.estimationProposeeCentimes}, ${p.estimationProposeeLe},
         ${p.rdvEstimationPrevuLe}, ${p.rdvEstimationRealiseLe}, ${p.mandatProposeLe}, ${p.mandatSigneLe},
         ${p.bienId}, ${p.motifPerte}, ${p.datePerte}, ${p.dernierContactLe}, ${p.creeLe}, ${p.creeLe}
-      )
-    `;
-  }
-
-  for (const b of dataset.biens) {
-    await sql`
-      insert into biens (
-        id, reference, titre, type, adresse, ville, code_postal, code_insee_commune,
-        surface, pieces, prix, statut_mandat, date_mandat, caracteristiques, description,
-        etage, ascenseur, parking, exterieur, charge_honoraires, nom_copropriete,
-        offre_en_cours_le, compromis_signe_le, cree_le, modifie_le
-      ) values (
-        ${b.id}, ${b.reference}, ${b.titre}, ${b.type}, ${b.adresse}, ${b.ville}, ${b.codePostal}, ${b.codeInseeCommune},
-        ${b.surface}, ${b.pieces}, ${b.prix}, ${b.statutMandat}, ${b.dateMandat}, ${b.caracteristiques}, ${b.description},
-        ${b.etage}, ${b.ascenseur}, ${b.parking}, ${b.exterieur}, ${b.chargeHonoraires}, ${b.nomCopropriete},
-        ${b.offreEnCoursLe}, ${b.compromisSigneLe}, ${b.creeLe}, ${b.creeLe}
       )
     `;
   }
@@ -730,6 +821,15 @@ async function insererDataset(sql, dataset) {
       values (${n.id}, ${n.prospectVendeurId}, ${n.type}, ${n.contenu}, ${n.creeLe})
     `;
   }
+
+  // Cible unique = prospect_vendeur_id (contrainte evenements_metier_une_seule_cible_check) :
+  // les autres colonnes de cible restent NULL, jamais renseignées "pour faire complet".
+  for (const e of dataset.evenements) {
+    await sql`
+      insert into evenements_metier (id, type_evenement, prospect_vendeur_id, survenu_le)
+      values (${e.id}, ${e.typeEvenement}, ${e.prospectVendeurId}, ${e.survenuLe})
+    `;
+  }
 }
 
 // Point d'entrée unique — les deux gardes sont ici, sur le chemin d'écriture, jamais seulement
@@ -787,6 +887,7 @@ export function compteurs(dataset) {
     remunerations: dataset.remunerations.length,
     taches: dataset.taches.length,
     notes: dataset.notesBien.length + dataset.notesProspect.length,
+    evenements: dataset.evenements.length,
   };
 }
 
@@ -817,6 +918,7 @@ async function main() {
     console.log(`${c.remunerations} rémunération prévisionnelle`);
     console.log(`${c.taches} tâches`);
     console.log(`${c.notes} notes`);
+    console.log(`${c.evenements} événements métier (mandats signés)`);
     console.log("0 document, 0 photo — à charger manuellement via l'interface (voir README).");
     console.log("Seed terminé.");
   } finally {

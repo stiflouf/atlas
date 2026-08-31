@@ -102,10 +102,10 @@ pnpm db:generate
 
 ### 4. Seed de démonstration — instance de démo uniquement (DEMO-02)
 
-Peuple une base **vierge** avec un univers fictif cohérent (3 prospects vendeurs, 4 acquéreurs,
-2 biens, 2 visites, 1 offre acceptée, 1 compromis en cours, 1 rémunération prévisionnelle,
-7 tâches, 2 notes). Destiné à une instance de démonstration dédiée — jamais à une base portant de
-vraies données.
+Peuple une base **vierge** avec un univers fictif cohérent (5 prospects vendeurs — dont 2 déjà
+convertis, un par bien —, 4 acquéreurs, 2 biens, 2 visites, 1 offre acceptée, 1 compromis en cours,
+1 rémunération prévisionnelle, 7 tâches, 2 notes, 2 événements `mandat_signe`). Destiné à une
+instance de démonstration dédiée — jamais à une base portant de vraies données.
 
 ```bash
 DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA pnpm db:seed:demo
