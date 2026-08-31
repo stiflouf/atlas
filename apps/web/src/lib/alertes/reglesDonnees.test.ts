@@ -10,7 +10,9 @@ describe("A1 — profil fiscal absent", () => {
   it("se déclenche quand aucun profil fiscal n'existe", () => {
     const alertes = produireAlertesDonnees(contexteTest({ fiscal: undefined }));
     expect(typesDe(alertes)).toEqual(["profil_fiscal_absent"]);
-    expect(alertes[0].niveau).toBe("action_requise");
+    // `information` et non `action_requise` : ne rien avoir renseigné de fiscal est l'état normal
+    // du premier jour, jamais une urgence qui devrait passer devant les dossiers du conseiller.
+    expect(alertes[0].niveau).toBe("information");
     expect(alertes[0].action?.href).toBe("/fiscal#profil");
   });
 

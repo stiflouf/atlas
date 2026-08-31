@@ -16,8 +16,11 @@ describe("produireAlertes — intégration règles + déduplication + priorité"
       expect.arrayContaining(["profil_fiscal_absent", "remuneration_manquante", "date_encaissement_prevue_manquante"])
     );
     expect(alertes).toHaveLength(3);
-    // Le plus prioritaire (action_requise) passe en tête, jamais un score affiché.
-    expect(alertes[0].type).toBe("profil_fiscal_absent");
+    // Le plus prioritaire passe en tête, jamais un score affiché. Depuis que profil_fiscal_absent
+    // est de niveau `information` (reglesDonnees.ts), ce sont les alertes commerciales — de niveau
+    // `attention` — qui ouvrent le cockpit, et l'absence de profil fiscal qui ferme la liste.
+    expect(alertes[0].type).toBe("remuneration_manquante");
+    expect(alertes[alertes.length - 1].type).toBe("profil_fiscal_absent");
     for (const alerte of alertes) {
       expect(alerte).not.toHaveProperty("score");
     }

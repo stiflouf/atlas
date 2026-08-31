@@ -16,6 +16,15 @@ type RegleAlerteDonnees = {
 // derrière elle toute alerte fiscale qui ne ferait que reformuler cette même absence — mais elle ne
 // se déclenche de toute façon jamais seule ici, `contexte.fiscal` étant systématiquement absent en
 // aval (voir contexte.ts).
+//
+// Niveau `information` et non `action_requise` : ne jamais rien renseigner de fiscal est l'état
+// NORMAL d'un conseiller au premier jour, pas une urgence métier. Au niveau `action_requise`, cette
+// alerte cumulait le score le plus élevé de toute la table (priorite.ts) et ouvrait donc
+// systématiquement le cockpit commercial d'un nouvel utilisateur sur une injonction fiscale, devant
+// ses propres dossiers. L'alerte reste produite, visible et inchangée sur le fond — seule sa place
+// dans l'ordre de priorité change. Distinct des règles A2a (profil existant mais champ 'inconnu'),
+// qui restent en `action_requise` : là, l'utilisateur a commencé à renseigner sa situation et une
+// donnée précise lui manque.
 const regleProfilAbsent: RegleAlerteDonnees = {
   id: "profil_fiscal_absent",
   evaluer: (contexte) => {
@@ -25,7 +34,7 @@ const regleProfilAbsent: RegleAlerteDonnees = {
         id: construireIdAlerte("profil_fiscal_absent", contexte.dossierFiscalId),
         type: "profil_fiscal_absent",
         categorie: "donnees_incompletes",
-        niveau: "action_requise",
+        niveau: "information",
         titre: "Situation fiscale non renseignée",
         explication:
           `Aucun profil fiscal n'est renseigné : ${PRODUCT_NAME} ne peut calculer ni cotisations, ni seuils, ni projections fiscales tant que cette situation n'est pas connue.`,
