@@ -3,7 +3,13 @@ import BrandMark from "./BrandMark";
 
 // Structure inchangée (marque / navigation / conseiller) — seul le langage visuel change : fond
 // navy profond sur toute la hauteur (direction artistique premium), navigation claire dessus.
-export default function Sidebar() {
+export default function Sidebar({
+  nomConseiller,
+  initialesConseiller,
+}: {
+  nomConseiller: string;
+  initialesConseiller: string;
+}) {
   return (
     <aside className="hidden md:flex flex-col w-[220px] shrink-0 h-full bg-navy">
       <div className="px-5 py-6 border-b border-white/10">
@@ -66,13 +72,16 @@ export default function Sidebar() {
         <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-navy to-transparent" />
       </div>
 
-      {/* Conseiller — carte minimale (avatar/initiale, jamais une photo inventée). */}
+      {/* Conseiller — carte minimale (avatar/initiale, jamais une photo inventée). Nom et initiales
+          reçus en props : ils sont résolus côté serveur (src/lib/conseiller.ts, lu par le Root
+          Layout) et traversent AppShell, qui est un Client Component — une variable
+          d'environnement non publique y serait `undefined`. */}
       <div className="px-3 py-4 border-t border-white/10">
         <div className="flex items-center gap-2.5 px-2 py-2 rounded-lg">
           <span className="inline-flex items-center justify-center shrink-0 w-8 h-8 rounded-full bg-champagne text-[13px] font-semibold text-navy">
-            SG
+            {initialesConseiller}
           </span>
-          <p className="text-[13px] text-text-inverse/90 truncate">Steven Gausset</p>
+          <p className="text-[13px] text-text-inverse/90 truncate">{nomConseiller}</p>
         </div>
       </div>
     </aside>

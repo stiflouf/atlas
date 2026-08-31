@@ -43,6 +43,12 @@ conseiller voudra tester avec ses vrais dossiers, ce sera une troisième instanc
 sans quoi de vraies données personnelles se retrouveraient dans un environnement conçu pour être
 montré à des tiers.
 
+Identité affichée : `ATLAS_ADVISOR_DISPLAY_NAME=Conseiller DOMIORA` — volontairement générique, cette
+instance étant montrée à des tiers. Facultative techniquement (repli `Conseiller DOMIORA`),
+recommandée sur toute instance déployée, et **strictement distincte d'`ATLAS_ALLOWED_EMAIL`** : l'une
+est ce qui s'affiche, l'autre décide qui peut entrer. Steven reste donc l'identité autorisée à se
+connecter au showroom sans que son nom y apparaisse.
+
 Variables volontairement **absentes** : `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`,
 `PRIM_API_KEY`, les 4 secrets d'endpoints techniques. Vérifié dans le code : toutes les lectures de
 `process.env` sont paresseuses (aucune au niveau module), l'application démarre et le cockpit

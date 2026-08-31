@@ -28,12 +28,20 @@ export const metadata: Metadata = {
 };
 
 import AppShell from "@/components/layout/AppShell";
+import { obtenirInitialesConseiller, obtenirNomConseiller } from "@/lib/conseiller";
 
+// Seul point de lecture de l'identité affichée du conseiller : ce layout est un Server Component,
+// il peut donc lire la variable d'environnement sans jamais l'exposer au bundle client. Elle
+// descend ensuite en props jusqu'à la Sidebar (voir AppShell).
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const nomConseiller = obtenirNomConseiller();
+
   return (
     <html lang="fr" className={`${inter.variable} ${cormorant.variable} h-full`}>
       <body className="h-full">
-        <AppShell>{children}</AppShell>
+        <AppShell nomConseiller={nomConseiller} initialesConseiller={obtenirInitialesConseiller(nomConseiller)}>
+          {children}
+        </AppShell>
       </body>
     </html>
   );
