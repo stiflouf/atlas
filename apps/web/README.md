@@ -100,6 +100,49 @@ Drizzle (`src/db/schema.ts`), qui fait foi du schéma physique**. Après une mod
 pnpm db:generate
 ```
 
+### 4. Seed de démonstration — instance de démo uniquement (DEMO-02)
+
+Peuple une base **vierge** avec un univers fictif cohérent (3 prospects vendeurs, 4 acquéreurs,
+2 biens, 2 visites, 1 offre acceptée, 1 compromis en cours, 1 rémunération prévisionnelle,
+7 tâches, 2 notes). Destiné à une instance de démonstration dédiée — jamais à une base portant de
+vraies données.
+
+```bash
+DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA pnpm db:seed:demo
+```
+
+`DOMIORA_DEMO_SEED_CONFIRM` est une confirmation **ponctuelle**, à passer sur la ligne de commande
+au moment de l'exécution. **Ne jamais la définir durablement dans les variables d'environnement de
+la plateforme d'hébergement** : sa raison d'être est qu'elle ne puisse pas être fournie par
+accident.
+
+Le script refuse d'écrire dans quatre situations, sans jamais rien supprimer :
+
+| Situation | Comportement |
+|---|---|
+| Confirmation absente ou différente | Refus, sortie en erreur, aucune écriture |
+| La base contient **une seule** ligne métier étrangère au dataset | Refus explicite, la ligne existante est laissée intacte |
+| Dataset de démonstration déjà complet | `Dataset de démonstration déjà présent.`, sortie 0, aucun doublon |
+| Dataset de démonstration **partiel** | Refus — aucune réparation automatique, recréer une base vierge |
+
+Il n'existe **aucune** commande de purge, de reset ni de `--force` : ce script ne sait qu'ajouter.
+Repartir d'un état propre signifie recréer la base, jamais vider celle-ci depuis l'application.
+
+Le seed ne crée **ni donnée fiscale personnelle** (`/fiscal` reste vide, hors du parcours de
+démonstration) **ni connexion Google** (Calendar et Gmail restent à connecter manuellement, ou
+pas du tout — l'application fonctionne sans).
+
+**Documents et photos ne sont pas seedés** : aucune ligne ne doit jamais pointer vers un fichier
+absent du stockage. À charger manuellement via l'interface avant une démonstration si besoin —
+quelques PDF fictifs sur l'onglet Documents d'un bien, deux photos sur la galerie.
+
+Une limite à connaître avant de faire une démonstration : les visites seedées portent un
+identifiant de rendez-vous de seed, pas un identifiant Google Calendar. La fiche visite
+(`/visites/[id]`, atteinte depuis l'onglet Visites d'un bien) est pleinement consultable — elle ne
+lit que Postgres. En revanche `/visites/[id]/preparer`, proposé par le CTA « Préparer » de la fiche
+acquéreur, ne peut pas résoudre un rendez-vous Calendar inexistant et rend une page « Page
+introuvable ».
+
 ## Variables d'environnement
 
 Toutes déclarées (noms uniquement) dans `.env.local.example`. **Aucune valeur ne doit jamais être
