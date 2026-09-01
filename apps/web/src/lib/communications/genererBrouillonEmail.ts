@@ -37,22 +37,46 @@ const OBJET_PAR_INTENTION: Record<IntentionCommunication, (faits: FaitsCommunica
 
 type ConstructeurParagraphes = (faits: FaitsCommunication, ton: TonMessage) => (string | undefined)[];
 
+// EMAIL-DEMO-02 — `tacheContexte` n'est lu par AUCUN constructeur ci-dessous, volontairement. Il
+// l'était par cinq d'entre eux, et le retour terrain a montré le résultat : une relance envoyée à
+// un vendeur portait « Mandat proposé il y a 6 jours, sans réponse depuis. », note de suivi écrite
+// pour le conseiller. Une donnée interne n'est jamais du texte prêt à envoyer, quel que soit le
+// ton choisi. Le principe existait déjà pour `retour_vendeur_apres_visite` (ADR-042) : il est
+// désormais général. Seuls des faits structurés produisent du texte externe.
+
 const PARAGRAPHES_PAR_INTENTION: Record<IntentionCommunication, ConstructeurParagraphes> = {
   relance_prospect_vendeur: (f, ton) => {
     const lieu = f.bienAdresse ? ` pour le bien situé ${f.bienAdresse}` : "";
     if (ton === "court") return [`Je reviens vers vous concernant votre projet de vente${lieu}.`];
     return [
       `Je me permets de revenir vers vous concernant votre projet de vente${lieu}.`,
-      f.tacheContexte ?? "Auriez-vous un moment pour échanger sur la suite ?",
+      "Auriez-vous un moment pour échanger sur la suite ?",
     ];
   },
 
   suivi_rdv_estimation: (f, ton) => {
     const date = f.dateRdvEstimation ? ` du ${f.dateRdvEstimation}` : "";
-    if (ton === "court") return [`Suite à notre rendez-vous d'estimation${date}, je fais le point avec vous.`];
+    if (ton === "court") {
+      return [
+        f.mandatPropose
+          ? `Suite à notre rendez-vous d'estimation${date}, avez-vous pu réfléchir à notre proposition de mandat ?`
+          : `Suite à notre rendez-vous d'estimation${date}, je fais le point avec vous.`,
+      ];
+    }
+    if (ton === "relance_douce") {
+      return [
+        `Je me permets de revenir vers vous à la suite de notre rendez-vous d'estimation${date}.`,
+        f.mandatPropose ? "Avez-vous eu le temps de réfléchir à notre proposition de mandat ?" : undefined,
+        "Je reste à votre disposition si vous souhaitez que nous en reparlions.",
+      ];
+    }
     return [
-      `Suite à notre rendez-vous d'estimation${date}, je souhaitais faire le point avec vous.`,
-      f.tacheContexte ?? "N'hésitez pas à me faire part de vos questions.",
+      f.mandatPropose
+        ? `Suite à notre rendez-vous d'estimation${date}, je souhaitais savoir si vous aviez eu le temps de réfléchir à notre proposition de mandat.`
+        : `Suite à notre rendez-vous d'estimation${date}, je souhaitais faire le point avec vous.`,
+      f.mandatPropose
+        ? "Je reste bien entendu disponible pour répondre à vos questions ou échanger à votre convenance."
+        : "N'hésitez pas à me faire part de vos questions.",
     ];
   },
 
@@ -61,7 +85,7 @@ const PARAGRAPHES_PAR_INTENTION: Record<IntentionCommunication, ConstructeurPara
     if (ton === "court") return [`Je reviens vers vous concernant votre projet d'acquisition${lieu}.`];
     return [
       `Je me permets de revenir vers vous concernant votre projet d'acquisition${lieu}.`,
-      f.tacheContexte ?? "Souhaitez-vous que nous échangions sur la suite à donner ?",
+      "Souhaitez-vous que nous échangions sur la suite à donner ?",
     ];
   },
 
@@ -72,7 +96,6 @@ const PARAGRAPHES_PAR_INTENTION: Record<IntentionCommunication, ConstructeurPara
     return [
       `Suite à votre visite${date}${lieu}, je souhaitais avoir votre retour.`,
       f.interetVisite ? `Nous avions noté à l'issue de la visite : ${f.interetVisite}.` : undefined,
-      f.tacheContexte,
     ];
   },
 
@@ -105,7 +128,6 @@ const PARAGRAPHES_PAR_INTENTION: Record<IntentionCommunication, ConstructeurPara
     return [
       `Je reviens vers vous au sujet du compromis de vente${lieu}${prix}.`,
       f.dateActeCompromis ? `La signature de l'acte est prévue le ${f.dateActeCompromis}.` : undefined,
-      f.tacheContexte,
     ];
   },
 

@@ -93,13 +93,96 @@ describe("genererBrouillonEmail — aucune donnée inventée", () => {
     expect(avecListe.corps).toContain("PV AG");
   });
 
-  it("recopie tacheContexte tel quel, jamais réinterprété", () => {
+  // EMAIL-DEMO-02 — cette attente était l'inverse jusqu'au 1er septembre 2026 (« recopie
+  // tacheContexte tel quel »). Le retour terrain a tranché : une note de suivi CRM n'est pas du
+  // texte prêt à envoyer. Le test n'est pas assoupli, il est retourné avec la règle métier.
+  it("ne recopie jamais la note de suivi interne de la tâche dans le corps", () => {
     const brouillon = genererBrouillonEmail(
       "relance_prospect_vendeur",
       { tacheContexte: "Rappel suite à notre échange téléphonique du 2 mars" },
       "professionnel"
     );
-    expect(brouillon.corps).toContain("Rappel suite à notre échange téléphonique du 2 mars");
+    expect(brouillon.corps).not.toContain("Rappel suite à notre échange téléphonique du 2 mars");
+    // La formulation externe neutre prend sa place — jamais un paragraphe manquant.
+    expect(brouillon.corps).toContain("Auriez-vous un moment pour échanger sur la suite ?");
+  });
+
+  it("aucune intention n'injecte la note interne, quel que soit le ton", () => {
+    const NOTE = "vendeur difficile, insister rapidement";
+    const faits = {
+      tacheContexte: NOTE,
+      bienAdresse: "14 rue des Tilleuls",
+      dateRdvEstimation: "15 août 2026",
+      dateVisite: "10 mars 2026",
+      interetVisite: "Intéressé",
+      dateActeCompromis: "1 décembre 2026",
+      documentLabel: "Pré-état daté",
+      mandatPropose: true,
+    };
+    const intentions = [
+      "relance_prospect_vendeur",
+      "suivi_rdv_estimation",
+      "suivi_acquereur",
+      "suivi_visite",
+      "demande_document_manquant",
+      "relance_piece_a_verifier",
+      "message_compromis",
+      "message_notaire",
+      "retour_vendeur_apres_visite",
+    ] as const;
+    const tons = ["professionnel", "cordial", "court", "relance_douce"] as const;
+
+    for (const intention of intentions) {
+      for (const ton of tons) {
+        const brouillon = genererBrouillonEmail(intention, faits, ton);
+        expect(brouillon.corps, `${intention} / ${ton}`).not.toContain(NOTE);
+        expect(brouillon.corps, `${intention} / ${ton}`).not.toContain("difficile");
+      }
+    }
+  });
+
+  // Cas réel à l'origine du correctif : tâche « Relancer Hélène Vasseur sur la proposition de
+  // mandat », dont le contexte interne était « Mandat proposé il y a 6 jours, sans réponse depuis. »
+  describe("suivi_rdv_estimation avec proposition de mandat en attente", () => {
+    const faitsHelene = {
+      destinatairePrenom: "Hélène",
+      dateRdvEstimation: "15 août 2026",
+      mandatPropose: true,
+      tacheContexte: "Mandat proposé il y a 6 jours, sans réponse depuis.",
+    };
+
+    it("professionnel : mentionne le rendez-vous, sa date et la proposition de mandat, sans la note interne", () => {
+      const { corps } = genererBrouillonEmail("suivi_rdv_estimation", faitsHelene, "professionnel");
+
+      expect(corps).not.toContain("Mandat proposé il y a 6 jours, sans réponse depuis.");
+      expect(corps).toContain("Bonjour Hélène,");
+      expect(corps).toContain("rendez-vous d'estimation du 15 août 2026");
+      expect(corps).toContain("proposition de mandat");
+      expect(corps).toContain("Je reste bien entendu disponible");
+      expect(corps).toContain("Cordialement,");
+    });
+
+    it("relance douce : formulation externe distincte du ton professionnel", () => {
+      const doux = genererBrouillonEmail("suivi_rdv_estimation", faitsHelene, "relance_douce").corps;
+      const pro = genererBrouillonEmail("suivi_rdv_estimation", faitsHelene, "professionnel").corps;
+
+      expect(doux).not.toContain("Mandat proposé il y a 6 jours, sans réponse depuis.");
+      expect(doux).not.toBe(pro);
+      expect(doux).toContain("rendez-vous d'estimation du 15 août 2026");
+      expect(doux).toContain("Avez-vous eu le temps de réfléchir à notre proposition de mandat ?");
+      expect(doux).toContain("Je reste à votre disposition");
+    });
+
+    it("sans proposition de mandat : aucune mention de mandat n'est inventée", () => {
+      const { corps } = genererBrouillonEmail(
+        "suivi_rdv_estimation",
+        { destinatairePrenom: "Hélène", dateRdvEstimation: "15 août 2026" },
+        "professionnel"
+      );
+
+      expect(corps).not.toContain("mandat");
+      expect(corps).toContain("je souhaitais faire le point avec vous");
+    });
   });
 
   it("retour_vendeur_apres_visite (ADR-042) : objet contient l'adresse du bien, jamais un nom d'acquéreur", () => {

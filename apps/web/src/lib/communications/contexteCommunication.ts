@@ -73,8 +73,15 @@ export type FaitsCommunication = {
   dateActeCompromis?: string;
   documentLabel?: string;
   documentsAObtenirNotaire?: string[];
-  // Texte déjà écrit par le conseiller sur la tâche d'origine — recopié tel quel, jamais
-  // réinterprété (ADR-008 : le texte libre reste une mémoire passive, jamais une entrée de règle).
+  // EMAIL-DEMO-02 — vrai depuis le RDV d'estimation, tant que le mandat n'est pas signé. Fait
+  // structuré (prospectsVendeurs.mandatProposeLe/mandatSigneLe), jamais déduit d'un texte libre :
+  // c'est lui qui autorise une formulation client mentionnant la proposition de mandat.
+  mandatPropose?: boolean;
+  // Note de suivi écrite par le conseiller sur la tâche d'origine. USAGE INTERNE STRICT : jamais
+  // injectée dans un corps d'email (EMAIL-DEMO-02). Une note de CRM est écrite POUR le conseiller
+  // (« sans réponse depuis », « vendeur difficile », « doute sur financement ») ; la recopier dans
+  // un message client a été observé en conditions réelles et est inacceptable. Elle reste ici pour
+  // que l'appelant comprenne l'origine de la communication, jamais pour être rendue.
   tacheContexte?: string;
 };
 

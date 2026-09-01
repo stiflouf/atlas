@@ -79,6 +79,8 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Pr
           ...base,
           bienAdresse: bien?.adresse ?? p.adresseBienPotentiel,
           dateRdvEstimation: p.rdvEstimationRealiseLe ? formatDateFr(p.rdvEstimationRealiseLe) : undefined,
+          // Une proposition encore en attente de réponse — signée, elle n'a plus à être relancée.
+          mandatPropose: Boolean(p.mandatProposeLe) && !p.mandatSigneLe,
         },
       };
     }
