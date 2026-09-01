@@ -116,7 +116,7 @@ export async function ajouterDocumentBienAction(formData: FormData): Promise<voi
     etatVerification: "non_verifie",
   });
 
-  redirect(`/biens/${bienId}`);
+  redirect(`/biens/${bienId}?onglet=documents`);
 }
 
 // Correction de classement (ADR-029) : remplacement complet des champs corrigibles, jamais un
@@ -165,5 +165,5 @@ export async function corrigerClassementDocumentBienAction(formData: FormData): 
   const resultat = await corrigerClassementDocumentBien(id, champs);
   if (!resultat) throw new Error("Document introuvable.");
 
-  redirect(`/biens/${bienId}`);
+  redirect(`/biens/${bienId}?onglet=documents`);
 }

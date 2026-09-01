@@ -44,7 +44,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
     const bien = await creerBien(bienTest("0-PHOTO"));
     idsCrees.push(bien.id);
 
-    const element = await FicheBien({ params: Promise.resolve({ id: bien.id }) });
+    const element = await FicheBien({ params: Promise.resolve({ id: bien.id }), searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(element);
 
     expect(html).not.toContain("/api/photos-bien/");
@@ -65,7 +65,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
       hashSha256: "hash-test-fiche-1",
     });
 
-    const element = await FicheBien({ params: Promise.resolve({ id: bien.id }) });
+    const element = await FicheBien({ params: Promise.resolve({ id: bien.id }), searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(element);
 
     expect(html).toContain(`/api/photos-bien/${photo.id}`);
@@ -98,7 +98,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
       hashSha256: "hash-test-fiche-2b",
     });
 
-    const element = await FicheBien({ params: Promise.resolve({ id: bien.id }) });
+    const element = await FicheBien({ params: Promise.resolve({ id: bien.id }), searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(element);
 
     expect(html).not.toContain("Visuel DOMIORA");

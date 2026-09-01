@@ -9,6 +9,7 @@ import BienStatutAction from "@/components/bien/BienStatutAction";
 import BienVendeurMandat from "@/components/bien/BienVendeurMandat";
 import BienAcquereursCompatibles from "@/components/bien/BienAcquereursCompatibles";
 import BienTabs from "@/components/bien/BienTabs";
+import { ongletBienValide } from "@/types/ongletBien";
 import { getBienById } from "@/lib/bienRepository";
 import { getPhotoPrincipaleBien, listerPhotosBien } from "@/lib/photoBienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
@@ -48,10 +49,14 @@ const variantStatutCommercial: Record<StatutCommercial, "default" | "accent" | "
   vendu: "success",
 };
 
-type PageProps = { params: Promise<{ id: string }> };
+// `onglet` (DEMO-DOCS-UX-01) : onglet d'ouverture de la fiche. Permet à une mutation faite
+// depuis un onglet d'y ramener l'utilisateur, et à un lien direct/rechargement de rouvrir le bon
+// onglet. Absent ou invalide -> "contexte", le défaut historique.
+type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ onglet?: string }> };
 
-export default async function FicheBien({ params }: PageProps) {
+export default async function FicheBien({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const ongletInitial = ongletBienValide((await searchParams).onglet);
   const bien = await getBienById(id);
   if (!bien) notFound();
 
@@ -251,6 +256,7 @@ export default async function FicheBien({ params }: PageProps) {
         prospectVendeurOrigine={prospectVendeurOrigine}
         checklist={checklist}
         labelRegleAutomatisation={LABEL_REGLE_AUTOMATISATION}
+        ongletInitial={ongletInitial}
       />
     </div>
   );

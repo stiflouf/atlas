@@ -75,13 +75,13 @@ test("Pack Notaire ADR-049 : upload, téléchargement ZIP, transmission, histori
     buffer: Buffer.from("%PDF-1.4 contenu de test E2E, jamais un vrai diagnostic.", "utf-8"),
   });
   await page.getByRole("button", { name: "Ajouter le document" }).click();
-  // ajouterDocumentBienAction se termine par redirect() vers la MÊME URL (/biens/{bienId}) :
-  // waitForURL serait un no-op (déjà vraie avant le submit). On attend la disparition réelle du
-  // champ fichier (démontage du formulaire par le rechargement) plutôt qu'une correspondance
-  // d'URL non discriminante — l'onglet actif (useState client, sans état d'URL) retombe alors sur
-  // "Contexte" par défaut, d'où le reclic.
-  await champFichier.waitFor({ state: "detached" });
-  await page.getByRole("tab", { name: "Documents", exact: true }).click();
+  // ajouterDocumentBienAction redirige désormais vers /biens/{bienId}?onglet=documents
+  // (DEMO-DOCS-UX-01) : l'onglet Documents reste ouvert après l'ajout. Le formulaire n'est donc
+  // plus démonté, et l'ancienne attente sur la disparition du champ fichier — qui ne fonctionnait
+  // que parce que l'onglet retombait sur "Contexte" — ne peut plus aboutir. On attend la
+  // navigation réelle, désormais discriminante grâce au paramètre d'onglet, puis l'apparition du
+  // document ; plus aucun reclic d'onglet n'est nécessaire.
+  await page.waitForURL(/\/biens\/[0-9a-f-]{36}\?onglet=documents$/);
   await expect(page.getByText(nomDocument)).toBeVisible();
 
   // 2. Pack Notaire : téléchargement ZIP réel (form POST natif → événement download navigateur).

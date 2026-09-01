@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { OngletBien } from "@/types/ongletBien";
 import Link from "next/link";
 import { Users, Building2, ShieldCheck, Landmark, Handshake, Scale, FileText } from "lucide-react";
 import Badge from "@/components/ui/Badge";
@@ -121,15 +122,7 @@ function formatPrix(montant: number): string {
   );
 }
 
-type Tab =
-  | "contexte"
-  | "historique"
-  | "notes"
-  | "visites"
-  | "documents"
-  | "offres"
-  | "compromis"
-  | "taches";
+type Tab = OngletBien;
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -154,6 +147,7 @@ export default function BienTabs({
   prospectVendeurOrigine,
   checklist,
   labelRegleAutomatisation,
+  ongletInitial,
 }: {
   bien: Bien;
   dossier?: DossierBien;
@@ -177,8 +171,12 @@ export default function BienTabs({
   prospectVendeurOrigine?: ProspectVendeur;
   checklist?: ChecklistDossier;
   labelRegleAutomatisation: Record<CodeRegleAutomatisation, string>;
+  ongletInitial?: Tab;
 }) {
-  const [active, setActive] = useState<Tab>("contexte");
+  // Onglet d'ouverture reçu du serveur (paramètre d'URL validé par la page). Reste un simple
+  // état local ensuite : cliquer sur un onglet ne réécrit pas l'URL, seule une navigation
+  // serveur (retour de mutation, lien direct, rechargement) décide de l'onglet d'ouverture.
+  const [active, setActive] = useState<Tab>(ongletInitial ?? "contexte");
 
   const liensParOffre = new Map<string, { lienId: string; visite: CompteRenduVisite }[]>();
   for (const lien of liens) {
