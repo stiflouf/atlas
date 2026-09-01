@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Users, Building2, ShieldCheck, Landmark, Handshake, Scale, FileText } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -646,9 +647,13 @@ export default function BienTabs({
           {documents.length === 0 ? (
             <p className="text-[14px] text-text-muted">Aucun document pour l'instant.</p>
           ) : (
-            <div className="flex flex-col divide-y divide-border-subtle bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            // Une Card par document (DEMO-DOCS-UX-02) : la liste à séparateurs donnait, plusieurs
+            // formulaires de correction ouverts, l'impression d'un seul long formulaire — un
+            // conseiller a saisi le contenu destiné aux deux dates dans le champ Nom d'un autre
+            // document.
+            <div className="flex flex-col gap-3">
               {documents.map((doc) => (
-                <div key={doc.id} className="flex flex-col gap-2 px-4 py-3">
+                <Card key={doc.id} className="flex flex-col gap-2 px-4 py-3">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <p className="text-[14px] text-text-primary truncate">{doc.nom}</p>
@@ -669,151 +674,156 @@ export default function BienTabs({
                     <summary className="text-text-muted cursor-pointer select-none">Corriger le classement</summary>
                     <form
                       action={corrigerClassementDocumentBienAction}
-                      className="flex flex-col gap-2 mt-2 pt-2 border-t border-border-subtle"
+                      aria-label={`Corriger le classement de ${doc.nom}`}
+                      className="flex flex-col gap-3 mt-2 pt-3 border-t border-border-subtle"
                     >
                       <input type="hidden" name="id" value={doc.id} />
-                      <input
-                        type="text"
-                        name="bienId"
-                        required
-                        defaultValue={doc.bienId}
-                        placeholder="Identifiant du bien"
-                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                      />
-                      <input
-                        type="text"
-                        name="nom"
-                        required
-                        defaultValue={doc.nom}
-                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                      />
+                      <label className="text-[11px] text-text-muted">
+                        Nom du document
+                        <Input type="text" name="nom" required defaultValue={doc.nom} className="mt-1" />
+                      </label>
                       <div className="grid grid-cols-2 gap-2">
-                        <select
-                          name="categorie"
-                          defaultValue={doc.categorie}
-                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                        >
-                          {CATEGORIES_DOCUMENT.map((categorie) => (
-                            <option key={categorie} value={categorie}>
-                              {LABEL_CATEGORIE_DOCUMENT[categorie]}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          name="typeDocument"
-                          defaultValue={doc.typeDocument ?? ""}
-                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                        >
-                          <option value="">Type — non classé</option>
-                          {FAMILLES_DOCUMENT.map((famille) => (
-                            <optgroup key={famille} label={LABEL_FAMILLE_DOCUMENT[famille]}>
-                              {TYPES_DOCUMENT.filter((t) => FAMILLE_PAR_TYPE_DOCUMENT[t] === famille).map((type) => (
-                                <option key={type} value={type}>
-                                  {LABEL_TYPE_DOCUMENT[type]}
+                        <label className="text-[11px] text-text-muted">
+                          Catégorie
+                          <Select name="categorie" defaultValue={doc.categorie} className="mt-1">
+                            {CATEGORIES_DOCUMENT.map((categorie) => (
+                              <option key={categorie} value={categorie}>
+                                {LABEL_CATEGORIE_DOCUMENT[categorie]}
+                              </option>
+                            ))}
+                          </Select>
+                        </label>
+                        <label className="text-[11px] text-text-muted">
+                          Type
+                          <Select name="typeDocument" defaultValue={doc.typeDocument ?? ""} className="mt-1">
+                            <option value="">Type — non classé</option>
+                            {FAMILLES_DOCUMENT.map((famille) => (
+                              <optgroup key={famille} label={LABEL_FAMILLE_DOCUMENT[famille]}>
+                                {TYPES_DOCUMENT.filter((t) => FAMILLE_PAR_TYPE_DOCUMENT[t] === famille).map((type) => (
+                                  <option key={type} value={type}>
+                                    {LABEL_TYPE_DOCUMENT[type]}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </Select>
+                        </label>
+                      </div>
+                      <label className="text-[11px] text-text-muted">
+                        Précision si type « Autre » (optionnel)
+                        <Input
+                          type="text"
+                          name="typeDocumentDetail"
+                          defaultValue={doc.typeDocumentDetail ?? ""}
+                          className="mt-1"
+                        />
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="text-[11px] text-text-muted">
+                          Date du document
+                          <Input
+                            type="date"
+                            name="dateDocument"
+                            defaultValue={doc.dateDocument ?? ""}
+                            className="mt-1"
+                          />
+                        </label>
+                        <div>
+                          <label className="text-[11px] text-text-muted">
+                            Fin de validité
+                            <Input
+                              type="date"
+                              name="dateFinValidite"
+                              defaultValue={doc.dateFinValidite ?? ""}
+                              aria-describedby={`aide-fin-validite-${doc.id}`}
+                              className="mt-1"
+                            />
+                          </label>
+                          <p id={`aide-fin-validite-${doc.id}`} className="mt-1 text-[11px] text-text-muted">
+                            Utilisée pour déterminer si un diagnostic est encore valide.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <p className="text-[11px] font-medium text-text-secondary">Rattachement</p>
+                        <label className="text-[11px] text-text-muted">
+                          Bien rattaché (identifiant)
+                          <Input type="text" name="bienId" required defaultValue={doc.bienId} className="mt-1" />
+                        </label>
+                        {compromisActuel && (
+                          <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
+                            <input
+                              type="checkbox"
+                              name="compromisId"
+                              value={compromisActuel.id}
+                              defaultChecked={doc.compromisId === compromisActuel.id}
+                            />
+                            Rattacher au compromis en cours
+                          </label>
+                        )}
+                        {acquereursActifs.length > 0 && (
+                          <label className="text-[11px] text-text-muted">
+                            Acquéreur rattaché
+                            <Select name="acquereurId" defaultValue={doc.acquereurId ?? ""} className="mt-1">
+                              <option value="">Acquéreur — aucun</option>
+                              {acquereursActifs.map((a) => (
+                                <option key={a.id} value={a.id}>
+                                  {a.prenom} {a.nom}
                                 </option>
                               ))}
-                            </optgroup>
-                          ))}
-                        </select>
+                            </Select>
+                          </label>
+                        )}
+                        {prospectVendeurOrigine && (
+                          <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
+                            <input
+                              type="checkbox"
+                              name="prospectVendeurId"
+                              value={prospectVendeurOrigine.id}
+                              defaultChecked={doc.prospectVendeurId === prospectVendeurOrigine.id}
+                            />
+                            Rattacher au vendeur d&apos;origine ({prospectVendeurOrigine.nom})
+                          </label>
+                        )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="date"
-                          name="dateDocument"
-                          defaultValue={doc.dateDocument ?? ""}
-                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
+                      <label className="text-[11px] text-text-muted">
+                        Copropriété déclarée par le document (optionnel)
+                        <Input
+                          type="text"
+                          name="coproprieteDeclaree"
+                          defaultValue={doc.coproprieteDeclaree ?? ""}
+                          className="mt-1"
                         />
-                        <input
-                          type="date"
-                          name="dateFinValidite"
-                          defaultValue={doc.dateFinValidite ?? ""}
-                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
+                      </label>
+                      <label className="text-[11px] text-text-muted">
+                        Adresse déclarée par le document (optionnel)
+                        <Input
+                          type="text"
+                          name="adresseDeclaree"
+                          defaultValue={doc.adresseDeclaree ?? ""}
+                          className="mt-1"
                         />
-                      </div>
-                      {compromisActuel && (
-                        <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
-                          <input
-                            type="checkbox"
-                            name="compromisId"
-                            value={compromisActuel.id}
-                            defaultChecked={doc.compromisId === compromisActuel.id}
-                          />
-                          Rattacher au compromis en cours
-                        </label>
-                      )}
-                      {acquereursActifs.length > 0 && (
-                        <select
-                          name="acquereurId"
-                          defaultValue={doc.acquereurId ?? ""}
-                          className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                        >
-                          <option value="">Acquéreur — aucun</option>
-                          {acquereursActifs.map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.prenom} {a.nom}
+                      </label>
+                      <label className="text-[11px] text-text-muted">
+                        Provenance (optionnel — agent, vendeur, notaire...)
+                        <Input type="text" name="provenance" defaultValue={doc.provenance ?? ""} className="mt-1" />
+                      </label>
+                      <label className="text-[11px] text-text-muted">
+                        État de vérification
+                        <Select name="etatVerification" defaultValue={doc.etatVerification} className="mt-1">
+                          {ETATS_VERIFICATION_DOCUMENT.map((etat) => (
+                            <option key={etat} value={etat}>
+                              {LABEL_ETAT_VERIFICATION_DOCUMENT[etat]}
                             </option>
                           ))}
-                        </select>
-                      )}
-                      {prospectVendeurOrigine && (
-                        <label className="inline-flex items-center gap-2 text-[13px] text-text-primary">
-                          <input
-                            type="checkbox"
-                            name="prospectVendeurId"
-                            value={prospectVendeurOrigine.id}
-                            defaultChecked={doc.prospectVendeurId === prospectVendeurOrigine.id}
-                          />
-                          Rattacher au vendeur d&apos;origine ({prospectVendeurOrigine.nom})
-                        </label>
-                      )}
-                      <input
-                        type="text"
-                        name="coproprieteDeclaree"
-                        defaultValue={doc.coproprieteDeclaree ?? ""}
-                        placeholder="Copropriété déclarée par le document"
-                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                      />
-                      <input
-                        type="text"
-                        name="adresseDeclaree"
-                        defaultValue={doc.adresseDeclaree ?? ""}
-                        placeholder="Adresse déclarée par le document"
-                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                      />
-                      <input
-                        type="text"
-                        name="typeDocumentDetail"
-                        defaultValue={doc.typeDocumentDetail ?? ""}
-                        placeholder="Précision si type « Autre » (optionnel)"
-                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                      />
-                      <input
-                        type="text"
-                        name="provenance"
-                        defaultValue={doc.provenance ?? ""}
-                        placeholder="Provenance (optionnel — agent, vendeur, notaire...)"
-                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                      />
-                      <select
-                        name="etatVerification"
-                        defaultValue={doc.etatVerification}
-                        className="w-full border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
-                      >
-                        {ETATS_VERIFICATION_DOCUMENT.map((etat) => (
-                          <option key={etat} value={etat}>
-                            {LABEL_ETAT_VERIFICATION_DOCUMENT[etat]}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="submit"
-                        className="self-start text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
-                      >
+                        </Select>
+                      </label>
+                      <Button type="submit" variant="primary" size="sm" className="self-start">
                         Enregistrer la correction
-                      </button>
+                      </Button>
                     </form>
                   </details>
-                </div>
+                </Card>
               ))}
             </div>
           )}
