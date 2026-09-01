@@ -44,6 +44,7 @@ import {
   type Remuneration,
 } from "@/types/remuneration";
 import { LABEL_ETAT_CONTROLE_EXIGENCE, type ChecklistDossier } from "@/lib/documents/checklistDossier";
+import { dateFinValiditeTheoriqueDpe } from "@/lib/documents/validiteDpe";
 import type { CodeRegleAutomatisation } from "@/types/automatisation";
 import { rendezVousDuJour } from "@/data/agenda";
 import { terminerTacheAction } from "@/actions/terminerTache";
@@ -128,6 +129,33 @@ type Tab = OngletBien;
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
+
+// VALIDITÉ-01 — suggestion de « Fin de validité » pour un DPE, appliquée au formulaire qui vient
+// d'être modifié (jamais aux autres documents de la liste, chacun ayant son propre <form>). Trois
+// garde-fous, parce que la mention « Valable jusqu'au » du DPE officiel fait foi sur tout calcul :
+// la valeur n'est posée que si le champ est vide ou porte encore une suggestion précédente, le
+// champ reste librement modifiable, et rien n'est validé ni recalculé côté serveur.
+function suggererFinValiditeDpe(formulaire: HTMLFormElement | null): void {
+  if (!formulaire) return;
+  const type = formulaire.elements.namedItem("typeDocument");
+  const dateDocument = formulaire.elements.namedItem("dateDocument");
+  const finValidite = formulaire.elements.namedItem("dateFinValidite");
+  if (!(type instanceof HTMLSelectElement)) return;
+  if (!(dateDocument instanceof HTMLInputElement) || !(finValidite instanceof HTMLInputElement)) return;
+
+  const estDpe = type.value === "dpe";
+  const aide = formulaire.querySelector<HTMLElement>("[data-aide-dpe]");
+  if (aide) aide.hidden = !estDpe;
+  if (!estDpe) return;
+
+  const suggestion = dateFinValiditeTheoriqueDpe(dateDocument.value);
+  if (!suggestion) return;
+  if (finValidite.value !== "" && finValidite.value !== finValidite.dataset.suggestionDpe) return;
+  finValidite.value = suggestion;
+  finValidite.dataset.suggestionDpe = suggestion;
+}
+
+const AIDE_DPE = "Un DPE récent est généralement valable 10 ans. Vérifiez la date « Valable jusqu'au » indiquée sur le diagnostic.";
 
 export default function BienTabs({
   bien,
@@ -557,7 +585,11 @@ export default function BienTabs({
                     </option>
                   ))}
                 </Select>
-                <Select name="typeDocument" defaultValue="">
+                <Select
+                  name="typeDocument"
+                  defaultValue=""
+                  onChange={(e) => suggererFinValiditeDpe(e.currentTarget.form)}
+                >
                   <option value="">Type — non classé</option>
                   {FAMILLES_DOCUMENT.map((famille) => (
                     <optgroup key={famille} label={LABEL_FAMILLE_DOCUMENT[famille]}>
@@ -578,12 +610,22 @@ export default function BienTabs({
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-[11px] text-text-muted">
                   Date du document
-                  <Input type="date" name="dateDocument" className="mt-1" />
+                  <Input
+                    type="date"
+                    name="dateDocument"
+                    className="mt-1"
+                    onChange={(e) => suggererFinValiditeDpe(e.currentTarget.form)}
+                  />
                 </label>
-                <label className="text-[11px] text-text-muted">
-                  Fin de validité (diagnostics)
-                  <Input type="date" name="dateFinValidite" className="mt-1" />
-                </label>
+                <div>
+                  <label className="text-[11px] text-text-muted">
+                    Fin de validité (diagnostics)
+                    <Input type="date" name="dateFinValidite" className="mt-1" />
+                  </label>
+                  <p data-aide-dpe="" hidden className="mt-1 text-[11px] text-text-muted">
+                    {AIDE_DPE}
+                  </p>
+                </div>
               </div>
               {(compromisActuel || acquereursActifs.length > 0 || prospectVendeurOrigine) && (
                 <div className="flex flex-col gap-1.5 pt-1">
@@ -695,7 +737,12 @@ export default function BienTabs({
                         </label>
                         <label className="text-[11px] text-text-muted">
                           Type
-                          <Select name="typeDocument" defaultValue={doc.typeDocument ?? ""} className="mt-1">
+                          <Select
+                            name="typeDocument"
+                            defaultValue={doc.typeDocument ?? ""}
+                            className="mt-1"
+                            onChange={(e) => suggererFinValiditeDpe(e.currentTarget.form)}
+                          >
                             <option value="">Type — non classé</option>
                             {FAMILLES_DOCUMENT.map((famille) => (
                               <optgroup key={famille} label={LABEL_FAMILLE_DOCUMENT[famille]}>
@@ -726,6 +773,7 @@ export default function BienTabs({
                             name="dateDocument"
                             defaultValue={doc.dateDocument ?? ""}
                             className="mt-1"
+                            onChange={(e) => suggererFinValiditeDpe(e.currentTarget.form)}
                           />
                         </label>
                         <div>
@@ -741,6 +789,13 @@ export default function BienTabs({
                           </label>
                           <p id={`aide-fin-validite-${doc.id}`} className="mt-1 text-[11px] text-text-muted">
                             Utilisée pour déterminer si un diagnostic est encore valide.
+                          </p>
+                          <p
+                            data-aide-dpe=""
+                            hidden={doc.typeDocument !== "dpe"}
+                            className="mt-1 text-[11px] text-text-muted"
+                          >
+                            {AIDE_DPE}
                           </p>
                         </div>
                       </div>

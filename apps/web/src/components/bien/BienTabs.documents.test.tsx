@@ -149,6 +149,34 @@ describe("BienTabs — formulaire de correction documentaire", () => {
     expect(mandat).not.toContain('value="2026-08-31"');
   });
 
+  // VALIDITÉ-01 — la suggestion de date DPE est un préremplissage, jamais une contrainte : le champ
+  // « Fin de validité » ne devient ni readonly ni disabled, et l'aide DPE n'apparaît que pour un DPE.
+  it("laisse « Fin de validité » librement modifiable, jamais verrouillée par la suggestion", () => {
+    const formulaire = formulaireCorrection(
+      rendreDocuments([documentTest({ dateDocument: "2026-09-01", dateFinValidite: "2036-08-31" })]),
+      "DPE Olivier Reynal"
+    );
+    const champ = /<input[^>]*name="dateFinValidite"[^>]*>/.exec(formulaire)?.[0] ?? "";
+
+    expect(champ).toContain('value="2036-08-31"');
+    expect(champ).not.toContain("readonly");
+    expect(champ).not.toContain("disabled");
+  });
+
+  it("affiche l'aide DPE sur un DPE, et la garde masquée pour un autre type de document", () => {
+    const html = rendreDocuments([
+      documentTest({ id: "doc-dpe", nom: "DPE Olivier Reynal", typeDocument: "dpe" }),
+      documentTest({ id: "doc-amiante", nom: "Diagnostic amiante", typeDocument: "amiante" }),
+    ]);
+
+    const dpe = formulaireCorrection(html, "DPE Olivier Reynal");
+    const amiante = formulaireCorrection(html, "Diagnostic amiante");
+
+    expect(/<p data-aide-dpe=""(?! hidden)/.test(dpe)).toBe(true);
+    expect(dpe).toContain("généralement valable 10 ans");
+    expect(/<p data-aide-dpe="" hidden/.test(amiante)).toBe(true);
+  });
+
   it("sépare visuellement chaque document dans sa propre carte, jamais un seul long formulaire", () => {
     const html = rendreDocuments([
       documentTest({ id: "doc-dpe", nom: "DPE Olivier Reynal" }),
