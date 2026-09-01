@@ -109,6 +109,33 @@ describe("calculerChecklistDossier", () => {
     expect(resultat.exigences.find((e) => e.code === "diagnostic_dpe")?.etat).toBe("perime");
   });
 
+  // VALIDITÉ-01 — « valable jusqu'au » est une borne calendaire INCLUSIVE. Ces trois cas sont
+  // évalués au même instant (MAINTENANT, injecté) : seul le jour civil de dateFinValidite change,
+  // jamais l'heure ni le fuseau de la machine qui exécute les tests.
+  it("dateFinValidite = la veille -> perime", () => {
+    const bien = creerBien();
+    const doc = creerDocument({ typeDocument: "dpe", dateFinValidite: "2026-08-31", etatVerification: "confirme" });
+    const resultat = calculerChecklistDossier({ bien }, [doc], new Date("2026-09-01T10:00:00+02:00"));
+    expect(resultat.exigences.find((e) => e.code === "diagnostic_dpe")?.etat).toBe("perime");
+  });
+
+  it("dateFinValidite = aujourd'hui -> encore valide toute la journée, jamais perime", () => {
+    const bien = creerBien();
+    const doc = creerDocument({ typeDocument: "dpe", dateFinValidite: "2026-09-01", etatVerification: "confirme" });
+
+    for (const instant of ["2026-09-01T00:05:00+02:00", "2026-09-01T10:00:00+02:00", "2026-09-01T23:55:00+02:00"]) {
+      const resultat = calculerChecklistDossier({ bien }, [doc], new Date(instant));
+      expect(resultat.exigences.find((e) => e.code === "diagnostic_dpe")?.etat).toBe("present");
+    }
+  });
+
+  it("dateFinValidite = demain -> present", () => {
+    const bien = creerBien();
+    const doc = creerDocument({ typeDocument: "dpe", dateFinValidite: "2026-09-02", etatVerification: "confirme" });
+    const resultat = calculerChecklistDossier({ bien }, [doc], new Date("2026-09-01T10:00:00+02:00"));
+    expect(resultat.exigences.find((e) => e.code === "diagnostic_dpe")?.etat).toBe("present");
+  });
+
   it("diagnostic avec dateFinValidite future -> present", () => {
     const bien = creerBien();
     const doc = creerDocument({ typeDocument: "dpe", dateFinValidite: "2027-01-01", etatVerification: "confirme" });

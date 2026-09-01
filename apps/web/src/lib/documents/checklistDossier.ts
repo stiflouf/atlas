@@ -2,6 +2,7 @@ import type { Bien } from "@/types/bien";
 import type { Compromis } from "@/types/compromis";
 import type { DocumentBien, FamilleDocument, TypeDocument } from "@/types/documentBien";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
+import { formatDateISO } from "@/lib/temps";
 
 // Contexte minimal du dossier (ADR-029) : dérivé des entités déjà réelles, jamais une nouvelle
 // entité "dossier de vente" — voir l'audit ADR-029, point 3. compromisActuel = le compromis
@@ -204,7 +205,12 @@ function calculerEtatExigence(regle: ReglExigence, doc: DocumentBien, maintenant
   if (doc.etatVerification === "rejete") return "incoherent";
   if (regle.suiviValidite) {
     if (!doc.dateFinValidite) return "a_verifier";
-    if (new Date(doc.dateFinValidite) < maintenant) return "perime";
+    // Borne calendaire INCLUSIVE : « valable jusqu'au 01/09/2026 » couvre toute la journée du
+    // 01/09/2026. Comparer `new Date("2026-09-01")` (minuit UTC) à l'instant courant déclarait le
+    // document périmé dès la première heure de son dernier jour de validité, et le verdict
+    // dépendait du fuseau de la machine. Deux jours civils Europe/Paris sont comparés à la place,
+    // au format YYYY-MM-DD dont l'ordre lexicographique est l'ordre chronologique.
+    if (doc.dateFinValidite < formatDateISO(maintenant)) return "perime";
   }
   if (doc.etatVerification === "a_verifier") return "a_verifier";
   return "present";
