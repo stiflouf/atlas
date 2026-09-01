@@ -16,13 +16,17 @@ Le logo s'affiche **uniquement** depuis l'asset maître approuvé.
 
 La symbolique n'a pas à être explicitée dans l'interface ni dans la communication commerciale.
 
-### ⛔ Blocage actuel — l'asset maître n'est pas dans le projet
+### État actuel — référence raster en production, master vectoriel toujours manquant
 
-Le seul fichier disponible est une vignette de **174 × 153 px** avec l'habillage de la planche de sélection incrusté dans l'image : le titre « 5. FLAMME DISCRÈTE », le badge « FORT », le cadre, et la légende « Énergie, passion, engagement. Une lumière intérieure durable. »
+Le produit affiche depuis le 1er septembre 2026 une **référence raster** du logo validé :
+`apps/web/public/brand/domiora-mark-flamme-discrete.png` (PNG 1024 × 1024, symbole seul, sans titre
+ni badge ni cadre, fond navy intégré à l'image — pas de couche alpha). Elle est issue de la vignette
+finale validée et affichée telle quelle par `BrandMark`, sans retrace, sans recadrage et sans
+recoloration.
 
-Elle ne peut pas servir d'asset de production : trop basse définition, chrome incrusté, pas de fond transparent utilisable, valeurs dorées non fiables. **Aucun affichage du logo ne doit être produit tant qu'un fichier source propre n'est pas fourni.**
-
-Attendu : le vectoriel d'origine, ou à défaut un PNG haute définition (≥ 1024 px de côté), symbole seul, fond transparent, sans texte ni cadre.
+**Ce n'est pas le master.** Le vectoriel d'origine reste à fournir : lui seul permettra un rendu net
+à toute échelle, un fond réellement transparent, et la détermination des ors officiels. Aucune
+valeur dorée ne doit être extraite du PNG.
 
 ---
 
@@ -114,9 +118,11 @@ Le produit charge Fraunces alors que la fondation verrouille Cormorant Garamond.
 
 `#02152B` est désormais le bleu nuit canonique DOMIORA. Les anciens navy proches doivent être migrés progressivement lorsqu'ils portent le même rôle de marque.
 
-### 8.3 — La sidebar en production n'affiche pas le logo maître
+### 8.3 — La sidebar affiche désormais le logo validé (référence raster)
 
-`BrandMark` n'est pas le logo validé. Son remplacement est bloqué tant que l'asset maître propre n'est pas disponible.
+Résolu le 1er septembre 2026 : le monogramme géométrique temporaire a été retiré de `BrandMark`, qui
+affiche la référence raster ci-dessus. Le remplacement par le vectoriel, quand il sera fourni, ne
+touchera que ce composant.
 
 ### 8.4 — Les planches d'exploration logo sont périmées
 
@@ -142,7 +148,7 @@ Le Design System V1 est documenté dans `brand/DESIGN-SYSTEM-V1.md`.
 
 Deux dépendances particulières subsistent :
 
-- **asset logo maître** ;
+- **master vectoriel du logo** (une référence raster tient lieu d'affichage en attendant) ;
 - par conséquent, **tokens or officiels**.
 
 Elles ne bloquent pas l'industrialisation du reste du Design System.

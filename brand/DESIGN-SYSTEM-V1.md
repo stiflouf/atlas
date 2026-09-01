@@ -358,12 +358,13 @@ Valeurs corrigées :
 
 ## 13. Logo
 
-Le logo maître reste bloqué tant que l'asset source propre n'est pas disponible.
+Le produit affiche une **référence raster** du logo validé
+(`apps/web/public/brand/domiora-mark-flamme-discrete.png`), telle quelle : aucun retrace, aucun
+recadrage, aucune recoloration. Le master vectoriel reste à fournir.
 
-Placeholder documentaire autorisé :
-`LOGO MAÎTRE — ASSET EN ATTENTE`
-
-Aucun substitut visuel ne doit être dessiné.
+Aucun substitut visuel ne doit être dessiné, et les tokens or restent en attente : leurs valeurs
+viendront du vectoriel, jamais d'un échantillonnage de ce PNG (voir § 2.7,
+`PENDING_MASTER_LOGO_ASSET`, inchangé).
 
 ---
 

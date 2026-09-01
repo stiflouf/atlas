@@ -1,10 +1,17 @@
+import Image from "next/image";
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/branding";
 
-// Monogramme temporaire, volontairement sobre et remplaçable — le logo final n'est pas figé
-// (nom "Domiora" encore en sécurisation juridique). Isolé ici : un futur remplacement (SVG,
-// nouveau nom) ne touche que ce fichier, jamais Sidebar/BottomNav/connexion. Motif géométrique
-// abstrait (3 formes architecturales simples) plutôt qu'une lettre gravée — un renommage futur
-// reste un changement local, aucune identité littérale à défaire.
+// Logo maître « 5. FLAMME DISCRÈTE » (brand/FONDATIONS.md § 1) — affiché depuis l'asset approuvé,
+// jamais reconstruit : aucun SVG retracé, aucune recoloration, aucun filtre, aucune opacité. Le
+// fichier porte son propre fond navy (PNG sans couche alpha) et le D vient bord à bord ; il occupe
+// donc tout le carré, le `bg-navy` du conteneur ne servant que de fond de sécurité.
+//
+// RÉFÉRENCE RASTER, PAS LE MASTER : ce PNG 1024×1024 est issu de la vignette finale validée. Le
+// vectoriel d'origine reste manquant, les tokens or restent donc en attente (PENDING_MASTER_LOGO_
+// ASSET, brand/DESIGN-SYSTEM-V1.md § 13) — aucune valeur dorée ne doit être extraite de ce fichier.
+//
+// Isolé ici : un futur remplacement par le vectoriel ne touche que ce composant, jamais
+// Sidebar/BottomNav/connexion.
 type Props = { taille?: "sm" | "md" | "lg"; surNavy?: boolean; avecBaseline?: boolean; className?: string };
 
 const TAILLE_MONOGRAMME: Record<NonNullable<Props["taille"]>, string> = {
@@ -25,14 +32,18 @@ export default function BrandMark({ taille = "md", surNavy = false, avecBaseline
   return (
     <div className={`flex items-center gap-2.5 ${className}`}>
       <span
-        className={`inline-flex items-center justify-center shrink-0 rounded-md bg-navy ${tailleMonogramme}`}
+        className={`relative inline-flex shrink-0 overflow-hidden rounded-md bg-navy ${tailleMonogramme}`}
       >
-        <svg viewBox="0 0 24 24" className="w-[62%] h-[62%]" aria-hidden="true">
-          <polygon points="4,20 12,4 20,20" fill="none" stroke="#c59a5b" strokeWidth="2" strokeLinejoin="round" />
-          <line x1="8" y1="20" x2="8" y2="13" stroke="#c59a5b" strokeWidth="1.6" />
-          <line x1="12" y1="20" x2="12" y2="10" stroke="#c59a5b" strokeWidth="1.6" />
-          <line x1="16" y1="20" x2="16" y2="13" stroke="#c59a5b" strokeWidth="1.6" />
-        </svg>
+        {/* object-contain : l'asset est carré comme son conteneur, le ratio est donc conservé à
+            l'identique — jamais de recadrage ni d'étirement. alt vide : le mot-symbole DOMIORA
+            juste à côté porte déjà le nom, l'annoncer deux fois n'apporterait rien. */}
+        <Image
+          src="/brand/domiora-mark-flamme-discrete.png"
+          alt=""
+          fill
+          sizes="40px"
+          className="object-contain"
+        />
       </span>
       <span className="flex flex-col min-w-0">
         <span
