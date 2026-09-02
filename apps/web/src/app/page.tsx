@@ -2,6 +2,7 @@ import { CalendarCheck, Building2, ListChecks, AlertCircle } from "lucide-react"
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
+import OpportuniteCard from "@/components/aujourd-hui/OpportuniteCard";
 import ConnexionsGoogle from "@/components/aujourd-hui/ConnexionsGoogle";
 import AlerteCard from "@/components/alertes/AlerteCard";
 import SectionTitle from "@/components/ui/SectionTitle";
@@ -24,6 +25,8 @@ import { chargerCapacitesGoogle } from "@/lib/google/capacites";
 import { construireContexte } from "@/lib/matching";
 import { resoudreContextesPersistes } from "@/lib/contexteRepository";
 import { chargerContexteAlertes } from "@/lib/alertes/contexte";
+import { chargerContexteOpportunites } from "@/lib/opportunites/contexte";
+import { detecterOpportunites } from "@/lib/opportunites/moteur";
 import { produireAlertes } from "@/lib/alertes/moteur";
 
 // Alertes affichées directement — au-delà, "Afficher les autres" les développe localement (ADR-026,
@@ -118,6 +121,15 @@ export default async function AujourdHui() {
     liste.push(tache);
     tachesParBien.set(tache.bienId, liste);
   }
+
+  // VALUE-01 — opportunités commerciales dérivées à la lecture (jamais persistées), à partir des
+  // collections déjà chargées ci-dessus plus prospects/visites/comptes rendus/compatibilités. La
+  // déduplication contre `tachesActives` vit dans le moteur : une action déjà portée par une tâche
+  // ouverte n'est jamais montrée deux fois.
+  const opportunites = detecterOpportunites(
+    await chargerContexteOpportunites({ biens, acquereurs: clients, tachesActives }),
+    maintenant
+  );
 
   const dossiersAttention: { bien: Bien; tache: Tache }[] = [];
   for (const [bienId, tachesDuBien] of tachesParBien) {
@@ -240,6 +252,22 @@ export default async function AujourdHui() {
               <div className="flex flex-col gap-2">
                 {dossiersAttention.map(({ bien, tache }) => (
                   <DossierActionCard key={bien.id} bien={bien} raison={raisonTache(tache)} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Opportunités (VALUE-01) — colonne principale, sous les dossiers déjà pris en charge
+              par une tâche : ce sont les situations que rien ne couvre encore. Wording sobre, aucun
+              score, aucune mention d'IA (il n'y en a pas). */}
+          {opportunites.length > 0 && (
+            <section>
+              <SectionTitle>
+                {opportunites.length} opportunité{opportunites.length > 1 ? "s" : ""}
+              </SectionTitle>
+              <div className="flex flex-col gap-2">
+                {opportunites.map((opportunite) => (
+                  <OpportuniteCard key={opportunite.id} opportunite={opportunite} />
                 ))}
               </div>
             </section>

@@ -21,6 +21,21 @@ function ligneVersCompteRendu(ligne: LigneCompteRendu): CompteRenduVisite {
   };
 }
 
+// Lecture globale (VALUE-01), même rationale que listerVisites() : le moteur d'opportunités croise
+// visites et comptes rendus sur tout le portefeuille en une seule passe.
+export async function listerComptesRendus(): Promise<CompteRenduVisite[]> {
+  try {
+    const lignes = await getDb()
+      .select()
+      .from(comptesRendusVisiteTable)
+      .orderBy(desc(comptesRendusVisiteTable.dateVisite));
+    return lignes.map(ligneVersCompteRendu);
+  } catch (erreur) {
+    console.error("[comptes-rendus-visite] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
 // Pas de repli mock : un compte rendu n'existe que pour un bien réel (FK uuid), il n'y a pas de
 // dataset de démonstration équivalent à fabriquer. Un id non-UUID (bien mocké) ne peut
 // correspondre à aucune ligne réelle : liste vide plutôt qu'une erreur de cast Postgres.

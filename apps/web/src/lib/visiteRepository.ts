@@ -39,6 +39,19 @@ export async function listerVisitesPourBien(bienId: string): Promise<Visite[]> {
   return lignes.map(ligneVersVisite);
 }
 
+// Lecture globale (VALUE-01) — le moteur d'opportunités raisonne sur l'ensemble du portefeuille,
+// pas bien par bien : une seule requête plutôt qu'une par bien. Aucune règle métier ici, aucun
+// filtre : c'est au moteur de décider ce qui mérite l'attention.
+export async function listerVisites(): Promise<Visite[]> {
+  try {
+    const lignes = await getDb().select().from(visitesTable);
+    return lignes.map(ligneVersVisite);
+  } catch (erreur) {
+    console.error("[visites] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
 // Symétrique de listerVisitesPourBien ci-dessus (Fiche Acquéreur Premium) — même lecture pure,
 // aucune nouvelle règle métier : l'entité Visite porte déjà acquereurId (ADR-040), il manquait
 // uniquement cette requête.
