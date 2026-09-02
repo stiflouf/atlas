@@ -2,6 +2,7 @@ import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import type { ActionMemoire, EvenementMemoire, MemoireRelationnelleAcquereur } from "@/lib/relations/memoireAcquereur";
+import type { RepriseContactAcquereur } from "@/lib/communications/repriseContactAcquereur";
 
 // VALUE-03 — « Mémoire de la relation ». Rend visible un read model entièrement dérivé
 // (memoireAcquereur.ts) : aucune décision n'est prise ici, aucune donnée n'est reformulée.
@@ -36,7 +37,10 @@ function Ligne({ evenement }: { evenement: EvenementMemoire }) {
   );
 }
 
-function ActionLigne({ action }: { action: ActionMemoire }) {
+// VALUE-04 — quand la reprise de contact passe par une tâche déjà ouverte, elle s'attache à la
+// ligne de cette tâche plutôt que d'ouvrir une seconde ligne : une seule représentation de la même
+// action, jamais « la tâche » puis « préparer le message pour la tâche ».
+function ActionLigne({ action, reprise }: { action: ActionMemoire; reprise?: RepriseContactAcquereur }) {
   const contenu = (
     <>
       <p className="text-[13.5px] text-text-1 leading-snug">{action.titre}</p>
@@ -53,12 +57,41 @@ function ActionLigne({ action }: { action: ActionMemoire }) {
       ) : (
         contenu
       )}
+      {reprise && (
+        <Link
+          href={reprise.href}
+          className="inline-block text-[12.5px] font-medium text-accent hover:text-accent-hover transition-colors mt-1"
+        >
+          {reprise.libelle} →
+        </Link>
+      )}
     </li>
   );
 }
 
-export default function AcquereurMemoireRelation({ memoire }: { memoire: MemoireRelationnelleAcquereur }) {
+// Reprise de contact sans tâche : sa propre ligne, précédée de « pourquoi maintenant ? ». La raison
+// vient des moteurs existants (VALUE-01, faits structurés de visite) — jamais recalculée pour cet
+// affichage, jamais une urgence inventée.
+function RepriseLigne({ reprise }: { reprise: RepriseContactAcquereur }) {
+  return (
+    <li>
+      <Link href={reprise.href} className="block hover:text-accent transition-colors">
+        <p className="text-[13.5px] text-text-1 leading-snug">{reprise.libelle}</p>
+        <p className="text-[12.5px] text-text-3 mt-0.5 leading-snug">{reprise.raison}</p>
+      </Link>
+    </li>
+  );
+}
+
+export default function AcquereurMemoireRelation({
+  memoire,
+  reprise,
+}: {
+  memoire: MemoireRelationnelleAcquereur;
+  reprise?: RepriseContactAcquereur;
+}) {
   const { etatActuel, faitsARetenir, historique, actions } = memoire;
+  const repriseAutonome = reprise && !reprise.tacheId ? reprise : undefined;
 
   return (
     <section>
@@ -105,12 +138,17 @@ export default function AcquereurMemoireRelation({ memoire }: { memoire: Memoire
 
         <div className="border-t border-border pt-3.5">
           <p className="text-[11px] font-medium text-text-2 mb-1.5">À faire maintenant</p>
-          {actions.length === 0 ? (
+          {actions.length === 0 && !repriseAutonome ? (
             <p className="text-[13px] text-text-3">Aucune action en attente sur cette relation.</p>
           ) : (
             <ul className="flex flex-col gap-2.5">
+              {repriseAutonome && <RepriseLigne reprise={repriseAutonome} />}
               {actions.map((action) => (
-                <ActionLigne key={action.cle} action={action} />
+                <ActionLigne
+                  key={action.cle}
+                  action={action}
+                  reprise={reprise?.tacheId && action.cle === `tache:${reprise.tacheId}` ? reprise : undefined}
+                />
               ))}
             </ul>
           )}

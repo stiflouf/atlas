@@ -80,11 +80,22 @@ const PARAGRAPHES_PAR_INTENTION: Record<IntentionCommunication, ConstructeurPara
     ];
   },
 
+  // VALUE-04 — `criteresCompatibles` ajoute UNE phrase, uniquement quand un rapprochement jugé
+  // `compatible` par le moteur canonique (ADR-034) est présenté. Formulation volontairement sobre :
+  // « correspond à » et jamais « est parfait pour vous », aucune probabilité, aucune urgence. Le
+  // fait absent (toute autre communication acquéreur : tâche générique, suivi d'offre) laisse
+  // l'intention strictement identique à ce qu'elle était avant ce lot.
   suivi_acquereur: (f, ton) => {
     const lieu = f.bienAdresse ? ` pour le bien situé ${f.bienAdresse}` : "";
-    if (ton === "court") return [`Je reviens vers vous concernant votre projet d'acquisition${lieu}.`];
+    const correspondance = f.criteresCompatibles?.length
+      ? `Ce bien correspond à ${f.criteresCompatibles.join(", ")}.`
+      : undefined;
+    if (ton === "court") {
+      return [`Je reviens vers vous concernant votre projet d'acquisition${lieu}.`, correspondance];
+    }
     return [
       `Je me permets de revenir vers vous concernant votre projet d'acquisition${lieu}.`,
+      correspondance,
       "Souhaitez-vous que nous échangions sur la suite à donner ?",
     ];
   },

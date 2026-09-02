@@ -77,6 +77,12 @@ export type FaitsCommunication = {
   // structuré (prospectsVendeurs.mandatProposeLe/mandatSigneLe), jamais déduit d'un texte libre :
   // c'est lui qui autorise une formulation client mentionnant la proposition de mandat.
   mandatPropose?: boolean;
+  // VALUE-04 — formulations CLIENT des critères que le moteur canonique (ADR-034) a réellement
+  // jugés `compatible` sur un rapprochement précis, déjà limitées à deux ou trois par la projection
+  // communicationnelle (repriseContactAcquereur.ts). Jamais un score, jamais un pourcentage, jamais
+  // une valeur chiffrée du dossier, jamais l'explication interne d'un critère. Absent pour toute
+  // communication qui ne présente pas un bien : les intentions existantes restent inchangées.
+  criteresCompatibles?: string[];
   // Note de suivi écrite par le conseiller sur la tâche d'origine. USAGE INTERNE STRICT : jamais
   // injectée dans un corps d'email (EMAIL-DEMO-02). Une note de CRM est écrite POUR le conseiller
   // (« sans réponse depuis », « vendeur difficile », « doute sur financement ») ; la recopier dans

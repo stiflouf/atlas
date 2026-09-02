@@ -31,6 +31,7 @@ import {
   construireMemoireRelationnelleAcquereur,
   selectionnerTachesLieesAcquereur,
 } from "@/lib/relations/memoireAcquereur";
+import { construireRepriseContactAcquereur } from "@/lib/communications/repriseContactAcquereur";
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
@@ -112,6 +113,28 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
     })
   );
 
+  // VALUE-04 — projection communicationnelle : au plus une reprise de contact, dérivée de
+  // situations déjà décidées ailleurs (VALUE-01 pour un bien à présenter, faits structurés de
+  // visite pour un suivi post-visite, tâche ouverte pour un dossier engagé).
+  const tachesActivesLiees = tachesLiees.filter((t) => deriverStatutTache(t) === "a_faire");
+  const reprise = construireRepriseContactAcquereur({
+    acquereur: client,
+    visites,
+    comptesRendus: comptesRendusAcquereur,
+    offres,
+    compromis,
+    compatibilites,
+    opportunites,
+    tachesActives: tachesActivesLiees,
+    biens: biensActifs,
+  });
+
+  // Une opportunité absorbée par la reprise ne doit plus apparaître à part : une seule
+  // représentation de la même action (« Présenter ce bien » et non aussi « Proposer X à Y »).
+  const opportunitesRestantes = reprise?.opportuniteId
+    ? opportunites.filter((o) => o.id !== reprise.opportuniteId)
+    : opportunites;
+
   const memoire = construireMemoireRelationnelleAcquereur({
     acquereur: client,
     secteurs: secteursRecherche,
@@ -121,7 +144,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
     compromis,
     tachesLiees,
     envois,
-    opportunites,
+    opportunites: opportunitesRestantes,
     biensParId,
     aujourdHui: formatDateISO(new Date()),
   });
@@ -153,7 +176,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
         <div className="flex flex-col gap-6 min-w-0">
           {/* VALUE-03 — placée avant le matching : « où en est cette relation » se lit avant
               « quels biens lui correspondent ». Aucune section existante n'a été déplacée. */}
-          <AcquereurMemoireRelation memoire={memoire} />
+          <AcquereurMemoireRelation memoire={memoire} reprise={reprise} />
           <AcquereurBiensCompatibles compatibilites={compatibilites} biensActifs={biensActifs} />
           <AcquereurVisites visites={visites} biensParId={biensParId} />
         </div>

@@ -2,8 +2,18 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import BrouillonEmailFormulaire from "@/components/communications/BrouillonEmailFormulaire";
-import { getTacheById } from "@/lib/tacheRepository";
-import { getBienById } from "@/lib/bienRepository";
+import { getTacheById, listerTaches } from "@/lib/tacheRepository";
+import { getBienById, listerBiens } from "@/lib/bienRepository";
+import { getClientById } from "@/lib/clientRepository";
+import { listerVisitesPourAcquereur } from "@/lib/visiteRepository";
+import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
+import { listerOffresPourAcquereur } from "@/lib/offreRepository";
+import { listerCompromisPourAcquereur } from "@/lib/compromisRepository";
+import { evaluerCompatibiliteAcquereur } from "@/lib/compatibilite/orchestration";
+import { chargerContexteOpportunites } from "@/lib/opportunites/contexte";
+import { detecterOpportunites } from "@/lib/opportunites/moteur";
+import { construireRepriseContactAcquereur } from "@/lib/communications/repriseContactAcquereur";
+import { deriverStatutTache } from "@/types/tache";
 import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
@@ -19,11 +29,21 @@ import {
   determinerIntentionParDefaut,
   resoudreContexteCommunicationDepuisTache,
 } from "@/lib/communications/resoudreContexteCommunicationDepuisTache";
-import { resoudreDestinatairesDepuisDocument } from "@/lib/communications/destinataireCommunication";
+import {
+  resoudreDestinatairesDepuisDocument,
+  versCandidatAcquereur,
+} from "@/lib/communications/destinataireCommunication";
 import { chargerCapacitesGoogle } from "@/lib/google/capacites";
 
 type PageProps = {
-  searchParams: Promise<{ tacheId?: string; bienId?: string; exigenceCode?: string; notaire?: string; candidat?: string }>;
+  searchParams: Promise<{
+    tacheId?: string;
+    bienId?: string;
+    acquereurId?: string;
+    exigenceCode?: string;
+    notaire?: string;
+    candidat?: string;
+  }>;
 };
 
 type ResultatContexte = {
@@ -99,6 +119,60 @@ async function resoudreDepuisConstat(bienId: string, exigenceCode: string): Prom
   };
 }
 
+// VALUE-04 — entrée dédiée depuis une fiche acquéreur, sans tâche. Le paramètre d'URL n'est JAMAIS
+// une autorisation : la situation est entièrement rejouée côté serveur (visites, comptes rendus,
+// offres, compromis, compatibilités canoniques, opportunités VALUE-01) et la page n'existe que si
+// la projection communicationnelle produit réellement une reprise sans tâche. Un lien forgé à la
+// main ne peut donc pas produire un message présentant un bien comme compatible quand il ne l'est
+// pas, ni relancer un acquéreur qui a décliné.
+//
+// Aucune tâche n'est créée pour obtenir un tacheId : `envois_email.tache_id` est nullable et toute
+// la chaîne d'envoi (ADR-031-bis) l'accepte déjà absent — rien n'a été modifié côté Gmail.
+async function resoudreDepuisAcquereur(acquereurId: string): Promise<ResultatContexte | undefined> {
+  const acquereur = await getClientById(acquereurId);
+  if (!acquereur || acquereur.archiveLe) return undefined;
+
+  const [visites, tousComptesRendus, offres, compromis, compatibilites, biens] = await Promise.all([
+    listerVisitesPourAcquereur(acquereur.id),
+    listerComptesRendus(),
+    listerOffresPourAcquereur(acquereur.id),
+    listerCompromisPourAcquereur(acquereur.id),
+    evaluerCompatibiliteAcquereur(acquereur.id),
+    listerBiens(),
+  ]);
+  const tachesActives = (await listerTaches()).filter((t) => deriverStatutTache(t) === "a_faire");
+  const opportunites = detecterOpportunites(
+    await chargerContexteOpportunites({ biens, acquereurs: [acquereur], tachesActives })
+  );
+
+  const reprise = construireRepriseContactAcquereur({
+    acquereur,
+    visites,
+    comptesRendus: tousComptesRendus.filter((cr) => cr.acquereurId === acquereur.id),
+    offres,
+    compromis,
+    compatibilites,
+    opportunites,
+    tachesActives,
+    biens,
+  });
+
+  // Une reprise passant par une tâche s'ouvre par `?tacheId=` (chemin le plus fiable, ADR-031) —
+  // jamais par cette entrée, qui reconstruirait un contexte moins riche pour la même communication.
+  if (!reprise || reprise.tacheId || !reprise.intention || !reprise.faitsPartageables) return undefined;
+
+  return {
+    titre: `${acquereur.prenom} ${acquereur.nom}`,
+    determinerIntention: () => reprise.intention!,
+    candidats: [versCandidatAcquereur(acquereur)],
+    // Seuls les faits de la liste blanche entrent ici : le type FaitsPartageablesAcquereur interdit
+    // structurellement d'y glisser une note interne ou un montant.
+    faits: reprise.faitsPartageables,
+    retourHref: `/clients/${acquereur.id}`,
+    bienId: reprise.bienId,
+  };
+}
+
 async function resoudreDepuisNotaire(bienId: string): Promise<ResultatContexte | undefined> {
   const contexte = await chargerContexteDossier(bienId);
   if (!contexte) return undefined;
@@ -128,6 +202,8 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
     resultat = await resoudreDepuisConstat(params.bienId, params.exigenceCode);
   } else if (params.bienId && params.notaire === "1") {
     resultat = await resoudreDepuisNotaire(params.bienId);
+  } else if (params.acquereurId) {
+    resultat = await resoudreDepuisAcquereur(params.acquereurId);
   }
 
   if (!resultat) notFound();
