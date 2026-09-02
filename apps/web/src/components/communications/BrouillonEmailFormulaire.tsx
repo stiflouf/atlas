@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { useFormStatus } from "react-dom";
 import {
   LABEL_TON_MESSAGE,
   type FaitsCommunication,
@@ -10,6 +11,7 @@ import {
 import { genererBrouillonEmail } from "@/lib/communications/genererBrouillonEmail";
 import { construireLienMailto } from "@/lib/communications/mailto";
 import { envoyerEmailGmailAction, type ResultatActionEnvoiEmail } from "@/actions/envoyerEmailGmail";
+import { reformulerBrouillonAction, type ResultatActionReformulation } from "@/actions/reformulerBrouillon";
 import { terminerTacheAction } from "@/actions/terminerTache";
 
 const TONS: TonMessage[] = ["professionnel", "cordial", "court", "relance_douce"];
@@ -20,6 +22,21 @@ const TONS: TonMessage[] = ["professionnel", "cordial", "court", "relance_douce"
 const LONGUEUR_MAX_MAILTO = 1800;
 
 const ETAT_INITIAL_ENVOI: ResultatActionEnvoiEmail = { statut: "idle" };
+const ETAT_INITIAL_REFORMULATION: ResultatActionReformulation = { statut: "idle" };
+
+// Enfant du <form> : c'est la seule position où useFormStatus voit la soumission en cours.
+function BoutonReformuler() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="self-start text-[13px] font-medium text-text-2 border border-border-md hover:border-accent hover:text-accent transition-colors px-3.5 py-2 rounded-lg disabled:opacity-50"
+    >
+      {pending ? "Reformulation en cours…" : "Améliorer la formulation"}
+    </button>
+  );
+}
 
 type ProprietesEcranConfirmation = {
   destinataireEmail: string;
@@ -163,6 +180,8 @@ export default function BrouillonEmailFormulaire({
   destinataireCandidatId,
   tacheId,
   bienId,
+  redactionDisponible = false,
+  parametresEcran,
 }: {
   intention: IntentionCommunication;
   faits: FaitsCommunication;
@@ -172,12 +191,31 @@ export default function BrouillonEmailFormulaire({
   destinataireCandidatId?: string;
   tacheId?: string;
   bienId?: string;
+  // VALUE-05 — l'action n'est proposée que si un rédacteur est réellement configuré : jamais un
+  // bouton mort. Aucun secret ne traverse cette frontière, seulement ce booléen.
+  redactionDisponible?: boolean;
+  // Identifiants d'écran renvoyés tels quels à la Server Action, qui rejoue elle-même la
+  // résolution du contexte : aucun fait métier ne transite par le client.
+  parametresEcran?: Record<string, string | undefined>;
 }) {
   const brouillonInitial = genererBrouillonEmail(intention, faits, "professionnel", destinataireEmail);
   const [ton, setTon] = useState<TonMessage>("professionnel");
   const [objet, setObjet] = useState(brouillonInitial.objet);
   const [corps, setCorps] = useState(brouillonInitial.corps);
   const [copie, setCopie] = useState(false);
+  const [etatReformulation, declencherReformulation] = useActionState(
+    reformulerBrouillonAction,
+    ETAT_INITIAL_REFORMULATION
+  );
+
+  // Succès : les champs éditables reçoivent le nouveau texte. Échec : rien n'est touché, le
+  // brouillon courant reste exactement ce qu'il était (garde-fou de VALUE-05, point 13).
+  useEffect(() => {
+    if (etatReformulation.statut === "reformule") {
+      setObjet(etatReformulation.objet);
+      setCorps(etatReformulation.corps);
+    }
+  }, [etatReformulation]);
 
   // Écran de confirmation explicite (ADR-031-bis) : jamais d'envoi à la génération du brouillon,
   // au chargement de page ni à une navigation — uniquement sur ce geste dédié. `idempotencyKey`
@@ -253,6 +291,26 @@ export default function BrouillonEmailFormulaire({
               className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
             />
           </label>
+
+          {/* VALUE-05 — action SECONDAIRE, jamais déclenchée au chargement ni au changement de ton :
+              un clic du conseiller, un appel. Le texte reste éditable avant comme après. Aucune
+              mention d'IA, aucun effet visuel : DOMIORA reste un outil métier. */}
+          {redactionDisponible && (
+            <form action={declencherReformulation} className="flex flex-col gap-1.5">
+              <input type="hidden" name="ton" value={ton} />
+              <input type="hidden" name="objet" value={objet} />
+              <input type="hidden" name="corps" value={corps} />
+              {Object.entries(parametresEcran ?? {}).map(([nom, valeur]) =>
+                valeur ? <input key={nom} type="hidden" name={nom} value={valeur} /> : null
+              )}
+              <BoutonReformuler />
+              {etatReformulation.statut === "indisponible" && (
+                <p className="text-[12px] text-text-3">
+                  La reformulation n&#39;est pas disponible pour le moment. Votre brouillon est conservé.
+                </p>
+              )}
+            </form>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             {destinataireEmail && !mailtoTropLong && (
