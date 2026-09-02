@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { envoisEmail as envoisEmailTable } from "@/db/schema";
 import type { IntentionCommunication } from "@/lib/communications/contexteCommunication";
@@ -96,6 +96,25 @@ async function resoudreTentative(
     )
     .returning();
   return ligne ? ligneVersEnvoiEmail(ligne) : undefined;
+}
+
+// Lecture seule (VALUE-03) — seul chemin de rattachement d'un envoi à une personne : `envois_email`
+// ne porte que `bienId` et `tacheId`, jamais d'FK vers un acquéreur ou un prospect vendeur. Les
+// tâches passées ici sont donc l'unique preuve de rattachement ; un envoi sans tâche reste
+// invisible côté relation, plutôt que rapproché par le seul email du destinataire (deux personnes
+// peuvent partager une adresse, et une adresse peut changer de main).
+//
+// Aucun filtrage d'état ici : la distinction envoyé / échoué / incertain (ADR-031-bis) appartient
+// à `deriverEtatEnvoiEmail`, jamais à une clause SQL qui la dupliquerait.
+export async function listerEnvoisEmailPourTaches(tacheIds: string[]): Promise<EnvoiEmail[]> {
+  const ids = tacheIds.filter((id) => UUID_REGEX.test(id));
+  if (ids.length === 0) return [];
+  const lignes = await getDb()
+    .select()
+    .from(envoisEmailTable)
+    .where(inArray(envoisEmailTable.tacheId, ids))
+    .orderBy(desc(envoisEmailTable.demarreLe));
+  return lignes.map(ligneVersEnvoiEmail);
 }
 
 export async function marquerEnvoiReussi(id: string, gmailMessageId: string): Promise<EnvoiEmail | undefined> {

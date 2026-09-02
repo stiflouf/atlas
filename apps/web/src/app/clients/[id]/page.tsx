@@ -20,6 +20,17 @@ import { LABEL_STATUT_OFFRE } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS } from "@/types/compromis";
 import { evaluerCompatibiliteAcquereur } from "@/lib/compatibilite/orchestration";
 import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
+import AcquereurMemoireRelation from "@/components/client/AcquereurMemoireRelation";
+import { listerTaches } from "@/lib/tacheRepository";
+import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
+import { listerEnvoisEmailPourTaches } from "@/lib/envoiEmailRepository";
+import { chargerContexteOpportunites } from "@/lib/opportunites/contexte";
+import { detecterOpportunites } from "@/lib/opportunites/moteur";
+import { formatDateISO } from "@/lib/temps";
+import {
+  construireMemoireRelationnelleAcquereur,
+  selectionnerTachesLieesAcquereur,
+} from "@/lib/relations/memoireAcquereur";
 
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
@@ -34,9 +45,13 @@ type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ tach
 // Fiche Acquéreur Premium — "le brief d'achat" (design validé). Raconte un projet d'achat : qui
 // (AcquereurHero), où (secteurs), où en est le projet (stade, dans le hero), quels biens
 // correspondent et pourquoi (AcquereurBiensCompatibles, cœur de la page), le reste (brief, notes,
-// visites, tâches, offres/compromis) en contexte autour. Pas de bandeau "Prochaine étape" : aucune
-// action contextuelle unique n'est fiable ici sans construire un moteur de recommandation (hors
-// périmètre explicite de ce chantier) — un bandeau absent plutôt qu'une recommandation inventée.
+// visites, tâches, offres/compromis) en contexte autour.
+//
+// VALUE-03 ajoute "Mémoire de la relation" en tête du corps principal. La réserve initiale de ce
+// chantier ("aucune action contextuelle unique n'est fiable ici sans construire un moteur de
+// recommandation") est levée sans construire ce moteur : les actions affichées proviennent des
+// tâches réellement persistées et du moteur d'opportunités VALUE-01, jamais d'une recommandation
+// inventée pour cette page.
 export default async function FicheClient({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { tacheTerminee } = await searchParams;
@@ -73,6 +88,44 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   const compatibilites = await evaluerCompatibiliteAcquereur(client.id);
   const biensActifs = await listerBiens();
 
+  // VALUE-03 — chargement des faits de la mémoire relationnelle. Tout ce qui suit alimente une
+  // fonction PURE (memoireAcquereur.ts) : aucune requête n'y est faite, aucun read model n'est
+  // persisté.
+  const [toutesTaches, tousComptesRendus] = await Promise.all([listerTaches(), listerComptesRendus()]);
+  const comptesRendusAcquereur = tousComptesRendus.filter((cr) => cr.acquereurId === client.id);
+  // Tâches de la relation par FK réelle (l'acquéreur, mais aussi ses visites/offres/compromis) :
+  // c'est ce qui fait remonter une tâche portée par le compromis comme prochaine action de
+  // l'acquéreur. La section « Tâches » du rail, elle, reste strictement inchangée.
+  const tachesLiees = selectionnerTachesLieesAcquereur(toutesTaches, client.id, visites, offres, compromis);
+  // Unique rattachement fiable d'un envoi Gmail à une personne : envois_email.tacheId -> taches.
+  const envois = await listerEnvoisEmailPourTaches(tachesLiees.map((t) => t.id));
+
+  // Moteur VALUE-01 réutilisé tel quel — jamais une règle recopiée. Le contexte est restreint à
+  // cet acquéreur : les opportunités visant un prospect vendeur ou un bien ne concernent pas cette
+  // fiche et sont écartées ensuite. La déduplication contre les tâches actives reste faite par le
+  // moteur, avec l'intégralité des tâches actives du produit.
+  const opportunites = detecterOpportunites(
+    await chargerContexteOpportunites({
+      biens: biensActifs,
+      acquereurs: [client],
+      tachesActives: toutesTaches.filter((t) => deriverStatutTache(t) === "a_faire"),
+    })
+  );
+
+  const memoire = construireMemoireRelationnelleAcquereur({
+    acquereur: client,
+    secteurs: secteursRecherche,
+    visites,
+    comptesRendus: comptesRendusAcquereur,
+    offres,
+    compromis,
+    tachesLiees,
+    envois,
+    opportunites,
+    biensParId,
+    aujourdHui: formatDateISO(new Date()),
+  });
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
       <Link
@@ -98,6 +151,9 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
         {/* Corps principal — le matching Bien × Acquéreur est le cœur de la page (design validé). */}
         <div className="flex flex-col gap-6 min-w-0">
+          {/* VALUE-03 — placée avant le matching : « où en est cette relation » se lit avant
+              « quels biens lui correspondent ». Aucune section existante n'a été déplacée. */}
+          <AcquereurMemoireRelation memoire={memoire} />
           <AcquereurBiensCompatibles compatibilites={compatibilites} biensActifs={biensActifs} />
           <AcquereurVisites visites={visites} biensParId={biensParId} />
         </div>
