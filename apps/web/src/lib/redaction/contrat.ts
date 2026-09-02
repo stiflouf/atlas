@@ -36,6 +36,15 @@ export function projeterFaitsAutorises(faits: FaitsCommunication): FaitsAutorise
 export type ContexteRedactionAugmentee = {
   // Identifiant canonique du ton DOMIORA (ADR-031) — aucune seconde taxonomie n'est créée.
   ton: TonMessage;
+  // VALUE-05B — RÔLE du destinataire dans le dossier, pas une donnée du CRM : dérivé du seul
+  // `DestinataireCandidat.type` déjà résolu côté serveur (ADR-031). Il n'ajoute aucune information
+  // personnelle et n'élargit pas la liste blanche de faits ci-dessus — il vit délibérément à côté
+  // d'elle, au même rang que le ton.
+  //
+  // Sa raison d'être : « votre bien » est la formulation juste pour un vendeur et une affirmation
+  // de propriété FAUSSE pour un acquéreur. Sans ce booléen, le modèle devrait deviner la relation à
+  // partir du texte — exactement ce que le produit s'interdit.
+  destinataireEstProprietaire: boolean;
   objetActuel: string;
   corpsActuel: string;
   faitsAutorises: FaitsAutorisesRedaction;

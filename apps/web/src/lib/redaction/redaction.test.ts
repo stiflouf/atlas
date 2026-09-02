@@ -33,6 +33,7 @@ const CORPS_SOURCE = [
 function contexte(surcharge: Partial<ContexteRedactionAugmentee> = {}): ContexteRedactionAugmentee {
   return {
     ton: "professionnel",
+    destinataireEstProprietaire: false,
     objetActuel: OBJET_SOURCE,
     corpsActuel: CORPS_SOURCE,
     faitsAutorises: {
@@ -140,7 +141,13 @@ describe("projection des faits autorisés", () => {
     ]) {
       expect(serialise).not.toContain(sentinelle);
     }
-    expect(Object.keys(recu!)).toEqual(["ton", "objetActuel", "corpsActuel", "faitsAutorises"]);
+    expect(Object.keys(recu!)).toEqual([
+      "ton",
+      "destinataireEstProprietaire",
+      "objetActuel",
+      "corpsActuel",
+      "faitsAutorises",
+    ]);
   });
 
   it("une note acquéreur, un retour de visite et une explication de matching restent hors du prompt", () => {
@@ -168,12 +175,12 @@ describe("prompt", () => {
   });
 
   it("transmet le ton canonique DOMIORA, jamais une seconde taxonomie", () => {
-    expect(construirePromptUtilisateur(contexte({ ton: "relance_douce" }))).toContain(
-      "Ton demandé : Relance douce — sans aucune pression ni reproche"
-    );
-    expect(construirePromptUtilisateur(contexte({ ton: "court" }))).toContain("réellement court");
-    expect(construirePromptUtilisateur(contexte({ ton: "cordial" }))).toContain("sans familiarité excessive");
-    expect(construirePromptUtilisateur(contexte({ ton: "professionnel" }))).toContain("précis, naturel et sobre");
+    // Les libellés canoniques (LABEL_TON_MESSAGE) restent la source du ton ; seule la consigne
+    // stylistique qui les suit a été recalibrée par VALUE-05B.
+    expect(construirePromptUtilisateur(contexte({ ton: "relance_douce" }))).toContain("Ton demandé : Relance douce —");
+    expect(construirePromptUtilisateur(contexte({ ton: "court" }))).toContain("Ton demandé : Court —");
+    expect(construirePromptUtilisateur(contexte({ ton: "cordial" }))).toContain("Ton demandé : Cordial —");
+    expect(construirePromptUtilisateur(contexte({ ton: "professionnel" }))).toContain("Ton demandé : Professionnel —");
   });
 
   it("un fait absent n'est jamais remplacé par un espace réservé", () => {
@@ -469,5 +476,154 @@ describe("texte déjà modifié à la main", () => {
     // L'action ne rend aucun texte : l'écran conserve donc exactement ce qu'il affichait.
     expect(r.type).toBe("indisponible");
     expect(JSON.stringify(r)).not.toContain("Texte personnel");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// VALUE-05B — calibrage stylistique
+// ---------------------------------------------------------------------------
+
+// Contexte reproduisant le cas réel observé : Hélène Vasseur, suivi de rendez-vous d'estimation,
+// destinataire propriétaire du bien. Le brouillon déterministe ne mentionne PAS l'adresse pour
+// cette intention — c'est le modèle qui la faisait entrer.
+const CONTEXTE_HELENE: ContexteRedactionAugmentee = {
+  ton: "professionnel",
+  destinataireEstProprietaire: true,
+  objetActuel: "Suite à notre rendez-vous d'estimation",
+  corpsActuel: [
+    "Bonjour Hélène,",
+    "",
+    "Suite à notre rendez-vous d'estimation du 15 août 2026, je souhaitais savoir si vous aviez eu le temps de réfléchir à notre proposition de mandat.",
+    "Je reste bien entendu disponible pour répondre à vos questions ou échanger à votre convenance.",
+    "",
+    "Cordialement,",
+  ].join("\n"),
+  faitsAutorises: {
+    destinatairePrenom: "Hélène",
+    bienAdresse: "8 rue du Clos Fictif",
+  },
+};
+
+describe("consignes de style", () => {
+  it("demande une écriture de conseiller, jamais administrative", () => {
+    expect(PROMPT_SYSTEME).toContain("conseiller immobilier expérimenté");
+    expect(PROMPT_SYSTEME).toContain("jamais administratif");
+    expect(PROMPT_SYSTEME).toContain("prendre connaissance de");
+  });
+
+  it("interdit de chercher à placer tous les faits, et l'adresse quand elle est inutile", () => {
+    expect(PROMPT_SYSTEME).toContain("n'est pas une liste à remplir");
+    expect(PROMPT_SYSTEME).toContain("Ne mentionne l'adresse du bien que si elle est nécessaire");
+  });
+
+  it("interdit la double conclusion", () => {
+    expect(PROMPT_SYSTEME).toContain("UNE seule ouverture à l'échange");
+  });
+
+  it("ne fabrique jamais la signature du conseiller", () => {
+    expect(PROMPT_SYSTEME).toContain("N'invente ni le nom, ni la signature");
+  });
+
+  it("cadre l'objet par un contre-exemple et deux exemples", () => {
+    expect(PROMPT_SYSTEME).toContain("phrase courte et grammaticale, jamais une juxtaposition");
+    expect(PROMPT_SYSTEME).toContain("Suite à l'estimation de votre bien");
+    expect(PROMPT_SYSTEME).toContain("Retour sur notre rendez-vous d'estimation");
+    expect(PROMPT_SYSTEME).toContain("Mauvais objet : « Retour sur l'estimation du 8 rue du Clos Fictif »");
+  });
+});
+
+describe("relation de propriété", () => {
+  it("destinataire propriétaire : « votre bien » explicitement autorisé", () => {
+    const prompt = construirePromptUtilisateur(CONTEXTE_HELENE);
+    expect(prompt).toContain("Le destinataire est le propriétaire du bien concerné");
+    expect(prompt).toContain("écris « votre bien »");
+  });
+
+  it("destinataire non propriétaire : « votre bien » explicitement interdit", () => {
+    const prompt = construirePromptUtilisateur(contexte({ destinataireEstProprietaire: false }));
+    expect(prompt).toContain("n'est pas propriétaire");
+    expect(prompt).toContain("n'écris jamais « votre bien »");
+  });
+
+  it("la relation n'est jamais déduite : la consigne est toujours présente, dans un sens ou l'autre", () => {
+    for (const proprietaire of [true, false]) {
+      expect(construirePromptUtilisateur(contexte({ destinataireEstProprietaire: proprietaire }))).toContain(
+        "propriétaire du bien concerné"
+      );
+    }
+  });
+});
+
+describe("calibrage par ton", () => {
+  const consigne = (ton: ContexteRedactionAugmentee["ton"]) =>
+    construirePromptUtilisateur(contexte({ ton })).split("\n")[0];
+
+  it("professionnel : explicitement non administratif", () => {
+    expect(consigne("professionnel")).toContain("professionnel ne veut pas dire administratif");
+    expect(consigne("professionnel")).toContain("phrases courtes");
+  });
+
+  it("cordial : chaleureux sans familiarité ni flatterie", () => {
+    expect(consigne("cordial")).toContain("sans familiarité");
+    expect(consigne("cordial")).toContain("sans exclamation ni flatterie");
+  });
+
+  it("court : deux à quatre phrases utiles, sans perdre les faits indispensables", () => {
+    expect(consigne("court")).toContain("deux à quatre phrases utiles");
+    expect(consigne("court")).toContain("indispensable à l'intention");
+  });
+
+  it("relance douce : décourage les formulations qui pèsent, encourage les tournures naturelles", () => {
+    const relance = consigne("relance_douce");
+    for (const decourage of ["examiner", "sans réponse", "toujours pas", "rapidement", "décision"]) {
+      expect(relance).toContain(decourage);
+    }
+    for (const encourage of [
+      "je me permets de revenir vers vous",
+      "avez-vous eu le temps de prendre connaissance de",
+      "si vous souhaitez que nous en reparlions",
+    ]) {
+      expect(relance).toContain(encourage);
+    }
+    expect(relance).toContain("aucun reproche");
+  });
+
+  it("aucune blacklist runtime : ces mots ne sont qu'une règle rédactionnelle du prompt", () => {
+    const gardeFous = readFileSync(join(__dirname, "gardeFous.ts"), "utf8");
+    for (const mot of ["examiner", "sans réponse", "toujours pas", "reparlions"]) {
+      expect(gardeFous).not.toContain(mot);
+    }
+  });
+});
+
+describe("cas Hélène — non-régression des protections", () => {
+  it("une reformulation naturelle et propriétaire passe les garde-fous", () => {
+    const objet = "Suite à l'estimation de votre bien";
+    const corps = [
+      "Bonjour Hélène,",
+      "",
+      "Je souhaitais revenir vers vous à la suite de notre rendez-vous d'estimation du 15 août 2026.",
+      "Avez-vous eu le temps de prendre connaissance de notre proposition de mandat ?",
+      "Je reste disponible si vous souhaitez que nous en reparlions.",
+      "",
+      "Cordialement,",
+    ].join("\n");
+    expect(validerReformulation(CONTEXTE_HELENE, objet, corps)).toEqual({ valide: true });
+  });
+
+  it("un style plus libre ne rachète aucun fait inventé", async () => {
+    const r = await reformulerBrouillon(
+      redacteurFactice({
+        type: "reformule",
+        objet: "Suite à l'estimation de votre bien",
+        corps: "Bonjour Hélène,\n\nJe vous rappelle le 20 août 2026.\n\nCordialement,",
+      }),
+      CONTEXTE_HELENE
+    );
+    expect(r).toEqual({ type: "indisponible", raison: "garde_fou_nombre_inconnu" });
+  });
+
+  it("le style n'autorise pas davantage de données : la projection reste inchangée", () => {
+    expect(Object.keys(CONTEXTE_HELENE.faitsAutorises).sort()).toEqual(["bienAdresse", "destinatairePrenom"]);
   });
 });

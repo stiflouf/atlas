@@ -69,6 +69,10 @@ export async function reformulerBrouillonAction(
 
   const resultat = await reformulerBrouillon(resoudreRedacteur(), {
     ton,
+    // Seul un prospect vendeur est propriétaire du bien du dossier (ADR-027). Un acquéreur, un
+    // notaire ou un destinataire non résolu ne l'est pas : le repli est donc `false`, jamais une
+    // supposition favorable.
+    destinataireEstProprietaire: candidat?.type === "prospectVendeur",
     // Le texte présent dans l'éditeur, y compris déjà modifié à la main : c'est lui que le
     // conseiller veut voir reformulé. Il ne fait entrer aucune donnée CRM supplémentaire — il est
     // déjà sorti du serveur une première fois, validé par la même chaîne.
