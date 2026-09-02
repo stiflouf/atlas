@@ -81,6 +81,12 @@ export async function enregistrerCompteRenduVisiteAction(formData: FormData): Pr
         );
       });
       await traiterExecutionsEnAttente(idsExecutionsATraiter);
+
+      // VALUE-02 — retour sur la fiche de la visite qui vient d'être traitée, jamais sur la fiche
+      // du bien : le conseiller y voit immédiatement la suite recommandée et les suivis déjà
+      // planifiés. Repli sur le bien quand aucune Visite Atlas n'a pu être reliée (compte rendu
+      // enregistré hors cycle ADR-040) — il n'existe alors aucune fiche visite où atterrir.
+      if (visiteValide) redirect(`/visites/${visiteValide.id}`);
     }
   }
 

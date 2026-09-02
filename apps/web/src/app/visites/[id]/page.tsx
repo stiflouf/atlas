@@ -10,6 +10,14 @@ import { getCompteRenduVisiteParVisiteId } from "@/lib/compteRenduVisiteReposito
 import { annulerVisiteAction, reporterVisiteAction } from "@/actions/visite";
 import { LABEL_STATUT_VISITE } from "@/types/visite";
 import { LABEL_INTERET } from "@/types/compteRenduVisite";
+import Card from "@/components/ui/Card";
+import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
+import { getTachesPourAcquereur, getTachesPourProspectVendeur } from "@/lib/tacheRepository";
+import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
+import { listerConfigurationsAutomatisation } from "@/lib/automatisations/configurationAutomatisationRepository";
+import { construireSuiteVisite } from "@/lib/visites/suiteVisite";
+import { creerTacheProchaineEtapeAction } from "@/actions/creerTacheProchaineEtape";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -54,6 +62,29 @@ export default async function VisitePage({ params }: PageProps) {
   // Théoriquement impossible (FK CASCADE, biens.id/acquereurs.id) : une visite ne peut pas
   // survivre à la suppression de son bien ou de son acquéreur.
   if (!bien || !acquereur) notFound();
+
+  // VALUE-02 — tout ce qui suit sert uniquement à RENDRE VISIBLE l'orchestration post-visite déjà
+  // en place (ADR-041/042/044). Chargé seulement quand un compte rendu existe : une visite encore
+  // planifiée n'a aucune suite à recommander.
+  const prospectVendeur = compteRendu ? await getProspectVendeurParBien(bien.id) : undefined;
+  const [tachesAcquereur, tachesVendeur, configurations] = compteRendu
+    ? await Promise.all([
+        getTachesPourAcquereur(acquereur.id),
+        prospectVendeur ? getTachesPourProspectVendeur(prospectVendeur.id) : Promise.resolve([]),
+        listerConfigurationsAutomatisation(),
+      ])
+    : [[], [], []];
+
+  const suite = compteRendu
+    ? construireSuiteVisite({ acquereur, prospectVendeur, compteRendu, tachesAcquereur, tachesVendeur })
+    : undefined;
+
+  // Information secondaire, jamais un avertissement : si ces règles sont inactives, aucune tâche
+  // automatique n'a pu être créée après cette visite — le dire évite de laisser croire à un oubli
+  // du produit. Aucune activation n'est faite ici, jamais.
+  const automatisationsPostVisiteInactives = configurations
+    .filter((c) => (c.regleCode === "suivi_apres_visite" || c.regleCode === "retour_vendeur_apres_visite") && !c.active)
+    .length;
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -173,6 +204,79 @@ export default async function VisitePage({ params }: PageProps) {
           <p className="text-[13px] text-text-3">Aucun compte rendu trouvé pour cette visite réalisée.</p>
         </section>
       ) : null}
+
+      {/* Suite recommandée (VALUE-02) — ne décide rien de neuf : rend visibles les parcours déjà
+          prévus par ADR-041 (suivi acquéreur), ADR-042 (retour vendeur) et les tâches réellement
+          ouvertes. Aucun état post-visite inventé, aucun score, aucune action automatique. */}
+      {compteRendu && suite && (
+        <section className="mb-8">
+          <SectionTitle>Suite recommandée</SectionTitle>
+          <Card className="p-4 flex flex-col gap-3.5">
+            {/* Le badge ne porte que `interet`, donnée structurée déjà saisie — jamais un état
+                post-visite calculé pour l'occasion. */}
+            <div className="flex items-start gap-2.5">
+              <Badge variant={VARIANT_BADGE_INTERET[compteRendu.interet]}>{LABEL_INTERET[compteRendu.interet]}</Badge>
+              <p className="text-[14px] text-text-1">{suite.raison}</p>
+            </div>
+
+            {suite.prochaineEtape && (
+              <div className="border-t border-border pt-3">
+                <p className="text-[11px] font-medium text-text-2">Prochaine étape prévue</p>
+                <p className="text-[14px] text-text-1 mt-0.5 whitespace-pre-wrap">« {suite.prochaineEtape} »</p>
+                {suite.proposerTacheDepuisProchaineEtape && (
+                  <form action={creerTacheProchaineEtapeAction} className="mt-2.5">
+                    <input type="hidden" name="visiteId" value={visite.id} />
+                    {/* Geste explicite du conseiller — seul chemin par lequel une prochaine étape
+                        devient une tâche. Jamais déclenché par l'enregistrement du compte rendu. */}
+                    <Button type="submit" variant="secondary" size="md">
+                      Créer une tâche
+                    </Button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {suite.tachesPlanifiees.length > 0 && (
+              <div className="border-t border-border pt-3">
+                <p className="text-[11px] font-medium text-text-2 mb-1.5">Suivis déjà planifiés</p>
+                <ul className="flex flex-col gap-1">
+                  {suite.tachesPlanifiees.map((t) => (
+                    <li key={t.id} className="text-[13.5px] text-text-1 leading-snug">
+                      · {t.titre}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {suite.actions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2.5 border-t border-border pt-3">
+                {suite.actions.map((action) => (
+                  <ButtonLink
+                    key={action.cle}
+                    href={action.href}
+                    variant={action.principale ? "primary" : "secondary"}
+                    size="md"
+                  >
+                    {action.libelle}
+                  </ButtonLink>
+                ))}
+              </div>
+            )}
+
+            {/* Information secondaire, jamais un avertissement : explique pourquoi aucune tâche
+                automatique n'a été créée, sans rien imposer ni rien activer. */}
+            {automatisationsPostVisiteInactives > 0 && (
+              <p className="text-[11px] text-text-3 border-t border-border pt-3">
+                Le suivi automatique après visite n'est pas activé.{" "}
+                <Link href="/automatisations" className="underline hover:text-text-2 transition-colors">
+                  Configurer
+                </Link>
+              </p>
+            )}
+          </Card>
+        </section>
+      )}
     </div>
   );
 }

@@ -9,6 +9,8 @@ vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
 import { and, eq, inArray } from "drizzle-orm";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // Test d'intégration + garde-fou : vérifie qu'un appel direct à enregistrerCompteRenduVisiteAction
 // (contournant le formulaire, remplacé par un message sur une fiche archivée — voir
@@ -147,6 +149,21 @@ describe("enregistrerCompteRenduVisiteAction — garde-fou entité archivée", (
     ).catch(() => {});
 
     expect(await listerComptesRendusPourBien(bien.id)).toEqual([]);
+  });
+});
+
+// VALUE-02 — destination après enregistrement. Test structurel sur le source, même patron que
+// BienTabs.onglet.test.ts : ce qui compte est la DESTINATION, pas le rendu ; la vérifier par
+// lecture du fichier évite de simuler tout le cycle Next pour un contrôle d'URL.
+describe("enregistrerCompteRenduVisiteAction — destination après succès (VALUE-02)", () => {
+  const source = readFileSync(join(__dirname, "enregistrerCompteRenduVisite.ts"), "utf8");
+
+  it("ramène sur la fiche de la visite traitée, jamais sur la fiche du bien quand une visite existe", () => {
+    expect(source).toContain("redirect(`/visites/${visiteValide.id}`)");
+  });
+
+  it("conserve le repli sur le bien quand aucune visite Atlas n'a pu être reliée", () => {
+    expect(source).toContain("redirect(`/biens/${bienId}`)");
   });
 });
 

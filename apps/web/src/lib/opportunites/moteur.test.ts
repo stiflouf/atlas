@@ -361,3 +361,29 @@ describe("ordre de restitution", () => {
     }
   });
 });
+
+// VALUE-02 — la tâche créée explicitement depuis une prochaine étape cible l'acquéreur (ADR-041) :
+// elle doit donc être absorbée par la déduplication VALUE-01, sans quoi le conseiller verrait la
+// même action deux fois, dans Aujourd'hui et sur sa liste de tâches.
+describe("interaction VALUE-01 / VALUE-02", () => {
+  it("visite intéressée sans prochaine étape -> opportunité, puis absorbée dès qu'une tâche acquéreur existe", () => {
+    const base = contexte({
+      visites: [VISITE],
+      comptesRendus: [compteRendu({ prochaineEtape: undefined })],
+    });
+
+    const avant = detecterOpportunites(base, MAINTENANT);
+    expect(avant.map((o) => o.type)).toEqual(["suivi_visite"]);
+
+    const apres = detecterOpportunites(
+      {
+        ...base,
+        tachesActives: [
+          tache({ titre: "Recontacter Camille vendredi", acquereurId: ACQUEREUR.id }),
+        ],
+      },
+      MAINTENANT
+    );
+    expect(apres).toHaveLength(0);
+  });
+});
