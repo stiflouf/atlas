@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 
 // Tests d'intégration réels (ADR-033) : couvre le scanner I/O — règle inactive/non configurée
@@ -40,6 +40,20 @@ const { scannerInactiviteProspectVendeur } = await import("./scanTemporel");
 const { deriverEtatRunScanAutomatisation } = await import("@/types/automatisation");
 
 const REGLE = "inactivite_prospect_vendeur" as const;
+
+// Point de départ connu pour les deux états PARTAGÉS que ce fichier possède (QUALITY-01).
+// 'inactivite_prospect_vendeur' est une identité métier CANONIQUE (clé primaire + CHECK sur
+// regle_code) : impossible de lui substituer un code unique par fichier de test, l'isolation passe
+// donc par une remise à zéro explicite plutôt que par des identifiants uniques. Sans elle, un run
+// laissé par une exécution interrompue avant son `afterAll`, ou par un second processus Vitest
+// visant la même base, serait lu par getDernierRunScanPourRegle() à la place du run attendu.
+beforeAll(async () => {
+  await getDb().delete(runsScanAutomatisationTable).where(eq(runsScanAutomatisationTable.regleCode, REGLE));
+  await getDb()
+    .update(configurationsAutomatisationTable)
+    .set({ active: false, seuilJoursInactivite: null })
+    .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
+});
 
 const idsProspectsCrees: string[] = [];
 const idsEvenementsCrees: string[] = [];
