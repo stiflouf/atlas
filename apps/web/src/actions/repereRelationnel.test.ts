@@ -270,6 +270,58 @@ describe("archiverRepereRelationnelAction / restaurerRepereRelationnelAction", (
     await restaurerRepereRelationnelAction(formulaire({ id: repere.id, acquereurId })).catch(() => {});
     expect(await listerReperesRelationnelsAcquereur(acquereurId)).toHaveLength(1);
   });
+
+  // Non-régression du scénario joué sur la demo (VALUE-06B) : la provenance affichée après
+  // restauration avait été lue comme altérée. Vérifier la seule PRÉSENCE dans les listes ne dit
+  // rien de ce qui est restauré — ce test compare la ligne champ par champ à chaque étape, et
+  // n'accepte comme seule différence que `archiveLe`.
+  it("cycle complet : archiver puis restaurer ne change que archiveLe, jamais provenance, autorisation ni horodatages", async () => {
+    const acquereurId = await creerAcquereurDeTest("CYCLE-VALEURS");
+    await ajouterRepereRelationnelAction(
+      null,
+      formulaire({
+        acquereurId,
+        categorie: "preference_contact",
+        libelle: "Préfère les échanges par email",
+        provenance: "indique_par_le_client",
+      })
+    );
+    const [cree] = await listerReperesRelationnelsAcquereur(acquereurId);
+    expect(cree.utilisableCommunication).toBe(false);
+
+    // Correction portant UNIQUEMENT sur l'autorisation : les trois autres champs sont resoumis à
+    // l'identique, exactement comme le fait le formulaire de modification.
+    await modifierRepereRelationnelAction(
+      null,
+      formulaire({
+        id: cree.id,
+        acquereurId,
+        categorie: "preference_contact",
+        libelle: "Préfère les échanges par email",
+        provenance: "indique_par_le_client",
+        utilisableCommunication: "on",
+      })
+    );
+    const [modifie] = await listerReperesRelationnelsAcquereur(acquereurId);
+    expect(modifie.categorie).toBe("preference_contact");
+    expect(modifie.libelle).toBe("Préfère les échanges par email");
+    expect(modifie.provenance).toBe("indique_par_le_client");
+    expect(modifie.utilisableCommunication).toBe(true);
+    expect(modifie.creeLe).toBe(cree.creeLe);
+
+    await archiverRepereRelationnelAction(formulaire({ id: cree.id, acquereurId })).catch(() => {});
+    const [archive] = await listerReperesRelationnelsArchivesAcquereur(acquereurId);
+    expect(archive.archiveLe).toBeDefined();
+    // Archiver n'est pas corriger : `modifieLe` doit continuer à dater la dernière correction.
+    expect({ ...archive, archiveLe: undefined }).toEqual({ ...modifie, archiveLe: undefined });
+
+    await restaurerRepereRelationnelAction(formulaire({ id: cree.id, acquereurId })).catch(() => {});
+    const actifs = await listerReperesRelationnelsAcquereur(acquereurId);
+    expect(actifs).toHaveLength(1);
+    expect(await listerReperesRelationnelsArchivesAcquereur(acquereurId)).toHaveLength(0);
+    // Égalité stricte de la ligne entière : restaurer ne remet aucun défaut de formulaire.
+    expect(actifs[0]).toEqual(modifie);
+  });
 });
 
 describe("VALUE-06 — aucune intelligence, aucune extraction", () => {

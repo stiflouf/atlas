@@ -63,15 +63,20 @@ function ChampsRepere({ repere }: { repere?: RepereRelationnel }) {
 
       <div>
         <label className={labelCls} htmlFor={`libelle-${repere?.id ?? "nouveau"}`}>
-          Information
+          Information à retenir
         </label>
+        {/* Placeholder préfixé « Ex. : » et jamais formulé comme une phrase prête à valider : sur la
+            demo, un exemple rédigé à l'identique d'un vrai repère a été lu comme une valeur déjà
+            saisie, et le repère a été ajouté une seconde fois avec la provenance par défaut.
+            `required` n'est qu'un garde-fou de saisie — validerChamps reste la seule sécurité. */}
         <input
           id={`libelle-${repere?.id ?? "nouveau"}`}
           type="text"
           name="libelle"
           defaultValue={repere?.libelle ?? ""}
           maxLength={LONGUEUR_MAX_LIBELLE_REPERE}
-          placeholder="Préfère les échanges par email"
+          required
+          placeholder="Ex. : préfère les échanges par email"
           className={inputCls}
         />
       </div>
