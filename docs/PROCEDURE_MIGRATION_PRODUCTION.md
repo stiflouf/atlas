@@ -9,6 +9,11 @@ le sont toutes (`ADD TABLE`/`ADD COLUMN`, jamais de `DROP`/`ALTER TYPE` destruct
 procédure doit rester valable pour une migration future qui ne le serait pas — d'où le backup
 systématique à l'étape 3, jamais une étape sautée « parce que ça a toujours été sans risque ».
 
+**Quelle « production » ?** Deux environnements Railway portent un environment nommé `production` —
+`sparkling-rejoicing` (production réelle de Steven, branche `main`) et `domiora-demo` (showroom,
+branche `develop`). Cette procédure vise la première. Identifier la cible avant toute commande :
+`docs/PILOT_RUNBOOK.md#0-environnements-branches-et-autorisations-décriture-source-canonique`.
+
 ## 1. Identifier la DATABASE_URL de production
 
 La variable `DATABASE_URL` de l'environnement Railway (ou équivalent) du service Atlas en

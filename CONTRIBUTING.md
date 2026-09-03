@@ -22,7 +22,21 @@ explicitement hors scope V1/post-V1 : `docs/KNOWN_LIMITATIONS.md`.
 
 ## Workflow Git
 
-- Branche principale : `main`.
+```
+feature/*  →  develop  →  domiora-demo         (courant)
+develop    →  main     →  sparkling-rejoicing  (promotion, mission explicite uniquement)
+```
+
+Correspondance environnement ↔ branche ↔ autorisation d'écriture : **source canonique unique**,
+`docs/PILOT_RUNBOOK.md#0-environnements-branches-et-autorisations-décriture-source-canonique` — ne
+jamais la recopier ni la déduire d'un nom de service.
+
+- Branche principale : `main` — elle déploie la **production personnelle réelle de Steven**.
+- Branche de développement : `develop` — elle déploie l'instance de démonstration `domiora-demo`.
+- **Ne jamais `git push origin main` dans un lot visant `develop`/`domiora-demo`.** Une promotion
+  vers `main` fait l'objet d'une mission explicite distincte. Une suite de tests entièrement verte
+  ne l'autorise pas.
+- Ne jamais travailler directement sur `main`.
 - **Jamais de force-push sur `main`.**
 - Avant tout push : `git fetch origin`, vérifier l'absence de divergence. Si `origin/main` a
   avancé de façon incompatible, ne jamais reset/rebase/cherry-pick à l'aveugle — comprendre la

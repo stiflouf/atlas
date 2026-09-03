@@ -281,6 +281,13 @@ Ce qui **n'existe pas** dans le code aujourd'hui, malgré des ADR ou des comment
    le schéma réel, lire `src/db/migrations/*.sql`, pas seulement `schema.ts`.
 7. **Français partout** dans le code (noms de variables, fonctions, commentaires, messages UI) —
    convention déjà en place dans tout `src/`, à respecter pour rester cohérent.
+8. **`develop` déploie le showroom, `main` déploie la production réelle de Steven** — deux projets
+   Railway distincts, dont les deux environments s'appellent `production` : le nom « production »
+   ne désigne donc jamais à lui seul la bonne cible. Ne jamais `git push origin main`, ni écrire
+   quoi que ce soit sur `sparkling-rejoicing`, dans un lot visant `develop`/`domiora-demo` — même
+   avec une suite entièrement verte. Matrice, identifiants et checklist de vérification avant
+   écriture Railway : `docs/PILOT_RUNBOOK.md#0-environnements-branches-et-autorisations-décriture-source-canonique`
+   (source canonique unique, jamais recopiée ailleurs).
 
 ## Architecture à respecter
 

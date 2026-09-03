@@ -12,6 +12,84 @@ Ce document ne duplique pas ce qui existe déjà ailleurs — il y renvoie :
 - Procédure de migration production : **`docs/PROCEDURE_MIGRATION_PRODUCTION.md`**.
 - Limites connues et dettes assumées : **`docs/KNOWN_LIMITATIONS.md`**.
 
+## 0. Environnements, branches et autorisations d'écriture (source canonique)
+
+**Emplacement canonique unique de la correspondance environnement ↔ branche ↔ autorisation.** Toute
+autre documentation doit pointer ici plutôt que recopier ces valeurs. En cas de désaccord entre un
+document et l'état Railway réel, **c'est l'état Railway qui fait foi**, et ce tableau doit être
+corrigé.
+
+| Environnement | Usage | Branche source | Écriture autorisée |
+|---|---|---|---|
+| local | développement quotidien | `feature/*` puis `develop` | oui |
+| `domiora-demo` (service `domiora-demo`) | showroom, démonstration, validation, tests manuels réalistes | **`develop`** | oui, après tests verts |
+| `sparkling-rejoicing` (service `DOMIORA`) | **production personnelle réelle de Steven** | **`main`** | **NON depuis un lot `develop`** — mission explicite distincte obligatoire |
+
+Identifiants (lecture, jamais des secrets) :
+
+| | Pilote (Steven) | DOMIORA DEMO |
+|---|---|---|
+| Projet Railway | `sparkling-rejoicing` | `domiora-demo` |
+| Project ID | — [Non vérifié depuis ce dépôt] | `3d771bb3-f397-4aed-9216-c5587c5232b4` |
+| Environment | `production` | `production` |
+| Service | `DOMIORA` | `domiora-demo` |
+| Service ID | — [Non vérifié depuis ce dépôt] | `50fdd82a-68d7-4afe-9f26-a3b14312809b` |
+
+Les deux environnements portent un environment Railway nommé `production` : **le nom
+« production » ne désigne donc jamais à lui seul la production de Steven.** Ne jamais déduire la
+cible d'un nom d'environnement.
+
+Dernier état vérifié de `sparkling-rejoicing` (constaté lors de VALUE-02/VALUE-03, **non revérifié
+depuis** — aucun accès Railway, CLI absente de l'environnement de développement) :
+
+- deployment `88756778-b4da-45ec-91cd-3b75b3aa49f7`
+- commit `1c92c8a`
+- date 2026-08-28
+
+### Règle Git canonique
+
+```
+feature/*  →  develop  →  domiora-demo         (courant, autorisé dans les lots de développement)
+develop    →  main     →  sparkling-rejoicing  (promotion, mission explicite uniquement)
+```
+
+- Ne jamais travailler directement sur `main`.
+- Ne jamais pousser `main` dans un lot de développement courant.
+- Un déploiement demo réussi n'est **jamais** une autorisation implicite de promotion en production.
+- **Une suite de tests entièrement verte n'autorise pas `main`.** La promotion est une décision
+  humaine, jamais une conséquence d'un état technique.
+
+### Garde-fou avant toute écriture Railway
+
+Aucune écriture (variable, redéploiement, configuration de service ou de branche, création de
+Function) sans avoir déroulé ces cinq points **dans cet ordre** :
+
+1. identifier le **projet** ;
+2. identifier l'**environment** ;
+3. identifier le **service** ;
+4. vérifier la **branche source** de ce service ;
+5. comparer avec la cible **explicitement nommée par la mission**.
+
+Si la mission dit « `domiora-demo` uniquement », alors `sparkling-rejoicing` est **lecture seule**.
+Si la cible n'est pas explicitement autorisée : **STOP**, demander avant d'agir.
+
+### Vérification en lecture seule
+
+Aucune de ces commandes n'écrit quoi que ce soit ; aucune ne doit jamais contenir de token ni de
+secret (l'authentification CLI est déjà établie côté poste, jamais passée en argument).
+
+```
+railway whoami                                          # compte utilisé
+railway status                                          # projet/environment/service actuellement liés
+railway service status --service <nom> --environment production   # statut du dernier déploiement
+railway logs --service <nom> --environment production --lines 30  # logs du dernier run
+railway functions list                                  # Functions cron et leurs horaires
+```
+
+À relever avant de conclure quoi que ce soit : **service, branche source, commit déployé,
+deployment ID, statut**. Un `railway status` qui ne nomme pas explicitement le projet attendu
+signifie que le lien local pointe ailleurs — relier avant toute lecture, jamais supposer.
+
 ## 1. Architecture mono-conseiller (rappel)
 
 Un seul conseiller autorisé (`ATLAS_ALLOWED_EMAIL`, allowlist à une seule adresse, jamais un
@@ -26,12 +104,14 @@ Environnement **distinct et permanent**, créé le 2026-08-31, destiné aux dém
 pilote décrite dans le reste de ce runbook : autre projet Railway, autre base, autre volume, autre
 secret de session.
 
+Projets, services, identifiants, **branches sources** et autorisations d'écriture : **section 0
+ci-dessus** (source canonique, ne pas les recopier ici). Le tableau ci-dessous ne couvre que la
+configuration propre à chaque instance.
+
 | | Pilote (Steven) | DOMIORA DEMO |
 |---|---|---|
-| Projet Railway | `sparkling-rejoicing` | `domiora-demo` (`3d771bb3-f397-4aed-9216-c5587c5232b4`) |
 | URL | `https://domiora-production.up.railway.app` | `https://domiora-demo-production.up.railway.app` |
 | Région | EU West | EU West |
-| Branche | `develop` | `develop` |
 | Volume | `domiora-volume` → `/data/stockage-documents` | `domiora-demo-volume` → `/data/stockage-documents` |
 | Postgres | dédié | dédié, distinct |
 | Jobs cron | 3 Railway Functions | **aucun** |
@@ -226,6 +306,11 @@ une sauvegarde).
 avant toute procédure de crise réelle — ne jamais restaurer directement sur la production.
 
 ## 7. Séquence de déploiement
+
+Séquence destinée à la **production de Steven** (`sparkling-rejoicing`, branche `main`) : elle
+suppose une mission de promotion explicite, jamais un lot `develop` courant (section 0). Un
+déploiement `domiora-demo` ne suit pas cette séquence — il découle automatiquement d'un push sur
+`develop`.
 
 1. Vérifier le commit/tag à déployer (section 2).
 2. Sauvegarde (`docs/PROCEDURE_MIGRATION_PRODUCTION.md`, étape 3).
