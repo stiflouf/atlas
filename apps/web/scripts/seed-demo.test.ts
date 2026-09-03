@@ -47,6 +47,16 @@ async function nettoyer() {
   for (const table of TABLES_A_NETTOYER) await sql.unsafe(`delete from ${table}`);
 }
 
+// Types RUNTIME réellement rendus par postgres.js, jamais supposés : une colonne PostgreSQL `date`
+// arrive en objet `Date` (ancré à minuit UTC du jour civil), pas en chaîne "YYYY-MM-DD".
+type LienOffreVisite = {
+  visite_id: string;
+  interet: string;
+  visite_statut: string;
+  date_visite: Date;
+  date_offre: Date;
+};
+
 async function compter(table: string): Promise<number> {
   const [{ n }] = await sql.unsafe<{ n: number }[]>(`select count(*)::int as n from ${table}`);
   return n;
@@ -230,7 +240,7 @@ describe("seed-demo — création du dataset", () => {
   it("rattache le compte rendu à sa visite réalisée et à l'offre qui en découle", async () => {
     await executerSeedDemo(sql, { env: ENV_CONFIRME });
 
-    const [lien] = await sql`
+    const [lien] = await sql<LienOffreVisite[]>`
       select cr.visite_id, cr.interet, v.statut as visite_statut, cr.date_visite, o.date_offre
       from offre_visites ov
       join comptes_rendus_visite cr on cr.id = ov.compte_rendu_visite_id
@@ -240,8 +250,34 @@ describe("seed-demo — création du dataset", () => {
 
     expect(lien.visite_statut).toBe("realisee");
     expect(lien.interet).toBe("interesse");
-    // Invariant porté par la Server Action (ADR-019), reproduit par le seed.
-    expect(String(lien.date_visite) <= String(lien.date_offre)).toBe(true);
+    // Invariant porté par la Server Action (ADR-019), reproduit par le seed. Comparaison sur
+    // l'instant, jamais sur String(Date) : cette représentation commence par le nom du jour
+    // ("Tue …", "Fri …") et se compare donc alphabétiquement, pas chronologiquement.
+    expect(lien.date_visite.getTime()).toBeLessThanOrEqual(lien.date_offre.getTime());
+  });
+
+  // Régression QUALITY-02 : `maintenant` est fixé sur une date où le seed produit précisément la
+  // paire dont l'ordre alphabétique des noms de jours est l'INVERSE de l'ordre chronologique —
+  // visite un mardi, offre le vendredi suivant. Toute comparaison reposant sur la représentation
+  // textuelle d'une Date échoue ici ; la sémantique attendue reste "visite avant ou le jour de
+  // l'offre". La date est fixée dans le test seul (paramètre déjà exposé par executerSeedDemo),
+  // jamais dans le seed.
+  it("visite antérieure ou égale à l'offre même quand les noms de jours s'ordonnent à l'envers", async () => {
+    await executerSeedDemo(sql, { env: ENV_CONFIRME, maintenant: new Date("2026-09-03T12:00:00Z") });
+
+    const [lien] = await sql<LienOffreVisite[]>`
+      select cr.visite_id, cr.interet, v.statut as visite_statut, cr.date_visite, o.date_offre
+      from offre_visites ov
+      join comptes_rendus_visite cr on cr.id = ov.compte_rendu_visite_id
+      join visites v on v.id = cr.visite_id
+      join offres o on o.id = ov.offre_id
+    `;
+
+    // Jour civil lu en UTC : postgres.js ancre une colonne `date` à minuit UTC, aucun décalage de
+    // fuseau n'est introduit ici (getDay() local pourrait, lui, changer de jour).
+    expect(lien.date_visite.getUTCDay()).toBe(2); // mardi
+    expect(lien.date_offre.getUTCDay()).toBe(5); // vendredi
+    expect(lien.date_visite.getTime()).toBeLessThanOrEqual(lien.date_offre.getTime());
   });
 
   it("ne crée aucune donnée fiscale personnelle ni aucune connexion Google", async () => {
