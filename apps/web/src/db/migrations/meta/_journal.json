@@ -218,6 +218,13 @@
       "when": 1787660959942,
       "tag": "0030_hot_leo",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788424953339,
+      "tag": "0031_awesome_stellaris",
+      "breakpoints": true
     }
   ]
 }

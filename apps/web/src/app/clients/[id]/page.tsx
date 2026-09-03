@@ -20,7 +20,12 @@ import { LABEL_STATUT_OFFRE } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS } from "@/types/compromis";
 import { evaluerCompatibiliteAcquereur } from "@/lib/compatibilite/orchestration";
 import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
+import {
+  listerReperesRelationnelsAcquereur,
+  listerReperesRelationnelsArchivesAcquereur,
+} from "@/lib/repereRelationnelRepository";
 import AcquereurMemoireRelation from "@/components/client/AcquereurMemoireRelation";
+import AcquereurReperesRelationnels from "@/components/client/AcquereurReperesRelationnels";
 import { listerTaches } from "@/lib/tacheRepository";
 import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
 import { listerEnvoisEmailPourTaches } from "@/lib/envoiEmailRepository";
@@ -82,6 +87,13 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   const biensParId = new Map(bienIds.map((bienId, i) => [bienId, biensResolus[i]]));
 
   const secteursRecherche = await listerSecteursPourAcquereur(client.id);
+  // VALUE-06 — lus ici et transmis TELS QUELS au seul composant qui les affiche : aucun repère
+  // n'entre dans construireMemoireRelationnelleAcquereur, construireRepriseContactAcquereur ni
+  // dans un contexte de rédaction. La séparation est structurelle, pas une discipline de relecture.
+  const [reperesRelationnels, reperesRelationnelsArchives] = await Promise.all([
+    listerReperesRelationnelsAcquereur(client.id),
+    listerReperesRelationnelsArchivesAcquereur(client.id),
+  ]);
   // ADR-034 — moteur canonique et déterministe, déjà calculé côté serveur, même sens que
   // BienAcquereursCompatibles (evaluerCompatibiliteBien) mais inversé. listerBiens() exclut déjà
   // les biens archivés (ADR-012) et porte photoPrincipaleId (sous-requête corrélée, ADR-052) —
@@ -177,6 +189,16 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
           {/* VALUE-03 — placée avant le matching : « où en est cette relation » se lit avant
               « quels biens lui correspondent ». Aucune section existante n'a été déplacée. */}
           <AcquereurMemoireRelation memoire={memoire} reprise={reprise} />
+          {/* VALUE-06 — section VOISINE, jamais fusionnée dans la mémoire : « À retenir » porte
+              les faits structurés du projet immobilier, celle-ci ce qui relève de la relation.
+              Aucun repère n'entre dans la projection communicationnelle (VALUE-04) ni dans la
+              rédaction assistée (VALUE-05) : leurs listes blanches restent fermées par le type. */}
+          <AcquereurReperesRelationnels
+            acquereurId={client.id}
+            reperesInitiaux={reperesRelationnels}
+            reperesArchives={reperesRelationnelsArchives}
+            archive={!!client.archiveLe}
+          />
           <AcquereurBiensCompatibles compatibilites={compatibilites} biensActifs={biensActifs} />
           <AcquereurVisites visites={visites} biensParId={biensParId} />
         </div>

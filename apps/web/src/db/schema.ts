@@ -187,6 +187,50 @@ export const secteursRechercheAcquereur = pgTable(
   (table) => [unique("secteurs_recherche_acquereur_id_code_insee_unique").on(table.acquereurId, table.codeInsee)]
 );
 
+// Repères relationnels d'un acquéreur (VALUE-06) — petits faits relationnels explicitement
+// enregistrés par le conseiller : préférence de contact, préférence relationnelle, centre
+// d'intérêt. Jamais extraits d'un texte libre, jamais déduits par un modèle : aucun chemin de
+// création automatique n'existe (ADR-008). Aucune catégorie « projet » : les critères du projet
+// immobilier ont déjà leurs colonnes canoniques (acquereurs.*, secteurs_recherche_acquereur), et
+// un repère libre y créerait une seconde vérité que le moteur de compatibilité ne lirait jamais.
+//
+// `utilisable_communication` est NOT NULL DEFAULT false VOLONTAIREMENT : ici `false` signifie « le
+// conseiller n'a pas explicitement autorisé cet usage », un refus par défaut réel — jamais une
+// valeur inconnue. ADR-009 (`NULL` ≠ `false`) vise les booléens métier dont l'absence de réponse
+// est signifiante, ce qui n'est pas le cas d'une autorisation : ne jamais rendre cette colonne
+// nullable sans nouvelle décision métier. `true` signifie seulement que le repère PEUT être
+// considéré par une future fonction de personnalisation ; aucun code de VALUE-06 ne le consomme.
+//
+// acquereurId est une vraie FK CASCADE (même rationale que secteurs_recherche_acquereur).
+// archive_le suit le patron ADR-012 (jamais de DELETE), modifie_le le patron ADR-029/ADR-021
+// (nullable, posé uniquement par une correction, aucun historique de versions).
+export const reperesRelationnelsAcquereur = pgTable(
+  "reperes_relationnels_acquereur",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    acquereurId: uuid("acquereur_id")
+      .notNull()
+      .references(() => acquereurs.id, { onDelete: "cascade" }),
+    categorie: text("categorie").notNull(),
+    libelle: text("libelle").notNull(),
+    provenance: text("provenance").notNull(),
+    utilisableCommunication: boolean("utilisable_communication").notNull().default(false),
+    archiveLe: timestamp("archive_le", { withTimezone: true }),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    modifieLe: timestamp("modifie_le", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "reperes_relationnels_acquereur_categorie_check",
+      sql`${table.categorie} IN ('preference_contact','preference_relationnelle','centre_interet','autre')`
+    ),
+    check(
+      "reperes_relationnels_acquereur_provenance_check",
+      sql`${table.provenance} IN ('indique_par_le_client','observe_lors_d_un_echange','saisi_par_le_conseiller')`
+    ),
+  ]
+);
+
 // Notes libres sur un bien réel. Contrairement à actions/memoireContextuelle, bienId est une
 // vraie FK : une note ne peut être créée que depuis la fiche d'un bien déjà réel (pas de
 // formulaire équivalent sur un bien mocké), donc pas de cas mixte id-mock/id-réel à accommoder.
