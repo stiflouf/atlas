@@ -54,3 +54,25 @@ describe("AcquereurReperesRelationnels — formulaire d'ajout", () => {
     expect(baliseChamp(markupFormulaireAjout(), 'id="libelle-nouveau"')).toContain('maxLength="200"');
   });
 });
+
+// VALUE-07B (ADR-053) — la case ne fait qu'ouvrir l'AFFICHAGE du repère au conseiller pendant
+// qu'il prépare un message. Son ancien libellé promettait une personnalisation automatique qui
+// n'existe pas : une case qui promet plus que le produit ne fait documente un consentement qui ne
+// correspond à rien.
+describe("AcquereurReperesRelationnels — ce que la case d'autorisation promet", () => {
+  it("l'ancienne promesse de personnalisation automatique a disparu", () => {
+    expect(markupFormulaireAjout()).not.toContain("personnalis");
+  });
+
+  it("le libellé annonce exactement ce que la case fait : afficher le repère", () => {
+    expect(markupFormulaireAjout()).toContain("Afficher ce repère lors de la préparation d");
+  });
+
+  it("l'aide dit ce qui NE se produit pas : ni ajout au message, ni envoi au moteur de rédaction", () => {
+    const html = markupFormulaireAjout();
+
+    expect(html).toContain("aide-mémoire");
+    expect(html).toContain("jamais ajouté automatiquement au message");
+    expect(html).toContain("transmis au moteur de rédaction");
+  });
+});

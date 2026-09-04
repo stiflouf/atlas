@@ -35,9 +35,13 @@ const boutonPrincipalCls =
   "text-[12px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3 py-1.5 rounded-lg";
 const boutonDiscretCls = "text-[12px] text-text-3 hover:text-text-2 transition-colors";
 
-// Wording produit, pas juridique : ce que la case autorise, et ce qu'elle n'autorise pas. Le
-// second point compte autant que le premier — cocher n'a jamais signifié « utilise ceci partout ».
-const AIDE_AUTORISATION = "Même autorisé, ce repère ne sera utilisé que lorsqu'il est pertinent.";
+// VALUE-07B (ADR-053) — wording resserré sur ce que la case fait RÉELLEMENT. L'ancienne
+// formulation (« Autoriser DOMIORA à utiliser ce repère pour personnaliser une communication »)
+// promettait une personnalisation automatique qui n'existe pas : cocher n'ouvre que l'affichage du
+// repère au conseiller pendant qu'il prépare un message. Une case qui promet plus que le produit
+// ne fait documente un consentement qui ne correspond à rien.
+const AIDE_AUTORISATION =
+  "Il reste un aide-mémoire pour vous : il n'est jamais ajouté automatiquement au message, ni transmis au moteur de rédaction.";
 const AIDE_PERTINENCE = "Conservez uniquement des informations utiles à votre relation professionnelle avec ce client.";
 
 function ChampsRepere({ repere }: { repere?: RepereRelationnel }) {
@@ -102,14 +106,16 @@ function ChampsRepere({ repere }: { repere?: RepereRelationnel }) {
       <div>
         <label className="flex items-start gap-2 text-[13px] text-text-1">
           {/* Décochée par défaut, toujours : `defaultChecked` ne vaut `true` que si le conseiller
-              l'avait déjà explicitement autorisé sur ce repère. */}
+              l'avait déjà explicitement autorisé sur ce repère. Le nom du champ et la colonne
+              `utilisable_communication` restent inchangés (aucune migration en VALUE-07B) : c'est
+              la promesse faite au conseiller qui était trop large, pas la donnée. */}
           <input
             type="checkbox"
             name="utilisableCommunication"
             defaultChecked={repere?.utilisableCommunication ?? false}
             className="mt-0.5"
           />
-          <span>Autoriser DOMIORA à utiliser ce repère pour personnaliser une communication</span>
+          <span>Afficher ce repère lors de la préparation d&apos;une communication</span>
         </label>
         <p className="text-[11px] text-text-3 mt-1 ml-6">{AIDE_AUTORISATION}</p>
       </div>

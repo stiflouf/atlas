@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import BrouillonEmailFormulaire from "@/components/communications/BrouillonEmailFormulaire";
+import ReperesPourEchange from "@/components/communications/ReperesPourEchange";
 import {
   assemblerFaits,
   LABEL_INTENTION_COMMUNICATION,
@@ -12,6 +13,8 @@ import {
   type ParametresEcranCommunication,
 } from "@/lib/communications/contexteEcranCommunication";
 import { redactionAssisteeDisponible } from "@/lib/redaction/redacteur";
+import { selectionnerReperesPourCommunication } from "@/lib/relations/politiqueReperesCommunication";
+import { listerReperesRelationnelsAcquereur } from "@/lib/repereRelationnelRepository";
 import { chargerCapacitesGoogle } from "@/lib/google/capacites";
 
 type PageProps = { searchParams: Promise<ParametresEcranCommunication> };
@@ -34,6 +37,17 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
   const choixRequis = candidats.length > 1 && !candidatChoisi;
   const intention = determinerIntention(candidatChoisi?.type);
 
+  // VALUE-07B (ADR-053) — repères du SEUL acquéreur réellement résolu comme destinataire par le
+  // contexte serveur ci-dessus : jamais un acquéreur deviné depuis l'email, le nom ou le contenu
+  // du message, jamais un chargement global. Ils alimentent uniquement le bloc d'affichage
+  // ci-dessous — ni `assemblerFaits`, ni le formulaire de rédaction, ni la reformulation.
+  const reperesDestinataire =
+    candidatChoisi?.type === "acquereur" ? await listerReperesRelationnelsAcquereur(candidatChoisi.id) : [];
+  const { reperesAffichables, presencePreferenceContact } = selectionnerReperesPourCommunication(
+    candidatChoisi,
+    reperesDestinataire
+  );
+
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
@@ -46,6 +60,8 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
 
       <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-1">{titre}</h1>
       <p className="text-[14px] text-text-2 mb-6">{LABEL_INTENTION_COMMUNICATION[intention]}</p>
+
+      <ReperesPourEchange reperes={reperesAffichables} presencePreferenceContact={presencePreferenceContact} />
 
       {choixRequis ? (
         <div className="bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">

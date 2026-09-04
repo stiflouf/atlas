@@ -340,6 +340,7 @@ Index cliquable : `docs/README.md`.
 | Pack Notaire / transmissions | ADR-030, 049, 050 |
 | Authentification / session / sécurité pilote | ADR-047 |
 | Recherche / pagination | ADR-048 |
+| Communications / emails / rédaction assistée / repères relationnels | ADR-008, 031, 031-bis, 043, 053 |
 | Release / E2E / exploitation pilote | `docs/PILOT_RUNBOOK.md`, `docs/PROCEDURE_MIGRATION_PRODUCTION.md`, ce document (Partie 4, section Tests) |
 | Décision structurante (hébergeur, stockage, async, multi-tenant futur, IaC) | ADR-051 — et écrire les rubriques Scalabilité/Réversibilité dans toute nouvelle ADR importante (voir `docs/adr/README.md`) |
 
