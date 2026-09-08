@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-047, §35 de l'audit : enregistrerValidationBien (validationRendezVous.ts) n'avait jusqu'ici
 // AUCUN test, direct ou indirect (confirmé par recherche exhaustive lors de l'audit). Comportement
@@ -7,6 +8,15 @@ import { and, eq } from "drizzle-orm";
 // validationRendezVous.securite.test.ts (jamais deux stratégies de mock dans un seul fichier).
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
+}));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
 }));
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
@@ -47,7 +57,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }

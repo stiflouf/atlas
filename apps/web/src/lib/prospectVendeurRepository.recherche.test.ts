@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-048 — recherche serveur : rechercherProspectsVendeurs(). Vérifie surtout que le filtrage par
 // vue reste EXACTEMENT celui de listerProspectsVendeurs*() (même prédicat partagé, predicatVue —
@@ -36,7 +37,7 @@ async function prospectDeTest(suffixe: string, prenom = "Jean") {
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-  });
+  }, WORKSPACE_TEST);
   idsCrees.push(prospect.id);
   return prospect;
 }

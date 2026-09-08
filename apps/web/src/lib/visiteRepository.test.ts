@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-040) : vraie base Postgres, même patron que
 // catalogueRegles.nouveauMatch.test.ts. Couvre l'entité minimale `visites` : matérialisation
@@ -49,7 +50,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -66,7 +67,7 @@ async function creerAcquereurDeTest(suffixe: string) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }

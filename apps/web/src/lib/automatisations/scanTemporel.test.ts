@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Tests d'intégration réels (ADR-033) : couvre le scanner I/O — règle inactive/non configurée
 // (aucun run), création d'occurrence, absence de doublon au second scan, nouveau cycle après un
@@ -61,7 +62,7 @@ const idsTachesCrees: string[] = [];
 const idsRunsCrees: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation(REGLE, false);
+  await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   // Nettoyage par requête plutôt que par suivi manuel (idsEvenementsCrees/idsTachesCrees ci-dessus
   // restent indicatifs) : plusieurs scans de ce fichier peuvent légitimement créer des occurrences
   // pour des prospects hérités d'un test précédent (pollution volontaire, même convention que les
@@ -105,7 +106,7 @@ async function creerProspectAvecAncre(suffixe: string, ancre: Date, viaContact: 
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-  });
+  }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   await getDb()
     .update(prospectsVendeursTable)
@@ -125,30 +126,30 @@ async function recupererEvenementsEtTaches(prospectVendeurId: string) {
 
 describe("scannerInactiviteProspectVendeur — règle inactive ou non configurée", () => {
   it("règle inactive : aucun run créé, execute=false", async () => {
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
     const resultat = await scannerInactiviteProspectVendeur(new Date("2026-08-14T10:00:00Z"));
     expect(resultat).toEqual({ execute: false });
   });
 
   it("règle active mais sans seuil configuré : aucun run créé, execute=false", async () => {
-    await definirSeuilAutomatisation(REGLE, 7);
+    await definirSeuilAutomatisation(REGLE, 7, WORKSPACE_TEST);
     // Repasse le seuil à NULL directement (aucun setter "effacer" côté repository — geste
     // volontairement absent en V1, contourné ici pour le test) pour simuler l'état initial seedé.
     await getDb()
       .update(configurationsAutomatisationTable)
       .set({ seuilJoursInactivite: null })
       .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const resultat = await scannerInactiviteProspectVendeur(new Date("2026-08-14T10:00:00Z"));
     expect(resultat).toEqual({ execute: false });
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("scannerInactiviteProspectVendeur — création d'occurrence et idempotence", () => {
   it("crée un événement + une tâche pour un prospect dont le seuil est franchi, aucun doublon au second scan", async () => {
-    await definirSeuilAutomatisation(REGLE, 7);
-    await definirActivationAutomatisation(REGLE, true);
+    await definirSeuilAutomatisation(REGLE, 7, WORKSPACE_TEST);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
 
     const maintenant = new Date("2026-08-20T10:00:00Z");
     const prospectId = await creerProspectAvecAncre("OCCURRENCE", new Date("2026-08-01T10:00:00Z"), true);
@@ -175,12 +176,12 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     expect(evenementsApres2).toHaveLength(1);
     expect(tachesApres2).toHaveLength(1);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("un vrai nouveau contact ouvre un nouveau cycle, même si la tâche du cycle précédent est encore ouverte", async () => {
-    await definirSeuilAutomatisation(REGLE, 7);
-    await definirActivationAutomatisation(REGLE, true);
+    await definirSeuilAutomatisation(REGLE, 7, WORKSPACE_TEST);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
 
     const prospectId = await creerProspectAvecAncre("NOUVEAU-CYCLE", new Date("2026-01-01T10:00:00Z"), true);
 
@@ -209,12 +210,12 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     expect(tache2).toHaveLength(2);
     idsTachesCrees.push(...tache2.filter((t) => !idsTachesCrees.includes(t.id)).map((t) => t.id));
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("concurrence : deux scans simultanés sur le même prospect ne créent qu'une seule occurrence", async () => {
-    await definirSeuilAutomatisation(REGLE, 7);
-    await definirActivationAutomatisation(REGLE, true);
+    await definirSeuilAutomatisation(REGLE, 7, WORKSPACE_TEST);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
 
     const maintenant = new Date("2026-08-20T10:00:00Z");
     const prospectId = await creerProspectAvecAncre("CONCURRENCE", new Date("2026-08-01T10:00:00Z"), true);
@@ -232,12 +233,12 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     expect(taches).toHaveLength(1);
     idsTachesCrees.push(taches[0].id);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("une erreur isolée sur un prospect n'empêche pas le traitement des autres, ni la complétion du run", async () => {
-    await definirSeuilAutomatisation(REGLE, 7);
-    await definirActivationAutomatisation(REGLE, true);
+    await definirSeuilAutomatisation(REGLE, 7, WORKSPACE_TEST);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
 
     const maintenant = new Date("2026-08-20T10:00:00Z");
     const idEnEchec = await creerProspectAvecAncre("ECHEC-ISOLE-A", new Date("2026-08-01T10:00:00Z"), true);
@@ -274,15 +275,15 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     expect(tacheSucces).toHaveLength(1);
     idsTachesCrees.push(tacheSucces[0].id);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("reprise après interruption : un run resté 'en_cours' (crash simulé) n'empêche jamais un scan ultérieur de détecter l'occurrence", async () => {
-    await definirSeuilAutomatisation(REGLE, 7);
-    await definirActivationAutomatisation(REGLE, true);
+    await definirSeuilAutomatisation(REGLE, 7, WORKSPACE_TEST);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
 
     // Simule un run laissé sans jamais être complété (process arrêté en plein scan).
-    const runInacheveId = await demarrerRunScanAutomatisation(REGLE);
+    const runInacheveId = await demarrerRunScanAutomatisation(REGLE, WORKSPACE_TEST);
     idsRunsCrees.push(runInacheveId);
     const runInacheve = await getDernierRunScanPourRegle(REGLE);
     expect(runInacheve?.id).toBe(runInacheveId);
@@ -299,6 +300,6 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     expect(taches).toHaveLength(1);
     idsTachesCrees.push(taches[0].id);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });

@@ -37,6 +37,9 @@ export function calculerContenuHash(destinataireEmail: string, objet: string, co
 
 export type NouvelEnvoiEmail = {
   id: string; // Clé d'idempotence fournie par l'appelant — jamais générée ici (defaultRandom absent du schéma).
+  // ADR-054 — appartenance obligatoire, fournie par le contexte authentifié appelant. Champ du type
+  // d'entrée plutôt que paramètre séparé : cette fonction reçoit déjà tout par un objet nommé.
+  workspaceId: string;
   destinataireEmail: string;
   objet: string;
   contenuHash: string;
@@ -55,6 +58,7 @@ export async function demarrerTentativeEnvoi(input: NouvelEnvoiEmail): Promise<E
     .insert(envoisEmailTable)
     .values({
       id: input.id,
+      workspaceId: input.workspaceId,
       destinataireEmail: input.destinataireEmail,
       objet: input.objet,
       contenuHash: input.contenuHash,

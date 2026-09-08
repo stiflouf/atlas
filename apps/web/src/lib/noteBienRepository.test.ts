@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : la FK notes_bien -> biens impose un bienId réel, donc un mock ne suffit
 // pas ici. Repli sur le même DATABASE_URL par défaut que drizzle.config.ts (Postgres local de
@@ -46,7 +47,7 @@ describe("noteBienRepository (intégration Postgres)", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(bien.id);
 
     const premiere = await ajouterNoteBien(bien.id, "Première note.");

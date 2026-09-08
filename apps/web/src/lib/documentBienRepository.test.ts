@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : la FK documents_bien -> biens impose un bienId réel, donc un mock ne
 // suffit pas ici. Repli sur le même DATABASE_URL par défaut que drizzle.config.ts (Postgres
@@ -56,7 +57,7 @@ describe("documentBienRepository (intégration Postgres)", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(bien.id);
 
     const premier = await enregistrerDocumentBien({
@@ -122,7 +123,7 @@ describe("documentBienRepository (intégration Postgres)", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(bien.id);
 
     const document = await enregistrerDocumentBien({

@@ -7,6 +7,7 @@ import { getClientById } from "@/lib/clientRepository";
 import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import type { CibleTache, PrioriteTache, TypeTache } from "@/types/tache";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefined {
   const texte = String(valeur ?? "").trim();
@@ -55,15 +56,19 @@ export async function creerTacheAction(formData: FormData): Promise<void> {
     cible = { type: "prospectVendeur", id: prospectVendeurId };
   }
 
-  await creerTache({
-    titre,
-    contexte: parseTexteOptionnel(formData.get("contexte")),
-    type: String(formData.get("type")) as TypeTache,
-    priorite: String(formData.get("priorite")) as PrioriteTache,
-    echeance: parseTexteOptionnel(formData.get("echeance")),
-    origine: "manuelle",
-    cible,
-  });
+  await creerTache(
+    {
+      titre,
+      contexte: parseTexteOptionnel(formData.get("contexte")),
+      type: String(formData.get("type")) as TypeTache,
+      priorite: String(formData.get("priorite")) as PrioriteTache,
+      echeance: parseTexteOptionnel(formData.get("echeance")),
+      origine: "manuelle",
+      cible,
+    },
+    // ADR-054 — appartenance explicite de la tâche (table racine).
+    await exigerWorkspaceCourant()
+  );
 
   const redirectTo = String(formData.get("redirectTo") ?? "/");
   redirect(redirectTo.startsWith("/") ? redirectTo : "/");

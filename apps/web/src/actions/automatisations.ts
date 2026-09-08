@@ -8,6 +8,7 @@ import {
 } from "@/lib/automatisations/configurationAutomatisationRepository";
 import { CODES_REGLE_AUTOMATISATION, type CodeRegleAutomatisation } from "@/types/automatisation";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Règles dont l'activation exige un paramètre produit explicite (ADR-033, point 4) — seule
 // 'inactivite_prospect_vendeur' aujourd'hui. Vérifié ici (Server Action), jamais dans le
@@ -33,7 +34,8 @@ export async function basculerAutomatisationAction(formData: FormData): Promise<
     }
   }
 
-  await definirActivationAutomatisation(regleCode as CodeRegleAutomatisation, active);
+  // ADR-054 — l'activation d'une règle appartient au workspace qui la configure.
+  await definirActivationAutomatisation(regleCode as CodeRegleAutomatisation, active, await exigerWorkspaceCourant());
   redirect("/automatisations");
 }
 
@@ -50,6 +52,6 @@ export async function definirSeuilAutomatisationAction(formData: FormData): Prom
     throw new Error("Le seuil doit être un nombre de jours entier strictement positif.");
   }
 
-  await definirSeuilAutomatisation(regleCode as CodeRegleAutomatisation, seuilJours);
+  await definirSeuilAutomatisation(regleCode as CodeRegleAutomatisation, seuilJours, await exigerWorkspaceCourant());
   redirect("/automatisations");
 }

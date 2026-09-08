@@ -33,9 +33,12 @@ export async function traiterDemandeResynchronisation(idDemande: string): Promis
       const demande = await verrouillerDemande(idDemande, tx);
       if (!demande) return; // déjà traitée, ou verrouillée par un traitement concurrent — rien à faire
 
+      // ADR-054 — le périmètre vient de la demande elle-même : ce chemin est appelé aussi bien
+      // depuis une Server Action (session) que depuis le balayage machine, et ne doit dépendre
+      // d'aucun des deux.
       const resultat = demande.bienId
-        ? await synchroniserCompatibilitesPourBien(demande.bienId)
-        : await synchroniserCompatibilitesPourAcquereur(demande.acquereurId!);
+        ? await synchroniserCompatibilitesPourBien(demande.bienId, demande.workspaceId)
+        : await synchroniserCompatibilitesPourAcquereur(demande.acquereurId!, demande.workspaceId);
 
       evenementsEmis = resultat.evenementsEmis;
 

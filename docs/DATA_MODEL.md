@@ -253,6 +253,75 @@ erDiagram
     }
 ```
 
+## `workspaces` (ADR-054)
+
+**Rôle** : périmètre PROPRIÉTAIRE des données métier (OWNERSHIP). Une ligne métier appartient à
+exactement un workspace, pour toute sa vie. Le produit reste mono-conseiller : une seule ligne
+existe, `id = 'default'`, créée par la migration `0032` — même patron de ligne unique que
+`connexions_google` et `dossier_fiscal`, mais ici l'unicité est un état de départ, pas une
+propriété permanente.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | text (PK) | non | `DEFAULT 'default'` — clé logique, jamais un uuid de substitution |
+| `nom` | text | **oui** | `NULL` = aucun libellé saisi ; la migration n'en invente aucun (ADR-009). Distinct d'`ATLAS_ADVISOR_DISPLAY_NAME`, propriété d'instance |
+| `cree_le` | timestamptz | non | `defaultNow()` |
+
+Aucune contrainte `CHECK`. Référencée par la colonne `workspace_id` des tables racines (voir
+ci-dessous) et par `workspace_membres`.
+
+## `workspace_membres` (ADR-054)
+
+**Rôle** : ACCESS — quelle identité humaine a accès à quel workspace. Ne dit **jamais** qui possède
+une ligne métier (c'est `workspace_id`) ni qui a créé quoi (aucune colonne d'auteur n'existe).
+
+**Table vide après la migration `0032`**, volontairement : le `sub` Google n'est jamais persisté
+(ADR-047), il n'est connu qu'au retour du callback OIDC — une appartenance initiale ne peut pas être
+établie de façon déterministe par une migration, et l'inventer créerait une identité inexistante.
+Elle sera posée par le lot qui résout le workspace en session. **Aucun chemin
+d'authentification ne lit cette table aujourd'hui** : l'allowlist à une seule adresse
+(`ATLAS_ALLOWED_EMAIL`) reste seule maîtresse de qui peut entrer.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `workspace_id` | text (PK composite) | non | FK → `workspaces.id`, NO ACTION |
+| `identite_sub` | text (PK composite) | non | `sub` Google, déjà porté par la session Atlas (ADR-047) — aucune seconde notion d'utilisateur n'est créée |
+| `email` | text | non | email vérifié au moment de l'ajout |
+| `role` | text | non | `CHECK IN ('owner')` — vocabulaire fermé ; `member`/`manager`/`admin` sont absents tant que leur sémantique n'est pas implémentée (ADR-054 §5) |
+| `ajoute_le` | timestamptz | non | `defaultNow()` |
+
+PK composite `(workspace_id, identite_sub)` : c'est la clé logique réelle, il n'existe pas de second
+axe d'identité pour une appartenance (même raisonnement que `compatibilites_bien_acquereur_etat`).
+
+## Colonne `workspace_id` sur les tables racines (ADR-054)
+
+Neuf tables **racines** portent `workspace_id text NOT NULL DEFAULT 'default'`, FK vers
+`workspaces.id` (NO ACTION) : `biens`, `acquereurs`, `prospects_vendeurs`, `taches`, `envois_email`,
+`evenements_metier`, `configurations_automatisation`, `runs_scan_automatisation`,
+`compatibilites_a_resynchroniser`.
+
+**Aucun `DEFAULT` depuis la migration `0033`** : le filet posé par `0032` a été retiré une fois tous
+les chemins d'écriture rendus explicites. C'est un invariant de sécurité — une écriture qui oublie
+son périmètre échoue immédiatement (violation `NOT NULL`) au lieu d'être silencieusement rangée dans
+le workspace historique. La valeur vient de la session (`exigerWorkspaceCourant`, `src/lib/auth/`)
+ou du contexte d'exécution machine (`resoudreWorkspaceExecutionMachine`, `src/lib/workspaceRepository.ts`)
+— jamais d'un littéral dans un repository, règle verrouillée par un test structurel.
+
+`configurations_automatisation` conserve sa PK `regle_code` seule : correcte tant qu'il n'existe
+qu'un workspace, elle devra devenir `PRIMARY KEY (workspace_id, regle_code)` **dans le lot qui
+activera le multi-workspace** — c'est la seule contrainte d'unicité du schéma dans ce cas.
+
+Les tables **feuilles** ne portent **pas** `workspace_id` : leur appartenance se dérive d'une FK
+NOT NULL vers un parent possédé, et la dupliquer créerait une seconde vérité pouvant diverger
+(ADR-054 §7). Restent sans colonne, chacun pour une raison distincte : `connexions_google` (secret personnel,
+ADR-054 §6), `dossier_fiscal` et ses trois filles (**tranché** : données fiscales personnelles du
+conseiller, rattachées à l'identité et non au workspace — ADR-054 §6 bis), `memoire_contextuelle`
+(**non tranché**, question ouverte 4 bis d'ADR-054), et `regle_fiscale` (référentiel non possédé).
+
+Le classement complet des tables est exécutable et verrouillé par
+`apps/web/src/db/appartenanceWorkspace.structurel.test.ts` : toute table ajoutée au schéma sans
+être classée fait échouer ce test.
+
 ## `connexions_google`
 
 **Rôle** : fait serveur unique — le conseiller est-il connecté à Google Calendar, et avec quel
@@ -1341,6 +1410,10 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0027_abandoned_red_wolf.sql` | ADR-042 : `CHECK` étendus (`configurations_automatisation`, `envois_email`, `executions_automatisation`) pour la 7ᵉ règle `retour_vendeur_apres_visite` ; seed `active = false` |
 | `0028_mixed_lorna_dane.sql` | ADR-047 : `UNIQUE(executions_automatisation.tache_id)`, `UNIQUE(compromis.offre_id)`, index unique partiel `compromis_bien_id_en_cours_unique` — trois invariants jusqu'ici seulement applicatifs, désormais garantis en base |
 | `0029_nappy_microbe.sql` | ADR-049 : table `transmissions_dossier_notaire` (FK `compromis_id` NO ACTION, `UNIQUE(cle_idempotence)`, premier usage `jsonb` du projet) |
+| `0030_hot_leo.sql` | ADR-052 : table `photos_bien` (FK `bien_id` CASCADE, `CHECK` type MIME/taille/ordre) |
+| `0031_awesome_stellaris.sql` | VALUE-06 : table `reperes_relationnels_acquereur` (FK `acquereur_id` CASCADE, `CHECK` catégorie/provenance, `utilisable_communication` `DEFAULT false`) |
+| `0032_polite_wolverine.sql` | ADR-054 : tables `workspaces` et `workspace_membres` ; INSERT du workspace historique `'default'` (**complété à la main** — indispensable avant les FK, voir l'en-tête du fichier) ; colonne `workspace_id` (`NOT NULL DEFAULT 'default'`, FK NO ACTION) sur les 9 tables racines. Additive : aucune table supprimée, aucune lecture applicative modifiée |
+| `0033_safe_invisible_woman.sql` | ADR-054 : `DROP DEFAULT` sur les 9 colonnes `workspace_id`, une fois tous les chemins d'écriture rendus explicites. `NOT NULL` et les FK restent en place ; aucune donnée historique touchée. Invariant de sécurité : une écriture sans périmètre échoue désormais au lieu de retomber sur le workspace historique |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -8,9 +8,19 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { and, eq, inArray } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration + garde-fou : vérifie qu'un appel direct à enregistrerCompteRenduVisiteAction
 // (contournant le formulaire, remplacé par un message sur une fiche archivée — voir
@@ -89,7 +99,7 @@ async function creerBienTest(reference: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -106,7 +116,7 @@ async function creerAcquereurTest(nom: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -204,7 +214,7 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
   });
 
   it("règle suivi_apres_visite non régressée (ADR-041 : cible désormais l'acquéreur, jamais le compte rendu)", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
     const bien = await creerBienTest("[test réel] CR-VISITE-2");
     const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-ACQ-2");
     const visite = await materialiserVisite({
@@ -233,7 +243,7 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
     expect(tachesDeSuivi[0].visiteId).toBeNull(); // jamais posée par cette règle depuis ADR-041
     expect(tachesDeSuivi[0].titre).toBe(`Relancer ${acquereur.prenom} ${acquereur.nom} après la visite de ${bien.reference}`);
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 
   it("visiteId absent (page non ADR-040, ou visite non matérialisable) : compte rendu enregistré normalement, sans erreur", async () => {

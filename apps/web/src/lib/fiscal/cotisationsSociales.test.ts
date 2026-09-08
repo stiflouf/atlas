@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration — utilise le référentiel réel seedé (taux_cotisations_bnc_general, 25,6 %
 // depuis 2026-01-01) : toutes les fixtures se placent en 2026 pour rester dans sa période de
@@ -52,7 +53,7 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -65,7 +66,7 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);

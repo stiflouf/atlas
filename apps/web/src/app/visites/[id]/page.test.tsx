@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-041) : vraie base Postgres, AUCUNE connexion Google Calendar
 // configurée dans cet environnement de test — la fiche doit rester pleinement consultable malgré
@@ -40,7 +41,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -57,7 +58,7 @@ async function creerAcquereurDeTest(suffixe: string) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }

@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -64,7 +65,7 @@ async function creerProspectDeTest(suffixe: string) {
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-  });
+  }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   return prospect;
 }
@@ -147,7 +148,7 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
       dateMandat: "2026-09-10",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     expect(resultat).toBeDefined();
     idsBiensCrees.push(resultat!.bien.id);
 
@@ -177,7 +178,7 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
       dateMandat: "2026-09-10",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(resultatA!.bien.id);
 
     // Tentative de faire pointer un second prospect vers le même bien directement en base

@@ -7,6 +7,7 @@ import { marquerHorsPerimetrePourBien } from "@/lib/compatibilite/etatRepository
 import { enqueuerResynchronisationBien } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // id absent/invalide/inexistant -> notFound(), jamais une redirection de succès silencieuse
 // (même garde que modifierBienAction).
@@ -39,13 +40,15 @@ export async function archiverBienAction(formData: FormData): Promise<void> {
 // flip.
 export async function desarchiverBienAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite de la demande de resynchronisation (table racine).
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
   const resultat = await getDb().transaction(async (tx) => {
     const bien = await desarchiverBien(id, tx);
     if (!bien) return undefined;
-    const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, tx);
+    const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, workspaceId, tx);
     return { bien, idDemandeResynchronisation };
   });
   if (!resultat) notFound();

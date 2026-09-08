@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { like, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -36,9 +37,9 @@ function acquereurTest(suffixe: string, overrides: Partial<Parameters<typeof cre
 
 describe("/clients (ADR-048)", () => {
   it("q filtre réellement la liste affichée", async () => {
-    const trouve = await creerAcquereur(acquereurTest("TROUVE"));
+    const trouve = await creerAcquereur(acquereurTest("TROUVE"), WORKSPACE_TEST);
     idsCrees.push(trouve.id);
-    const autre = await creerAcquereur(acquereurTest("AUTRE"));
+    const autre = await creerAcquereur(acquereurTest("AUTRE"), WORKSPACE_TEST);
     idsCrees.push(autre.id);
 
     const element = await ClientsPage({ searchParams: Promise.resolve({ q: `${NOM_PREFIX}-TROUVE` }) });
@@ -58,7 +59,7 @@ describe("/clients (ADR-048)", () => {
   });
 
   it("page hors bornes redirige vers la dernière page valide, jamais une page vide", async () => {
-    const acquereur = await creerAcquereur(acquereurTest("HORS-BORNES"));
+    const acquereur = await creerAcquereur(acquereurTest("HORS-BORNES"), WORKSPACE_TEST);
     idsCrees.push(acquereur.id);
 
     await expect(
@@ -67,7 +68,7 @@ describe("/clients (ADR-048)", () => {
   });
 
   it("archives=1 continue de fonctionner seul (rétrocompatibilité du lien existant)", async () => {
-    const archive = await creerAcquereur(acquereurTest("ARCHIVE-COMPAT"));
+    const archive = await creerAcquereur(acquereurTest("ARCHIVE-COMPAT"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
     await archiverAcquereur(archive.id);
 

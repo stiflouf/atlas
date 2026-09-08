@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : les vérifications de cohérence lisent des entités réelles (compromis,
 // prospect vendeur) — même repli DATABASE_URL que les autres suites d'intégration.
@@ -61,7 +62,7 @@ async function creerBienTest(reference: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiens.push(bien.id);
   return bien;
 }
@@ -78,7 +79,7 @@ async function creerAcquereurTest(email: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
   return acquereur;
 }
@@ -149,7 +150,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
   it("rejette un prospect vendeur n'ayant pas converti ce bien", async () => {
     const bienConverti = await creerBienTest("[test réel] COHER-BIEN-005");
     const autreBien = await creerBienTest("[test réel] COHER-BIEN-006");
-    const prospect = await creerProspectVendeur({ nom: "Vendeur Test" });
+    const prospect = await creerProspectVendeur({ nom: "Vendeur Test" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     // signerMandatProspectVendeur crée son propre bien atomiquement — on utilise celui-ci comme
     // "bienConverti" réel, distinct de autreBien (jamais converti par ce prospect).
@@ -167,7 +168,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
       dateMandat: bienConverti.dateMandat,
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     if (conversion) idsBiens.push(conversion.bien.id);
 
     await expect(
@@ -176,7 +177,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
   });
 
   it("accepte un prospect vendeur cohérent avec le bien qu'il a converti", async () => {
-    const prospect = await creerProspectVendeur({ nom: "Vendeur Test 2" });
+    const prospect = await creerProspectVendeur({ nom: "Vendeur Test 2" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const conversion = await signerMandatProspectVendeur(prospect.id, {
       reference: "[test réel] COHER-BIEN-007",
@@ -192,7 +193,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     expect(conversion).toBeDefined();
     if (!conversion) return;
     idsBiens.push(conversion.bien.id);

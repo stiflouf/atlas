@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration sur des agrégats globaux (pas de filtre par bienId comme les autres
 // repositories) : impossible d'isoler ces requêtes des autres suites qui créent/suppriment leurs
@@ -106,7 +107,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -119,7 +120,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return { bien, acquereur };
 }

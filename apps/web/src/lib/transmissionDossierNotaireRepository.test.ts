@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration Postgres réel (ADR-049) — même principe que compromisRepository.test.ts : les
 // FK compromis -> biens/acquereurs imposent des ids réels.
@@ -56,7 +57,7 @@ async function creerCompromisDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -69,7 +70,7 @@ async function creerCompromisDeTest(suffixe: string) {
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({
     bienId: bien.id,

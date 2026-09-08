@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-046 §43/§45) : couvre la règle `preparation_dossier_notaire_apres_compromis`
 // après le reformulation de titre/contexte (ADR-046) — aucun changement de comportement
@@ -38,7 +39,7 @@ const idsAcquereursCrees: string[] = [];
 const idsCompromisCrees: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation(REGLE, false);
+  await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
 
   const filtreEvt = idsCompromisCrees.length > 0 ? inArray(evenementsMetier.compromisId, idsCompromisCrees) : undefined;
   if (filtreEvt) {
@@ -69,7 +70,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -82,14 +83,14 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return { bien, acquereur };
 }
 
 describe("règle preparation_dossier_notaire_apres_compromis — wording ADR-046, comportement inchangé", () => {
   it("produit une tâche avec le nouveau titre/contexte, cible/priorité/type/échéance inchangés", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("WORDING1");
     const compromis = await enregistrerCompromis({
       bienId: bien.id,
@@ -102,7 +103,7 @@ describe("règle preparation_dossier_notaire_apres_compromis — wording ADR-046
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "compromis_signe",
       compromisId: compromis.id,
-    });
+    }, WORKSPACE_TEST);
     await traiterExecutionsEnAttente(idsExecutionsATraiter);
 
     const execution = await getExecutionAutomatisationById(idsExecutionsATraiter[0]);
@@ -126,11 +127,11 @@ describe("règle preparation_dossier_notaire_apres_compromis — wording ADR-046
     expect(tache!.titre).not.toContain("pour le notaire");
     expect(tache!.contexte).not.toMatch(/notaire/i);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("cible Compromis : Voir la fiche absent (aucune fiche Compromis navigable), Préparer un email présent", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("CIBLE1");
     const compromis = await enregistrerCompromis({
       bienId: bien.id,
@@ -143,7 +144,7 @@ describe("règle preparation_dossier_notaire_apres_compromis — wording ADR-046
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "compromis_signe",
       compromisId: compromis.id,
-    });
+    }, WORKSPACE_TEST);
     await traiterExecutionsEnAttente(idsExecutionsATraiter);
     const execution = await getExecutionAutomatisationById(idsExecutionsATraiter[0]);
     const tache = await getTacheById(execution!.tacheId!);
@@ -161,6 +162,6 @@ describe("règle preparation_dossier_notaire_apres_compromis — wording ADR-046
     const intention = determinerIntentionParDefaut(resultat.cibleType, resultat.candidats[0]?.type, resultat.faits);
     expect(intention).toBe("message_compromis");
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });

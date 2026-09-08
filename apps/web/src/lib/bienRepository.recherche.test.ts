@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-048 — recherche + pagination serveur : rechercherBiensPage(). Test d'intégration réel
 // (Postgres local), même principe que bienRepository.test.ts.
@@ -37,9 +38,9 @@ function bienTest(suffixe: string, overrides: Partial<Parameters<typeof creerBie
 
 describe("rechercherBiensPage (ADR-048)", () => {
   it("filtre par archives=false/true comme les fonctions existantes", async () => {
-    const actif = await creerBien(bienTest("ARCHIVES-1"));
+    const actif = await creerBien(bienTest("ARCHIVES-1"), WORKSPACE_TEST);
     idsCrees.push(actif.id);
-    const archive = await creerBien(bienTest("ARCHIVES-2"));
+    const archive = await creerBien(bienTest("ARCHIVES-2"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
     await archiverBien(archive.id);
 
@@ -54,7 +55,8 @@ describe("rechercherBiensPage (ADR-048)", () => {
 
   it("recherche texte : trouve par référence, adresse ou ville, insensible à la casse", async () => {
     const bien = await creerBien(
-      bienTest("TEXTE-1", { reference: `${REFERENCE_PREFIX}-TEXTE-1`, adresse: "12 avenue Foch", ville: "Belfort" })
+      bienTest("TEXTE-1", { reference: `${REFERENCE_PREFIX}-TEXTE-1`, adresse: "12 avenue Foch", ville: "Belfort" }),
+      WORKSPACE_TEST
     );
     idsCrees.push(bien.id);
 
@@ -81,7 +83,7 @@ describe("rechercherBiensPage (ADR-048)", () => {
     const reference = `${REFERENCE_PREFIX}-PAGINATION`;
     const crees = [];
     for (let i = 0; i < 5; i++) {
-      const bien = await creerBien(bienTest(`PAGINATION-${i}`, { reference }));
+      const bien = await creerBien(bienTest(`PAGINATION-${i}`, { reference }), WORKSPACE_TEST);
       idsCrees.push(bien.id);
       crees.push(bien);
     }
@@ -105,7 +107,7 @@ describe("rechercherBiensPage (ADR-048)", () => {
   });
 
   it("page hors bornes retourne une liste vide, jamais une erreur — total reste correct", async () => {
-    const bien = await creerBien(bienTest("HORS-BORNES"));
+    const bien = await creerBien(bienTest("HORS-BORNES"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
 
     const resultat = await rechercherBiensPage({ q: "HORS-BORNES", archives: false, page: 99, parPage: 25 });

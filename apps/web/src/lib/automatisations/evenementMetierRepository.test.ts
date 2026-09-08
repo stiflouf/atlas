@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Tests d'intégration réels (ADR-032) : chaque scénario touche la vraie base Postgres, même style
 // que compromis.test.ts / envoiEmailRepository.test.ts. Ce fichier couvre les corrections n°1 à 3
@@ -37,7 +38,7 @@ afterAll(async () => {
     "suivi_apres_rdv_estimation",
     "preparation_dossier_notaire_apres_compromis",
   ] as const) {
-    await definirActivationAutomatisation(code, false);
+    await definirActivationAutomatisation(code, false, WORKSPACE_TEST);
   }
   if (idsEvenementsCrees.length > 0) {
     await getDb().delete(executionsAutomatisationTable).where(inArray(executionsAutomatisationTable.evenementId, idsEvenementsCrees));
@@ -63,7 +64,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -76,7 +77,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return { bien, acquereur };
 }
@@ -105,7 +106,7 @@ async function creerProspectDeTest(suffixe: string) {
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-  });
+  }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   return prospect;
 }
@@ -127,14 +128,14 @@ describe("emettreEvenementEtPreparerExecutions — idempotence de l'événement 
     const premier = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     expect(premier.evenement).toBeDefined();
     idsEvenementsCrees.push(premier.evenement!.id);
 
     const second = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     expect(second.evenement).toBeUndefined();
     expect(second.idsExecutionsATraiter).toEqual([]);
 
@@ -156,14 +157,14 @@ describe("emettreEvenementEtPreparerExecutions — idempotence de l'événement 
     const premier = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "rdv_estimation_realise",
       prospectVendeurId: prospect.id,
-    });
+    }, WORKSPACE_TEST);
     expect(premier.evenement).toBeDefined();
     idsEvenementsCrees.push(premier.evenement!.id);
 
     const second = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "rdv_estimation_realise",
       prospectVendeurId: prospect.id,
-    });
+    }, WORKSPACE_TEST);
     expect(second.evenement).toBeUndefined();
 
     const lignes = await getDb()
@@ -184,14 +185,14 @@ describe("emettreEvenementEtPreparerExecutions — idempotence de l'événement 
     const premier = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "compromis_signe",
       compromisId: compromis.id,
-    });
+    }, WORKSPACE_TEST);
     expect(premier.evenement).toBeDefined();
     idsEvenementsCrees.push(premier.evenement!.id);
 
     const second = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "compromis_signe",
       compromisId: compromis.id,
-    });
+    }, WORKSPACE_TEST);
     expect(second.evenement).toBeUndefined();
 
     const lignes = await getDb()
@@ -206,20 +207,20 @@ describe("emettreEvenementEtPreparerExecutions — idempotence de l'événement 
 
 describe("emettreEvenementEtPreparerExecutions — activation figée au moment de l'événement", () => {
   it("règle inactive au moment de l'événement : aucune exécution préparée, même après activation ultérieure de la règle", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
     const compteRendu = await creerCompteRenduDeTest("ACTIVATION-INACTIVE");
 
     const resultat = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     expect(resultat.evenement).toBeDefined();
     idsEvenementsCrees.push(resultat.evenement!.id);
     expect(resultat.idsExecutionsATraiter).toEqual([]);
 
     // Activation ultérieure de la règle — ne doit jamais traiter rétroactivement l'événement déjà
     // survenu : aucune ligne d'exécution n'a été prévue pour lui, il n'en existera donc jamais.
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
 
     const lignesExecution = await getDb()
       .select()
@@ -232,17 +233,17 @@ describe("emettreEvenementEtPreparerExecutions — activation figée au moment d
       );
     expect(lignesExecution).toHaveLength(0);
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 
   it("règle active au moment de l'événement : une exécution 'à traiter' est préparée pour elle", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
     const compteRendu = await creerCompteRenduDeTest("ACTIVATION-ACTIVE");
 
     const resultat = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     idsEvenementsCrees.push(resultat.evenement!.id);
     expect(resultat.idsExecutionsATraiter).toHaveLength(1);
 
@@ -254,7 +255,7 @@ describe("emettreEvenementEtPreparerExecutions — activation figée au moment d
     expect(ligneExecution.reussieLe).toBeNull();
     expect(ligneExecution.echoueeLe).toBeNull();
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 });
 
@@ -264,7 +265,7 @@ describe("executions_automatisation — idempotence de l'exécution (UNIQUE regl
     const { evenement } = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "compromis_signe",
       compromisId: compromis.id,
-    });
+    }, WORKSPACE_TEST);
     expect(evenement).toBeDefined();
     idsEvenementsCrees.push(evenement!.id);
 
@@ -292,7 +293,7 @@ describe("emettreEvenementEtPreparerExecutions — idempotence du cycle temporel
       typeEvenement: "inactivite_prospect_vendeur",
       prospectVendeurId: prospect.id,
       ancreCycle: ancreA,
-    });
+    }, WORKSPACE_TEST);
     expect(premier.evenement).toBeDefined();
     expect(premier.evenement!.ancreCycle).toBe(ancreA.toISOString());
     idsEvenementsCrees.push(premier.evenement!.id);
@@ -302,7 +303,7 @@ describe("emettreEvenementEtPreparerExecutions — idempotence du cycle temporel
       typeEvenement: "inactivite_prospect_vendeur",
       prospectVendeurId: prospect.id,
       ancreCycle: ancreA,
-    });
+    }, WORKSPACE_TEST);
     expect(rejeuMemeAncre.evenement).toBeUndefined();
 
     // Nouvelle ancre (un vrai nouveau contact a eu lieu entre-temps, puis un nouveau silence) :
@@ -311,7 +312,7 @@ describe("emettreEvenementEtPreparerExecutions — idempotence du cycle temporel
       typeEvenement: "inactivite_prospect_vendeur",
       prospectVendeurId: prospect.id,
       ancreCycle: ancreB,
-    });
+    }, WORKSPACE_TEST);
     expect(nouvelleAncre.evenement).toBeDefined();
     expect(nouvelleAncre.evenement!.ancreCycle).toBe(ancreB.toISOString());
     idsEvenementsCrees.push(nouvelleAncre.evenement!.id);
@@ -335,7 +336,7 @@ describe("emettreEvenementEtPreparerExecutions — idempotence du cycle temporel
     const ponctuel = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "rdv_estimation_realise",
       prospectVendeurId: prospect.id,
-    });
+    }, WORKSPACE_TEST);
     expect(ponctuel.evenement).toBeDefined();
     idsEvenementsCrees.push(ponctuel.evenement!.id);
 
@@ -343,7 +344,7 @@ describe("emettreEvenementEtPreparerExecutions — idempotence du cycle temporel
       typeEvenement: "inactivite_prospect_vendeur",
       prospectVendeurId: prospect.id,
       ancreCycle: ancre,
-    });
+    }, WORKSPACE_TEST);
     expect(cyclique.evenement).toBeDefined();
     idsEvenementsCrees.push(cyclique.evenement!.id);
   });

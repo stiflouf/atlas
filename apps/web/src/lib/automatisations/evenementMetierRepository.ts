@@ -11,6 +11,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier {
   return {
     id: ligne.id,
+    workspaceId: ligne.workspaceId,
     typeEvenement: ligne.typeEvenement as TypeEvenementMetier,
     compteRenduVisiteId: ligne.compteRenduVisiteId ?? undefined,
     prospectVendeurId: ligne.prospectVendeurId ?? undefined,
@@ -60,11 +61,18 @@ export type ResultatEmissionEvenement = {
 // L'activation des règles est lue ICI, au moment de l'événement (`configurations_automatisation`
 // tel qu'il est maintenant) — jamais réévaluée plus tard : activer une règle après coup ne traite
 // jamais rétroactivement les événements déjà survenus, faute de ligne d'exécution prévue pour eux.
+// ADR-054 — `workspaceId` est un paramètre OBLIGATOIRE, jamais une valeur que ce repository
+// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou du contexte
+// d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
+// la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
+// lieu d'être silencieusement rangé dans le workspace historique.
 export async function emettreEvenementEtPreparerExecutions(
   input: NouvelEvenementMetier,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ResultatEmissionEvenement> {
   const valeurs = {
+    workspaceId,
     typeEvenement: input.typeEvenement,
     compteRenduVisiteId: "compteRenduVisiteId" in input ? input.compteRenduVisiteId : null,
     prospectVendeurId: "prospectVendeurId" in input ? input.prospectVendeurId : null,

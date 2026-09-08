@@ -43,7 +43,10 @@ async function traiterPaire(
   bienId: string,
   acquereurId: string,
   statutObserve: StatutCompatibilite,
-  dansPerimetreActif: boolean
+  dansPerimetreActif: boolean,
+  // ADR-054 — périmètre de l'éventuel événement émis, transmis par l'appelant depuis la demande de
+  // resynchronisation (jamais deviné, jamais lu d'un contexte ambiant).
+  workspaceId: string
 ): Promise<{ emis: boolean } | { erreur: string }> {
   try {
     const emis = await getDb().transaction(async (tx) => {
@@ -71,6 +74,7 @@ async function traiterPaire(
         // ADR-036 lui-même.
         await emettreEvenementEtPreparerExecutions(
           { typeEvenement: "compatibilite_bien_acquereur_devenue_compatible", bienId, acquereurId, cycleCompatibilite },
+          workspaceId,
           tx
         );
       }
@@ -87,7 +91,10 @@ async function traiterPaire(
 // bascule dans_perimetre_actif directement sans évaluation, voir etatRepository.ts) : 1 bien × tous
 // les acquéreurs actifs persistés, secteurs chargés en une seule requête groupée (ADR-035),
 // jamais un fetch IGN ni une requête par paire.
-export async function synchroniserCompatibilitesPourBien(bienId: string): Promise<ResultatSynchronisation> {
+export async function synchroniserCompatibilitesPourBien(
+  bienId: string,
+  workspaceId: string
+): Promise<ResultatSynchronisation> {
   const bien = await getBienById(bienId);
   // Garde défensive : normalement jamais appelée pour un bien archivé (voir ci-dessus), mais une
   // course avec un archivage concurrent reste possible entre l'enqueue et le traitement — dans ce
@@ -101,7 +108,7 @@ export async function synchroniserCompatibilitesPourBien(bienId: string): Promis
   const erreurs: string[] = [];
   for (const acquereur of acquereurs) {
     const resultat = evaluerCompatibilite(bien, acquereur, secteursParAcquereur.get(acquereur.id) ?? []);
-    const traitement = await traiterPaire(bien.id, acquereur.id, resultat.statutGlobal, true);
+    const traitement = await traiterPaire(bien.id, acquereur.id, resultat.statutGlobal, true, workspaceId);
     if ("erreur" in traitement) {
       console.error(`[compatibilite] échec de synchronisation pour la paire bien=${bien.id} acquereur=${acquereur.id} :`, traitement.erreur);
       erreurs.push(traitement.erreur);
@@ -114,7 +121,10 @@ export async function synchroniserCompatibilitesPourBien(bienId: string): Promis
 
 // Symétrique côté acquéreur (création, modification, ajout/suppression de secteur, désarchivage) :
 // 1 acquéreur × tous les biens actifs persistés, secteurs de ce seul acquéreur chargés une fois.
-export async function synchroniserCompatibilitesPourAcquereur(acquereurId: string): Promise<ResultatSynchronisation> {
+export async function synchroniserCompatibilitesPourAcquereur(
+  acquereurId: string,
+  workspaceId: string
+): Promise<ResultatSynchronisation> {
   const acquereur = await getClientById(acquereurId);
   if (!acquereur || acquereur.archiveLe) return { pairesTraitees: 0, evenementsEmis: 0, erreurs: [] };
 
@@ -127,7 +137,7 @@ export async function synchroniserCompatibilitesPourAcquereur(acquereurId: strin
   const erreurs: string[] = [];
   for (const bien of biens) {
     const resultat = evaluerCompatibilite(bien, acquereur, secteursRecherche);
-    const traitement = await traiterPaire(bien.id, acquereur.id, resultat.statutGlobal, true);
+    const traitement = await traiterPaire(bien.id, acquereur.id, resultat.statutGlobal, true, workspaceId);
     if ("erreur" in traitement) {
       console.error(`[compatibilite] échec de synchronisation pour la paire bien=${bien.id} acquereur=${acquereur.id} :`, traitement.erreur);
       erreurs.push(traitement.erreur);

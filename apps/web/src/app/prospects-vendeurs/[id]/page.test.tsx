@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq, inArray, like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -64,7 +65,7 @@ async function prospectDeTest(suffixe: string, champs: Partial<Parameters<typeof
     codePostal: undefined,
     typeBien: undefined,
     ...champs,
-  });
+  }, WORKSPACE_TEST);
   idsProspects.push(prospect.id);
   return prospect;
 }
@@ -309,7 +310,7 @@ describe("Fiche prospect vendeur — mandat signé", () => {
       caracteristiques: [],
       description: "",
       chargeHonoraires: "vendeur",
-    });
+    }, WORKSPACE_TEST);
     expect(resultat).toBeDefined();
     if (resultat) idsBiens.push(resultat.bien.id);
 
@@ -388,7 +389,7 @@ describe("Fiche prospect vendeur — sémantique contact / échange", () => {
       dateMandat: "2026-08-11",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     if (resultat) idsBiens.push(resultat.bien.id);
     const html = await rendre(prospect.id);
 

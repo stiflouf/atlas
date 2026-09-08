@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -60,7 +61,7 @@ async function creerPhotoTest(suffixe: string, contenuWebp: Buffer) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
 
   const cle = genererCleStockage();
   await ecrirePhotoOptimisee(cle, contenuWebp);
@@ -140,7 +141,7 @@ describe("GET /api/photos-bien/[photoId] (ADR-052)", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     const photoOrpheline = await ajouterPhotoBien({
       bienId: bien.id,
       cleStockage: genererCleStockage(), // jamais écrite sur disque

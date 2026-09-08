@@ -141,13 +141,20 @@ export type NouvelAcquereur = Omit<ProfilAcquereur, "id">;
 
 // Insertion pure : la validation métier (budgetMin <= budgetMax, etc.) est de la responsabilité
 // de l'appelant (Server Action), pas de ce repository.
+// ADR-054 — `workspaceId` est un paramètre OBLIGATOIRE, jamais une valeur que ce repository
+// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou du contexte
+// d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
+// la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
+// lieu d'être silencieusement rangé dans le workspace historique.
 export async function creerAcquereur(
   input: NouvelAcquereur,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ProfilAcquereur> {
   const [ligne] = await executeur
     .insert(acquereursTable)
     .values({
+      workspaceId,
       prenom: input.prenom,
       nom: input.nom,
       email: input.email,

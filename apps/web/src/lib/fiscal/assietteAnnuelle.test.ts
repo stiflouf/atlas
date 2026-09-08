@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration — dossier fiscal + bien/acquéreur/compromis dédiés à ce fichier, même stratégie
 // que remunerationRepository.test.ts. Toutes les fixtures utilisent une année passée fixe (2020)
@@ -62,7 +63,7 @@ async function creerEncaissement(suffixe: string, montantCentimes: number, dateE
     dateMandat: "2020-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -75,7 +76,7 @@ async function creerEncaissement(suffixe: string, montantCentimes: number, dateE
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2020-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({
     bienId: bien.id,

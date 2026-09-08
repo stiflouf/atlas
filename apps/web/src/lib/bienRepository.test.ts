@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : exerce la vraie base Postgres locale (pas de mock), même principe que
 // actionRepository.test.ts. Repli sur le même DATABASE_URL par défaut que drizzle.config.ts si
@@ -61,7 +62,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("modifierBien() met à jour les champs et rafraîchit modifieLe", async () => {
-    const cree = await creerBien(bienTest());
+    const cree = await creerBien(bienTest(), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
     const [ligneAvant] = await getDb().select().from(biensTable).where(eq(biensTable.id, cree.id));
@@ -85,7 +86,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("modifierBien() préserve NULL (jamais false) pour un champ tri-état laissé inconnu", async () => {
-    const cree = await creerBien(bienTest());
+    const cree = await creerBien(bienTest(), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
     const modifie = await modifierBien(cree.id, bienTest());
@@ -101,7 +102,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("archiver un bien : posé archiveLe, exclu de listerBiens(), présent dans listerBiensArchives(), toujours résolu par getBienById()", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-001" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-001" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     expect(cree.archiveLe).toBeUndefined();
 
@@ -120,7 +121,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("désarchiver un bien : archiveLe redevient undefined, réapparaît dans listerBiens()", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-002" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-002" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     await archiverBien(cree.id);
 
@@ -132,7 +133,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("le comptage de bascule démo->réel inclut les biens archivés (pas de repli mock)", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-003" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-003" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     await archiverBien(cree.id);
 
@@ -143,7 +144,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("marquerOffreEnCours()/marquerCompromisSigne() posent les timestamps, annulerCompromis()/retirerOffre() les effacent", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] STATUT-COMM-001" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] STATUT-COMM-001" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     expect(cree.offreEnCoursLe).toBeUndefined();
     expect(cree.compromisSigneLe).toBeUndefined();
@@ -169,7 +170,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("marquerCompromisSigne() ne pose jamais offreEnCoursLe automatiquement (compromis marqué directement)", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] STATUT-COMM-002" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] STATUT-COMM-002" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
     const avecCompromis = await marquerCompromisSigne(cree.id);
@@ -188,19 +189,19 @@ describe("bienRepository (intégration Postgres)", () => {
   // toujours faite en amont, dans la Server Action) — ces tests vérifient uniquement que le
   // repository persiste/efface correctement ce que l'appelant lui fournit, sans réseau.
   it("creerBien() persiste codeInseeCommune quand fourni", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-001", codeInseeCommune: "78311" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-001", codeInseeCommune: "78311" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     expect(cree.codeInseeCommune).toBe("78311");
   });
 
   it("creerBien() laisse codeInseeCommune undefined (NULL) quand absent", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-002" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-002" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     expect(cree.codeInseeCommune).toBeUndefined();
   });
 
   it("modifierBien() écrase codeInseeCommune par NULL si l'appelant ne le fournit pas — jamais l'ancienne valeur périmée conservée (ADR-035, section 6)", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-003", codeInseeCommune: "78311" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-003", codeInseeCommune: "78311" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     expect(cree.codeInseeCommune).toBe("78311");
 
@@ -214,7 +215,7 @@ describe("bienRepository (intégration Postgres)", () => {
   });
 
   it("modifierBien() remplace codeInseeCommune par une nouvelle valeur résolue", async () => {
-    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-004", codeInseeCommune: "78311" }));
+    const cree = await creerBien(bienTest({ reference: "[test réel] INSEE-004", codeInseeCommune: "78311" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
     const modifie = await modifierBien(

@@ -8,7 +8,17 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration + garde-fous : ajouterOffreAction/changerStatutOffreAction doivent refuser
 // explicitement (throw) sur bien/acquéreur invalides ou archivés, et changerStatutOffreAction sur
@@ -66,7 +76,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -79,7 +89,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     stadeProjet: "offre",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return { bien, acquereur };
 }

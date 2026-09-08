@@ -1,5 +1,25 @@
 # Architecture — Atlas (`apps/web`)
 
+> **Avertissement d'obsolescence (ajouté le 2026-09-08).** Ce document décrit l'état construit au
+> **2026-08-11**. Le produit a évolué depuis (rédaction assistée, cycle de vie des visites, cockpit
+> commercial, design system, photos de bien, stockage documentaire persistant, sécurisation du
+> pilote). Il est conservé tel quel — l'historique n'est pas réécrit — mais il **n'est plus la
+> source normative**.
+>
+> Ordre de lecture à jour :
+> 1. **les ADR** (`docs/adr/`) — seule source normative, jamais réécrite rétroactivement ;
+> 2. **`docs/audits/DOMIORA-STRATEGIC-ARCHITECTURE-AUDIT-2026-09.md`** — état réellement observé au
+>    2026-09-08, vérifié fichier par fichier ;
+> 3. **`docs/PLATFORM_BOUNDARIES.md`** — frontières de plateforme cibles (ADR-054/055/056), non
+>    implémentées ;
+> 4. ce document — toujours utile pour les patrons de fond (flux UI → Server Action → Repository,
+>    règle d'import de `@/db/*`, bascule démo/réel), à recouper avec les trois précédents pour tout
+>    le reste.
+>
+> Écart connu et non corrigé ici : la ligne « ADR-004 — Stratégie IA » du tableau ci-dessous affirme
+> qu'aucune dépendance LLM n'existe dans le code. Ce n'est plus exact — voir la section LLM de
+> `docs/KNOWN_LIMITATIONS.md`.
+
 Ce document décrit l'architecture **réellement construite** au moment de sa rédaction (2026-08-11),
 vérifiée directement dans le code — pas la vision produit du `README.md` racine, pas les ADR de
 cible non encore construites. Voir `docs/AI_HANDOFF.md` pour la liste explicite de ce qu'il ne

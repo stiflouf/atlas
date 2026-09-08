@@ -1,5 +1,6 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-036) : vraie base Postgres, comme orchestration.test.ts
 // (ADR-034/035). Couvre la matrice de transitions, les cycles, l'isolation par paire, la
@@ -61,7 +62,7 @@ async function creerBienDeTest(suffixe: string, surcharge: Partial<Parameters<ty
     caracteristiques: [],
     description: "",
     ...surcharge,
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -79,7 +80,7 @@ async function creerAcquereurDeTest(suffixe: string, surcharge: Partial<Paramete
     notes: "",
     datePremiereContact: "2026-01-01",
     ...surcharge,
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -111,13 +112,13 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const acquereur = await creerAcquereurDeTest("T1", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T1", { prix: 500000 }); // > budgetMax → incompatible
 
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("incompatible");
     expect((await lireEtat(bien.id, acquereur.id))?.cycleCompatibilite).toBe(0);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(0);
 
     await modifierBien(bien.id, { ...donneesBase(bien), prix: 350000 }); // <= budgetMax → compatible
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     const etat = await lireEtat(bien.id, acquereur.id);
     expect(etat?.dernierStatut).toBe("compatible");
@@ -133,12 +134,12 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const acquereur = await creerAcquereurDeTest("T2", { budgetMax: 400000, necessiteParking: true });
     const bien = await creerBienDeTest("T2", { prix: 300000 }); // parking non renseigné
 
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("a_verifier");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(0);
 
     await modifierBien(bien.id, { ...donneesBase(bien), parking: true }); // devient compatible
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     const etat = await lireEtat(bien.id, acquereur.id);
     expect(etat?.dernierStatut).toBe("compatible");
     expect(etat?.cycleCompatibilite).toBe(1);
@@ -149,10 +150,10 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const acquereur = await creerAcquereurDeTest("T3", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T3", { prix: 300000 }); // compatible dès la première observation
 
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1);
 
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     const etat = await lireEtat(bien.id, acquereur.id);
     expect(etat?.cycleCompatibilite).toBe(1);
@@ -162,10 +163,10 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
   it("compatible → incompatible : aucun événement, état mis à jour", async () => {
     const acquereur = await creerAcquereurDeTest("T4", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T4", { prix: 300000 });
-    await synchroniserCompatibilitesPourBien(bien.id); // compatible, cycle 1
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // compatible, cycle 1
 
     await modifierBien(bien.id, { ...donneesBase(bien), prix: 500000 }); // devient incompatible
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     const etat = await lireEtat(bien.id, acquereur.id);
     expect(etat?.dernierStatut).toBe("incompatible");
@@ -176,10 +177,10 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
   it("compatible → a_verifier : aucun événement, état mis à jour", async () => {
     const acquereur = await creerAcquereurDeTest("T5", { budgetMax: 400000, necessiteParking: true });
     const bien = await creerBienDeTest("T5", { prix: 300000, parking: true }); // compatible dès le départ
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     await modifierBien(bien.id, { ...donneesBase(bien), parking: undefined }); // parking devient inconnu → a_verifier
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("a_verifier");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1); // toujours celui de l'entrée
   });
@@ -187,15 +188,15 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
   it("compatible → incompatible → compatible : second cycle, second événement", async () => {
     const acquereur = await creerAcquereurDeTest("T6", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T6", { prix: 300000 });
-    await synchroniserCompatibilitesPourBien(bien.id); // cycle 1
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // cycle 1
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1);
 
     await modifierBien(bien.id, { ...donneesBase(bien), prix: 500000 });
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1); // toujours 1, aucun événement de sortie
 
     await modifierBien(bien.id, { ...donneesBase(bien), prix: 300000 });
-    await synchroniserCompatibilitesPourBien(bien.id); // cycle 2
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // cycle 2
 
     const etat = await lireEtat(bien.id, acquereur.id);
     expect(etat?.cycleCompatibilite).toBe(2);
@@ -208,7 +209,7 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const acquereur = await creerAcquereurDeTest("T7", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T7", { prix: 300000 });
 
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.cycleCompatibilite).toBe(1);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1);
   });
@@ -216,9 +217,9 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
   it("retry exact de la même mutation (rejeu du même statut) : aucun événement supplémentaire", async () => {
     const acquereur = await creerAcquereurDeTest("T8", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T8", { prix: 300000 });
-    await synchroniserCompatibilitesPourBien(bien.id);
-    await synchroniserCompatibilitesPourBien(bien.id);
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1);
   });
@@ -226,10 +227,10 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
   it("deux synchronisations concurrentes de la même paire : un seul cycle, un seul événement", async () => {
     const acquereur = await creerAcquereurDeTest("T9", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T9", { prix: 500000 });
-    await synchroniserCompatibilitesPourBien(bien.id); // incompatible, cycle 0
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // incompatible, cycle 0
 
     await modifierBien(bien.id, { ...donneesBase(bien), prix: 300000 }); // devient compatible
-    await Promise.all([synchroniserCompatibilitesPourBien(bien.id), synchroniserCompatibilitesPourBien(bien.id)]);
+    await Promise.all([synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST), synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST)]);
 
     const etat = await lireEtat(bien.id, acquereur.id);
     expect(etat?.cycleCompatibilite).toBe(1);
@@ -242,7 +243,7 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const compatible2 = await creerAcquereurDeTest("T10b", { budgetMax: 350000 });
     const incompatible = await creerAcquereurDeTest("T10c", { budgetMax: 100000 });
 
-    const resultat = await synchroniserCompatibilitesPourBien(bien.id);
+    const resultat = await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect(resultat.pairesTraitees).toBeGreaterThanOrEqual(3);
     expect(resultat.evenementsEmis).toBeGreaterThanOrEqual(2);
 
@@ -258,7 +259,7 @@ describe("synchroniserCompatibilitesPourAcquereur — symétrie et secteurs (ADR
     const bienCompatible = await creerBienDeTest("T11a", { prix: 300000 });
     const bienIncompatible = await creerBienDeTest("T11b", { prix: 500000 });
 
-    await synchroniserCompatibilitesPourAcquereur(acquereur.id);
+    await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect((await lireEtat(bienCompatible.id, acquereur.id))?.dernierStatut).toBe("compatible");
     expect((await lireEtat(bienIncompatible.id, acquereur.id))?.dernierStatut).toBe("incompatible");
     expect(await lireEvenements(bienCompatible.id, acquereur.id)).toHaveLength(1);
@@ -271,7 +272,7 @@ describe("synchroniserCompatibilitesPourAcquereur — symétrie et secteurs (ADR
 
     // Secteur non correspondant : le critère géographique est incompatible → global incompatible.
     await ajouterSecteurRecherche(acquereur.id, { citycode: "75056", nom: "Paris", codePostal: "75001", contexte: "" });
-    await synchroniserCompatibilitesPourAcquereur(acquereur.id);
+    await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("incompatible");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(0);
 
@@ -282,19 +283,19 @@ describe("synchroniserCompatibilitesPourAcquereur — symétrie et secteurs (ADR
       codePostal: "78800",
       contexte: "",
     });
-    await synchroniserCompatibilitesPourAcquereur(acquereur.id);
+    await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.cycleCompatibilite).toBe(1);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1);
 
     // Suppression du secteur correspondant : redevient incompatible (le secteur Paris reste seul).
     await supprimerSecteurRecherche(secteurCorrespondant.id, acquereur.id);
-    await synchroniserCompatibilitesPourAcquereur(acquereur.id);
+    await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("incompatible");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1); // toujours celui de l'entrée
 
     // Réajout : nouveau cycle, nouvel événement.
     await ajouterSecteurRecherche(acquereur.id, { citycode: "78311", nom: "Houilles", codePostal: "78800", contexte: "" });
-    await synchroniserCompatibilitesPourAcquereur(acquereur.id);
+    await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     const etatFinal = await lireEtat(bien.id, acquereur.id);
     expect(etatFinal?.cycleCompatibilite).toBe(2);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(2);
@@ -310,14 +311,14 @@ describe("synchronisation — hors périmètre commercial (ADR-036, aucun effet 
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(synchroniserCompatibilitesPourBien(bien.id)).resolves.toBeDefined();
+    await expect(synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST)).resolves.toBeDefined();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("un nouveau match ne prépare aucune exécution d'automatisation (aucune règle ADR-032 ne référence encore ce type d'événement)", async () => {
     const acquereur = await creerAcquereurDeTest("T14", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T14", { prix: 300000 });
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     const [evenement] = await lireEvenements(bien.id, acquereur.id);
     expect(evenement).toBeDefined();
@@ -331,7 +332,7 @@ describe("synchronisation — hors périmètre commercial (ADR-036, aucun effet 
   it("l'événement ne porte que des identifiants — aucune donnée texte libre ni PII (budget/nom/email absents du schéma de la table)", async () => {
     const acquereur = await creerAcquereurDeTest("T15", { budgetMax: 400000 });
     const bien = await creerBienDeTest("T15", { prix: 300000 });
-    await synchroniserCompatibilitesPourBien(bien.id);
+    await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     const [evenement] = await lireEvenements(bien.id, acquereur.id);
     expect(evenement.bienId).toBe(bien.id);

@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (Postgres local) — la FK photos_bien -> biens impose un bienId réel.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
@@ -40,7 +41,7 @@ async function creerBienTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }

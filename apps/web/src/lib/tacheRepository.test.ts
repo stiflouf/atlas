@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : exerce la vraie base Postgres locale (pas de mock), car les garde-fous
 // vérifiés ici (gel concurrent terminerTache/annulerTache, CHECK "au plus une cible") sont des
@@ -49,7 +50,7 @@ async function creerAcquereurDeTest(suffixe: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -69,7 +70,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -81,7 +82,7 @@ describe("tacheRepository (intégration Postgres)", () => {
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     expect(tache.termineeLe).toBeUndefined();
@@ -97,7 +98,7 @@ describe("tacheRepository (intégration Postgres)", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "bien", id: bien.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     expect(tache.bienId).toBe(bien.id);
@@ -111,7 +112,7 @@ describe("tacheRepository (intégration Postgres)", () => {
     try {
       await getDb()
         .insert(tachesTable)
-        .values({
+        .values({ workspaceId: WORKSPACE_TEST,
           titre: "[test] Deux cibles",
           type: "autre",
           priorite: "normale",
@@ -133,7 +134,7 @@ describe("tacheRepository (intégration Postgres)", () => {
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     const terminee = await terminerTache(tache.id);
@@ -148,7 +149,7 @@ describe("tacheRepository (intégration Postgres)", () => {
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await terminerTache(tache.id);
@@ -163,7 +164,7 @@ describe("tacheRepository (intégration Postgres)", () => {
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await terminerTache(tache.id);
@@ -180,7 +181,7 @@ describe("tacheRepository (intégration Postgres)", () => {
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     const annulee = await annulerTache(tache.id);
@@ -203,7 +204,7 @@ describe("tacheRepository (intégration Postgres)", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "bien", id: bien.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     const taches = await getTachesPourBien(bien.id);

@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : la FK remuneration -> compromis (UNIQUE) impose un compromis réel, donc un
 // mock ne suffit pas ici. Même stratégie que compromisRepository.test.ts : bien/acquéreur/compromis
@@ -59,7 +60,7 @@ async function creerCompromisDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -72,7 +73,7 @@ async function creerCompromisDeTest(suffixe: string) {
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({
     bienId: bien.id,

@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -65,7 +66,7 @@ async function creerBienTest(reference: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiens.push(bien.id);
   return bien;
 }
@@ -82,7 +83,7 @@ async function creerAcquereurTest(email: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
   return acquereur;
 }
@@ -94,7 +95,7 @@ describe("resoudreDestinatairesDepuisBien", () => {
   });
 
   it("un seul candidat vendeur si aucun compromis n'existe", async () => {
-    const prospect = await creerProspectVendeur({ nom: "Dupont" });
+    const prospect = await creerProspectVendeur({ nom: "Dupont" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const conversion = await signerMandatProspectVendeur(prospect.id, {
       reference: "[test réel] COMM-BIEN-002",
@@ -110,7 +111,7 @@ describe("resoudreDestinatairesDepuisBien", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     expect(conversion).toBeDefined();
     if (!conversion) return;
     idsBiens.push(conversion.bien.id);
@@ -121,7 +122,7 @@ describe("resoudreDestinatairesDepuisBien", () => {
   });
 
   it("deux candidats (vendeur + acquéreur) si les deux existent sur le même bien — jamais tranché arbitrairement", async () => {
-    const prospect = await creerProspectVendeur({ nom: "Petit" });
+    const prospect = await creerProspectVendeur({ nom: "Petit" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const conversion = await signerMandatProspectVendeur(prospect.id, {
       reference: "[test réel] COMM-BIEN-003",
@@ -137,7 +138,7 @@ describe("resoudreDestinatairesDepuisBien", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     expect(conversion).toBeDefined();
     if (!conversion) return;
     idsBiens.push(conversion.bien.id);
@@ -182,7 +183,7 @@ describe("resoudreDestinatairesDepuisDocument", () => {
   it("aucune présélection si le document porte les deux rattachements à la fois (ambigu) — repli sur le bien", async () => {
     const bien = await creerBienTest("[test réel] COMM-DOC-002");
     const acquereur = await creerAcquereurTest("comm3@test.local");
-    const prospect = await creerProspectVendeur({ nom: "Ambigu" });
+    const prospect = await creerProspectVendeur({ nom: "Ambigu" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const document = await enregistrerDocumentBien({
       bienId: bien.id,

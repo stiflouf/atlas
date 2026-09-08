@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Tests d'intégration réels (ADR-043) — couvre getExecutionAutomatisationParTacheId() : lecture
 // fail-closed de la provenance d'une tâche automatique (tache.id -> execution exacte). 0 ligne,
@@ -37,7 +38,7 @@ const idsEvenements: string[] = [];
 const idsExecutions: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
+  await definirActivationAutomatisation("retour_vendeur_apres_visite", false, WORKSPACE_TEST);
 
   if (idsExecutions.length > 0) await getDb().delete(executionsAutomatisation).where(inArray(executionsAutomatisation.id, idsExecutions));
   if (idsEvenements.length > 0) {
@@ -68,7 +69,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiens.push(bien.id);
   return bien;
 }
@@ -85,14 +86,14 @@ async function creerAcquereurDeTest(suffixe: string) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
   return acquereur;
 }
 
 describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
   it("0 ligne : aucune exécution ne référence cette tâche -> undefined, jamais une erreur", async () => {
-    const tache = await creerTache({ titre: "Tâche manuelle sans provenance", type: "autre", priorite: "normale", origine: "manuelle" });
+    const tache = await creerTache({ titre: "Tâche manuelle sans provenance", type: "autre", priorite: "normale", origine: "manuelle" }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await getExecutionAutomatisationParTacheId(tache.id);
@@ -100,7 +101,7 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
   });
 
   it("exactement 1 ligne : retourne l'exécution exacte produite par le vrai moteur", async () => {
-    await definirActivationAutomatisation("retour_vendeur_apres_visite", true);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", true, WORKSPACE_TEST);
     const bien = await creerBienDeTest("UNIQUE1");
     const acquereur = await creerAcquereurDeTest("UNIQUE1");
     const cr = await enregistrerCompteRenduVisite({
@@ -114,11 +115,11 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
 
     // Vendeur structuré requis pour que retour_vendeur_apres_visite produise réellement une tâche
     // (sans vendeur, construireTache() renvoie undefined — aucune exécution "réussie avec tâche").
-    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ExecProv" });
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ExecProv" }, WORKSPACE_TEST);
     await getDb().update(prospectsVendeursTable).set({ bienId: bien.id }).where(eq(prospectsVendeursTable.id, prospect.id));
 
     const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, WORKSPACE_TEST, tx)
     );
     idsEvenements.push(
       ...(await getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(eq(evenementsMetier.compteRenduVisiteId, cr.id))).map(
@@ -137,7 +138,7 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
     expect(resultat?.regleCode).toBe("retour_vendeur_apres_visite");
 
     await getDb().delete(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, prospect.id));
-    await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", false, WORKSPACE_TEST);
   });
 
   // ADR-047 : UNIQUE(tache_id) a été ajoutée en défense en profondeur avant exposition Internet — le
@@ -169,15 +170,15 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
 
     const [evt1] = await getDb()
       .insert(evenementsMetier)
-      .values({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr1.id })
+      .values({ workspaceId: WORKSPACE_TEST, typeEvenement: "visite_realisee", compteRenduVisiteId: cr1.id })
       .returning();
     const [evt2] = await getDb()
       .insert(evenementsMetier)
-      .values({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr2.id })
+      .values({ workspaceId: WORKSPACE_TEST, typeEvenement: "visite_realisee", compteRenduVisiteId: cr2.id })
       .returning();
     idsEvenements.push(evt1.id, evt2.id);
 
-    const tache = await creerTache({ titre: "Tâche ciblée par deux exécutions (test d'incohérence)", type: "autre", priorite: "normale", origine: "manuelle" });
+    const tache = await creerTache({ titre: "Tâche ciblée par deux exécutions (test d'incohérence)", type: "autre", priorite: "normale", origine: "manuelle" }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const [exec1] = await getDb()
@@ -229,11 +230,11 @@ describe("getExecutionAutomatisationParTacheId (ADR-043)", () => {
 
     const [evt1] = await getDb()
       .insert(evenementsMetier)
-      .values({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr1.id })
+      .values({ workspaceId: WORKSPACE_TEST, typeEvenement: "visite_realisee", compteRenduVisiteId: cr1.id })
       .returning();
     const [evt2] = await getDb()
       .insert(evenementsMetier)
-      .values({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr2.id })
+      .values({ workspaceId: WORKSPACE_TEST, typeEvenement: "visite_realisee", compteRenduVisiteId: cr2.id })
       .returning();
     idsEvenements.push(evt1.id, evt2.id);
 

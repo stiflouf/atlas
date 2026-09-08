@@ -1,8 +1,83 @@
 import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
+// ADR-054 — périmètre PROPRIÉTAIRE des données métier (OWNERSHIP). Une ligne métier appartient à
+// exactement un workspace, pour toute sa vie ; aucun transfert d'un workspace à un autre n'existe.
+//
+// `id` en `text` avec `default("default")`, exactement le patron déjà éprouvé par
+// `connexions_google` et `dossier_fiscal` : le produit reste mono-conseiller et la ligne unique
+// 'default' rend cette unicité VISIBLE et intentionnelle plutôt qu'implicite. Ce n'est pas un
+// identifiant de substitution — c'est la clé logique elle-même, comme
+// `configurations_automatisation` (`regleCode` en PK directe).
+//
+// `nom` NULLABLE (ADR-009, `NULL` = information inconnue) : le workspace historique n'a jamais reçu
+// de libellé, et la migration n'en invente aucun — jamais un "Workspace par défaut" fabriqué qui
+// deviendrait ensuite une donnée que personne n'a saisie. Le nom AFFICHÉ du conseiller reste
+// `ATLAS_ADVISOR_DISPLAY_NAME`, propriété d'INSTANCE (ADR-047), jamais confondue avec ce champ.
+//
+// Aucune colonne "au cas où" (pas de slug, pas de statut, pas d'organisation, pas de facturation) :
+// ADR-054 écarte explicitement `organization`/`account` comme unité racine, et une future
+// `organisations` qui contiendrait des workspaces serait une FK ajoutée ICI — jamais une reprise
+// des tables métier.
+export const workspaces = pgTable("workspaces", {
+  id: text("id").primaryKey().default("default"),
+  nom: text("nom"),
+  creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ADR-054 — ACCESS, jamais OWNERSHIP et jamais IDENTITY. Cette table dit "cette identité humaine a
+// accès à ce workspace" ; elle ne dit ni qui possède une ligne métier (c'est `workspace_id`), ni qui
+// a créé quoi (aucune colonne d'auteur n'existe encore, et aucun backfill d'auteur ne serait honnête
+// sur l'historique).
+//
+// `identiteSub` est le `sub` Google déjà porté par la session Atlas (ADR-047,
+// src/lib/auth/sessionAtlas.ts) — AUCUNE seconde notion d'utilisateur n'est créée : pas de table
+// `utilisateurs`, pas de mot de passe, pas d'inscription. L'allowlist à une seule adresse
+// (`ATLAS_ALLOWED_EMAIL`, src/lib/auth/allowlist.ts) reste seule maîtresse de qui peut entrer ;
+// cette table ne l'assouplit pas et n'est lue par aucun chemin d'authentification aujourd'hui.
+//
+// PK COMPOSITE (workspaceId, identiteSub), jamais un uuid de substitution : c'est la clé logique
+// réelle, il n'existe pas de second axe d'identité pour une appartenance — même raisonnement
+// explicitement retenu pour `compatibilites_bien_acquereur_etat`. Une contrainte UNIQUE séparée
+// serait redondante avec cette PK.
+//
+// `role` : vocabulaire FERMÉ à 'owner' (ADR-054 §5). 'member'/'manager'/'admin' sont réservés dans
+// la réflexion mais volontairement ABSENTS du CHECK — une valeur acceptée sans sémantique
+// implémentée serait un état à moitié construit (même refus que `biens.chargeHonoraires`, où
+// 'partagee' n'existe pas tant que la répartition n'est pas modélisée). Ajouter une valeur exigera
+// d'implémenter son comportement dans le même lot.
+//
+// AUCUNE ligne n'est insérée par la migration : le `sub` Google n'est jamais persisté (ADR-047 —
+// "Aucun id_token/access_token n'est jamais persisté"), il n'est connu qu'au retour du callback
+// OIDC. Une appartenance initiale ne peut donc PAS être établie de façon déterministe hors ligne ;
+// l'inventer (un `sub` fabriqué, ou l'email en guise de `sub`) créerait une identité qui n'existe
+// pas. Elle sera posée par le lot qui résout le workspace en session.
+export const workspaceMembres = pgTable(
+  "workspace_membres",
+  {
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    identiteSub: text("identite_sub").notNull(),
+    email: text("email").notNull(),
+    role: text("role").notNull(),
+    ajouteLe: timestamp("ajoute_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.workspaceId, table.identiteSub] }),
+    check("workspace_membres_role_check", sql`${table.role} IN ('owner')`),
+  ]
+);
+
 // Produit mono-conseiller pour l'instant (voir ADR-006) : une seule ligne possible,
 // toujours identifiée par id = 'default'. Pas de notion d'utilisateur/session en base.
+//
+// ADR-054 §6 — SECRET PERSONNEL, jamais un actif du workspace : cette table porte un refresh token
+// OAuth accordé par UNE identité humaine. Elle ne reçoit donc AUCUN `workspace_id`, et n'en recevra
+// jamais : le jour du multi-utilisateur elle gagnera une référence vers l'identité/l'appartenance.
+// Aucun partage implicite d'un token entre membres — une boîte mail ou un agenda d'organisation
+// serait une connexion distincte, accordée explicitement à ce titre, jamais l'élargissement
+// silencieux du token personnel d'un conseiller.
 export const connexionsGoogle = pgTable("connexions_google", {
   id: text("id").primaryKey().default("default"),
   refreshTokenChiffre: text("refresh_token_chiffre").notNull(),
@@ -17,6 +92,20 @@ export const connexionsGoogle = pgTable("connexions_google", {
 // table : seulement de nouvelles lignes avec un `source`/`typeElement` différents.
 // bienId/clientId restent des références texte vers le catalogue mocké (data/biens.ts,
 // data/clients.ts) — pas de FK : ces catalogues ne vivent pas encore en base (hors périmètre).
+//
+// ADR-054 — appartenance NON TRANCHÉE, volontairement : cette table ne reçoit PAS de `workspace_id`
+// dans le lot de fondation. Elle n'est pas non plus une feuille (aucune FK NOT NULL vers un parent
+// possédé — ses cibles sont du texte sans FK, ADR-010). Le doute est réel et documenté comme
+// question ouverte n°4 d'ADR-054 : elle mémorise des décisions HUMAINES portant sur des éléments
+// issus d'un Google Calendar PERSONNEL (`connexions_google`, secret d'identité, ADR-054 §6), ce qui
+// la tire vers l'identité, alors que son contenu (bien/acquéreur/type métier) est une donnée de
+// dossier, ce qui la tire vers le workspace. Aucune preuve du dépôt ne tranche.
+// Un doute ne doit pas être transformé en modèle permanent : poser la colonne "au cas où"
+// figerait la réponse sans l'avoir décidée. À trancher par une décision explicite avant tout
+// deuxième membre.
+// Note pour ce jour-là : `UNIQUE(source, identifiant_externe)` devra alors être étendue au
+// périmètre retenu (workspace ou identité), sans quoi deux périmètres ne pourraient pas mémoriser
+// le même élément externe.
 export const memoireContextuelle = pgTable(
   "memoire_contextuelle",
   {
@@ -59,6 +148,21 @@ export const biens = pgTable(
   "biens",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). SANS DEFAULT depuis la migration 0033 : le filet posé par
+    // 0032 a été retiré une fois tous les chemins d'écriture rendus explicites. C'est un invariant
+    // de sécurité, pas un détail — une écriture qui oublierait l'appartenance échoue désormais
+    // immédiatement au lieu d'être silencieusement rangée dans le workspace historique.
+    // La valeur vient du contexte authentifié (`exigerWorkspaceCourant`) ou du contexte d'exécution
+    // machine (`resoudreWorkspaceExecutionMachine`) — jamais d'un littéral dans un repository.
+    // Pas de CASCADE : aucun workspace n'est jamais supprimé, NO ACTION (défaut Drizzle) suffit —
+    // même choix déjà fait pour `evenements_metier.compromis_id` et
+    // `compatibilites_bien_acquereur_etat`.
+    // Aucun index dans ce lot : avec une seule valeur possible, un index sur cette colonne ne serait
+    // jamais retenu par le planificateur et ne coûterait que des écritures. Les index composites
+    // (`workspace_id`, …) viendront avec le filtrage réel, sur des requêtes mesurées.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     reference: text("reference").notNull(),
     titre: text("titre").notNull(),
     type: text("type").notNull(),
@@ -136,6 +240,10 @@ export const acquereurs = pgTable(
   "acquereurs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     prenom: text("prenom").notNull(),
     nom: text("nom").notNull(),
     email: text("email").notNull(),
@@ -640,6 +748,21 @@ export const transmissionsDossierNotaire = pgTable(
 // d'exister isolément : le jour où Atlas gère plusieurs conseillers, un futur rattachement
 // conseiller -> dossier_fiscal (1:1 ou N:1) sera additif — aucune de ces trois tables n'a besoin
 // d'être retouchée, seul dossier_fiscal gagnera une colonne conseillerId.
+//
+// ADR-054 — appartenance NON TRANCHÉE, volontairement : cette table ne reçoit PAS de `workspace_id`
+// dans le lot de fondation, et ses trois filles (profil_fiscal, historique_amorcage, rfr_foyer) en
+// héritent donc aussi le statut non tranché. Motif : deux textes du dépôt se contredisent.
+//   - ADR-054 §Répartition la classe parmi les racines ;
+//   - ADR-054 §6 pose que les données PERSONNELLES à un humain ne deviennent jamais un actif du
+//     workspace, et §5 pose que l'accès est BINAIRE (être membre d'un workspace donne accès à tout
+//     le workspace). Or ce dossier porte la situation fiscale personnelle du conseiller (régime
+//     micro-BNC, TVA, revenu fiscal de référence du FOYER) : la rattacher au workspace l'exposerait
+//     intégralement au premier assistant ajouté ;
+//   - le commentaire d'origine ci-dessus (ADR-023) anticipait d'ailleurs un rattachement
+//     `conseillerId`, pas un rattachement d'organisation.
+// Un doute ne doit pas être transformé en modèle permanent, et celui-ci a une conséquence de
+// confidentialité réelle. À trancher explicitement (workspace ou identité) avant tout deuxième
+// membre — l'ajout de la colonne restera additif dans les deux cas.
 export const dossierFiscal = pgTable("dossier_fiscal", {
   id: text("id").primaryKey().default("default"),
   creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
@@ -920,6 +1043,10 @@ export const prospectsVendeurs = pgTable(
   "prospects_vendeurs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     nom: text("nom").notNull(),
     prenom: text("prenom"),
     email: text("email"),
@@ -1044,6 +1171,10 @@ export const taches = pgTable(
   "taches",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     titre: text("titre").notNull(),
     contexte: text("contexte"),
     type: text("type").notNull().default("autre"),
@@ -1104,6 +1235,10 @@ export const envoisEmail = pgTable(
   "envois_email",
   {
     id: uuid("id").primaryKey(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     destinataireEmail: text("destinataire_email").notNull(),
     objet: text("objet").notNull(),
     contenuHash: text("contenu_hash").notNull(),
@@ -1165,6 +1300,10 @@ export const evenementsMetier = pgTable(
   "evenements_metier",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     typeEvenement: text("type_evenement").notNull(),
     compteRenduVisiteId: uuid("compte_rendu_visite_id").references(() => comptesRendusVisite.id),
     prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id),
@@ -1299,6 +1438,18 @@ export const configurationsAutomatisation = pgTable(
   "configurations_automatisation",
   {
     regleCode: text("regle_code").primaryKey(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    // ATTENTION, dette assumée et documentée : la PK reste `regleCode` SEULE. Elle est correcte
+    // tant qu'il n'existe qu'un workspace (une configuration par règle), mais elle empêcherait deux
+    // workspaces de configurer la même règle. Elle devra devenir PRIMARY KEY (workspace_id,
+    // regle_code) DANS le lot qui active réellement le multi-workspace — jamais avant : la changer
+    // ici serait une mutation de contrainte sans aucun bénéfice observable, dans un lot qui doit
+    // rester additif. C'est la SEULE contrainte d'unicité du schéma qui soit dans ce cas (vérifié
+    // table par table : toutes les autres portent sur des colonnes déjà rattachées à une entité
+    // elle-même possédée).
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     active: boolean("active").notNull().default(false),
     // Paramètre produit explicite (ADR-033), pas une constante cachée — n'a de sens que pour
     // 'inactivite_prospect_vendeur' aujourd'hui, NULL pour les autres règles ET par défaut : une
@@ -1335,6 +1486,10 @@ export const runsScanAutomatisation = pgTable(
   "runs_scan_automatisation",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     regleCode: text("regle_code").notNull(),
     demarreLe: timestamp("demarre_le", { withTimezone: true }).notNull().defaultNow(),
     termineLe: timestamp("termine_le", { withTimezone: true }),
@@ -1376,6 +1531,12 @@ export const runsScanAutomatisation = pgTable(
 // evenements_metier.cycle_compatibilite.
 // Pas de CASCADE sur les deux FK : ni biens ni acquereurs ne sont jamais supprimés physiquement
 // dans ce produit (archivage seulement, ADR-012) — NO ACTION (défaut Drizzle) suffit.
+//
+// ADR-054 — FEUILLE, donc AUCUN `workspace_id` : `bienId` et `acquereurId` sont deux FK NOT NULL
+// vers des parents eux-mêmes possédés, l'appartenance est donc entièrement dérivable. La liste
+// illustrative d'ADR-054 (§Répartition) la citait parmi les racines ; c'est la RÈGLE de l'ADR
+// (§7 : "une feuille ne duplique jamais l'appartenance de son parent") qui s'applique, vérifiée ici
+// sur le schéma réel plutôt que recopiée depuis une liste.
 export const compatibilitesBienAcquereurEtat = pgTable(
   "compatibilites_bien_acquereur_etat",
   {
@@ -1424,6 +1585,10 @@ export const compatibilitesARessynchroniser = pgTable(
   "compatibilites_a_resynchroniser",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     bienId: uuid("bien_id").references(() => biens.id),
     acquereurId: uuid("acquereur_id").references(() => acquereurs.id),
     demandeeLe: timestamp("demandee_le", { withTimezone: true }).notNull().defaultNow(),

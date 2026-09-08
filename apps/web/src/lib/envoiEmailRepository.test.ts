@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -38,12 +39,12 @@ describe("envoiEmailRepository — idempotence", () => {
     idsCrees.push(id);
     const contenuHash = calculerContenuHash("jean@test.local", "Objet", "Corps");
 
-    const premiere = await demarrerTentativeEnvoi({ id, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
+    const premiere = await demarrerTentativeEnvoi({ id, workspaceId: WORKSPACE_TEST, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
     expect(premiere).toBeDefined();
     expect(deriverEtatEnvoiEmail(premiere!)).toBe("en_cours");
 
     // Jamais un second envoi : rejouer exactement la même clé ne réécrit rien.
-    const seconde = await demarrerTentativeEnvoi({ id, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
+    const seconde = await demarrerTentativeEnvoi({ id, workspaceId: WORKSPACE_TEST, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
     expect(seconde).toBeUndefined();
 
     const relue = await getEnvoiEmailById(id);
@@ -54,7 +55,7 @@ describe("envoiEmailRepository — idempotence", () => {
     const id = randomUUID();
     idsCrees.push(id);
     const contenuHash = calculerContenuHash("jean@test.local", "Objet", "Corps");
-    await demarrerTentativeEnvoi({ id, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
+    await demarrerTentativeEnvoi({ id, workspaceId: WORKSPACE_TEST, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
 
     const resultat = await marquerEnvoiReussi(id, "gmail-msg-1");
     expect(resultat).toBeDefined();
@@ -66,7 +67,7 @@ describe("envoiEmailRepository — idempotence", () => {
     const id = randomUUID();
     idsCrees.push(id);
     const contenuHash = calculerContenuHash("jean@test.local", "Objet", "Corps");
-    await demarrerTentativeEnvoi({ id, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
+    await demarrerTentativeEnvoi({ id, workspaceId: WORKSPACE_TEST, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
 
     const resultat = await marquerEnvoiEchoue(id, "erreur_google_500");
     expect(deriverEtatEnvoiEmail(resultat!)).toBe("echec");
@@ -76,7 +77,7 @@ describe("envoiEmailRepository — idempotence", () => {
     const id = randomUUID();
     idsCrees.push(id);
     const contenuHash = calculerContenuHash("jean@test.local", "Objet", "Corps");
-    await demarrerTentativeEnvoi({ id, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
+    await demarrerTentativeEnvoi({ id, workspaceId: WORKSPACE_TEST, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
 
     const resultat = await marquerEnvoiIncertain(id, "reseau_ou_timeout");
     expect(deriverEtatEnvoiEmail(resultat!)).toBe("incertain");
@@ -86,7 +87,7 @@ describe("envoiEmailRepository — idempotence", () => {
     const id = randomUUID();
     idsCrees.push(id);
     const contenuHash = calculerContenuHash("jean@test.local", "Objet", "Corps");
-    await demarrerTentativeEnvoi({ id, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
+    await demarrerTentativeEnvoi({ id, workspaceId: WORKSPACE_TEST, destinataireEmail: "jean@test.local", objet: "Objet", contenuHash });
     await marquerEnvoiReussi(id, "gmail-msg-2");
 
     const rejeuEchec = await marquerEnvoiEchoue(id, "tentative_tardive");

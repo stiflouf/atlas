@@ -7,6 +7,7 @@ import { marquerHorsPerimetrePourAcquereur } from "@/lib/compatibilite/etatRepos
 import { enqueuerResynchronisationAcquereur } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // id absent/invalide/inexistant -> notFound(), jamais une redirection de succès silencieuse
 // (même garde que modifierAcquereurAction).
@@ -33,13 +34,15 @@ export async function archiverAcquereurAction(formData: FormData): Promise<void>
 // raisonnement symétrique complet (aucune bascule inline de dans_perimetre_actif ici).
 export async function desarchiverAcquereurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite de la demande de resynchronisation (table racine).
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
   const resultat = await getDb().transaction(async (tx) => {
     const acquereur = await desarchiverAcquereur(id, tx);
     if (!acquereur) return undefined;
-    const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereur.id, tx);
+    const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereur.id, workspaceId, tx);
     return { acquereur, idDemandeResynchronisation };
   });
   if (!resultat) notFound();

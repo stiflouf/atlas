@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Tests d'intégration réels (ADR-032) : ce fichier couvre les corrections n°6 (création de tâche +
 // succès d'exécution atomiques, jamais de tâche orpheline en cas d'échec) et n°2 (scénario
@@ -56,7 +57,7 @@ const idsTachesCrees: string[] = [];
 const idsEvenementsCrees: string[] = [];
 
 afterAll(async () => {
-  for (const code of RÈGLES) await definirActivationAutomatisation(code, false);
+  for (const code of RÈGLES) await definirActivationAutomatisation(code, false, WORKSPACE_TEST);
   if (idsTachesCrees.length > 0) {
     await getDb().delete(tachesTable).where(inArray(tachesTable.id, idsTachesCrees));
   }
@@ -84,7 +85,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -97,7 +98,7 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return { bien, acquereur };
 }
@@ -126,20 +127,20 @@ async function creerProspectDeTest(suffixe: string) {
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-  });
+  }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   return prospect;
 }
 
 describe("moteur — création de tâche + succès d'exécution atomiques", () => {
   it("traite une exécution à traiter : crée la tâche (origine automatique) et pose tacheId + reussieLe", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
     const compteRendu = await creerCompteRenduDeTest("SUCCES");
 
     const resultat = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     idsEvenementsCrees.push(resultat.evenement!.id);
     expect(resultat.idsExecutionsATraiter).toHaveLength(1);
 
@@ -157,13 +158,13 @@ describe("moteur — création de tâche + succès d'exécution atomiques", () =
     expect(tache.acquereurId).toBe(compteRendu.acquereurId);
     expect(tache.visiteId).toBeNull();
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 });
 
 describe("moteur — scénario crash/pending", () => {
   it("une exécution laissée 'à traiter' (jamais transmise juste après le commit) est traitée avec succès plus tard, sans duplication", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
     const compteRendu = await creerCompteRenduDeTest("CRASH-PENDING");
 
     // Simule le crash : l'événement et l'exécution sont posés (comme dans la transaction métier),
@@ -172,7 +173,7 @@ describe("moteur — scénario crash/pending", () => {
     const resultat = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     idsEvenementsCrees.push(resultat.evenement!.id);
     const [executionId] = resultat.idsExecutionsATraiter;
 
@@ -194,19 +195,19 @@ describe("moteur — scénario crash/pending", () => {
     const tachesPourAcquereur = await getDb().select().from(tachesTable).where(eq(tachesTable.acquereurId, compteRendu.acquereurId));
     expect(tachesPourAcquereur).toHaveLength(1);
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 });
 
 describe("moteur — échec de creerTache", () => {
   it("si creerTache échoue, aucune tâche n'est créée et l'exécution est marquée 'echouee', jamais 'reussie'", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
     const compteRendu = await creerCompteRenduDeTest("ECHEC-CREER-TACHE");
 
     const resultat = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     idsEvenementsCrees.push(resultat.evenement!.id);
     const [executionId] = resultat.idsExecutionsATraiter;
 
@@ -221,19 +222,19 @@ describe("moteur — échec de creerTache", () => {
     const tachesPourAcquereur = await getDb().select().from(tachesTable).where(eq(tachesTable.acquereurId, compteRendu.acquereurId));
     expect(tachesPourAcquereur).toHaveLength(0);
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 });
 
 describe("moteur — double-submit bout en bout, par règle", () => {
   it("suivi_apres_visite : une double émission du même événement ne produit qu'une seule tâche", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
     const compteRendu = await creerCompteRenduDeTest("DOUBLE-SUBMIT-VISITE");
 
     const premiere = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     idsEvenementsCrees.push(premiere.evenement!.id);
     await traiterExecutionsEnAttente(premiere.idsExecutionsATraiter);
 
@@ -242,42 +243,42 @@ describe("moteur — double-submit bout en bout, par règle", () => {
     const seconde = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "visite_realisee",
       compteRenduVisiteId: compteRendu.id,
-    });
+    }, WORKSPACE_TEST);
     await traiterExecutionsEnAttente(seconde.idsExecutionsATraiter);
 
     const taches = await getDb().select().from(tachesTable).where(eq(tachesTable.acquereurId, compteRendu.acquereurId));
     expect(taches).toHaveLength(1);
     idsTachesCrees.push(taches[0].id);
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 
   it("suivi_apres_rdv_estimation : une double émission pour le même prospect ne produit qu'une seule tâche", async () => {
-    await definirActivationAutomatisation("suivi_apres_rdv_estimation", true);
+    await definirActivationAutomatisation("suivi_apres_rdv_estimation", true, WORKSPACE_TEST);
     const prospect = await creerProspectDeTest("DOUBLE-SUBMIT-RDV");
 
     const premiere = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "rdv_estimation_realise",
       prospectVendeurId: prospect.id,
-    });
+    }, WORKSPACE_TEST);
     idsEvenementsCrees.push(premiere.evenement!.id);
     await traiterExecutionsEnAttente(premiere.idsExecutionsATraiter);
 
     const seconde = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "rdv_estimation_realise",
       prospectVendeurId: prospect.id,
-    });
+    }, WORKSPACE_TEST);
     await traiterExecutionsEnAttente(seconde.idsExecutionsATraiter);
 
     const taches = await getDb().select().from(tachesTable).where(eq(tachesTable.prospectVendeurId, prospect.id));
     expect(taches).toHaveLength(1);
     idsTachesCrees.push(taches[0].id);
 
-    await definirActivationAutomatisation("suivi_apres_rdv_estimation", false);
+    await definirActivationAutomatisation("suivi_apres_rdv_estimation", false, WORKSPACE_TEST);
   });
 
   it("preparation_apres_mandat : une réémission directe de l'événement après signature ne produit pas de seconde tâche", async () => {
-    await definirActivationAutomatisation("preparation_apres_mandat", true);
+    await definirActivationAutomatisation("preparation_apres_mandat", true, WORKSPACE_TEST);
     const prospect = await creerProspectDeTest("DOUBLE-SUBMIT-MANDAT");
 
     const resultat = await signerMandatProspectVendeur(prospect.id, {
@@ -294,7 +295,7 @@ describe("moteur — double-submit bout en bout, par règle", () => {
       dateMandat: "2026-09-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(resultat!.bien.id);
     await traiterExecutionsEnAttente(resultat!.idsExecutionsATraiter);
 
@@ -314,7 +315,7 @@ describe("moteur — double-submit bout en bout, par règle", () => {
     const rejeu = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "mandat_signe",
       prospectVendeurId: prospect.id,
-    });
+    }, WORKSPACE_TEST);
     expect(rejeu.evenement).toBeUndefined();
     await traiterExecutionsEnAttente(rejeu.idsExecutionsATraiter);
 
@@ -322,11 +323,11 @@ describe("moteur — double-submit bout en bout, par règle", () => {
     expect(taches).toHaveLength(1);
     idsTachesCrees.push(taches[0].id);
 
-    await definirActivationAutomatisation("preparation_apres_mandat", false);
+    await definirActivationAutomatisation("preparation_apres_mandat", false, WORKSPACE_TEST);
   });
 
   it("preparation_dossier_notaire_apres_compromis : une double émission pour le même compromis ne produit qu'une seule tâche", async () => {
-    await definirActivationAutomatisation("preparation_dossier_notaire_apres_compromis", true);
+    await definirActivationAutomatisation("preparation_dossier_notaire_apres_compromis", true, WORKSPACE_TEST);
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("DOUBLE-SUBMIT-COMPROMIS");
     const compromis = await enregistrerCompromis({
       bienId: bien.id,
@@ -338,20 +339,20 @@ describe("moteur — double-submit bout en bout, par règle", () => {
     const premiere = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "compromis_signe",
       compromisId: compromis.id,
-    });
+    }, WORKSPACE_TEST);
     idsEvenementsCrees.push(premiere.evenement!.id);
     await traiterExecutionsEnAttente(premiere.idsExecutionsATraiter);
 
     const seconde = await emettreEvenementEtPreparerExecutions({
       typeEvenement: "compromis_signe",
       compromisId: compromis.id,
-    });
+    }, WORKSPACE_TEST);
     await traiterExecutionsEnAttente(seconde.idsExecutionsATraiter);
 
     const taches = await getDb().select().from(tachesTable).where(eq(tachesTable.compromisId, compromis.id));
     expect(taches).toHaveLength(1);
     idsTachesCrees.push(taches[0].id);
 
-    await definirActivationAutomatisation("preparation_dossier_notaire_apres_compromis", false);
+    await definirActivationAutomatisation("preparation_dossier_notaire_apres_compromis", false, WORKSPACE_TEST);
   });
 });

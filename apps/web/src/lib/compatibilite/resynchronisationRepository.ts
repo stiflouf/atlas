@@ -6,12 +6,22 @@ type LigneDemande = typeof compatibilitesARessynchroniser.$inferSelect;
 
 export type DemandeResynchronisation = {
   id: string;
+  // ADR-054 — périmètre propriétaire de la demande, posé à l'enqueue. C'est lui qui suit jusqu'à
+  // l'événement de compatibilité éventuellement émis pendant le traitement : le traitement n'a
+  // ainsi besoin d'aucune session ni d'aucun contexte ambiant, y compris quand il est déclenché
+  // par le balayage machine (/api/compatibilite/scan).
+  workspaceId: string;
   bienId?: string;
   acquereurId?: string;
 };
 
 function ligneVersDemande(ligne: LigneDemande): DemandeResynchronisation {
-  return { id: ligne.id, bienId: ligne.bienId ?? undefined, acquereurId: ligne.acquereurId ?? undefined };
+  return {
+    id: ligne.id,
+    workspaceId: ligne.workspaceId,
+    bienId: ligne.bienId ?? undefined,
+    acquereurId: ligne.acquereurId ?? undefined,
+  };
 }
 
 // Enqueue transactionnel du handoff durable (ADR-036) — DOIT être appelé DANS LA MÊME transaction
@@ -24,10 +34,17 @@ function ligneVersDemande(ligne: LigneDemande): DemandeResynchronisation {
 // Dès qu'une ligne est marquée traitée, elle sort de ce prédicat : une demande arrivée entre-temps
 // ne peut donc jamais entrer en conflit avec une ligne déjà verrouillée par un traitement en cours
 // ni être silencieusement absorbée par lui — elle crée naturellement une nouvelle ligne.
-export async function enqueuerResynchronisationBien(bienId: string, executeur: Executeur): Promise<string> {
+// ADR-054 — `workspaceId` obligatoire, fourni par l'appelant (contexte authentifié ou contexte
+// d'exécution machine), jamais choisi ici. Le `set:` du DO UPDATE ne le touche volontairement pas :
+// l'appartenance d'une demande en attente ne change jamais, seule sa date de demande est rafraîchie.
+export async function enqueuerResynchronisationBien(
+  bienId: string,
+  workspaceId: string,
+  executeur: Executeur
+): Promise<string> {
   const [ligne] = await executeur
     .insert(compatibilitesARessynchroniser)
-    .values({ bienId })
+    .values({ bienId, workspaceId })
     .onConflictDoUpdate({
       target: compatibilitesARessynchroniser.bienId,
       targetWhere: sql`${compatibilitesARessynchroniser.bienId} IS NOT NULL AND ${compatibilitesARessynchroniser.traiteeLe} IS NULL`,
@@ -37,10 +54,14 @@ export async function enqueuerResynchronisationBien(bienId: string, executeur: E
   return ligne.id;
 }
 
-export async function enqueuerResynchronisationAcquereur(acquereurId: string, executeur: Executeur): Promise<string> {
+export async function enqueuerResynchronisationAcquereur(
+  acquereurId: string,
+  workspaceId: string,
+  executeur: Executeur
+): Promise<string> {
   const [ligne] = await executeur
     .insert(compatibilitesARessynchroniser)
-    .values({ acquereurId })
+    .values({ acquereurId, workspaceId })
     .onConflictDoUpdate({
       target: compatibilitesARessynchroniser.acquereurId,
       targetWhere: sql`${compatibilitesARessynchroniser.acquereurId} IS NOT NULL AND ${compatibilitesARessynchroniser.traiteeLe} IS NULL`,

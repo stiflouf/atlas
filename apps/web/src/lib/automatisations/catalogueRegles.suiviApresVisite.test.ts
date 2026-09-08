@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-041), même patron que catalogueRegles.nouveauMatch.test.ts.
 // Couvre la règle unique `suivi_apres_visite` : politique par `interet` (une seule règle,
@@ -40,7 +41,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -57,7 +58,7 @@ async function creerAcquereurDeTest(suffixe: string) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -65,6 +66,7 @@ async function creerAcquereurDeTest(suffixe: string) {
 function evenementDeTest(compteRenduVisiteId: string) {
   return {
     id: "n/a",
+    workspaceId: WORKSPACE_TEST,
     typeEvenement: "visite_realisee" as const,
     compteRenduVisiteId,
     survenuLe: new Date().toISOString(),

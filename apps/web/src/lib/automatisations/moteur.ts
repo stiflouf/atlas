@@ -50,6 +50,11 @@ async function traiterUneExecution(executionId: string): Promise<void> {
           origineCode: regle.code,
           cible: champs.cible,
         },
+        // ADR-054 — la tâche produite appartient au MÊME workspace que l'événement qui l'a
+        // déclenchée. Lecture ponctuelle strictement au service d'une écriture cohérente (jamais
+        // un filtrage de lecture) : l'événement est déjà chargé juste au-dessus, aucun accès
+        // supplémentaire, aucun contexte ambiant, aucune valeur devinée.
+        evenement.workspaceId,
         tx
       );
       await marquerExecutionReussie(executionId, tache.id, tx);

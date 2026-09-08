@@ -37,13 +37,19 @@ export async function getConfigurationAutomatisation(regleCode: CodeRegleAutomat
 // Bascule explicite (ADR-032, point 7) — jamais un état implicite. `onConflictDoUpdate` : la ligne
 // existe déjà pour les 4 règles V1 (seedées), mais reste robuste si une future règle n'a encore
 // aucune ligne.
+// ADR-054 — `workspaceId` est un paramètre OBLIGATOIRE, jamais une valeur que ce repository
+// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou du contexte
+// d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
+// la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
+// lieu d'être silencieusement rangé dans le workspace historique.
 export async function definirActivationAutomatisation(
   regleCode: CodeRegleAutomatisation,
-  active: boolean
+  active: boolean,
+  workspaceId: string
 ): Promise<void> {
   await getDb()
     .insert(configurationsAutomatisation)
-    .values({ regleCode, active })
+    .values({ regleCode, active, workspaceId })
     .onConflictDoUpdate({
       target: configurationsAutomatisation.regleCode,
       set: { active, modifieLe: new Date() },
@@ -55,11 +61,12 @@ export async function definirActivationAutomatisation(
 // "impossible d'activer sans seuil valide" vit dans la Server Action, pas ici — ADR-007).
 export async function definirSeuilAutomatisation(
   regleCode: CodeRegleAutomatisation,
-  seuilJoursInactivite: number
+  seuilJoursInactivite: number,
+  workspaceId: string
 ): Promise<void> {
   await getDb()
     .insert(configurationsAutomatisation)
-    .values({ regleCode, seuilJoursInactivite })
+    .values({ regleCode, seuilJoursInactivite, workspaceId })
     .onConflictDoUpdate({
       target: configurationsAutomatisation.regleCode,
       set: { seuilJoursInactivite, modifieLe: new Date() },

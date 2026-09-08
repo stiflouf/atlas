@@ -11,7 +11,14 @@ contribution : `CONTRIBUTING.md` racine.
 ## Architecture / modèle
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — stack technique, organisation des dossiers, flux
-  UI → Server Action → Repository → PostgreSQL.
+  UI → Server Action → Repository → PostgreSQL. **Daté du 2026-08-11 et partiellement obsolète** :
+  voir l'avertissement en tête du fichier, et l'audit ci-dessous pour l'état observé.
+- [`audits/DOMIORA-STRATEGIC-ARCHITECTURE-AUDIT-2026-09.md`](audits/DOMIORA-STRATEGIC-ARCHITECTURE-AUDIT-2026-09.md)
+  — audit stratégique du 2026-09-08 : état réellement observé, modèle de données, inventaire
+  fonctionnel, couplage IAD, risques architecturaux.
+- [`PLATFORM_BOUNDARIES.md`](PLATFORM_BOUNDARIES.md) — frontières de plateforme cibles
+  (CORE / CONNECTORS / SYNC ENGINE / INTELLIGENCE / AUTOMATIONS / PACKS) et sens des dépendances.
+  Carte de lecture uniquement — les décisions sont dans ADR-054/055/056, **non implémentées**.
 - [`DATA_MODEL.md`](DATA_MODEL.md) — schéma de données, table par table.
 - [`FLOWS.md`](FLOWS.md) — quelques parcours utilisateur bout en bout.
 - [`DEMO_VS_REAL.md`](DEMO_VS_REAL.md) — comment la bascule données mockées/réelles fonctionne.
@@ -29,6 +36,21 @@ contribution : `CONTRIBUTING.md` racine.
 - [`adr/051-portabilite-reversibilite-montee-en-charge.md`](adr/051-portabilite-reversibilite-montee-en-charge.md)
   — principes transversaux (portabilité, réversibilité, montée en charge) pour les décisions
   futures ; aucune implémentation, le pilote reste la priorité immédiate.
+
+### Fondations multi-source / multi-utilisateur (2026-09-08, aucune implémentation)
+
+Trois décisions à prendre avant tout connecteur et avant toute ouverture multi-utilisateur. Elles
+ne changent aucun comportement actuel et n'ajoutent aucune migration.
+
+- [`adr/054-appartenance-workspace-multi-utilisateur.md`](adr/054-appartenance-workspace-multi-utilisateur.md)
+  — l'unité racine d'appartenance est le **workspace** ; IDENTITY / OWNERSHIP / ACCESS / SECRETS
+  sont quatre concepts distincts ; toute nouvelle table porte son appartenance dès sa création.
+- [`adr/055-modele-canonique-contact-projets-mandat-interaction.md`](adr/055-modele-canonique-contact-projets-mandat-interaction.md)
+  — séparation **personne ↔ projet** (le contact n'a aucun rôle stocké), le **mandat** devient une
+  entité, les interactions convergent par read model plutôt que par fusion de tables.
+- [`adr/056-identite-externe-provenance-frontiere-connecteur.md`](adr/056-identite-externe-provenance-frontiere-connecteur.md)
+  — l'identité canonique reste interne ; références externes N:1 ; provenance hybride avec verrous
+  de champs ; capacités de connecteur ; frontière CORE / CONNECTOR / SYNC ENGINE.
 
 ## Sécurité
 

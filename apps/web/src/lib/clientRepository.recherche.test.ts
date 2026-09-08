@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, like, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-048 — recherche + pagination serveur : rechercherAcquereursPage(). Test d'intégration réel
 // (Postgres local), même principe que clientRepository.test.ts.
@@ -36,9 +37,9 @@ function acquereurTest(suffixe: string, overrides: Partial<Parameters<typeof cre
 
 describe("rechercherAcquereursPage (ADR-048)", () => {
   it("filtre par archives=false/true comme les fonctions existantes", async () => {
-    const actif = await creerAcquereur(acquereurTest("ARCHIVES-1"));
+    const actif = await creerAcquereur(acquereurTest("ARCHIVES-1"), WORKSPACE_TEST);
     idsCrees.push(actif.id);
-    const archive = await creerAcquereur(acquereurTest("ARCHIVES-2"));
+    const archive = await creerAcquereur(acquereurTest("ARCHIVES-2"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
     await archiverAcquereur(archive.id);
 
@@ -51,7 +52,7 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
   });
 
   it("recherche texte : trouve par nom ou par prénom, insensible à la casse", async () => {
-    const acquereur = await creerAcquereur(acquereurTest("TEXTE-1", { prenom: "Dominique" }));
+    const acquereur = await creerAcquereur(acquereurTest("TEXTE-1", { prenom: "Dominique" }), WORKSPACE_TEST);
     idsCrees.push(acquereur.id);
 
     const parNom = await rechercherAcquereursPage({ q: "texte-1", archives: false, page: 1, parPage: 50 });
@@ -74,7 +75,7 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
     const nom = `${NOM_PREFIX}-PAGINATION`;
     const crees = [];
     for (let i = 0; i < 5; i++) {
-      const acquereur = await creerAcquereur(acquereurTest(`PAGINATION-${i}`, { nom }));
+      const acquereur = await creerAcquereur(acquereurTest(`PAGINATION-${i}`, { nom }), WORKSPACE_TEST);
       idsCrees.push(acquereur.id);
       crees.push(acquereur);
     }
@@ -94,7 +95,7 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
   });
 
   it("page hors bornes retourne une liste vide, jamais une erreur — total reste correct", async () => {
-    const acquereur = await creerAcquereur(acquereurTest("HORS-BORNES"));
+    const acquereur = await creerAcquereur(acquereurTest("HORS-BORNES"), WORKSPACE_TEST);
     idsCrees.push(acquereur.id);
 
     const resultat = await rechercherAcquereursPage({ q: "HORS-BORNES", archives: false, page: 99, parPage: 25 });

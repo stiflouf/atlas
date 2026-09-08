@@ -80,9 +80,13 @@ describe("seed-demo — gardes de sécurité", () => {
   });
 
   it("refuse si la base porte une donnée métier étrangère au dataset, sans rien supprimer", async () => {
+    // ADR-054 — `workspace_id` est obligatoire et sans DEFAULT depuis la migration 0033 : même une
+    // fixture brute doit nommer son périmètre. La valeur est LUE en base, comme le fait le seed
+    // lui-même, plutôt que codée en dur ici.
+    const [{ id: workspaceId }] = await sql`select id from workspaces limit 1`;
     await sql`
-      insert into biens (reference, titre, type, adresse, ville, code_postal, surface, pieces, prix, date_mandat)
-      values ('REEL-001', 'Bien réel du conseiller', 'appartement', '1 rue Réelle', 'Houilles', '78800', 60, 3, 300000, '2026-01-01')
+      insert into biens (reference, titre, type, adresse, ville, code_postal, surface, pieces, prix, date_mandat, workspace_id)
+      values ('REEL-001', 'Bien réel du conseiller', 'appartement', '1 rue Réelle', 'Houilles', '78800', 60, 3, 300000, '2026-01-01', ${workspaceId})
     `;
 
     await expect(executerSeedDemo(sql, { env: ENV_CONFIRME })).rejects.toMatchObject({

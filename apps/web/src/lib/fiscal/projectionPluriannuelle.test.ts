@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -60,7 +61,7 @@ async function creerCompromisPourPipeline(suffixe: string, montantCentimes: numb
     dateMandat: "2020-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -73,7 +74,7 @@ async function creerCompromisPourPipeline(suffixe: string, montantCentimes: numb
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2020-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2020-01-01" });
   idsCompromisCrees.push(compromis.id);
@@ -102,7 +103,7 @@ async function creerEncaissementReel(suffixe: string, montantCentimes: number, d
     dateMandat: "2020-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -115,7 +116,7 @@ async function creerEncaissementReel(suffixe: string, montantCentimes: number, d
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2020-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);

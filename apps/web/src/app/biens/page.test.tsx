@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 // aux Server Actions/Route Handlers.
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq, like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -42,9 +43,9 @@ function bienTest(suffixe: string, overrides: Partial<Parameters<typeof creerBie
 
 describe("/biens (ADR-048)", () => {
   it("q filtre réellement la liste affichée", async () => {
-    const trouve = await creerBien(bienTest("TROUVE", { ville: "Annecy" }));
+    const trouve = await creerBien(bienTest("TROUVE", { ville: "Annecy" }), WORKSPACE_TEST);
     idsCrees.push(trouve.id);
-    const autre = await creerBien(bienTest("AUTRE", { ville: "Chambéry" }));
+    const autre = await creerBien(bienTest("AUTRE", { ville: "Chambéry" }), WORKSPACE_TEST);
     idsCrees.push(autre.id);
 
     const element = await BiensPage({ searchParams: Promise.resolve({ q: "Annecy" }) });
@@ -64,7 +65,7 @@ describe("/biens (ADR-048)", () => {
   });
 
   it("page hors bornes redirige vers la dernière page valide, jamais une page vide", async () => {
-    const bien = await creerBien(bienTest("HORS-BORNES"));
+    const bien = await creerBien(bienTest("HORS-BORNES"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
 
     await expect(
@@ -73,7 +74,7 @@ describe("/biens (ADR-048)", () => {
   });
 
   it("archives=1 continue de fonctionner seul (rétrocompatibilité du lien existant)", async () => {
-    const archive = await creerBien(bienTest("ARCHIVE-COMPAT"));
+    const archive = await creerBien(bienTest("ARCHIVE-COMPAT"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
     await archiverBien(archive.id);
 
@@ -87,7 +88,7 @@ describe("/biens (ADR-048)", () => {
   // ADR-052 — la galerie photo (photos_bien) est cascadée à la suppression du bien via
   // ON DELETE CASCADE : aucun nettoyage dédié nécessaire dans afterAll ci-dessus.
   it("bien sans photo → fallback PropertyVisual, jamais une image /api/photos-bien", async () => {
-    const bien = await creerBien(bienTest("SANS-PHOTO"));
+    const bien = await creerBien(bienTest("SANS-PHOTO"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
 
     const element = await BiensPage({ searchParams: Promise.resolve({ q: bien.reference }) });
@@ -99,9 +100,9 @@ describe("/biens (ADR-048)", () => {
   });
 
   it("bien avec photo principale → image réelle /api/photos-bien/<id>, pas de N+1 (une seule requête de liste)", async () => {
-    const bienA = await creerBien(bienTest("AVEC-PHOTO-A"));
+    const bienA = await creerBien(bienTest("AVEC-PHOTO-A"), WORKSPACE_TEST);
     idsCrees.push(bienA.id);
-    const bienB = await creerBien(bienTest("AVEC-PHOTO-B"));
+    const bienB = await creerBien(bienTest("AVEC-PHOTO-B"), WORKSPACE_TEST);
     idsCrees.push(bienB.id);
 
     const photo = await ajouterPhotoBien({

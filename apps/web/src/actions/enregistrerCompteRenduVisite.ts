@@ -10,6 +10,7 @@ import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/even
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { Interet } from "@/types/compteRenduVisite";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 const INTERETS_VALIDES: Interet[] = ["interesse", "a_reflechir", "pas_interesse", "inconnu"];
 
@@ -34,6 +35,8 @@ function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefi
 // alors exactement comme avant ADR-040, sans transition de statut associée.
 export async function enregistrerCompteRenduVisiteAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite de l'événement métier (table racine).
+  const workspaceId = await exigerWorkspaceCourant();
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const visiteIdSoumis = String(formData.get("visiteId") ?? "");
@@ -77,6 +80,7 @@ export async function enregistrerCompteRenduVisiteAction(formData: FormData): Pr
         }
         return emettreEvenementEtPreparerExecutions(
           { typeEvenement: "visite_realisee", compteRenduVisiteId: compteRendu.id },
+          workspaceId,
           tx
         );
       });

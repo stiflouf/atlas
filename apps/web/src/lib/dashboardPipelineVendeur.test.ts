@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Fichier séparé de dashboardRepository.test.ts (déjà volumineux) : ne teste que
 // chargerPipelineVendeur() (ADR-027), même repli DATABASE_URL que les autres suites
@@ -31,7 +32,7 @@ async function creerProspectDeTest(suffixe: string) {
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-  });
+  }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   return prospect;
 }

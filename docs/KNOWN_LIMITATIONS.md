@@ -877,26 +877,91 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   — ADR-006). Pas de webhook Google : chaque chargement de page relit l'agenda à la demande, pas
   de synchronisation en tâche de fond.
 
-## Pas de LLM
+## LLM : une seule utilisation, optionnelle et encadrée
 
-Confirmation factuelle (recherche exhaustive dans `src/`, aucune dépendance dans `package.json`) :
-aucune fonctionnalité actuelle n'utilise de modèle de langage. Tous les textes affichés sont soit
-des faits bruts (bien, acquéreur, notes, retours), soit produits par des règles déterministes sur
-champs structurés (`docs/BUSINESS_RULES.md`, ADR-008). ADR-004 prévoit un usage futur progressif —
-non commencé à ce jour.
+**Cette section affirmait « Pas de LLM » ; c'est devenu faux.** Une rédaction assistée a été
+introduite depuis (`apps/web/src/lib/redaction/`). Correction factuelle, chaque point vérifié dans
+le code :
+
+- **Une seule utilisation existe** : reformuler un brouillon d'email **déjà produit par un
+  générateur déterministe** (`lib/communications/genererBrouillonEmail.ts`). Point d'entrée unique :
+  la Server Action `apps/web/src/actions/reformulerBrouillon.ts`. Aucun autre chemin du produit
+  n'appelle un modèle.
+- **ADR-008 reste entièrement valide** : aucune règle métier n'est décidée par un modèle. Les
+  moteurs (`compatibilite/`, `opportunites/`, `alertes/`, `pointsForts/`, `pointsAttention/`,
+  `fiscal/`) restent déterministes et ne lisent aucun texte libre. Le modèle est un **rédacteur**,
+  jamais une source de faits, jamais une décision.
+- **Toujours aucune dépendance LLM dans `package.json`** (`apps/web/package.json`) : l'adaptateur
+  est écrit en `fetch` brut sur le protocole OpenAI-compatible
+  (`lib/redaction/adaptateurCompatibleOpenAI.ts`), choisi comme protocole et non comme fournisseur.
+- **Désactivée par défaut** : `resoudreRedacteur()` (`lib/redaction/redacteur.ts`) retourne
+  `undefined` tant que `DOMIORA_REDACTION_BASE_URL` **et** `DOMIORA_REDACTION_MODELE` ne sont pas
+  définies. Ce n'est pas une panne — Communications reste entièrement utilisable, et l'action n'est
+  affichée que si elle peut aboutir (`redactionAssisteeDisponible()`).
+- **Ce que le modèle reçoit est verrouillé par le type** : `FaitsAutorisesRedaction`
+  (`lib/redaction/contrat.ts`) est un `Pick<>` sur cinq champs, construit champ par champ (jamais un
+  spread). Aucune donnée de la base, aucune note, aucun repère relationnel (ADR-053 §4), aucun
+  contexte de tâche interne ne lui parvient. Les faits sont **re-résolus côté serveur**, jamais
+  acceptés depuis le formulaire.
+- **Sortie acceptée en entier ou rejetée en entier** : `lib/redaction/gardeFous.ts` valide la
+  reformulation ; en cas d'échec le brouillon déterministe est conservé, jamais corrigé
+  partiellement.
+- **Aucun envoi n'est déclenché** par cette action : elle rend deux chaînes de texte que le
+  conseiller reste libre de modifier ou d'ignorer.
+
+Limites connues de cette brique :
+
+- **Les trois variables d'environnement ne sont documentées nulle part** :
+  `DOMIORA_REDACTION_BASE_URL`, `DOMIORA_REDACTION_MODELE` et `DOMIORA_REDACTION_CLE_API` sont
+  absentes de `apps/web/.env.local.example` et de `docs/DEVELOPER_ONBOARDING.md`. Une instance ne
+  peut pas activer la fonctionnalité sans lire `lib/redaction/redacteur.ts`.
+- **Le fournisseur réellement configuré en production n'est pas déductible du dépôt** — aucune
+  valeur n'y figure, et aucune ne doit y figurer.
+- **D'autres documents portent encore l'affirmation obsolète « aucun LLM »** :
+  `docs/DEVELOPER_ONBOARDING.md`, `docs/AI_HANDOFF.md`, `docs/BUSINESS_RULES.md`. Ils n'ont pas été
+  corrigés par la passe qui a corrigé cette section.
 
 ## Pas de multi-utilisateur
 
 Produit mono-conseiller assumé (ADR-006). Depuis ADR-047, Atlas a une vraie authentification
-(identité Google + allowlist à **une seule** adresse, session cookie chiffrée) — mais ceci ne
-constitue toujours pas du multi-utilisateur : aucune table utilisateur, aucun `userId`/`tenantId`,
-aucune notion de "qui a fait quoi" au-delà de l'identifiant Google unique posé en session.
-`connexions_google` (une seule ligne possible) et le nom affiché dans `Sidebar.tsx`
-("Steven Gausset", codé en dur) le confirment toujours. Introduire un second conseiller
-nécessiterait une refonte de plusieurs tables (au minimum `connexions_google`,
-`memoire_contextuelle`, et potentiellement `taches`/`notes_bien`/`comptes_rendus_visite` pour
-savoir qui a écrit quoi) — ADR-047 rend Atlas raisonnablement exposable pour **un** conseiller,
-pas pour plusieurs sur la même instance.
+(identité Google + allowlist à **une seule** adresse, session cookie chiffrée). **Le
+fonctionnement reste strictement mono-conseiller**, et rien de ce qui suit ne le change.
+
+Correction factuelle depuis la migration `0032` (ADR-054, fondation d'appartenance) : la phrase
+« aucune table utilisateur, aucun `userId`/`tenantId` » n'est plus exacte au sens littéral. Ce qui
+existe désormais, et ce qui n'existe toujours pas :
+
+- **Existe** : les tables `workspaces` (une ligne, `'default'`) et `workspace_membres`, une colonne
+  `workspace_id` (`NOT NULL`, **sans `DEFAULT` depuis la migration `0033`**) sur les 9 tables
+  racines, et une résolution explicite du périmètre à l'écriture — depuis la session
+  (`exigerWorkspaceCourant`) ou depuis un contexte d'exécution machine
+  (`resoudreWorkspaceExecutionMachine`, qui échoue bruyamment si plusieurs workspaces existent).
+  L'appartenance `owner` est bootstrappée de façon idempotente au callback OIDC, et rattrapée à la
+  première écriture pour une session ouverte avant l'introduction du mécanisme.
+- **N'existe pas** : aucune requête de lecture ne filtre par workspace, aucun sélecteur de
+  workspace, aucune UI, aucun rôle au-delà de `'owner'`, aucun moteur de permissions.
+  `workspace_membres` n'est lue par aucun chemin d'**authentification** — l'allowlist à une seule
+  adresse reste seule maîtresse de qui peut entrer ; l'appartenance ne sert qu'à nommer le
+  périmètre d'écriture.
+- **Dette connue, à payer au passage multi-workspace** : `configurations_automatisation` garde sa PK
+  `regle_code` seule, ce qui empêcherait deux workspaces de configurer la même règle. C'est la seule
+  contrainte d'unicité du schéma dans ce cas (vérifié table par table).
+- **Toujours pas de "qui a fait quoi"** : aucune colonne d'auteur sur `taches`/`notes_bien`/
+  `comptes_rendus_visite`, et aucun backfill d'auteur ne serait honnête sur l'historique.
+- **Toujours mono-conseiller côté secrets** : `connexions_google` ne porte volontairement aucun
+  `workspace_id` (ADR-054 §6 — un token OAuth est personnel à une identité, jamais un actif
+  partagé). Le nom affiché vient d'`ATLAS_ADVISOR_DISPLAY_NAME`, propriété d'instance.
+- **`dossier_fiscal` (+ `profil_fiscal`, `historique_amorcage`, `rfr_foyer`) : tranché** — ces
+  données appartiennent à l'**identité** du conseiller, jamais au workspace (ADR-054 §6 bis). Motif :
+  l'accès étant binaire par workspace (§5), les y rattacher exposerait le régime micro-BNC et le
+  revenu fiscal du foyer au premier collaborateur ajouté. La forme exacte du rattachement à
+  l'identité reste hors périmètre tant qu'un second membre n'existe pas.
+- **`memoire_contextuelle` : toujours non tranchée** (question ouverte 4 bis d'ADR-054), sans
+  colonne et sans modification de son `UNIQUE`. Un doute ne doit pas devenir un modèle permanent.
+
+Introduire un second conseiller reste donc un chantier à part entière : activer le filtrage par
+workspace dans toutes les lectures, trancher les appartenances laissées ouvertes, rattacher
+`connexions_google` à l'identité, et décider si une colonne d'auteur est nécessaire.
 
 ## Sécurisation du pilote mono-conseiller (ADR-047)
 

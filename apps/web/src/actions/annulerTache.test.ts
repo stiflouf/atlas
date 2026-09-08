@@ -8,7 +8,17 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -42,7 +52,7 @@ describe("annulerTacheAction", () => {
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await annulerTacheAction(formData({ id: tache.id })).catch(() => {});

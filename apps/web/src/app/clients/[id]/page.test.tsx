@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq, like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (même pattern que biens/page.test.tsx et biens/[id]/page.test.tsx,
 // ADR-048) — vraie base Postgres, vraie page Server Component. La leçon du chantier Fiche Bien
@@ -49,7 +50,7 @@ async function bienDeTest(suffixe: string, overrides: Partial<Parameters<typeof 
     caracteristiques: [],
     description: "",
     ...overrides,
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -67,7 +68,7 @@ async function acquereurDeTest(suffixe: string, overrides: Partial<Parameters<ty
     notes: "",
     datePremiereContact: "2026-01-15",
     ...overrides,
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -166,7 +167,7 @@ describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)"
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "acquereur", id: acquereur.id },
-    });
+    }, WORKSPACE_TEST);
 
     const html = renderToStaticMarkup(await rendreFiche(acquereur.id));
     expect(html).toContain(tache.titre);
@@ -184,7 +185,7 @@ describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)"
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "acquereur", id: acquereur.id },
-    });
+    }, WORKSPACE_TEST);
     await terminerTache(tache.id);
 
     const html = renderToStaticMarkup(await rendreFiche(acquereur.id, tache.id));

@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-042), même patron que catalogueRegles.nouveauMatch.test.ts /
 // catalogueRegles.suiviApresVisite.test.ts. Couvre la règle unique `retour_vendeur_apres_visite` :
@@ -36,7 +37,7 @@ const idsAcquereursCrees: string[] = [];
 const idsProspectsCrees: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation(REGLE, false);
+  await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
 
   // evenements_metier.compte_rendu_visite_id référence aussi comptes_rendus_visite en NO ACTION —
   // les comptes rendus créés pour idsBiensCrees doivent être inclus dans le filtre, sans quoi la
@@ -83,7 +84,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -100,7 +101,7 @@ async function creerAcquereurDeTest(suffixe: string) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -113,7 +114,7 @@ async function creerBienAvecVendeurDeTest(suffixe: string) {
     nom: `[test réel] Vendeur ${suffixe}`,
     prenom: "Marc",
     email: `test-réel-vendeur-${suffixe}@example.com`,
-  });
+  }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   await getDb().update(prospectsVendeursTable).set({ bienId: bien.id }).where(eq(prospectsVendeursTable.id, prospect.id));
   return { bien, prospect };
@@ -136,6 +137,7 @@ async function creerCompteRenduDeTest(
 function evenementDeTest(compteRenduVisiteId: string) {
   return {
     id: "n/a",
+    workspaceId: WORKSPACE_TEST,
     typeEvenement: "visite_realisee" as const,
     compteRenduVisiteId,
     survenuLe: new Date().toISOString(),
@@ -256,7 +258,7 @@ describe("règle retour_vendeur_apres_visite — jamais l'acquéreur, même en p
       origine: "automatique",
       origineCode: REGLE,
       cible: champs!.cible,
-    });
+    }, WORKSPACE_TEST);
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.candidats[0].type).toBe("prospectVendeur");
@@ -270,17 +272,17 @@ describe("règle retour_vendeur_apres_visite — jamais l'acquéreur, même en p
 
 describe("règle retour_vendeur_apres_visite — activation figée (ADR-032)", () => {
   it("règle inactive : événement créé, 0 exécution ; activation ultérieure : ancien événement toujours 0 tâche ; nouvel événement : 1 tâche", async () => {
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
     const { bien } = await creerBienAvecVendeurDeTest("ACT1");
     const acquereur = await creerAcquereurDeTest("ACT1");
     const cr = await creerCompteRenduDeTest(bien.id, acquereur.id, "interesse");
 
     const { evenement, idsExecutionsATraiter } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, WORKSPACE_TEST, tx)
     );
     expect(idsExecutionsATraiter).toEqual([]);
 
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const executionsAncien = await getDb()
       .select()
       .from(executionsAutomatisation)
@@ -291,47 +293,47 @@ describe("règle retour_vendeur_apres_visite — activation figée (ADR-032)", (
     const acquereur2 = await creerAcquereurDeTest("ACT1-bis");
     const cr2 = await creerCompteRenduDeTest(bien.id, acquereur2.id, "interesse");
     const second = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr2.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr2.id }, WORKSPACE_TEST, tx)
     );
     expect(second.idsExecutionsATraiter).toHaveLength(1);
     await traiterExecutionsEnAttente(second.idsExecutionsATraiter);
     const executionsNouveau = await getExecutionAutomatisationById(second.idsExecutionsATraiter[0]);
     expect(executionsNouveau?.tacheId).toBeDefined();
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("règle retour_vendeur_apres_visite — idempotence et concurrence (ADR-032)", () => {
   it("double traitement de la même exécution : 1 tâche maximum", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { bien, prospect } = await creerBienAvecVendeurDeTest("IDEMP1");
     const acquereur = await creerAcquereurDeTest("IDEMP1");
     const cr = await creerCompteRenduDeTest(bien.id, acquereur.id, "interesse");
     const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, WORKSPACE_TEST, tx)
     );
 
     await traiterExecutionsEnAttente(idsExecutionsATraiter);
     await traiterExecutionsEnAttente(idsExecutionsATraiter); // rejeu
 
     expect(await tachesPourProspect(prospect.id)).toHaveLength(1);
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("traitement concurrent de la même exécution : 1 tâche maximum (verrou FOR UPDATE)", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { bien, prospect } = await creerBienAvecVendeurDeTest("CONC1");
     const acquereur = await creerAcquereurDeTest("CONC1");
     const cr = await creerCompteRenduDeTest(bien.id, acquereur.id, "interesse");
     const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, WORKSPACE_TEST, tx)
     );
 
     await Promise.all([traiterExecutionsEnAttente(idsExecutionsATraiter), traiterExecutionsEnAttente(idsExecutionsATraiter)]);
 
     expect(await tachesPourProspect(prospect.id)).toHaveLength(1);
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("reprise ADR-038 : une exécution laissée à_traiter pour cette règle est reprise sans dupliquer la tâche", async () => {
@@ -343,14 +345,14 @@ describe("règle retour_vendeur_apres_visite — idempotence et concurrence (ADR
     // compteur de tentatives, plafond) est déjà entièrement couvert par reprise.test.ts — non
     // spécifique à une règle, rien à re-tester ici au-delà du comportement de CETTE règle une fois
     // rejouée par ce chemin.
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { bien, prospect } = await creerBienAvecVendeurDeTest("REPRISE1");
     const acquereur = await creerAcquereurDeTest("REPRISE1");
     const cr = await creerCompteRenduDeTest(bien.id, acquereur.id, "a_reflechir");
     // Événement + exécution posés (comme dans la transaction métier), jamais traité juste après —
     // exactement l'état laissé par un crash entre le COMMIT et le traitement synchrone.
     const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, WORKSPACE_TEST, tx)
     );
     const [executionId] = idsExecutionsATraiter;
 
@@ -365,6 +367,6 @@ describe("règle retour_vendeur_apres_visite — idempotence et concurrence (ADR
     await traiterExecutionsEnAttente([executionId]);
     expect(await tachesPourProspect(prospect.id)).toHaveLength(1);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });

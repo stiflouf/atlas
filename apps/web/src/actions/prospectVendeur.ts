@@ -26,6 +26,7 @@ import { MOTIFS_PERTE_PROSPECT_VENDEUR, type MotifPerteProspectVendeur } from "@
 import { TYPES_NOTE_PROSPECT_VENDEUR, type TypeNoteProspectVendeur } from "@/types/noteProspectVendeur";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 function parseDateOptionnelle(valeur: FormDataEntryValue | null): string | undefined {
   const date = String(valeur ?? "").trim();
@@ -54,7 +55,8 @@ async function chargerProspectPourJalon(id: string): Promise<ProspectVendeur> {
 
 export async function creerProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
-  const prospect = await creerProspectVendeur(parseProspectVendeurFormData(formData));
+  // ADR-054 — appartenance explicite du prospect vendeur (table racine).
+  const prospect = await creerProspectVendeur(parseProspectVendeurFormData(formData), await exigerWorkspaceCourant());
   redirect(`/prospects-vendeurs/${prospect.id}`);
 }
 
@@ -108,6 +110,8 @@ export async function planifierRdvEstimationProspectVendeurAction(formData: Form
 
 export async function marquerRdvEstimationRealiseProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite de l'événement métier (table racine).
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   const prospectAvant = await chargerProspectPourJalon(id);
@@ -137,6 +141,7 @@ export async function marquerRdvEstimationRealiseProspectVendeurAction(formData:
     if (!estTransitionReelle) return [];
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
       { typeEvenement: "rdv_estimation_realise", prospectVendeurId: id },
+      workspaceId,
       tx
     );
     return idsExecutionsATraiter;
@@ -161,12 +166,14 @@ export async function proposerMandatProspectVendeurAction(formData: FormData): P
 // mandatSigneLe/bienId posés ensemble, ou aucun des deux.
 export async function signerMandatProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite du bien créé et de l'événement `mandat_signe`.
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
   await chargerProspectPourJalon(id);
 
   const donneesBien = parseSignatureMandatFormData(formData);
-  const resultat = await signerMandatProspectVendeur(id, donneesBien);
+  const resultat = await signerMandatProspectVendeur(id, donneesBien, workspaceId);
   if (!resultat) notFound();
 
   // Traitement synchrone après le COMMIT (déjà acté à l'intérieur de signerMandatProspectVendeur,

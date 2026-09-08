@@ -8,7 +8,17 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-044 §25/§39/§44) : la création d'une Offre depuis le parcours
 // contextuel Visite ne doit JAMAIS terminer automatiquement la tâche `suivi_apres_visite` déjà
@@ -43,7 +53,7 @@ const idsComptesRendusCrees: string[] = [];
 const idsOffresCrees: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation("suivi_apres_visite", false);
+  await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
 
   if (idsComptesRendusCrees.length > 0) {
     const filtre = or(
@@ -72,7 +82,7 @@ function formData(champs: Record<string, string>): FormData {
 
 describe("ajouterOffreAction — non-régression tâche suivi_apres_visite (ADR-044 §25/§44)", () => {
   it("la tâche suivi_apres_visite reste ouverte après création d'une offre depuis le contexte de la visite qui l'a produite", async () => {
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
 
     const bien = await creerBien({
       reference: "[test réel] OFFRE-SUIVI-TACHE-1",
@@ -88,7 +98,7 @@ describe("ajouterOffreAction — non-régression tâche suivi_apres_visite (ADR-
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(bien.id);
     const acquereur = await creerAcquereur({
       prenom: "Test",
@@ -101,7 +111,7 @@ describe("ajouterOffreAction — non-régression tâche suivi_apres_visite (ADR-
       stadeProjet: "offre",
       notes: "",
       datePremiereContact: "2026-01-01",
-    });
+    }, WORKSPACE_TEST);
     idsAcquereursCrees.push(acquereur.id);
 
     const cr = await enregistrerCompteRenduVisite({
@@ -114,7 +124,7 @@ describe("ajouterOffreAction — non-régression tâche suivi_apres_visite (ADR-
     idsComptesRendusCrees.push(cr.id);
 
     const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, WORKSPACE_TEST, tx)
     );
     await traiterExecutionsEnAttente(idsExecutionsATraiter);
 

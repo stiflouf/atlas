@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-036) : vraie base Postgres. Le dry-run n'écrit jamais — ses
 // assertions restent donc valables quel que soit le contenu réel de la base partagée. `apply`
@@ -55,7 +56,7 @@ async function creerBienDeTest(suffixe: string, prix = 300000) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -72,7 +73,7 @@ async function creerAcquereurDeTest(suffixe: string, budgetMax = 400000) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -166,7 +167,7 @@ describe("appliquerBaseline — écrit silencieusement, jamais d'événement", (
 
     // Simule un historique déjà avancé pour cette paire (cycle 5 déjà émis par le passé), sans
     // ligne d'état correspondante (table technique perdue/à reconstruire).
-    await getDb().insert(evenementsMetier).values({
+    await getDb().insert(evenementsMetier).values({ workspaceId: WORKSPACE_TEST,
       typeEvenement: "compatibilite_bien_acquereur_devenue_compatible",
       bienId: bien.id,
       acquereurId: acquereur.id,

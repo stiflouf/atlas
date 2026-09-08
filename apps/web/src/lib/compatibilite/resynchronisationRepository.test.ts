@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-036) : vraie base Postgres. Couvre le handoff durable lui-même —
 // coalescing, complétion par identité (jamais par source), et le scénario de concurrence explicité
@@ -42,7 +43,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -54,8 +55,8 @@ async function lignesPourBien(bienId: string) {
 describe("enqueuerResynchronisationBien — coalescing", () => {
   it("deux demandes successives non traitées pour la même source coalescent en une seule ligne", async () => {
     const bien = await creerBienDeTest("COAL1");
-    const premier = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
-    const second = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const premier = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
+    const second = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
 
     expect(second).toBe(premier); // même ligne, rafraîchie (ON CONFLICT ... DO UPDATE)
     expect(await lignesPourBien(bien.id)).toHaveLength(1);
@@ -63,10 +64,10 @@ describe("enqueuerResynchronisationBien — coalescing", () => {
 
   it("une nouvelle demande après complétion de la précédente crée une NOUVELLE ligne, jamais une réutilisation", async () => {
     const bien = await creerBienDeTest("COAL2");
-    const premier = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const premier = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
     await getDb().transaction((tx) => marquerDemandeTraitee(premier, tx));
 
-    const second = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const second = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
     expect(second).not.toBe(premier);
 
     const lignes = await lignesPourBien(bien.id);
@@ -77,7 +78,7 @@ describe("enqueuerResynchronisationBien — coalescing", () => {
 describe("verrouillerDemande / marquerDemandeTraitee — complétion par identité", () => {
   it("une ligne déjà traitée n'est plus verrouillable", async () => {
     const bien = await creerBienDeTest("LOCK1");
-    const id = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const id = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
     await getDb().transaction((tx) => marquerDemandeTraitee(id, tx));
 
     const relue = await getDb().transaction((tx) => verrouillerDemande(id, tx));
@@ -86,7 +87,7 @@ describe("verrouillerDemande / marquerDemandeTraitee — complétion par identit
 
   it("un échec n'est jamais terminal : la ligne reste verrouillable pour un nouveau traitement", async () => {
     const bien = await creerBienDeTest("LOCK2");
-    const id = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const id = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
     await marquerDemandeEnEchec(id, "erreur simulée pour ce test");
 
     const relue = await getDb().transaction((tx) => verrouillerDemande(id, tx));
@@ -96,7 +97,7 @@ describe("verrouillerDemande / marquerDemandeTraitee — complétion par identit
 
   it("listerDemandesEnAttente ne retourne jamais une ligne déjà traitée", async () => {
     const bien = await creerBienDeTest("LOCK3");
-    const id = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const id = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
     await getDb().transaction((tx) => marquerDemandeTraitee(id, tx));
 
     const enAttente = await listerDemandesEnAttente(1000);
@@ -107,7 +108,7 @@ describe("verrouillerDemande / marquerDemandeTraitee — complétion par identit
 describe("concurrence (ADR-036, addendum §11) — une demande créée pendant un traitement en cours n'est jamais perdue", () => {
   it("le coalescing ne peut jamais absorber silencieusement une demande arrivée pendant un traitement verrouillé", async () => {
     const bien = await creerBienDeTest("CONC1");
-    const idPremiere = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const idPremiere = await getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
 
     // "Worker A" : verrouille la ligne et la garde verrouillée un court instant avant de la marquer
     // traitée — simule un traitement en cours.
@@ -121,7 +122,7 @@ describe("concurrence (ADR-036, addendum §11) — une demande créée pendant u
     // Laisse le traitement lent prendre le verrou en premier, puis déclenche une "nouvelle
     // mutation" concurrente sur la MÊME source pendant que la ligne est encore verrouillée.
     await new Promise((resolve) => setTimeout(resolve, 50));
-    const mutationConcurrente = getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, tx));
+    const mutationConcurrente = getDb().transaction((tx) => enqueuerResynchronisationBien(bien.id, WORKSPACE_TEST, tx));
 
     const [, idSeconde] = await Promise.all([traitementLent, mutationConcurrente]);
 

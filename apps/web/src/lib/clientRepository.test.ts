@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : exerce la vraie base Postgres locale (pas de mock), même principe que
 // actionRepository.test.ts. Repli sur le même DATABASE_URL par défaut que drizzle.config.ts si
@@ -54,7 +55,7 @@ describe("clientRepository (intégration Postgres)", () => {
   });
 
   it("modifierAcquereur() met à jour les champs et rafraîchit modifieLe", async () => {
-    const cree = await creerAcquereur(acquereurTest());
+    const cree = await creerAcquereur(acquereurTest(), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
     const [ligneAvant] = await getDb()
@@ -90,7 +91,7 @@ describe("clientRepository (intégration Postgres)", () => {
   });
 
   it("modifierAcquereur() préserve NULL (jamais false) pour un champ tri-état laissé inconnu", async () => {
-    const cree = await creerAcquereur(acquereurTest());
+    const cree = await creerAcquereur(acquereurTest(), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
     const modifie = await modifierAcquereur(cree.id, acquereurTest());
@@ -107,7 +108,7 @@ describe("clientRepository (intégration Postgres)", () => {
   });
 
   it("archiver un acquéreur : posé archiveLe, exclu de listerClients(), présent dans listerClientsArchives(), toujours résolu par getClientById()", async () => {
-    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive1" }));
+    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive1" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     expect(cree.archiveLe).toBeUndefined();
 
@@ -126,7 +127,7 @@ describe("clientRepository (intégration Postgres)", () => {
   });
 
   it("désarchiver un acquéreur : archiveLe redevient undefined, réapparaît dans listerClients()", async () => {
-    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive2" }));
+    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive2" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     await archiverAcquereur(cree.id);
 
@@ -138,7 +139,7 @@ describe("clientRepository (intégration Postgres)", () => {
   });
 
   it("le comptage de bascule démo->réel inclut les acquéreurs archivés (pas de repli mock)", async () => {
-    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive3" }));
+    const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive3" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
     await archiverAcquereur(cree.id);
 

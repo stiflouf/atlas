@@ -9,6 +9,7 @@ import { nettoyerDonneesE2E } from "./nettoyage";
 import { creerBien } from "../src/lib/bienRepository";
 import { creerAcquereur } from "../src/lib/clientRepository";
 import { enregistrerCompromis } from "../src/lib/compromisRepository";
+import { WORKSPACE_TEST } from "../src/db/workspaceDeTest";
 
 const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const prefixe = `[E2E:${runId}]`;
@@ -32,7 +33,7 @@ test.beforeAll(async () => {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   bienId = bien.id;
 
   const acquereur = await creerAcquereur({
@@ -46,7 +47,7 @@ test.beforeAll(async () => {
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   acquereurId = acquereur.id;
 
   await enregistrerCompromis({

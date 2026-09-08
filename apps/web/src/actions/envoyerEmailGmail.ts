@@ -16,6 +16,7 @@ import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository"
 import { deriverEtatEnvoiEmail } from "@/types/envoiEmail";
 import type { IntentionCommunication } from "@/lib/communications/contexteCommunication";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 export type ResultatActionEnvoiEmail =
   | { statut: "idle" }
@@ -97,6 +98,8 @@ export async function envoyerEmailGmailAction(
   const contenuHash = calculerContenuHash(destinataireEmail, objet, corps);
   const tentative = await demarrerTentativeEnvoi({
     id: idempotencyKey,
+    // ADR-054 — appartenance explicite de l'audit d'envoi (table racine).
+    workspaceId: await exigerWorkspaceCourant(),
     destinataireEmail,
     objet,
     contenuHash,

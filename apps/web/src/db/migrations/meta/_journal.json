@@ -225,6 +225,20 @@
       "when": 1788424953339,
       "tag": "0031_awesome_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788872886418,
+      "tag": "0032_polite_wolverine",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788878272454,
+      "tag": "0033_safe_invisible_woman",
+      "breakpoints": true
     }
   ]
 }

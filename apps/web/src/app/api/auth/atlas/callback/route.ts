@@ -3,6 +3,7 @@ import { echangerCodeEtVerifierIdentite, origineIdentitePublique } from "@/lib/a
 import { lireEtSupprimerStateOidcAtlas } from "@/lib/auth/atlasOidcState";
 import { estEmailAutorise } from "@/lib/auth/allowlist";
 import { creerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { bootstrapperAppartenanceOwner } from "@/lib/workspaceRepository";
 
 // Publique par nature (ADR-047, voir src/proxy.ts) : c'est Google qui redirige le navigateur ici,
 // avant qu'aucune session Atlas n'existe. La garantie ne vient pas d'une session préalable mais du
@@ -32,6 +33,24 @@ export async function GET(request: Request) {
     }
 
     await creerSessionAtlas({ sub: identite.sub, email: identite.email });
+
+    // ADR-054 — bootstrap de l'appartenance : premier instant du code où l'identité réelle est
+    // connue ET autorisée. Idempotent (ON CONFLICT DO NOTHING) : rejoué à chaque connexion sans
+    // jamais créer de doublon. Ne crée aucun workspace, n'accorde aucun droit supplémentaire —
+    // l'allowlist ci-dessus reste le seul décideur, cette écriture ne fait qu'enregistrer sa
+    // décision dans le modèle d'appartenance.
+    //
+    // BEST EFFORT VOLONTAIRE : un échec (base injoignable) ne doit pas empêcher la connexion, qui
+    // ne dépendait d'aucune écriture jusqu'ici — le comportement observable reste identique.
+    // `exigerWorkspaceCourant()` retentera le bootstrap au premier besoin réel d'écriture.
+    try {
+      await bootstrapperAppartenanceOwner({ sub: identite.sub, email: identite.email });
+    } catch (erreurBootstrap) {
+      console.error(
+        "[atlas-auth] appartenance workspace non établie à la connexion :",
+        erreurBootstrap instanceof Error ? erreurBootstrap.message : "erreur non standard"
+      );
+    }
   } catch (e) {
     // Ne jamais logger l'objet erreur complet (correction n°10, passe de fermeture ADR-047) : une
     // erreur venant de google-auth-library ou de l'échange de code peut porter des propriétés

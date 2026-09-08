@@ -692,6 +692,18 @@ async function inspecterBaseMetier(sql) {
 }
 
 async function insererDataset(sql, dataset) {
+  // ADR-054 — le seed écrit dans des tables RACINES : il doit nommer son périmètre explicitement
+  // (la migration 0033 a retiré le DEFAULT SQL). Le workspace est LU en base, jamais écrit en dur
+  // ici : le jour où plusieurs workspaces existeront, ce script devra dire dans lequel il seede,
+  // et cette lecture échouera bruyamment au lieu de choisir à sa place.
+  const workspaces = await sql`select id from workspaces limit 2`;
+  if (workspaces.length !== 1) {
+    throw new Error(
+      `Seed impossible : ${workspaces.length} workspace(s) en base. Un seul est attendu tant que le produit est mono-conseiller (ADR-054).`
+    );
+  }
+  const workspaceId = workspaces[0].id;
+
   // Les biens d'abord : deux des cinq prospects portent une FK bien_id (vendeurs convertis).
   for (const b of dataset.biens) {
     await sql`
@@ -699,12 +711,12 @@ async function insererDataset(sql, dataset) {
         id, reference, titre, type, adresse, ville, code_postal, code_insee_commune,
         surface, pieces, prix, statut_mandat, date_mandat, caracteristiques, description,
         etage, ascenseur, parking, exterieur, charge_honoraires, nom_copropriete,
-        offre_en_cours_le, compromis_signe_le, cree_le, modifie_le
+        offre_en_cours_le, compromis_signe_le, cree_le, modifie_le, workspace_id
       ) values (
         ${b.id}, ${b.reference}, ${b.titre}, ${b.type}, ${b.adresse}, ${b.ville}, ${b.codePostal}, ${b.codeInseeCommune},
         ${b.surface}, ${b.pieces}, ${b.prix}, ${b.statutMandat}, ${b.dateMandat}, ${b.caracteristiques}, ${b.description},
         ${b.etage}, ${b.ascenseur}, ${b.parking}, ${b.exterieur}, ${b.chargeHonoraires}, ${b.nomCopropriete},
-        ${b.offreEnCoursLe}, ${b.compromisSigneLe}, ${b.creeLe}, ${b.creeLe}
+        ${b.offreEnCoursLe}, ${b.compromisSigneLe}, ${b.creeLe}, ${b.creeLe}, ${workspaceId}
       )
     `;
   }
@@ -716,13 +728,13 @@ async function insererDataset(sql, dataset) {
         adresse_bien_potentiel, secteur_bien_potentiel, ville, code_postal, type_bien,
         qualifie_le, estimation_proposee_centimes, estimation_proposee_le,
         rdv_estimation_prevu_le, rdv_estimation_realise_le, mandat_propose_le, mandat_signe_le,
-        bien_id, motif_perte, date_perte, dernier_contact_le, cree_le, modifie_le
+        bien_id, motif_perte, date_perte, dernier_contact_le, cree_le, modifie_le, workspace_id
       ) values (
         ${p.id}, ${p.nom}, ${p.prenom}, ${p.email}, ${p.telephone}, ${p.origineLead}, ${p.origineLeadDetail},
         ${p.adresseBienPotentiel}, ${p.secteurBienPotentiel}, ${p.ville}, ${p.codePostal}, ${p.typeBien},
         ${p.qualifieLe}, ${p.estimationProposeeCentimes}, ${p.estimationProposeeLe},
         ${p.rdvEstimationPrevuLe}, ${p.rdvEstimationRealiseLe}, ${p.mandatProposeLe}, ${p.mandatSigneLe},
-        ${p.bienId}, ${p.motifPerte}, ${p.datePerte}, ${p.dernierContactLe}, ${p.creeLe}, ${p.creeLe}
+        ${p.bienId}, ${p.motifPerte}, ${p.datePerte}, ${p.dernierContactLe}, ${p.creeLe}, ${p.creeLe}, ${workspaceId}
       )
     `;
   }
@@ -732,11 +744,11 @@ async function insererDataset(sql, dataset) {
       insert into acquereurs (
         id, prenom, nom, email, telephone, budget_min, budget_max, criteres, stade_projet, notes,
         date_premiere_contact, pieces_min, surface_min, accessibilite_requise,
-        necessite_parking, necessite_exterieur, cree_le, modifie_le
+        necessite_parking, necessite_exterieur, cree_le, modifie_le, workspace_id
       ) values (
         ${a.id}, ${a.prenom}, ${a.nom}, ${a.email}, ${a.telephone}, ${a.budgetMin}, ${a.budgetMax}, ${a.criteres}, ${a.stadeProjet}, ${a.notes},
         ${a.datePremiereContact}, ${a.piecesMin}, ${a.surfaceMin}, ${a.accessibiliteRequise},
-        ${a.necessiteParking}, ${a.necessiteExterieur}, ${a.creeLe}, ${a.creeLe}
+        ${a.necessiteParking}, ${a.necessiteExterieur}, ${a.creeLe}, ${a.creeLe}, ${workspaceId}
       )
     `;
     await sql`
@@ -802,11 +814,11 @@ async function insererDataset(sql, dataset) {
       insert into taches (
         id, titre, contexte, type, priorite, echeance, origine, origine_code,
         bien_id, acquereur_id, prospect_vendeur_id, visite_id, offre_id, compromis_id, remuneration_id,
-        cree_le, terminee_le, annulee_le
+        cree_le, terminee_le, annulee_le, workspace_id
       ) values (
         ${t.id}, ${t.titre}, ${t.contexte ?? null}, ${t.type}, ${t.priorite}, ${t.echeance}, 'manuelle', null,
         ${t.bienId ?? null}, ${t.acquereurId ?? null}, ${t.prospectVendeurId ?? null}, null, null, ${t.compromisId ?? null}, null,
-        ${t.creeLe}, ${t.termineeLe ?? null}, null
+        ${t.creeLe}, ${t.termineeLe ?? null}, null, ${workspaceId}
       )
     `;
   }
@@ -826,8 +838,8 @@ async function insererDataset(sql, dataset) {
   // les autres colonnes de cible restent NULL, jamais renseignées "pour faire complet".
   for (const e of dataset.evenements) {
     await sql`
-      insert into evenements_metier (id, type_evenement, prospect_vendeur_id, survenu_le)
-      values (${e.id}, ${e.typeEvenement}, ${e.prospectVendeurId}, ${e.survenuLe})
+      insert into evenements_metier (id, type_evenement, prospect_vendeur_id, survenu_le, workspace_id)
+      values (${e.id}, ${e.typeEvenement}, ${e.prospectVendeurId}, ${e.survenuLe}, ${workspaceId})
     `;
   }
 }

@@ -8,7 +8,17 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration + garde-fous : les 4 actions de statut commercial doivent refuser
 // explicitement (throw) sur un bien archivé, et retirerOffreAction doit refuser explicitement si
@@ -62,7 +72,7 @@ function formData(id: string): FormData {
 
 describe("statutCommercialBien — garde-fou bien archivé", () => {
   it("refuse explicitement (throw) marquerOffreEnCoursAction sur un bien archivé", async () => {
-    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-001"));
+    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-001"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
     await archiverBien(bien.id);
 
@@ -70,7 +80,7 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
   });
 
   it("refuse explicitement (throw) retirerOffreAction sur un bien archivé", async () => {
-    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-002"));
+    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-002"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
     await marquerOffreEnCours(bien.id);
     await archiverBien(bien.id);
@@ -79,7 +89,7 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
   });
 
   it("refuse explicitement (throw) marquerCompromisSigneAction sur un bien archivé", async () => {
-    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-003"));
+    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-003"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
     await archiverBien(bien.id);
 
@@ -87,7 +97,7 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
   });
 
   it("refuse explicitement (throw) annulerCompromisAction sur un bien archivé", async () => {
-    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-004"));
+    const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-004"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
     await marquerCompromisSigne(bien.id);
     await archiverBien(bien.id);
@@ -98,7 +108,7 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
 
 describe("statutCommercialBien — garde-fou compromis actif", () => {
   it("refuse explicitement (throw) retirerOffreAction si un compromis est déjà signé", async () => {
-    const bien = await creerBien(bienTest("[test réel] STATUT-COMPROMIS-001"));
+    const bien = await creerBien(bienTest("[test réel] STATUT-COMPROMIS-001"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
     await marquerOffreEnCours(bien.id);
     await marquerCompromisSigne(bien.id);

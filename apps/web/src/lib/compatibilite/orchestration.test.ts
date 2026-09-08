@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : exerce la vraie base Postgres locale — vérifie que les deux sens de
 // l'orchestration (bien -> acquéreurs, acquéreur -> biens) appellent bien la même
@@ -38,7 +39,7 @@ async function creerBienDeTest(suffixe: string, surcharge: Partial<Parameters<ty
     caracteristiques: [],
     description: "",
     ...surcharge,
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -56,7 +57,7 @@ async function creerAcquereurDeTest(suffixe: string, surcharge: Partial<Paramete
     notes: "",
     datePremiereContact: "2026-01-01",
     ...surcharge,
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }

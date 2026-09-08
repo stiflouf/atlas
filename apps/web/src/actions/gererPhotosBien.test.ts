@@ -3,6 +3,7 @@ import { like } from "drizzle-orm";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-047 : session Atlas mockée comme valide pour les tests de comportement métier ci-dessous ;
 // le contrôle du refus anonyme est vérifié séparément dans un describe dédié plus bas, avec le
@@ -10,6 +11,15 @@ import path from "node:path";
 const exigerSessionAtlasMock = vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" });
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: () => exigerSessionAtlasMock(),
+}));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
 }));
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
@@ -44,7 +54,7 @@ async function bienTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
 }
 
 async function ajouterPhotoAvecFichiers(bienId: string, suffixe: string) {

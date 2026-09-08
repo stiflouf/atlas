@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Référentiel réel seedé : plafond_micro_bnc = 83 600,00 € du 2026-01-01 au 2029-01-01 (exclu).
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
@@ -54,7 +55,7 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -67,7 +68,7 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);

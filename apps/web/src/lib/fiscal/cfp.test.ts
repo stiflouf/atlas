@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Référentiel réel seedé : taux_cfp_liberal_non_reglemente, 0,2 % depuis 2026-01-01, statut
 // a_confirmer (ADR-023) — le moteur calcule quand même, la réserve est portée par la provenance.
@@ -50,7 +51,7 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -63,7 +64,7 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
     stadeProjet: "compromis",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);

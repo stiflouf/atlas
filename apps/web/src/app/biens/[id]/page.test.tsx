@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -41,7 +42,7 @@ function bienTest(suffixe: string) {
 
 describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre de photos (ADR-052)", () => {
   it("0 photo : fallback Visuel DOMIORA, CTA Ajouter des photos, pas de filmstrip", async () => {
-    const bien = await creerBien(bienTest("0-PHOTO"));
+    const bien = await creerBien(bienTest("0-PHOTO"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
 
     const element = await FicheBien({ params: Promise.resolve({ id: bien.id }), searchParams: Promise.resolve({}) });
@@ -54,7 +55,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
   });
 
   it("1 photo : vraie photo principale, CTA Gérer les photos, jamais Visuel DOMIORA, pas de filmstrip", async () => {
-    const bien = await creerBien(bienTest("1-PHOTO"));
+    const bien = await creerBien(bienTest("1-PHOTO"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
     const photo = await ajouterPhotoBien({
       bienId: bien.id,
@@ -79,7 +80,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
   });
 
   it("2 photos : filmstrip réellement rendu (les deux vraies photos, dans l'ordre ADR-052), CTA Gérer les photos", async () => {
-    const bien = await creerBien(bienTest("2-PHOTOS"));
+    const bien = await creerBien(bienTest("2-PHOTOS"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
     const photoA = await ajouterPhotoBien({
       bienId: bien.id,

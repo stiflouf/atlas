@@ -19,8 +19,14 @@ function ligneVersRun(ligne: typeof runsScanAutomatisation.$inferSelect): RunSca
 // posée ici au tout début du scan, puis complétée par terminerRunScanAutomatisation() une fois
 // terminé. Un run resté sans `termineLe` (crash pendant le scan) reste honnêtement visible comme
 // "en_cours" — voir deriverEtatRunScanAutomatisation.
-export async function demarrerRunScanAutomatisation(regleCode: CodeRegleAutomatisation): Promise<string> {
-  const [ligne] = await getDb().insert(runsScanAutomatisation).values({ regleCode }).returning({ id: runsScanAutomatisation.id });
+export async function demarrerRunScanAutomatisation(
+  regleCode: CodeRegleAutomatisation,
+  workspaceId: string
+): Promise<string> {
+  const [ligne] = await getDb()
+    .insert(runsScanAutomatisation)
+    .values({ regleCode, workspaceId })
+    .returning({ id: runsScanAutomatisation.id });
   return ligne.id;
 }
 

@@ -142,10 +142,19 @@ export async function getProspectVendeurParBien(bienId: string): Promise<Prospec
 
 // Insertion pure : la validation métier (email/téléphone, etc.) est de la responsabilité de
 // l'appelant (Server Action), pas de ce repository.
-export async function creerProspectVendeur(input: NouveauProspectVendeur): Promise<ProspectVendeur> {
+// ADR-054 — `workspaceId` est un paramètre OBLIGATOIRE, jamais une valeur que ce repository
+// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou du contexte
+// d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
+// la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
+// lieu d'être silencieusement rangé dans le workspace historique.
+export async function creerProspectVendeur(
+  input: NouveauProspectVendeur,
+  workspaceId: string
+): Promise<ProspectVendeur> {
   const [ligne] = await getDb()
     .insert(prospectsVendeursTable)
     .values({
+      workspaceId,
       nom: input.nom,
       prenom: input.prenom ?? null,
       email: input.email ?? null,
@@ -277,14 +286,17 @@ export async function proposerMandatProspectVendeur(id: string): Promise<Prospec
 // ici, contrairement à `marquerRdvEstimationRealiseProspectVendeur` qui autorise une correction.
 export async function signerMandatProspectVendeur(
   id: string,
-  donneesBien: NouveauBien
+  donneesBien: NouveauBien,
+  // ADR-054 — le bien créé par la conversion et l'événement `mandat_signe` sont deux écritures de
+  // tables racines : leur périmètre vient de l'appelant (Server Action), jamais de ce repository.
+  workspaceId: string
 ): Promise<{ prospect: ProspectVendeur; bien: Bien; idsExecutionsATraiter: string[] } | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const existant = await getProspectVendeurById(id);
   if (!existant) return undefined;
 
   return getDb().transaction(async (tx) => {
-    const bien = await creerBien(donneesBien, tx);
+    const bien = await creerBien(donneesBien, workspaceId, tx);
     const [ligne] = await tx
       .update(prospectsVendeursTable)
       .set({ mandatSigneLe: new Date(), bienId: bien.id, modifieLe: new Date() })
@@ -292,6 +304,7 @@ export async function signerMandatProspectVendeur(
       .returning();
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
       { typeEvenement: "mandat_signe", prospectVendeurId: id },
+      workspaceId,
       tx
     );
     return { prospect: ligneVersProspectVendeur(ligne), bien, idsExecutionsATraiter };

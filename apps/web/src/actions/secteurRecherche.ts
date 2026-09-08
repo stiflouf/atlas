@@ -9,6 +9,7 @@ import { enqueuerResynchronisationAcquereur } from "@/lib/compatibilite/resynchr
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import type { SecteurRecherche } from "@/types/secteurRecherche";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 export type ResultatActionAjoutSecteur =
   | { statut: "idle" }
@@ -28,6 +29,8 @@ export async function ajouterSecteurRechercheAction(
   formData: FormData
 ): Promise<ResultatActionAjoutSecteur> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite de la demande de resynchronisation (table racine).
+  const workspaceId = await exigerWorkspaceCourant();
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const codeInsee = String(formData.get("codeInsee") ?? "").trim();
   const nomCommune = String(formData.get("nomCommune") ?? "").trim();
@@ -54,7 +57,7 @@ export async function ajouterSecteurRechercheAction(
     // cet unique acquéreur est resynchronisé (synchroniserCompatibilitesPourAcquereur).
     const { secteur, idDemandeResynchronisation } = await getDb().transaction(async (tx) => {
       const secteur = await ajouterSecteurRecherche(acquereurId, communeVerifiee, tx);
-      const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereurId, tx);
+      const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereurId, workspaceId, tx);
       return { secteur, idDemandeResynchronisation };
     });
     await traiterDemandeResynchronisation(idDemandeResynchronisation);
@@ -81,6 +84,7 @@ export async function ajouterSecteurRechercheAction(
 // useActionState ici.
 export async function supprimerSecteurRechercheAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   if (!id || !acquereurId) {
@@ -92,7 +96,7 @@ export async function supprimerSecteurRechercheAction(formData: FormData): Promi
   // est simplement mis à jour, voir synchronisation.ts).
   const idDemandeResynchronisation = await getDb().transaction(async (tx) => {
     await supprimerSecteurRecherche(id, acquereurId, tx);
-    return enqueuerResynchronisationAcquereur(acquereurId, tx);
+    return enqueuerResynchronisationAcquereur(acquereurId, workspaceId, tx);
   });
   await traiterDemandeResynchronisation(idDemandeResynchronisation);
 

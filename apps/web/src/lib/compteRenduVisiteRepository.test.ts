@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : les FK comptes_rendus_visite -> biens/acquereurs imposent des ids réels,
 // donc un mock ne suffit pas ici. Repli sur le même DATABASE_URL par défaut que
@@ -55,7 +56,7 @@ describe("compteRenduVisiteRepository (intégration Postgres)", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(bien.id);
     const acquereur = await creerAcquereur({
       prenom: "Test",
@@ -68,7 +69,7 @@ describe("compteRenduVisiteRepository (intégration Postgres)", () => {
       stadeProjet: "decouverte",
       notes: "",
       datePremiereContact: "2026-01-01",
-    });
+    }, WORKSPACE_TEST);
     idsAcquereursCrees.push(acquereur.id);
 
     const ancien = await enregistrerCompteRenduVisite({

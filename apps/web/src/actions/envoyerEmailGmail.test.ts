@@ -8,8 +8,18 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 process.env.GOOGLE_TOKEN_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString("base64");
@@ -77,7 +87,7 @@ function formulaire(champs: Record<string, string>): FormData {
 
 describe("envoyerEmailGmailAction", () => {
   it("succès : envoi confirmé, ligne envoyee, interaction ADR-027 ajoutée pour un prospect vendeur", async () => {
-    const prospect = await creerProspectVendeur({ nom: "Dupont" });
+    const prospect = await creerProspectVendeur({ nom: "Dupont" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     mockFetchRoute(() => new Response(JSON.stringify({ id: "gmail-msg-succes" }), { status: 200 }));
 
@@ -124,7 +134,7 @@ describe("envoyerEmailGmailAction", () => {
   });
 
   it("échec Gmail (réponse HTTP reçue non-2xx) -> statut echec, aucune interaction ajoutée", async () => {
-    const prospect = await creerProspectVendeur({ nom: "Martin" });
+    const prospect = await creerProspectVendeur({ nom: "Martin" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     mockFetchRoute(() => new Response("erreur", { status: 500 }));
 
@@ -147,7 +157,7 @@ describe("envoyerEmailGmailAction", () => {
   });
 
   it("résultat incertain (rupture réseau) -> statut incertain, aucune interaction, aucun message de succès", async () => {
-    const prospect = await creerProspectVendeur({ nom: "Petit" });
+    const prospect = await creerProspectVendeur({ nom: "Petit" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     vi.stubGlobal(
       "fetch",
@@ -180,7 +190,7 @@ describe("envoyerEmailGmailAction", () => {
   });
 
   it("retour_vendeur_apres_visite (ADR-042) : intention acceptée, persistée, interaction ADR-027 ajoutée pour le vendeur", async () => {
-    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur envoi ADR-042" });
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur envoi ADR-042" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     mockFetchRoute(() => new Response(JSON.stringify({ id: "gmail-msg-retour-vendeur" }), { status: 200 }));
 

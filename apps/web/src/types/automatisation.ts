@@ -24,6 +24,11 @@ export type TypeEvenementMetier =
 
 export type EvenementMetier = {
   id: string;
+  // ADR-054 — périmètre propriétaire de l'événement. Exposé dans le type MÉTIER parce qu'un
+  // consommateur en a un besoin réel et vérifiable : le moteur d'automatisations crée une tâche à
+  // partir de cet événement et doit la ranger dans le MÊME workspace, sans jamais deviner ni
+  // dépendre d'un contexte ambiant. Ce n'est pas une donnée d'affichage.
+  workspaceId: string;
   typeEvenement: TypeEvenementMetier;
   compteRenduVisiteId?: string;
   prospectVendeurId?: string;

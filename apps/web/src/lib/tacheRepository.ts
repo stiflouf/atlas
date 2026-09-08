@@ -107,10 +107,20 @@ export type NouvelleTache = Omit<
 // de la responsabilité de l'appelant (Server Action), pas de ce repository. `executeur` optionnel
 // (même principe que bienRepository.creerBien, ADR-019) : permet au moteur d'automatisations
 // (ADR-032) de créer la tâche dans la même transaction que la pose de reussieLe sur l'exécution.
-export async function creerTache(input: NouvelleTache, executeur: Executeur = getDb()): Promise<Tache> {
+// ADR-054 — `workspaceId` est un paramètre OBLIGATOIRE, jamais une valeur que ce repository
+// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou du contexte
+// d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
+// la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
+// lieu d'être silencieusement rangé dans le workspace historique.
+export async function creerTache(
+  input: NouvelleTache,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Tache> {
   const [ligne] = await executeur
     .insert(tachesTable)
     .values({
+      workspaceId,
       titre: input.titre,
       contexte: input.contexte ?? null,
       type: input.type,

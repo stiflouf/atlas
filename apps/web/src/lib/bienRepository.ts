@@ -173,10 +173,20 @@ export type NouveauBien = Omit<Bien, "id">;
 // marquerOffreEnCours, ADR-019) : permet d'appeler cette fonction à l'intérieur d'une transaction
 // ouverte ailleurs — voir prospectVendeurRepository.signerMandatProspectVendeur (ADR-027), qui
 // crée le bien et pose le jalon de conversion dans une seule transaction atomique.
-export async function creerBien(input: NouveauBien, executeur: Executeur = getDb()): Promise<Bien> {
+// ADR-054 — `workspaceId` est un paramètre OBLIGATOIRE, jamais une valeur que ce repository
+// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou du contexte
+// d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
+// la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
+// lieu d'être silencieusement rangé dans le workspace historique.
+export async function creerBien(
+  input: NouveauBien,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Bien> {
   const [ligne] = await executeur
     .insert(biensTable)
     .values({
+      workspaceId,
       reference: input.reference,
       titre: input.titre,
       type: input.type,

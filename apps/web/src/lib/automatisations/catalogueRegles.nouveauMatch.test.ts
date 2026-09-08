@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-037) : vraie base Postgres, comme evenementMetierRepository.test.ts/
 // moteur.test.ts (ADR-032). Couvre la règle unique `nouveau_match_bien_acquereur` : activation
@@ -36,7 +37,7 @@ const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation(REGLE, false);
+  await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
 
   if (idsBiensCrees.length > 0 || idsAcquereursCrees.length > 0) {
     const filtreEvt = or(inArray(evenementsMetier.bienId, idsBiensCrees), inArray(evenementsMetier.acquereurId, idsAcquereursCrees));
@@ -80,7 +81,7 @@ async function creerBienDeTest(suffixe: string, prix = 300000) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -97,7 +98,7 @@ async function creerAcquereurDeTest(suffixe: string, budgetMax = 400000) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -105,7 +106,7 @@ async function creerAcquereurDeTest(suffixe: string, budgetMax = 400000) {
 async function emettreNouveauMatch(bienId: string, acquereurId: string, cycleCompatibilite: number) {
   const { evenement, idsExecutionsATraiter } = await getDb().transaction((tx) =>
     emettreEvenementEtPreparerExecutions(
-      { typeEvenement: "compatibilite_bien_acquereur_devenue_compatible", bienId, acquereurId, cycleCompatibilite },
+      { typeEvenement: "compatibilite_bien_acquereur_devenue_compatible", bienId, acquereurId, cycleCompatibilite }, WORKSPACE_TEST,
       tx
     )
   );
@@ -118,7 +119,7 @@ async function tachesPourAcquereur(acquereurId: string) {
 
 describe("règle nouveau_match_bien_acquereur — activation figée, jamais de rattrapage rétroactif", () => {
   it("règle inactive : événement créé, 0 exécution préparée, 0 tâche même après activation ultérieure", async () => {
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("ACT1");
     const bien = await creerBienDeTest("ACT1");
 
@@ -126,7 +127,7 @@ describe("règle nouveau_match_bien_acquereur — activation figée, jamais de r
     expect(idsExecutionsATraiter).toEqual([]);
 
     // Activation ultérieure — ne doit jamais traiter rétroactivement l'événement déjà survenu.
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const evenementsPourPaire = await getDb()
       .select({ id: evenementsMetier.id })
       .from(evenementsMetier)
@@ -146,11 +147,11 @@ describe("règle nouveau_match_bien_acquereur — activation figée, jamais de r
     expect(executions).toHaveLength(0); // jamais rejoué, même après activation
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(0);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("règle active : nouvel événement produit 1 tâche, cible acquéreur, titre/provenance corrects, aucune échéance", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("ACT2", 400000);
     const bien = await creerBienDeTest("ACT2", 300000);
 
@@ -170,13 +171,13 @@ describe("règle nouveau_match_bien_acquereur — activation figée, jamais de r
     expect(tache.titre).toContain(acquereur.nom);
     expect(tache.titre).toContain(bien.reference);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("règle nouveau_match_bien_acquereur — « Préparer un email » cible le bon acquéreur", () => {
   it("resoudreContexteCommunicationDepuisTache() résout exactement l'acquéreur du match, aucun autre candidat", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("EMAIL1", 400000);
     const bien = await creerBienDeTest("EMAIL1", 300000);
     const { idsExecutionsATraiter } = await emettreNouveauMatch(bien.id, acquereur.id, 1);
@@ -191,13 +192,13 @@ describe("règle nouveau_match_bien_acquereur — « Préparer un email » cible
     expect(contexte.candidats).toHaveLength(1);
     expect(contexte.candidats[0]).toMatchObject({ type: "acquereur", id: acquereur.id });
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("règle nouveau_match_bien_acquereur — idempotence et concurrence", () => {
   it("double traitement de la même exécution : 1 tâche maximum", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("IDEMP1");
     const bien = await creerBienDeTest("IDEMP1");
     const { idsExecutionsATraiter } = await emettreNouveauMatch(bien.id, acquereur.id, 1);
@@ -206,11 +207,11 @@ describe("règle nouveau_match_bien_acquereur — idempotence et concurrence", (
     await traiterExecutionsEnAttente(idsExecutionsATraiter); // rejeu
 
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(1);
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("traitement concurrent de la même exécution : 1 tâche maximum (verrou FOR UPDATE)", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("CONC1");
     const bien = await creerBienDeTest("CONC1");
     const { idsExecutionsATraiter } = await emettreNouveauMatch(bien.id, acquereur.id, 1);
@@ -218,7 +219,7 @@ describe("règle nouveau_match_bien_acquereur — idempotence et concurrence", (
     await Promise.all([traiterExecutionsEnAttente(idsExecutionsATraiter), traiterExecutionsEnAttente(idsExecutionsATraiter)]);
 
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(1);
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
@@ -226,7 +227,7 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
   it("paire toujours compatible au moment du traitement : 1 tâche", async () => {
     const acquereur = await creerAcquereurDeTest("REVAL1", 400000);
     const bien = await creerBienDeTest("REVAL1", 300000);
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeDefined();
@@ -236,7 +237,7 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
   it("paire redevenue incompatible avant le traitement : aucune tâche (undefined, jamais une erreur)", async () => {
     const acquereur = await creerAcquereurDeTest("REVAL2", 200000);
     const bien = await creerBienDeTest("REVAL2", 900000); // > budgetMax → incompatible
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeUndefined();
@@ -262,6 +263,7 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
     });
     const evenement = {
       id: "n/a",
+      workspaceId: WORKSPACE_TEST,
       typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const,
       bienId: bienAvecParkingInconnu.id,
       acquereurId: acquereur.id,
@@ -276,7 +278,7 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
     const acquereur = await creerAcquereurDeTest("ARCH1", 400000);
     const bien = await creerBienDeTest("ARCH1", 300000);
     await archiverBien(bien.id);
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeUndefined();
@@ -287,7 +289,7 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
     const acquereur = await creerAcquereurDeTest("ARCH2", 400000);
     const bien = await creerBienDeTest("ARCH2", 300000);
     await archiverAcquereur(acquereur.id);
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeUndefined();
@@ -297,6 +299,7 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
     const acquereur = await creerAcquereurDeTest("ABS1", 400000);
     const evenement = {
       id: "n/a",
+      workspaceId: WORKSPACE_TEST,
       typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const,
       bienId: "00000000-0000-0000-0000-000000000000",
       acquereurId: acquereur.id,
@@ -313,7 +316,7 @@ describe("règle nouveau_match_bien_acquereur — relation commerciale déjà av
     const bien = await creerBienDeTest("OFFRE1", 300000);
     await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 290000, dateOffre: "2026-01-01" });
 
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     await expect(trouverRegle(REGLE)!.construireTache(evenement)).resolves.toBeUndefined();
   });
 
@@ -322,7 +325,7 @@ describe("règle nouveau_match_bien_acquereur — relation commerciale déjà av
     const bien = await creerBienDeTest("COMPR1", 300000);
     await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-01-01" });
 
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     await expect(trouverRegle(REGLE)!.construireTache(evenement)).resolves.toBeUndefined();
   });
 
@@ -332,7 +335,7 @@ describe("règle nouveau_match_bien_acquereur — relation commerciale déjà av
     const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-01-01" });
     await marquerCompromisAnnule(compromis.id, "2026-01-15", "financement_refuse");
 
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeDefined();
   });
@@ -349,7 +352,7 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
       rendezVousCalendarId: `test-visite-${bien.id}`,
     });
 
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     await expect(trouverRegle(REGLE)!.construireTache(evenement)).resolves.toBeUndefined();
   });
 
@@ -364,7 +367,7 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
     });
     await marquerVisiteRealisee(visite.id);
 
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeDefined();
   });
@@ -380,7 +383,7 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
     });
     await annulerVisite(visite.id);
 
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeDefined();
   });
@@ -396,7 +399,7 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
       rendezVousCalendarId: `test-visite-${autreBien.id}`,
     });
 
-    const evenement = { id: "n/a", typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
+    const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeDefined();
   });
@@ -404,7 +407,7 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
 
 describe("règle nouveau_match_bien_acquereur — anti-spam inter-cycle (distinct de l'idempotence ADR-032)", () => {
   it("cycle 2 alors qu'une tâche du cycle 1 est encore ouverte : aucune nouvelle tâche, T1 intacte", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("CYC1", 400000);
     const bien = await creerBienDeTest("CYC1", 300000);
 
@@ -422,11 +425,11 @@ describe("règle nouveau_match_bien_acquereur — anti-spam inter-cycle (distinc
     expect(tachesApresCycle2[0].id).toBe(idT1); // T1 jamais modifiée/remplacée
     expect(tachesApresCycle2[0].termineeLe).toBeNull();
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("cycle 2 alors que la tâche du cycle 1 est terminée : une nouvelle tâche T2 est créée", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("CYC2", 400000);
     const bien = await creerBienDeTest("CYC2", 300000);
 
@@ -443,13 +446,13 @@ describe("règle nouveau_match_bien_acquereur — anti-spam inter-cycle (distinc
     expect(tachesFinales).toHaveLength(2);
     expect(tachesFinales.some((t) => t.id !== t1.id)).toBe(true);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("règle nouveau_match_bien_acquereur — non-régression", () => {
   it("aucun nouvel événement métier créé par la règle, l'événement ADR-036 reste append-only", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("NOREG1", 400000);
     const bien = await creerBienDeTest("NOREG1", 300000);
     const { evenement, idsExecutionsATraiter } = await emettreNouveauMatch(bien.id, acquereur.id, 1);
@@ -462,6 +465,6 @@ describe("règle nouveau_match_bien_acquereur — non-régression", () => {
     expect(evenementsPourPaire).toHaveLength(1); // toujours celui d'origine, jamais un second créé par la règle
     expect(evenementsPourPaire[0].id).toBe(evenement.id);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });

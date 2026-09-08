@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // VALUE-07B (ADR-053) — FRONTIÈRE « AFFICHÉ ≠ RÉDIGÉ ». Le lot VALUE-06 interdisait toute sortie ;
 // celui-ci en ouvre exactement une, l'affichage au conseiller, et doit prouver que les autres
@@ -55,7 +56,7 @@ beforeAll(async () => {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
   await creerRepereRelationnelAcquereur({
     acquereurId: acquereur.id,

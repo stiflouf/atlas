@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-038) : vraie base Postgres, même patron que moteur.test.ts
 // (mock ciblé de creerTache pour simuler une vraie erreur technique — jamais un état de données
@@ -36,7 +37,7 @@ const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation(REGLE, false);
+  await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   if (idsBiensCrees.length > 0 || idsAcquereursCrees.length > 0) {
     const filtreEvt = or(inArray(evenementsMetier.bienId, idsBiensCrees), inArray(evenementsMetier.acquereurId, idsAcquereursCrees));
     const sousRequeteEvts = getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(filtreEvt);
@@ -62,7 +63,7 @@ async function creerBienDeTest(suffixe: string, prix = 300000) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -79,7 +80,7 @@ async function creerAcquereurDeTest(suffixe: string, budgetMax = 400000) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -92,7 +93,7 @@ async function creerExecutionATraiterDeTest(suffixe: string, prixBien = 300000, 
   const bien = await creerBienDeTest(suffixe, prixBien);
   const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
     emettreEvenementEtPreparerExecutions(
-      { typeEvenement: "compatibilite_bien_acquereur_devenue_compatible", bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1 },
+      { typeEvenement: "compatibilite_bien_acquereur_devenue_compatible", bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1 }, WORKSPACE_TEST,
       tx
     )
   );
@@ -105,7 +106,7 @@ async function tachesPourAcquereur(acquereurId: string) {
 
 describe("reprendreExecutionsBloquees — sélection et traitement", () => {
   it("reprend une exécution a_traiter jamais traitée : exactement 1 tâche, reussie, tentative incrémentée", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { acquereur, executionId } = await creerExecutionATraiterDeTest("SEL1");
 
     const resultat = await reprendreExecutionsBloquees();
@@ -119,11 +120,11 @@ describe("reprendreExecutionsBloquees — sélection et traitement", () => {
     expect(execution?.derniereTentativeLe).toBeDefined();
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(1);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("une exécution déjà reussie n'est jamais retouchée par un appel suivant", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { acquereur, executionId } = await creerExecutionATraiterDeTest("SEL2");
     await reprendreExecutionsBloquees();
     const apresPremierAppel = await getExecutionAutomatisationById(executionId);
@@ -134,36 +135,36 @@ describe("reprendreExecutionsBloquees — sélection et traitement", () => {
     expect(apresSecondAppel?.nombreTentatives).toBe(1); // jamais réincrémentée
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(1); // jamais une seconde tâche
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("reprendreExecutionsBloquees — idempotence et concurrence", () => {
   it("double appel séquentiel sur la même exécution : toujours 1 tâche", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { acquereur } = await creerExecutionATraiterDeTest("IDEMP1");
 
     await reprendreExecutionsBloquees();
     await reprendreExecutionsBloquees();
 
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(1);
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
   it("deux appels réellement concurrents sur la même exécution : toujours 1 tâche maximum", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { acquereur } = await creerExecutionATraiterDeTest("CONC1");
 
     await Promise.all([reprendreExecutionsBloquees(), reprendreExecutionsBloquees()]);
 
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(1);
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("reprendreExecutionsBloquees — plafond de tentatives", () => {
   it("une exécution ayant déjà atteint le plafond devient terminale (echouee) sans nouvelle tentative de traitement", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { acquereur, executionId } = await creerExecutionATraiterDeTest("PLAFOND1");
 
     // Simule des tentatives de reprise déjà comptabilisées (crashs répétés) sans jamais avoir
@@ -188,13 +189,13 @@ describe("reprendreExecutionsBloquees — plafond de tentatives", () => {
     const executionApres = await getExecutionAutomatisationById(executionId!);
     expect(executionApres?.nombreTentatives).toBe(MAX_TENTATIVES_AUTOMATISATION + 1);
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("reprendreExecutionsBloquees — undefined reste un succès, jamais repris", () => {
   it("effet devenu inutile (paire incompatible) : reussie sans tâche, jamais retentée", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     // budgetMax très inférieur au prix du bien -> incompatible -> construireTache() retourne undefined.
     const { acquereur, executionId } = await creerExecutionATraiterDeTest("UNDEF1", 900000, 200000);
 
@@ -210,15 +211,15 @@ describe("reprendreExecutionsBloquees — undefined reste un succès, jamais rep
     expect(executionApres?.nombreTentatives).toBe(execution?.nombreTentatives);
     void resultatSuivant;
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("reprendreExecutionsBloquees — erreur technique réelle, terminale", () => {
   it("creerTache échoue pendant la reprise : execution devient echouee, jamais retentée automatiquement ensuite", async () => {
-    await definirActivationAutomatisation(REGLE, true);
+    await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const { acquereur, executionId } = await creerExecutionATraiterDeTest("ERR1");
-    creerTacheMock.mockRejectedValueOnce(new Error("échec simulé de creerTache (reprise)"));
+    creerTacheMock.mockRejectedValueOnce(new Error("échec simulé de creerTache (reprise, WORKSPACE_TEST)"));
 
     await reprendreExecutionsBloquees();
     const execution = await getExecutionAutomatisationById(executionId);
@@ -233,20 +234,20 @@ describe("reprendreExecutionsBloquees — erreur technique réelle, terminale", 
     const executionApres = await getExecutionAutomatisationById(executionId);
     expect(executionApres?.echoueeLe).toEqual(execution?.echoueeLe); // jamais retouchée
 
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
 
 describe("reprendreExecutionsBloquees — activation figée", () => {
   it("ne crée jamais d'exécution : ne travaille que sur des exécutions déjà matérialisées", async () => {
-    await definirActivationAutomatisation(REGLE, false);
+    await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
     const acquereur = await creerAcquereurDeTest("ACT1", 400000);
     const bien = await creerBienDeTest("ACT1", 300000);
     // Événement émis pendant que la règle est inactive : aucune exécution préparée (comportement
     // ADR-032 déjà garanti, non modifié par ADR-038).
     const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
       emettreEvenementEtPreparerExecutions(
-        { typeEvenement: "compatibilite_bien_acquereur_devenue_compatible", bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1 },
+        { typeEvenement: "compatibilite_bien_acquereur_devenue_compatible", bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1 }, WORKSPACE_TEST,
         tx
       )
     );

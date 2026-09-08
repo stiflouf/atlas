@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (même pattern que biens/page.test.tsx, ADR-048) — correctif UX : après
 // création depuis une fiche, l'utilisateur doit revenir sur cette fiche (jamais "Aujourd'hui" par
@@ -50,7 +51,7 @@ async function bienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -67,13 +68,13 @@ async function acquereurDeTest(suffixe: string) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
 
 async function prospectDeTest(suffixe: string) {
-  const prospect = await creerProspectVendeur({ nom: `[test réel] Tâche Prospect ${suffixe}` });
+  const prospect = await creerProspectVendeur({ nom: `[test réel] Tâche Prospect ${suffixe}` }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   return prospect;
 }

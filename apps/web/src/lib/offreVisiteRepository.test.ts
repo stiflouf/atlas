@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : offre_visites (ADR-019) impose des FK réelles sur offres et
 // comptes_rendus_visite. Même principe que offreRepository.test.ts : bien/acquéreur/offre/compte
@@ -60,7 +61,7 @@ async function creerJeuDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   const acquereur = await creerAcquereur({
     prenom: "Test",
@@ -73,7 +74,7 @@ async function creerJeuDeTest(suffixe: string) {
     stadeProjet: "offre",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   const offre = await enregistrerOffre({
     bienId: bien.id,

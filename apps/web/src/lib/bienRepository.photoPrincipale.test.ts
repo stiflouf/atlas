@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { like } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (Postgres local) — couvre spécifiquement photoPrincipaleId sur
 // listerBiens()/rechercherBiensPage() (ADR-052 §16, N+1). Un bug de qualification SQL dans la
@@ -34,7 +35,7 @@ async function bienTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
 }
 
 describe("bienRepository — photoPrincipaleId (ADR-052)", () => {

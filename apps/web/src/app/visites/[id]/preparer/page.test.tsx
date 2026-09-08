@@ -8,8 +8,18 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-041) : vraie base Postgres, `getRendezVousAvecContexte` mocké
 // (même patron que moteur.test.ts/scanTemporel.test.ts, vi.mock hoisté) pour résoudre un rendez-
@@ -94,7 +104,7 @@ describe("GET /visites/[id]/preparer — jamais de mutation (ADR-041)", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     idsBiensCrees.push(bien.id);
     const acquereur = await creerAcquereur({
       prenom: "Test",
@@ -107,7 +117,7 @@ describe("GET /visites/[id]/preparer — jamais de mutation (ADR-041)", () => {
       stadeProjet: "recherche_active",
       notes: "",
       datePremiereContact: "2026-01-01",
-    });
+    }, WORKSPACE_TEST);
     idsAcquereursCrees.push(acquereur.id);
     contexteBienId = bien.id;
     contexteAcquereurId = acquereur.id;

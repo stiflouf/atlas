@@ -8,6 +8,7 @@ import { resoudreCommuneBien } from "@/lib/geocodage/resolutionBien";
 import { enqueuerResynchronisationBien } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Résolution IGN best-effort (ADR-035) : jamais bloquante — une panne/ambiguïté produit
 // codeInseeCommune undefined, le bien est tout de même créé.
@@ -18,12 +19,15 @@ import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 // optimisation de délai ; la fiabilité vient de la ligne déjà durablement écrite avant lui.
 export async function creerBienAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite : la garde ci-dessus répond "qui entre" (IDENTITY), celle-ci
+  // "dans quel périmètre on écrit" (OWNERSHIP). Jamais la même question, jamais la même source.
+  const workspaceId = await exigerWorkspaceCourant();
   const donnees = parseBienFormData(formData);
   const commune = await resoudreCommuneBien(donnees.adresse, donnees.ville, donnees.codePostal);
 
   const { bien, idDemandeResynchronisation } = await getDb().transaction(async (tx) => {
-    const bien = await creerBien({ ...donnees, codeInseeCommune: commune?.citycode }, tx);
-    const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, tx);
+    const bien = await creerBien({ ...donnees, codeInseeCommune: commune?.citycode }, workspaceId, tx);
+    const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, workspaceId, tx);
     return { bien, idDemandeResynchronisation };
   });
 

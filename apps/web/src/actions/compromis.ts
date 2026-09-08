@@ -19,6 +19,7 @@ import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { StatutCompromis } from "@/types/compromis";
 import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 const TRANSITIONS_VALIDES: StatutCompromis[] = ["realise", "annule"];
 
@@ -52,6 +53,8 @@ function parseOffreIdOptionnel(valeur: FormDataEntryValue | null): string | unde
 // non transactionnels) en même temps qu'elle y accroche le moteur d'automatisations.
 export async function ajouterCompromisAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite de l'événement métier (table racine).
+  const workspaceId = await exigerWorkspaceCourant();
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const prixConvenu = parseMontant(formData.get("prixConvenu"));
@@ -112,6 +115,7 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
     await marquerCompromisSigne(bienId, tx);
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
       { typeEvenement: "compromis_signe", compromisId: compromis.id },
+      workspaceId,
       tx
     );
     return idsExecutionsATraiter;

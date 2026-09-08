@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (VALUE-06) : vraie base Postgres, même patron que
 // secteurRechercheRepository / noteBienRepository. Couvre le refus par défaut de l'usage
@@ -39,7 +40,7 @@ async function creerAcquereurDeTest(suffixe: string): Promise<string> {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
   return acquereur.id;
 }

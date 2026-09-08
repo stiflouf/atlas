@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { and, eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-036) — même patron que
 // src/app/api/automatisations/scan/route.test.ts (ADR-033) pour l'authentification, plus le
@@ -67,7 +68,7 @@ async function creerBienDeTest(suffixe: string, prix = 300000) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -84,7 +85,7 @@ async function creerAcquereurDeTest(suffixe: string, budgetMax = 400000) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -117,7 +118,7 @@ describe("POST /api/compatibilite/scan — reprise après crash simulé", () => 
 
     // Simule le crash : la ligne de handoff est posée (comme le ferait creerBienAction dans sa
     // transaction) mais AUCUN traitement synchrone n'a jamais eu lieu ensuite.
-    await getDb().insert(compatibilitesARessynchroniser).values({ bienId: bien.id });
+    await getDb().insert(compatibilitesARessynchroniser).values({ workspaceId: WORKSPACE_TEST, bienId: bien.id });
 
     const reponse = await POST(requete("Bearer secret-de-test-tres-long-et-suffisant"));
     expect(reponse.status).toBe(200);

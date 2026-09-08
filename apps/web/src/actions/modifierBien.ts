@@ -8,6 +8,7 @@ import { resoudreCommuneBien } from "@/lib/geocodage/resolutionBien";
 import { enqueuerResynchronisationBien } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // id absent/invalide/inexistant -> notFound(), jamais une redirection de succès après une
 // modification qui n'a en réalité touché aucune ligne.
@@ -23,6 +24,8 @@ import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 // creerBienAction pour le raisonnement complet (handoff durable, addendum de l'audit §6).
 export async function modifierBienAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — appartenance explicite de la demande de resynchronisation (table racine).
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
@@ -32,7 +35,7 @@ export async function modifierBienAction(formData: FormData): Promise<void> {
   const resultat = await getDb().transaction(async (tx) => {
     const bien = await modifierBien(id, { ...donnees, codeInseeCommune: commune?.citycode }, tx);
     if (!bien) return undefined;
-    const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, tx);
+    const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, workspaceId, tx);
     return { bien, idDemandeResynchronisation };
   });
   if (!resultat) notFound();

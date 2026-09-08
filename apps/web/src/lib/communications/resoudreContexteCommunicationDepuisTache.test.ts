@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq, inArray, or } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -45,7 +46,7 @@ const idsTaches: string[] = [];
 const idsProspects: string[] = [];
 
 afterAll(async () => {
-  await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
+  await definirActivationAutomatisation("retour_vendeur_apres_visite", false, WORKSPACE_TEST);
 
   // evenements_metier référence prospectVendeurId/bienId/compteRenduVisiteId en NO ACTION
   // (append-only, ADR-032) — purgé AVANT les entités source (signerMandatProspectVendeur émet
@@ -89,7 +90,7 @@ async function creerBienTest(reference: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiens.push(bien.id);
   return bien;
 }
@@ -106,7 +107,7 @@ async function creerAcquereurTest(email: string) {
     stadeProjet: "decouverte",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
   return acquereur;
 }
@@ -131,7 +132,7 @@ async function creerVisiteRealiseeEtTraiter(
   idsVisites.push(cr.id);
 
   const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
-    emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, tx)
+    emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: cr.id }, WORKSPACE_TEST, tx)
   );
   await traiterExecutionsEnAttente(idsExecutionsATraiter);
   const [executionId] = idsExecutionsATraiter;
@@ -145,7 +146,7 @@ async function creerVisiteRealiseeEtTraiter(
 
 describe("resoudreContexteCommunicationDepuisTache", () => {
   it("tâche sans rattachement -> aucun candidat", async () => {
-    const tache = await creerTache({ titre: "Tâche générale", type: "autre", priorite: "normale", origine: "manuelle" });
+    const tache = await creerTache({ titre: "Tâche générale", type: "autre", priorite: "normale", origine: "manuelle" }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
     expect(resultat.candidats).toEqual([]);
@@ -153,7 +154,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
   });
 
   it("tâche -> prospectVendeur : résolution directe, faits incluent le rdv d'estimation réalisé", async () => {
-    const prospect = await creerProspectVendeur({ nom: "Dupont" });
+    const prospect = await creerProspectVendeur({ nom: "Dupont" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-03-01T10:00:00.000Z"));
 
@@ -163,7 +164,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "prospectVendeur", id: prospect.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -180,7 +181,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "acquereur", id: acquereur.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -205,7 +206,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "visite", id: visite.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -227,7 +228,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "offre", id: offre.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -247,7 +248,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "compromis", id: compromis.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -263,7 +264,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "bien", id: bien.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -275,7 +276,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     // le seul cas réaliste de provenance cassée compte tenu des FK NO ACTION (un événement/CR ne
     // peut pas être supprimé tant qu'une exécution le référence encore, §29). Fail-closed attendu :
     // aucun repli vers un autre compte rendu du bien, les faits de visite restent simplement absents.
-    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 sans provenance" });
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 sans provenance" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const resultatMandat = await signerMandatProspectVendeur(prospect.id, {
       reference: "[test réel] RESOL-RV-SANSPROV",
@@ -291,7 +292,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     const bien = resultatMandat!.bien;
     idsBiens.push(bien.id);
 
@@ -312,7 +313,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       origine: "automatique",
       origineCode: "retour_vendeur_apres_visite",
       cible: { type: "prospectVendeur", id: prospect.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -326,7 +327,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
   });
 
   it("tâche -> prospectVendeur, origineCode retour_vendeur_apres_visite : deux visites du même bien, chaque tâche garde EXACTEMENT le compte rendu qui l'a produite (ADR-043, test de régression principal)", async () => {
-    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 provenance exacte" });
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 provenance exacte" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const resultatMandat = await signerMandatProspectVendeur(prospect.id, {
       reference: "[test réel] RESOL-RV-PROVEXACTE",
@@ -342,10 +343,10 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     const bien = resultatMandat!.bien;
     idsBiens.push(bien.id);
-    await definirActivationAutomatisation("retour_vendeur_apres_visite", true);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", true, WORKSPACE_TEST);
 
     // Visite A : plus ANCIENNE, acquéreur A, pas_interesse. Marqueurs internes distincts de B pour
     // le test de confidentialité ci-dessous.
@@ -398,11 +399,11 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(empreinteTB).not.toContain(acquereurA.email);
     expect(empreinteTB).not.toContain(acquereurB.email);
 
-    await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", false, WORKSPACE_TEST);
   });
 
   it("tâche -> prospectVendeur, origineCode retour_vendeur_apres_visite : la résolution suit l'événement, jamais l'ordre d'insertion ni la date de visite la plus tardive (ADR-043 §25)", async () => {
-    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 ordre inversé" });
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur ADR-043 ordre inversé" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const resultatMandat = await signerMandatProspectVendeur(prospect.id, {
       reference: "[test réel] RESOL-RV-ORDRE",
@@ -418,10 +419,10 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     const bien = resultatMandat!.bien;
     idsBiens.push(bien.id);
-    await definirActivationAutomatisation("retour_vendeur_apres_visite", true);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", true, WORKSPACE_TEST);
 
     // Première visite traitée par le moteur (creeLe le plus ancien), mais avec la date de visite la
     // plus TARDIVE dans le calendrier — inverse volontairement date/ordre d'insertion pour prouver
@@ -446,11 +447,11 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(resultatSeconde.faits.interetVisiteValeur).toBe("a_reflechir");
     expect(resultatSeconde.faits.dateVisite).toMatch(/janvier/);
 
-    await definirActivationAutomatisation("retour_vendeur_apres_visite", false);
+    await definirActivationAutomatisation("retour_vendeur_apres_visite", false, WORKSPACE_TEST);
   });
 
   it("tâche -> prospectVendeur sans origineCode retour_vendeur_apres_visite : comportement générique inchangé même si des visites existent", async () => {
-    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur générique ADR-042" });
+    const prospect = await creerProspectVendeur({ nom: "[test réel] Vendeur générique ADR-042" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
     const resultatMandat2 = await signerMandatProspectVendeur(prospect.id, {
       reference: "[test réel] RESOL-RV-2",
@@ -466,7 +467,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    });
+    }, WORKSPACE_TEST);
     const bien = resultatMandat2!.bien;
     idsBiens.push(bien.id);
     const acquereur = await creerAcquereurTest("resol7@test.local");
@@ -485,7 +486,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "prospectVendeur", id: prospect.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -507,7 +508,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "remuneration", id: remuneration.id },
-    });
+    }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
     const resultat = await resoudreContexteCommunicationDepuisTache(tache);
@@ -522,7 +523,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     // ("si le code démontre que c'est déjà exact, ne rien changer, documenter la vérification").
     const bien = await creerBienTest("[test réel] RESOL-SUIVI-VISITE-PROVENANCE");
     const acquereur = await creerAcquereurTest("resol-suivivisite@test.local");
-    await definirActivationAutomatisation("suivi_apres_visite", true);
+    await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
 
     // Deux visites du même acquéreur sur le même bien, avec des faits bien distincts : si le moindre
     // fait de visite fuitait via une liste "la plus récente", ce test le détecterait.
@@ -535,7 +536,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     });
     idsVisites.push(crAncien.id);
     const { idsExecutionsATraiter: exec1 } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: crAncien.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: crAncien.id }, WORKSPACE_TEST, tx)
     );
     await traiterExecutionsEnAttente(exec1);
 
@@ -548,7 +549,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     });
     idsVisites.push(crRecent.id);
     const { idsExecutionsATraiter: exec2 } = await getDb().transaction((tx) =>
-      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: crRecent.id }, tx)
+      emettreEvenementEtPreparerExecutions({ typeEvenement: "visite_realisee", compteRenduVisiteId: crRecent.id }, WORKSPACE_TEST, tx)
     );
     await traiterExecutionsEnAttente(exec2);
 
@@ -565,7 +566,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(resultat.faits.interetVisite).toBeUndefined();
     expect(JSON.stringify(resultat.faits)).not.toContain("MARQUEUR_SUIVI_VISITE");
 
-    await definirActivationAutomatisation("suivi_apres_visite", false);
+    await definirActivationAutomatisation("suivi_apres_visite", false, WORKSPACE_TEST);
   });
 });
 

@@ -8,7 +8,17 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth/sessionAtlas", () => ({
   exigerSessionAtlas: vi.fn().mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" }),
 }));
+
+// ADR-054 — même raison que le mock de session juste au-dessus : ces tests portent sur le
+// COMPORTEMENT MÉTIER de l'action, pas sur la résolution du périmètre (couverte par ses propres
+// tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
+// d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
+// workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+}));
 import { eq } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration : terminerTacheAction ne doit JAMAIS enregistrer silencieusement une
 // interaction (ADR-028, correction n° 2) — seule une soumission explicite
@@ -56,7 +66,7 @@ async function creerProspectDeTest(suffixe: string) {
     ville: undefined,
     codePostal: undefined,
     typeBien: undefined,
-  });
+  }, WORKSPACE_TEST);
   idsProspectsCrees.push(prospect.id);
   return prospect;
 }
@@ -74,7 +84,7 @@ describe("terminerTacheAction", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "prospectVendeur", id: prospect.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await terminerTacheAction(formData({ id: tache.id })).catch(() => {});
@@ -91,7 +101,7 @@ describe("terminerTacheAction", () => {
       type: "appel",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await terminerTacheAction(
@@ -115,7 +125,7 @@ describe("terminerTacheAction", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "prospectVendeur", id: prospect.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await terminerTacheAction(
@@ -141,7 +151,7 @@ describe("terminerTacheAction", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "prospectVendeur", id: prospect.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await expect(
@@ -169,7 +179,7 @@ describe("terminerTacheAction", () => {
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "prospectVendeur", id: prospect.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
     await expect(

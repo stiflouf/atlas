@@ -5,6 +5,7 @@ import { getConfigurationAutomatisation } from "./configurationAutomatisationRep
 import { emettreEvenementEtPreparerExecutions } from "./evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "./moteur";
 import { demarrerRunScanAutomatisation, terminerRunScanAutomatisation } from "./runScanAutomatisationRepository";
+import { resoudreWorkspaceExecutionMachine } from "@/lib/workspaceRepository";
 
 const REGLE_CODE = "inactivite_prospect_vendeur" as const;
 
@@ -37,7 +38,13 @@ export async function scannerInactiviteProspectVendeur(
     return { execute: false };
   }
 
-  const runId = await demarrerRunScanAutomatisation(REGLE_CODE);
+  // ADR-054 — contexte d'exécution MACHINE : ce chemin n'a ni session ni identité humaine et ne
+  // doit surtout pas en simuler une. Le périmètre est lu en base et échouera bruyamment le jour où
+  // plusieurs workspaces existeront — un scan multi-workspace est une passe PAR workspace, une
+  // conception à part entière, jamais un contournement silencieux.
+  const workspaceId = await resoudreWorkspaceExecutionMachine();
+
+  const runId = await demarrerRunScanAutomatisation(REGLE_CODE, workspaceId);
   let nombreCandidats = 0;
   let nombreOccurrencesCreees = 0;
 
@@ -60,6 +67,7 @@ export async function scannerInactiviteProspectVendeur(
               prospectVendeurId: occurrence.prospectVendeurId,
               ancreCycle: new Date(occurrence.ancreCycle),
             },
+            workspaceId,
             tx
           )
         );

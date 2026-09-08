@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { inArray } from "drizzle-orm";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // VALUE-06 — FRONTIÈRE. Ce lot prépare la donnée relationnelle ; il ne la consomme nulle part.
 // Ces tests fixent cette limite là où elle compte : la mémoire relationnelle (VALUE-03), la
@@ -48,7 +49,7 @@ async function acquereurAvecRepereSentinelle() {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
   await creerRepereRelationnelAcquereur({
     acquereurId: acquereur.id,
@@ -180,7 +181,7 @@ describe("VALUE-06 — les textes libres existants ne sont jamais migrés", () =
       stadeProjet: "decouverte",
       notes: "Camille m'a dit qu'elle préférait les échanges par email et qu'elle aimait la randonnée.",
       datePremiereContact: "2026-01-01",
-    });
+    }, WORKSPACE_TEST);
     idsAcquereurs.push(acquereur.id);
 
     // Aucune extraction, aucune suggestion, aucun repère implicite : seule une création explicite

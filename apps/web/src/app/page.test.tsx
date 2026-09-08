@@ -3,6 +3,7 @@ import { renderToPipeableStream } from "react-dom/server";
 import { Writable } from "node:stream";
 import { and, eq, isNull } from "drizzle-orm";
 import type { ReactElement } from "react";
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (ADR-039) : vraie base Postgres, comme le reste du projet — la page
 // d'accueil orchestre plusieurs repositories réels, un mock partiel romprait la couverture de
@@ -52,7 +53,7 @@ async function creerBienDeTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  });
+  }, WORKSPACE_TEST);
   idsBiensCrees.push(bien.id);
   return bien;
 }
@@ -69,7 +70,7 @@ async function creerAcquereurDeTest(suffixe: string) {
     stadeProjet: "recherche_active",
     notes: "",
     datePremiereContact: "2026-01-01",
-  });
+  }, WORKSPACE_TEST);
   idsAcquereursCrees.push(acquereur.id);
   return acquereur;
 }
@@ -111,7 +112,7 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
 
     const html = await rendreCockpit();
@@ -128,7 +129,7 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       origine: "automatique",
       origineCode: "nouveau_match_bien_acquereur",
       cible: { type: "acquereur", id: acquereur.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
 
     const html = await rendreCockpit();
@@ -144,7 +145,7 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       type: "autre",
       priorite: "normale",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
     await terminerTache(tache.id);
 
@@ -160,7 +161,7 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       priorite: "haute",
       origine: "manuelle",
       cible: { type: "bien", id: bien.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
 
     const html = await rendreCockpit();
@@ -178,7 +179,7 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       priorite: "normale",
       origine: "manuelle",
       cible: { type: "bien", id: bien.id },
-    });
+    }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
     await archiverBien(bien.id);
 
@@ -194,7 +195,7 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       type: "autre",
       priorite: "basse",
       origine: "manuelle",
-    });
+    }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
 
     const html = await rendreCockpit();
