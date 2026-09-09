@@ -82,7 +82,11 @@ export type NouveauProspectVendeur = Pick<
   | "ville"
   | "codePostal"
   | "typeBien"
->;
+> & {
+  // ADR-055 — pont OPTIONNEL vers l'identité canonique. Voir NouvelAcquereur pour le rationale
+  // complet : absent = ligne non rattachée, jamais un rattachement deviné.
+  contactId?: string;
+};
 
 // Dérivé, jamais stocké (même principe que deriverStatutCommercial, ADR-014) : le jalon le plus
 // avancé déjà RÉELLEMENT atteint l'emporte. Ordre d'affichage : prospect -> qualification ->

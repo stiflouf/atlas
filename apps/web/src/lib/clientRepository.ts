@@ -137,7 +137,13 @@ export async function getClientById(id: string): Promise<ProfilAcquereur | undef
   return getClientDemoById(id);
 }
 
-export type NouvelAcquereur = Omit<ProfilAcquereur, "id">;
+export type NouvelAcquereur = Omit<ProfilAcquereur, "id"> & {
+  // ADR-055 — pont OPTIONNEL vers l'identité canonique. Optionnel et non requis : les chemins qui
+  // ne connaissent pas encore le modèle canonique (tests d'intégration, seed, appels internes)
+  // continuent de fonctionner à l'identique en le laissant absent, et la ligne reste alors
+  // simplement non rattachée. Aucun rattachement n'est jamais deviné ici.
+  contactId?: string;
+};
 
 // Insertion pure : la validation métier (budgetMin <= budgetMax, etc.) est de la responsabilité
 // de l'appelant (Server Action), pas de ce repository.
@@ -155,6 +161,7 @@ export async function creerAcquereur(
     .insert(acquereursTable)
     .values({
       workspaceId,
+      contactId: input.contactId ?? null,
       prenom: input.prenom,
       nom: input.nom,
       email: input.email,

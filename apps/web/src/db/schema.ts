@@ -234,6 +234,52 @@ export const biens = pgTable(
   ]
 );
 
+// ADR-055 §A — IDENTITÉ CANONIQUE d'une personne, indépendante de tout dossier. C'est la première
+// brique du modèle canonique ; elle coexiste avec `prospects_vendeurs` et `acquereurs`, qui restent
+// la source de vérité des workflows existants pendant toute la transition (ADR-055, Stratégie de
+// migration, étape 1 : « Créer `contacts` seul, alimenté par les écrans existants, sans rien
+// débrancher »).
+//
+// AUCUNE COLONNE DE RÔLE — ni `role`, ni `type`, ni `statut`, ni `pipeline`. Un contact est vendeur
+// parce qu'il est partie d'un projet vendeur, acquéreur parce qu'il est partie d'un projet
+// acquéreur : le rôle se DÉRIVE des relations, exactement comme le statut de tâche se dérive de
+// `terminee_le`/`annulee_le` (ADR-028) et le statut commercial des jalons (ADR-014). Stocker le rôle
+// ici créerait une seconde vérité, et rendrait le CAS 8 d'ADR-055 (une personne qui cumule les
+// casquettes) inexprimable. Invariant verrouillé par contactCanonique.structurel.test.ts.
+//
+// AUCUN IDENTIFIANT FOURNISSEUR (ADR-056 §1/§8) : pas de `playiad_id`, `hektor_id`, `apimo_id`.
+// L'identité canonique est l'`id` interne ; les correspondances externes vivront dans
+// `references_externes` (N références → 1 entité), table non créée à ce jour.
+//
+// `nom` est le SEUL champ obligatoire. C'est le seul que les deux modèles historiques garantissent :
+// `acquereurs` impose prenom/email/telephone NOT NULL, mais `prospects_vendeurs` les laisse tous
+// nullables — un lead de prospection terrain peut n'être connu que par son nom (ADR-027 §1). Rendre
+// l'email ou le téléphone obligatoire ici rendrait une partie du réel existant non représentable.
+//
+// AUCUNE CONTRAINTE D'UNICITÉ sur email ou téléphone, et c'est une décision, pas un oubli :
+// un couple partage une adresse email, une famille partage un numéro, un prospect peut n'avoir ni
+// l'un ni l'autre, et la même personne existe légitimement dans deux workspaces. Une contrainte
+// UNIQUE serait un mensonge qui bloquerait des saisies vraies. La déduplication se fera par
+// recherche de candidats et validation humaine (ADR-055 §H : jamais de fusion automatique).
+//
+// Champs volontairement ABSENTS pour l'instant, tous additifs le jour où un consommateur existe :
+// `personne_morale` (cité par ADR-055 §A, mais aucun écran ne le saisit et aucune règle ne le lit),
+// `archive_le` (aucun geste d'archivage de contact n'existe) et `modifie_le` (aucun chemin de
+// modification). Les poser sans lecteur ni écrivain produirait des colonnes mortes — le schéma
+// refuse cet état à moitié construit partout ailleurs.
+export const contacts = pgTable("contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+  workspaceId: text("workspace_id")
+    .notNull()
+    .references(() => workspaces.id),
+  nom: text("nom").notNull(),
+  prenom: text("prenom"),
+  email: text("email"),
+  telephone: text("telephone"),
+  creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // Premier acquéreur réel persisté (hors mocks data/clients.ts). Mêmes principes que `biens` :
 // colonnes nullable sans défaut pour les champs structurés optionnels.
 export const acquereurs = pgTable(
@@ -244,6 +290,17 @@ export const acquereurs = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id),
+    // ADR-055 — PONT vers l'identité canonique, volontairement NULLABLE et sans backfill.
+    // Direction ancien -> nouveau (ADR-055, Stratégie de migration, étape 2) : cette ligne reste la
+    // source de vérité de son workflow, elle pointe simplement vers la personne qu'elle décrit.
+    // NULL n'est pas une anomalie : c'est l'état de TOUTES les lignes historiques. Un backfill
+    // « 1 ligne = 1 contact » créerait des doublons structurels (le même humain vendeur puis
+    // acquéreur donnerait deux contacts), et un rapprochement automatique sur email/téléphone
+    // fusionnerait à tort deux personnes mal saisies — ADR-055 §H interdit toute fusion silencieuse.
+    // Le rattachement des lignes historiques sera un geste explicite, dans son propre lot.
+    // Pas de CASCADE : aucun contact n'est jamais supprimé, NO ACTION (défaut Drizzle) suffit —
+    // même choix que `evenements_metier.compromis_id`.
+    contactId: uuid("contact_id").references(() => contacts.id),
     prenom: text("prenom").notNull(),
     nom: text("nom").notNull(),
     email: text("email").notNull(),
@@ -1047,6 +1104,17 @@ export const prospectsVendeurs = pgTable(
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id),
+    // ADR-055 — PONT vers l'identité canonique, volontairement NULLABLE et sans backfill.
+    // Direction ancien -> nouveau (ADR-055, Stratégie de migration, étape 2) : cette ligne reste la
+    // source de vérité de son workflow, elle pointe simplement vers la personne qu'elle décrit.
+    // NULL n'est pas une anomalie : c'est l'état de TOUTES les lignes historiques. Un backfill
+    // « 1 ligne = 1 contact » créerait des doublons structurels (le même humain vendeur puis
+    // acquéreur donnerait deux contacts), et un rapprochement automatique sur email/téléphone
+    // fusionnerait à tort deux personnes mal saisies — ADR-055 §H interdit toute fusion silencieuse.
+    // Le rattachement des lignes historiques sera un geste explicite, dans son propre lot.
+    // Pas de CASCADE : aucun contact n'est jamais supprimé, NO ACTION (défaut Drizzle) suffit —
+    // même choix que `evenements_metier.compromis_id`.
+    contactId: uuid("contact_id").references(() => contacts.id),
     nom: text("nom").notNull(),
     prenom: text("prenom"),
     email: text("email"),

@@ -17,6 +17,7 @@ import {
 } from "@/lib/prospectVendeurRepository";
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { getDb } from "@/db/client";
+import { creerContact } from "@/lib/contactRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import { parseProspectVendeurFormData, parseSignatureMandatFormData } from "@/lib/prospectVendeurFormulaire";
@@ -56,7 +57,21 @@ async function chargerProspectPourJalon(id: string): Promise<ProspectVendeur> {
 export async function creerProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
   // ADR-054 — appartenance explicite du prospect vendeur (table racine).
-  const prospect = await creerProspectVendeur(parseProspectVendeurFormData(formData), await exigerWorkspaceCourant());
+  const workspaceId = await exigerWorkspaceCourant();
+  const donnees = parseProspectVendeurFormData(formData);
+
+  // ADR-055 — identité canonique créée dans la MÊME transaction que l'opportunité qui la référence.
+  // Toujours un nouveau contact, jamais un rapprochement automatique : voir creerAcquereurAction
+  // pour le rationale complet. Le prospect vendeur reste la source de vérité de son workflow.
+  const prospect = await getDb().transaction(async (tx) => {
+    const contact = await creerContact(
+      { nom: donnees.nom, prenom: donnees.prenom, email: donnees.email, telephone: donnees.telephone },
+      workspaceId,
+      tx
+    );
+    return creerProspectVendeur({ ...donnees, contactId: contact.id }, workspaceId, tx);
+  });
+
   redirect(`/prospects-vendeurs/${prospect.id}`);
 }
 

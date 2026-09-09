@@ -28,6 +28,9 @@ const TABLES_MODELE_APPARTENANCE = ["workspaces", "workspace_membres"];
 // RACINES — portent `workspace_id`. Recalculées depuis le schéma réel (aucune FK NOT NULL vers un
 // parent possédé), jamais recopiées depuis une liste illustrative d'ADR.
 const TABLES_RACINES = [
+  // ADR-055 — l'identité canonique naît directement racine (ADR-054 §7), comme toute table créée
+  // après cette ADR.
+  "contacts",
   "biens",
   "acquereurs",
   "prospects_vendeurs",

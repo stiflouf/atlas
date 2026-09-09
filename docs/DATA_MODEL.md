@@ -322,6 +322,63 @@ Le classement complet des tables est exécutable et verrouillé par
 `apps/web/src/db/appartenanceWorkspace.structurel.test.ts` : toute table ajoutée au schéma sans
 être classée fait échouer ce test.
 
+## `contacts` (ADR-055)
+
+**Rôle** : **identité canonique d'une personne**, indépendante de tout dossier — la première brique
+du modèle canonique décidé par ADR-055.
+
+**État : fondation, pas encore la source de vérité.** `prospects_vendeurs` et `acquereurs` restent
+intacts et pilotent tous les workflows existants (matching, visites, offres, compromis, tâches,
+automatisations). `contacts` est une identité **parallèle**, alimentée depuis les créations réelles,
+que rien ne lit encore. Ne pas présenter cette table comme utilisée : elle est prête, pas branchée.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | identité canonique interne — jamais un identifiant fournisseur (ADR-056 §1) |
+| `workspace_id` | text | non | FK → `workspaces.id`, sans `DEFAULT` (ADR-054) |
+| `nom` | text | **non** | seul champ obligatoire : le seul que les deux modèles historiques garantissent |
+| `prenom` | text | oui | |
+| `email` | text | oui | |
+| `telephone` | text | oui | |
+| `cree_le` | timestamptz | non | `defaultNow()` |
+
+**Aucune colonne de rôle** (`role`, `type`, `statut`, `pipeline`…) : un contact est vendeur ou
+acquéreur *parce qu'il est partie d'un dossier*, jamais par un attribut stocké. Même discipline que
+le statut de tâche dérivé de `terminee_le`/`annulee_le` (ADR-028). **Aucune donnée de projet** non
+plus (budget, secteur, critères) : elles décrivent une recherche, pas un humain.
+
+**Aucune contrainte d'unicité sur `email` ou `telephone`**, et c'est une décision : un couple
+partage une adresse, une famille un numéro, un prospect terrain peut n'avoir ni l'un ni l'autre, et
+la même personne existe légitimement dans deux workspaces. La déduplication passera par une
+recherche de candidats et une **validation humaine** — jamais par le schéma, jamais automatiquement
+(ADR-055 §H).
+
+Invariants verrouillés par `apps/web/src/db/contactCanonique.structurel.test.ts`.
+
+## Pont `contact_id` (ADR-055)
+
+`acquereurs.contact_id` et `prospects_vendeurs.contact_id` : FK **nullable** vers `contacts`
+(NO ACTION), dans le sens ancien → nouveau.
+
+- Les créations passant par les Server Actions (`creerAcquereurAction`,
+  `creerProspectVendeurAction`) créent le contact **dans la même transaction** que le dossier et le
+  rattachent : les deux existent ensemble ou aucun des deux.
+- **Toutes les lignes antérieures gardent `contact_id = NULL`** : aucun backfill n'a été fait.
+  « 1 ligne = 1 contact » fabriquerait des doublons structurels (le même humain vendeur puis
+  acquéreur donnerait deux contacts) ; un rapprochement sur email/téléphone fusionnerait à tort deux
+  personnes mal saisies. Le rattachement de l'historique sera un geste explicite, dans son lot.
+- Les autres chemins d'écriture (tests d'intégration, seed, appels internes) laissent le pont
+  absent : `contactId` est un champ **optionnel** des types d'entrée.
+
+**Source de vérité pendant la coexistence : le dossier historique.** L'identité est temporairement
+dupliquée entre `contacts` et `acquereurs`/`prospects_vendeurs`. Aucune synchronisation
+bidirectionnelle n'existe : modifier un acquéreur ne met pas à jour son contact. C'est assumé pour
+la durée de la transition — la bascule des lectures se fera quand les projets canoniques existeront.
+
+**Cible (non implémentée)** : `Contact → PartieProjet → SellerProject / BuyerProject`, avec `Mandat`
+et `Interaction` comme entités propres. Voir ADR-055. **Le matching restera branché sur le projet
+acquéreur, jamais sur le Contact** : un contact n'est pas une recherche immobilière.
+
 ## `connexions_google`
 
 **Rôle** : fait serveur unique — le conseiller est-il connecté à Google Calendar, et avec quel
@@ -1414,6 +1471,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0031_awesome_stellaris.sql` | VALUE-06 : table `reperes_relationnels_acquereur` (FK `acquereur_id` CASCADE, `CHECK` catégorie/provenance, `utilisable_communication` `DEFAULT false`) |
 | `0032_polite_wolverine.sql` | ADR-054 : tables `workspaces` et `workspace_membres` ; INSERT du workspace historique `'default'` (**complété à la main** — indispensable avant les FK, voir l'en-tête du fichier) ; colonne `workspace_id` (`NOT NULL DEFAULT 'default'`, FK NO ACTION) sur les 9 tables racines. Additive : aucune table supprimée, aucune lecture applicative modifiée |
 | `0033_safe_invisible_woman.sql` | ADR-054 : `DROP DEFAULT` sur les 9 colonnes `workspace_id`, une fois tous les chemins d'écriture rendus explicites. `NOT NULL` et les FK restent en place ; aucune donnée historique touchée. Invariant de sécurité : une écriture sans périmètre échoue désormais au lieu de retomber sur le workspace historique |
+| `0034_dark_maverick.sql` | ADR-055 : table `contacts` (identité canonique, racine avec `workspace_id`) ; colonne nullable `contact_id` sur `acquereurs` et `prospects_vendeurs` (FK NO ACTION). Strictement additive : aucune table supprimée, aucune colonne retirée, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -149,12 +149,16 @@ export async function getProspectVendeurParBien(bienId: string): Promise<Prospec
 // lieu d'être silencieusement rangé dans le workspace historique.
 export async function creerProspectVendeur(
   input: NouveauProspectVendeur,
-  workspaceId: string
+  workspaceId: string,
+  // `executeur` optionnel, même patron que creerBien/creerAcquereur (ADR-019) : permet de créer le
+  // prospect dans la même transaction que l'identité canonique qu'il référence (ADR-055).
+  executeur: Executeur = getDb()
 ): Promise<ProspectVendeur> {
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .insert(prospectsVendeursTable)
     .values({
       workspaceId,
+      contactId: input.contactId ?? null,
       nom: input.nom,
       prenom: input.prenom ?? null,
       email: input.email ?? null,

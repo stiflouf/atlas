@@ -239,6 +239,13 @@
       "when": 1788878272454,
       "tag": "0033_safe_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788938049804,
+      "tag": "0034_dark_maverick",
+      "breakpoints": true
     }
   ]
 }

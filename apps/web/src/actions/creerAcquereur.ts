@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
 import { creerAcquereur } from "@/lib/clientRepository";
+import { creerContact } from "@/lib/contactRepository";
 import { parseAcquereurFormData } from "@/lib/acquereurFormulaire";
 import { enqueuerResynchronisationAcquereur } from "@/lib/compatibilite/resynchronisationRepository";
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
@@ -16,7 +17,21 @@ export async function creerAcquereurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
   const workspaceId = await exigerWorkspaceCourant();
   const { idDemandeResynchronisation } = await getDb().transaction(async (tx) => {
-    const acquereur = await creerAcquereur(parseAcquereurFormData(formData), workspaceId, tx);
+    const donnees = parseAcquereurFormData(formData);
+    // ADR-055 — l'identité canonique est créée DANS LA MÊME TRANSACTION que le dossier qui la
+    // référence : les deux existent ensemble ou aucun des deux. Toujours un nouveau contact, jamais
+    // un rapprochement automatique avec un contact existant — deux personnes mal saisies partageant
+    // un email ne doivent jamais être fusionnées sans décision humaine (ADR-055 §H). Un doublon se
+    // corrige ; une fusion à tort, non.
+    //
+    // Le dossier reste la SOURCE DE VÉRITÉ du workflow : rien ne lit encore `contacts`, aucun écran
+    // ne change. Le contact est une identité canonique parallèle, alimentée à partir d'aujourd'hui.
+    const contact = await creerContact(
+      { nom: donnees.nom, prenom: donnees.prenom, email: donnees.email, telephone: donnees.telephone },
+      workspaceId,
+      tx
+    );
+    const acquereur = await creerAcquereur({ ...donnees, contactId: contact.id }, workspaceId, tx);
     const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereur.id, workspaceId, tx);
     return { acquereur, idDemandeResynchronisation };
   });
