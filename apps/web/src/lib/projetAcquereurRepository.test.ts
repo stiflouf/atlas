@@ -15,13 +15,10 @@ const {
 } = await import("@/db/schema");
 const { WORKSPACE_TEST } = await import("@/db/workspaceDeTest");
 const { creerContact } = await import("./contactRepository");
-const {
-  ajouterPartieProjet,
-  creerProjetAcquereur,
-  getProjetAcquereurById,
-  listerPartiesDuContact,
-  listerPartiesDuProjet,
-} = await import("./projetAcquereurRepository");
+const { creerProjetAcquereur, getProjetAcquereurById } = await import("./projetAcquereurRepository");
+const { ajouterPartieProjet, listerPartiesDuContact, listerPartiesDuProjetAcquereur } = await import(
+  "./partieProjetRepository"
+);
 
 const PROJET_MINIMAL = {
   budgetMin: 200_000,
@@ -104,7 +101,7 @@ describe("parties_projet — la relation contact ↔ projet est réellement N:N"
     });
 
     expect(partie.role).toBe("acquereur");
-    expect(await listerPartiesDuProjet(projet.id)).toHaveLength(1);
+    expect(await listerPartiesDuProjetAcquereur(projet.id)).toHaveLength(1);
   });
 
   it("un même projet porté par DEUX contacts — couple, coacquéreurs, indivision", async () => {
@@ -117,7 +114,7 @@ describe("parties_projet — la relation contact ↔ projet est réellement N:N"
     await ajouterPartieProjet({ contactId: premier.id, projetAcquereurId: projet.id, role: "acquereur" });
     await ajouterPartieProjet({ contactId: second.id, projetAcquereurId: projet.id, role: "co_acquereur" });
 
-    const parties = await listerPartiesDuProjet(projet.id);
+    const parties = await listerPartiesDuProjetAcquereur(projet.id);
     expect(parties).toHaveLength(2);
     expect(parties.map((partie) => partie.role).sort()).toEqual(["acquereur", "co_acquereur"]);
     expect(new Set(parties.map((partie) => partie.contactId)).size).toBe(2);
@@ -168,7 +165,7 @@ describe("parties_projet — la relation contact ↔ projet est réellement N:N"
       ajouterPartieProjet({ contactId: contactAilleurs.id, projetAcquereurId: projetIci.id, role: "acquereur" })
     ).rejects.toThrow(/workspaces différents/);
 
-    expect(await listerPartiesDuProjet(projetIci.id)).toEqual([]);
+    expect(await listerPartiesDuProjetAcquereur(projetIci.id)).toEqual([]);
   });
 
   it("refuse un contact ou un projet inexistant plutôt que d'écrire une relation orpheline", async () => {
@@ -181,7 +178,7 @@ describe("parties_projet — la relation contact ↔ projet est réellement N:N"
     ).rejects.toThrow(/Contact introuvable/);
     await expect(
       ajouterPartieProjet({ contactId: contact.id, projetAcquereurId: inexistant, role: "acquereur" })
-    ).rejects.toThrow(/Projet acquéreur introuvable/);
+    ).rejects.toThrow(/Projet introuvable/);
   });
 
   it("un projet peut exister sans aucune partie", async () => {
@@ -190,6 +187,6 @@ describe("parties_projet — la relation contact ↔ projet est réellement N:N"
     // que la base ne peut pas garantir. L'invariant « un projet finit par avoir un porteur » est
     // tenu par le flux de création, pas par le schéma.
     const projet = await unProjet();
-    expect(await listerPartiesDuProjet(projet.id)).toEqual([]);
+    expect(await listerPartiesDuProjetAcquereur(projet.id)).toEqual([]);
   });
 });

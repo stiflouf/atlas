@@ -18,6 +18,8 @@ import {
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { getDb } from "@/db/client";
 import { creerContact } from "@/lib/contactRepository";
+import { creerProjetVendeur } from "@/lib/projetVendeurRepository";
+import { ajouterPartieProjet } from "@/lib/partieProjetRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import { parseProspectVendeurFormData, parseSignatureMandatFormData } from "@/lib/prospectVendeurFormulaire";
@@ -60,16 +62,30 @@ export async function creerProspectVendeurAction(formData: FormData): Promise<vo
   const workspaceId = await exigerWorkspaceCourant();
   const donnees = parseProspectVendeurFormData(formData);
 
-  // ADR-055 — identité canonique créée dans la MÊME transaction que l'opportunité qui la référence.
-  // Toujours un nouveau contact, jamais un rapprochement automatique : voir creerAcquereurAction
-  // pour le rationale complet. Le prospect vendeur reste la source de vérité de son workflow.
+  // ADR-055 — modèle canonique créé dans la MÊME transaction que l'opportunité qui le référence :
+  // l'identité (Contact), le projet de vente, et la participation qui les relie. Toujours un nouveau
+  // contact, jamais un rapprochement automatique — voir creerAcquereurAction pour le rationale
+  // complet (ADR-055 §H).
+  //
+  // Le rôle n'est pas une colonne du contact : c'est cette participation qui fait de cette personne
+  // un vendeur. `vendeur` (et non `co_vendeur`) parce que l'opportunité historique ne décrit qu'une
+  // identité — celle du contact principal, seule que sache représenter ADR-027 §1.
+  //
+  // Un seul `tx` du début à la fin : les quatre écritures existent toutes ou aucune. Le prospect
+  // vendeur reste la SOURCE DE VÉRITÉ de son workflow — rien ne lit encore le modèle canonique.
   const prospect = await getDb().transaction(async (tx) => {
     const contact = await creerContact(
       { nom: donnees.nom, prenom: donnees.prenom, email: donnees.email, telephone: donnees.telephone },
       workspaceId,
       tx
     );
-    return creerProspectVendeur({ ...donnees, contactId: contact.id }, workspaceId, tx);
+    const projet = await creerProjetVendeur(
+      { origineLead: donnees.origineLead, origineLeadDetail: donnees.origineLeadDetail },
+      workspaceId,
+      tx
+    );
+    await ajouterPartieProjet({ contactId: contact.id, projetVendeurId: projet.id, role: "vendeur" }, tx);
+    return creerProspectVendeur({ ...donnees, contactId: contact.id, projetVendeurId: projet.id }, workspaceId, tx);
   });
 
   redirect(`/prospects-vendeurs/${prospect.id}`);

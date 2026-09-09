@@ -118,7 +118,6 @@ describe("ADR-055 — le Contact est une identité, jamais un rôle", () => {
     // `projets_acquereur` et `parties_projet` en sont sorties quand le lot §B les a créées — cette
     // liste dit ce qui n'existe PAS aujourd'hui, jamais ce qu'un lot passé s'était interdit.
     const horsPerimetre = [
-      "projets_vendeur",
       "projets_vendeur_biens",
       "mandats",
       "interactions",

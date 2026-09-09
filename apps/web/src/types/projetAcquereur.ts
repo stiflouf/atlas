@@ -31,15 +31,4 @@ export type ProjetAcquereur = {
   archiveLe?: string;
 };
 
-// Le rôle vit sur la RELATION, jamais sur le Contact : c'est la participation à un projet
-// acquéreur qui fait de quelqu'un un acquéreur. Vocabulaire limité au côté acquéreur — les rôles
-// vendeur arriveront avec les projets vendeur.
-export type RolePartieProjet = "acquereur" | "co_acquereur";
-
-export type PartieProjet = {
-  id: string;
-  contactId: string;
-  projetAcquereurId: string;
-  role: RolePartieProjet;
-  creeLe: string;
-};
+// Le rôle vit sur la RELATION, jamais sur ce type : voir `PartieProjet` dans types/partieProjet.ts.

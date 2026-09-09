@@ -253,6 +253,13 @@
       "when": 1788943148146,
       "tag": "0035_mighty_human_fly",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788946025250,
+      "tag": "0036_smiling_iron_fist",
+      "breakpoints": true
     }
   ]
 }

@@ -1021,22 +1021,29 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
 
 ## Modèle canonique en coexistence (ADR-055)
 
-`contacts`, `projets_acquereur` et `parties_projet` existent en base et sont alimentés par les
-créations réelles. **Rien ne les lit.** Le matching, les visites, les offres, les tâches et l'UI
-consomment toujours `acquereurs` et `prospects_vendeurs`, qui restent la source de vérité.
+`contacts`, `projets_acquereur`, `projets_vendeur` et `parties_projet` existent en base et sont
+alimentés par les créations réelles, des deux côtés. **Rien ne les lit.** Le matching, le tunnel
+commercial, le pipeline vendeur, la signature de mandat, les tâches et l'UI consomment toujours
+`acquereurs` et `prospects_vendeurs`, qui restent la source de vérité.
 
 Limites qui en découlent, toutes assumées le temps de la transition :
 
 - **Les lignes antérieures ne sont rattachées à rien.** `contact_id` et `projet_acquereur_id` sont
   `NULL` sur tout l'historique : aucun backfill n'a été fait, parce qu'aucune règle automatique ne
   peut distinguer deux saisies de la même personne de deux personnes mal saisies (ADR-055 §H).
-- **Une modification diverge.** `modifierAcquereur()` n'écrit que la ligne historique ; la copie
-  canonique garde les valeurs de la création. Sans lecteur canonique, cette divergence est
-  invisible — elle devra être résolue par le lot qui bascule les lectures, jamais par une
-  synchronisation bidirectionnelle.
-- **`parties_projet` ne connaît que le côté acquéreur.** Une seule cible (`projet_acquereur_id`
-  `NOT NULL`) et un `CHECK` de rôle limité à `acquereur`/`co_acquereur`, en attendant les projets
-  vendeur.
+- **Une modification diverge.** `modifierAcquereur()` n'écrit que la ligne historique, et aucun
+  geste vendeur (qualification, estimation, mandat, perte, archivage) ne propage quoi que ce soit
+  vers `projets_vendeur`. Les copies canoniques gardent les valeurs de la création. Sans lecteur
+  canonique cette divergence est invisible — elle devra être résolue par le lot qui bascule les
+  lectures, jamais par une synchronisation bidirectionnelle.
+- **Aucune relation projet ↔ bien.** `projets_vendeur` ne pointe vers aucun bien : la frontière
+  (un projet, plusieurs biens ? un bien, plusieurs projets successifs ?) est renvoyée au lot
+  Property/Mandat. `prospects_vendeurs.bien_id` reste `UNIQUE` et posé uniquement à la signature.
+- **`mandats` n'existe pas.** `mandat_propose_le` et `mandat_signe_le` sont des jalons du projet ;
+  le type, l'exclusivité, le numéro, la date de fin, la résiliation et le renouvellement d'un
+  mandat ne sont **stockés nulle part** aujourd'hui.
+- **`notes_prospect_vendeur` n'est pas migrée** : son vocabulaire est déjà celui des futures
+  `interactions` (ADR-055 §G), qui ne sont ni du projet ni de la personne.
 - **L'isolation inter-workspaces des parties de projet est applicative**, pas structurelle :
   `parties_projet` est une feuille sans `workspace_id` (ADR-054 §7), donc c'est
   `ajouterPartieProjet()` qui refuse une relation traversant deux périmètres. Une écriture SQL

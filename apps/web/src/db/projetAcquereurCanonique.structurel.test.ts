@@ -81,20 +81,21 @@ describe("ADR-055 §B — le projet est une intention immobilière, jamais une p
     expect(workspace!.hasDefault).toBe(false);
   });
 
-  it("parties_projet est une vraie relation N:N entre contact et projet", () => {
+  it("parties_projet est une vraie relation N:N entre contact et projet acquéreur", () => {
     const partie = config("parties_projet");
-    const contactId = partie.columns.find((colonne) => colonne.name === "contact_id");
-    const projetId = partie.columns.find((colonne) => colonne.name === "projet_acquereur_id");
-
-    expect(contactId!.notNull).toBe(true);
-    expect(projetId!.notNull).toBe(true);
+    expect(partie.columns.find((colonne) => colonne.name === "contact_id")!.notNull).toBe(true);
+    // `projet_acquereur_id` est devenue nullable quand les projets vendeur sont arrivés : c'est le
+    // CHECK « exactement une cible » qui porte désormais l'invariant, pas la nullabilité. Il est
+    // vérifié par projetVendeurCanonique.structurel.test.ts.
+    expect(partie.columns.some((colonne) => colonne.name === "projet_acquereur_id")).toBe(true);
 
     // Les DEUX côtés sont libres : aucune unicité sur `contact_id` seul (un contact peut porter
     // plusieurs projets) ni sur `projet_acquereur_id` seul (un projet peut avoir plusieurs
     // contacts). Une unicité sur l'une des deux colonnes ferait secrètement retomber le modèle en
     // 1:N — c'est exactement l'erreur que ce test empêche.
     const uniques = partie.uniqueConstraints.map((contrainte) => contrainte.columns.map((c) => c.name).sort());
-    expect(uniques).toEqual([["contact_id", "projet_acquereur_id"]]);
+    expect(uniques).toContainEqual(["contact_id", "projet_acquereur_id"]);
+    expect(uniques.every((colonnes) => colonnes.length === 2)).toBe(true);
   });
 
   it("le rôle vit sur la relation, jamais sur le contact ni sur le projet", () => {
@@ -111,14 +112,8 @@ describe("ADR-055 §B — le projet est une intention immobilière, jamais une p
     }
   });
 
-  it("ce lot ne crée ni projet vendeur, ni mandat, ni interaction, ni provenance", () => {
-    const horsPerimetre = [
-      "projets_vendeur",
-      "projets_vendeur_biens",
-      "mandats",
-      "interactions",
-      "references_externes",
-    ];
+  it("aucun mandat, aucune interaction, aucune provenance n'existe encore", () => {
+    const horsPerimetre = ["projets_vendeur_biens", "mandats", "interactions", "references_externes"];
     expect([...tables.keys()].filter((nom) => horsPerimetre.includes(nom))).toEqual([]);
   });
 

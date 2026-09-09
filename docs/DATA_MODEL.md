@@ -413,28 +413,51 @@ le modèle actuel n'en a aucune, et en inventer une créerait un vocabulaire que
 ## `parties_projet` (ADR-055 §B)
 
 **Rôle** : la relation « cette personne participe à ce projet ». C'est elle, et elle seule, qui fait
-exister le rôle : un contact est acquéreur **parce qu'il est partie d'un projet acquéreur**.
+exister le rôle : un contact est acquéreur **parce qu'il est partie d'un projet acquéreur**, vendeur
+parce qu'il est partie d'un projet vendeur. **La même personne peut être les deux à la fois**, sans
+qu'aucune colonne ne l'affirme — c'est le CAS 8 d'ADR-055, inexprimable dans le modèle historique.
+
+```
+                    Contact
+                       │
+                 parties_projet
+                  /          \
+        projets_acquereur   projets_vendeur
+                 ▲                 ▲
+                 │                 │
+           acquereurs      prospects_vendeurs
+        (historiques, sources de vérité transitoires)
+```
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
 | `contact_id` | uuid | non | FK → `contacts.id`, NO ACTION (un contact n'est jamais supprimé) |
-| `projet_acquereur_id` | uuid | non | FK → `projets_acquereur.id`, CASCADE |
-| `role` | text | non | `CHECK ('acquereur','co_acquereur')` — vocabulaire du seul côté implémenté |
+| `projet_acquereur_id` | uuid | oui | FK → `projets_acquereur.id`, CASCADE |
+| `projet_vendeur_id` | uuid | oui | FK → `projets_vendeur.id`, CASCADE |
+| `role` | text | non | `CHECK ('acquereur','co_acquereur','vendeur','co_vendeur')` |
 | `cree_le` | timestamptz | non | |
 
-`UNIQUE(projet_acquereur_id, contact_id)` : une personne participe **une fois** à un projet donné ;
-changer son rôle est une mise à jour, jamais une seconde ligne. **Aucune unicité sur une colonne
-seule** — ce serait faire retomber le modèle en 1:N.
+`UNIQUE(projet_acquereur_id, contact_id)` et `UNIQUE(projet_vendeur_id, contact_id)` : une personne
+participe **une fois** à un projet donné ; changer son rôle est une mise à jour, jamais une seconde
+ligne. Les lignes de l'autre côté ont leur colonne à `NULL` et ne s'y heurtent pas (deux `NULL` sont
+distincts pour un `UNIQUE` Postgres). **Aucune unicité sur une colonne seule** — ce serait faire
+retomber le modèle en 1:N.
+
+Aucun rôle de **propriété juridique** (`proprietaire`, `mandant`, `indivisaire`, `usufruitier`) :
+ADR-055 §C place ce lien sur le mandat et le projet, et aucun consommateur n'existe — l'inventer
+affirmerait un fait que DOMIORA ne constate pas.
 
 **Feuille (ADR-054 §7)** : pas de `workspace_id` dupliqué. La base seule ne peut donc pas refuser
 une participation traversant deux périmètres : l'invariant est tenu par `ajouterPartieProjet()`, qui
 compare les deux workspaces et **échoue**, et il est prouvé par un test.
 
-`projet_acquereur_id` est `NOT NULL` tant qu'un seul type de projet existe. La cible d'ADR-055
-(invariant 5) est un jeu de cibles dédiées + `CHECK` « exactement une », patron `taches` : le lot qui
-créera `projets_vendeur` lèvera ce `NOT NULL` et posera le `CHECK`. Jamais un couple polymorphe
-`{type, id}`.
+**Cibles dédiées + `CHECK` « exactement une »** (ADR-055 invariant 5, patron `taches` /
+`evenements_metier`) : `projet_acquereur_id` et `projet_vendeur_id` sont toutes deux nullables, et
+c'est `parties_projet_une_seule_cible_check` — pas leur nullabilité — qui impose qu'exactement une
+soit renseignée. Jamais zéro (une partie sans projet ne rattache personne à rien), jamais deux (une
+participation n'est pas à la fois un achat et une vente). Jamais un couple polymorphe `{type, id}` :
+il rendrait les FK impossibles.
 
 ## Pont `projet_acquereur_id` (ADR-055 §B)
 
@@ -473,6 +496,98 @@ offres, tâches et UI le lisent, inchangés. Un test structurel vérifie qu'aucu
 - `notes` et `date_premiere_contact` de `acquereurs` ne sont **pas** repris dans le projet canonique :
   ils décrivent la relation avec la personne autant que le projet, et les trancher sans consommateur
   inventerait une frontière.
+
+## `projets_vendeur` (ADR-055 §B)
+
+**Rôle** : **projet vendeur canonique** — une intention de VENDRE située dans le temps. C'est la
+généralisation de `prospects_vendeurs`, dont ADR-027 §1 assume explicitement les limites (« un seul
+contact principal par opportunité », « une seule opportunité par bien potentiel », séparation
+contact ↔ opportunité renvoyée à « une passe ultérieure »). C'est cette passe.
+
+**État : fondation, pas encore la source de vérité.** `prospects_vendeurs` reste intact et pilote le
+pipeline vendeur, la signature de mandat, les tâches, les événements métier et l'UI.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | identité canonique interne — jamais un identifiant fournisseur (ADR-056) |
+| `workspace_id` | text | non | FK → `workspaces.id`, sans `DEFAULT` (ADR-054). **Racine** |
+| `origine_lead` / `origine_lead_detail` | text | oui | `CHECK` sur le vocabulaire d'`OrigineLead` |
+| `qualifie_le` | timestamptz | oui | jalon ADR-027 |
+| `rdv_estimation_prevu_le` | timestamptz | oui | **planifié** — ne fait jamais avancer le statut |
+| `rdv_estimation_realise_le` | timestamptz | oui | **tenu** — le seul des deux qui le fasse |
+| `estimation_proposee_centimes` / `_le` | integer / date | oui | `CHECK` montant > 0 |
+| `mandat_propose_le` / `mandat_signe_le` | timestamptz | oui | jalons **du projet**, pas attributs du mandat |
+| `motif_perte` / `date_perte` | text / date | oui | issue commerciale, `CHECK` sur le vocabulaire |
+| `dernier_contact_le` | timestamptz | oui | ADR-027 §4 — seules de vraies interactions le font avancer |
+| `cree_le` | timestamptz | non | `defaultNow()` |
+| `archive_le` | timestamptz | oui | geste administratif (ADR-012), **jamais** l'issue commerciale |
+
+**Aucune identité humaine** : les vendeurs sont des Contacts, atteints par `parties_projet`. Un
+couple qui vend en indivision porte UN projet à deux.
+
+**Aucun `stade_projet` stocké** : le statut se dérive du jalon le plus avancé réellement atteint,
+exactement comme `deriverStatutProspectVendeur()` (ADR-014/027). Le stocker créerait une seconde
+vérité.
+
+**Aucune description de bien** (`adresse_bien_potentiel`, `ville`, `code_postal`, `type_bien`,
+`bien_id`) : elles décrivent le bien, pas le projet. Les recopier ici figerait la frontière
+projet/bien avant que le lot Property/Mandat ne la traite.
+
+**Aucun attribut de mandat** (numéro, type, exclusivité, date de fin, résiliation) : ADR-055 §F en
+fait une entité à part entière, **non créée à ce jour**. `mandat_propose_le` et `mandat_signe_le`
+restent ici parce que ce sont des jalons du projet ; le jour où `mandats` existera,
+`mandat_signe_le` deviendra dérivable de `mandats.date_debut`.
+
+## Pont `projet_vendeur_id` (ADR-055 §B)
+
+`prospects_vendeurs.projet_vendeur_id` : FK **nullable** vers `projets_vendeur` (NO ACTION), pendant
+vendeur de `acquereurs.projet_acquereur_id`.
+
+- `creerProspectVendeurAction` crée, **dans une seule transaction** : le Contact, le projet vendeur,
+  la partie (`role = 'vendeur'`, le contact principal que la ligne historique décrit) et la ligne
+  `prospects_vendeurs` avec ses deux ponts. Tout existe, ou rien.
+- **Toutes les lignes antérieures gardent `projet_vendeur_id = NULL`** : aucun backfill. Un prospect
+  historique peut être un lead mort, un doublon, ou l'un de plusieurs prospects décrivant le **même**
+  projet à deux propriétaires — chacun deviendrait un projet distinct.
+- Aucun geste ultérieur (qualification, estimation, proposition ou signature de mandat, perte,
+  archivage) **ne propage quoi que ce soit** vers le projet canonique. Décision assumée, identique
+  au côté acquéreur : ce lot alimente les créations, sans miroir en écriture. La copie canonique
+  garde donc les valeurs de la création — acceptable tant que **rien ne la lit**.
+
+**Source de vérité pendant la coexistence : `prospects_vendeurs`.** Pipeline, signature de mandat,
+tâches (`taches.prospect_vendeur_id`), notes, événements métier et UI le lisent, inchangés. Un test
+structurel vérifie qu'aucun moteur pur (`lib/compatibilite/`, `lib/opportunites/`, `lib/alertes/`,
+`lib/fiscal/`) ni aucun écran ne référence le modèle canonique.
+
+**Frontière projet ↔ bien, non tranchée par ce lot** (à traiter avec Property/Mandat) :
+
+- Aujourd'hui, `prospects_vendeurs.bien_id` est **`UNIQUE` et posé uniquement à la signature du
+  mandat** (ADR-010) : avant le mandat, l'opportunité ne pointe vers aucun bien réel, seulement vers
+  une description libre (`adresse_bien_potentiel`, `secteur_bien_potentiel`).
+- ADR-055 §C prévoit qu'un projet vendeur puisse porter **plusieurs** biens (CAS 5), via une
+  relation dédiée (`projets_vendeur_biens`) — non créée ici.
+- Un même bien pourrait relever de **plusieurs projets vendeur successifs** (revente des années plus
+  tard). Rien dans le modèle actuel ne l'interdit ni ne le représente.
+- Aucune FK `projets_vendeur → biens` n'est posée : la choisir maintenant trancherait ces trois
+  questions sans consommateur.
+
+**Champs qui relèveront du futur `mandats` (ADR-055 §F), aujourd'hui dispersés :**
+
+| Fait | Où il vit aujourd'hui | Destination |
+|---|---|---|
+| mandat proposé | `prospects_vendeurs.mandat_propose_le`, `projets_vendeur.mandat_propose_le` | reste un jalon du **projet** (aucun mandat n'existe encore à ce moment) |
+| mandat signé (date de début) | `prospects_vendeurs.mandat_signe_le`, `projets_vendeur.mandat_signe_le` | `mandats.date_debut` — le jalon deviendra dérivable |
+| type / exclusivité / numéro | **nulle part** — jamais saisis | `mandats.type`, `.exclusivite_jusqu_au`, `.numero` |
+| date de fin, résiliation, motif | **nulle part** | `mandats.date_fin`, `.resilie_le`, `.motif_resiliation` |
+| renouvellement | **nulle part** | `mandats.remplace_mandat_id` (CAS 7 : une ligne, jamais une mutation) |
+| statut du mandat sur le bien | `biens.statut_mandat` | dérivé des dates (ADR-014) ; coexistera le temps de la bascule |
+
+**`notes_prospect_vendeur` : laissée intacte, appartenance non tranchée.** Son vocabulaire
+(`appel`, `email`, `sms`, `rendez_vous`, `autre_interaction`, `note_interne`) est **exactement**
+celui des futures `interactions` (ADR-055 §G) : ces lignes ne sont ni « du projet » ni « de la
+personne », ce sont des faits d'échange qui devront être rattachés à un Contact avec un contexte
+optionnel. Les déplacer vers `projets_vendeur` les enfermerait dans un contexte qu'elles n'ont pas.
+Elles restent feuilles de `prospects_vendeurs` jusqu'au lot Interaction.
 
 ## `connexions_google`
 
@@ -1568,6 +1683,8 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0033_safe_invisible_woman.sql` | ADR-054 : `DROP DEFAULT` sur les 9 colonnes `workspace_id`, une fois tous les chemins d'écriture rendus explicites. `NOT NULL` et les FK restent en place ; aucune donnée historique touchée. Invariant de sécurité : une écriture sans périmètre échoue désormais au lieu de retomber sur le workspace historique |
 | `0034_dark_maverick.sql` | ADR-055 : table `contacts` (identité canonique, racine avec `workspace_id`) ; colonne nullable `contact_id` sur `acquereurs` et `prospects_vendeurs` (FK NO ACTION). Strictement additive : aucune table supprimée, aucune colonne retirée, **aucun backfill** |
 | `0035_mighty_human_fly.sql` | ADR-055 §B : tables `projets_acquereur` (racine, `workspace_id`, `CHECK` stade) et `parties_projet` (feuille, `UNIQUE(projet, contact)`, `CHECK` rôle) ; colonne nullable `projet_acquereur_id` sur `acquereurs` (FK NO ACTION). Strictement additive : aucune table supprimée, aucune colonne retirée, **aucun backfill** |
+
+| `0036_smiling_iron_fist.sql` | ADR-055 §B : table `projets_vendeur` (racine, jalons ADR-027, `CHECK` origine/motif/estimation) ; `parties_projet` étendue aux deux côtés (`projet_vendeur_id`, `DROP NOT NULL` sur `projet_acquereur_id`, `CHECK` « exactement une cible », `CHECK` rôle élargi, second `UNIQUE`) ; colonne nullable `projet_vendeur_id` sur `prospects_vendeurs`. Ordre volontaire pour qu'aucune ligne existante ne devienne invalide. Strictement additive, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

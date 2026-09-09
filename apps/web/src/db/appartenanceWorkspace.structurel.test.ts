@@ -34,6 +34,9 @@ const TABLES_RACINES = [
   // ADR-055 §B — RACINE et non feuille de `contacts` : un projet porté par un couple n'appartient
   // à aucun des deux en particulier, son périmètre ne peut donc pas être dérivé d'un contact.
   "projets_acquereur",
+  // ADR-055 §B — même raison côté vendeur : un projet porté en indivision n'appartient à aucun des
+  // coindivisaires en particulier.
+  "projets_vendeur",
   "biens",
   "acquereurs",
   "prospects_vendeurs",

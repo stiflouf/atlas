@@ -26,6 +26,7 @@ const {
   evenementsMetier,
   partiesProjet: partiesProjetTable,
   projetsAcquereur: projetsAcquereurTable,
+  projetsVendeur: projetsVendeurTable,
 } = await import("@/db/schema");
 const { creerAcquereurAction } = await import("./creerAcquereur");
 const { creerProspectVendeurAction } = await import("./prospectVendeur");
@@ -56,13 +57,25 @@ afterAll(async () => {
   const idsContacts = contactsMarques.map((contact) => contact.id);
   if (idsContacts.length > 0) {
     const parties = await getDb()
-      .select({ projetAcquereurId: partiesProjetTable.projetAcquereurId })
+      .select({
+        projetAcquereurId: partiesProjetTable.projetAcquereurId,
+        projetVendeurId: partiesProjetTable.projetVendeurId,
+      })
       .from(partiesProjetTable)
       .where(inArray(partiesProjetTable.contactId, idsContacts));
     await getDb().delete(partiesProjetTable).where(inArray(partiesProjetTable.contactId, idsContacts));
-    const idsProjets = [...new Set(parties.map((partie) => partie.projetAcquereurId))];
-    if (idsProjets.length > 0) {
-      await getDb().delete(projetsAcquereurTable).where(inArray(projetsAcquereurTable.id, idsProjets));
+
+    const idsAcquereur = [
+      ...new Set(parties.map((partie) => partie.projetAcquereurId).filter((id): id is string => id !== null)),
+    ];
+    if (idsAcquereur.length > 0) {
+      await getDb().delete(projetsAcquereurTable).where(inArray(projetsAcquereurTable.id, idsAcquereur));
+    }
+    const idsVendeur = [
+      ...new Set(parties.map((partie) => partie.projetVendeurId).filter((id): id is string => id !== null)),
+    ];
+    if (idsVendeur.length > 0) {
+      await getDb().delete(projetsVendeurTable).where(inArray(projetsVendeurTable.id, idsVendeur));
     }
     await getDb().delete(contactsTable).where(inArray(contactsTable.id, idsContacts));
   }

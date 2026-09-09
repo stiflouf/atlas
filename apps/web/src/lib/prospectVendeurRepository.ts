@@ -159,6 +159,7 @@ export async function creerProspectVendeur(
     .values({
       workspaceId,
       contactId: input.contactId ?? null,
+      projetVendeurId: input.projetVendeurId ?? null,
       nom: input.nom,
       prenom: input.prenom ?? null,
       email: input.email ?? null,

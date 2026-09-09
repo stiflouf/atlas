@@ -27,7 +27,8 @@ const {
   projetsAcquereur: projetsAcquereurTable,
 } = await import("@/db/schema");
 const { creerAcquereurAction } = await import("./creerAcquereur");
-const { getProjetAcquereurById, listerPartiesDuProjet } = await import("@/lib/projetAcquereurRepository");
+const { getProjetAcquereurById } = await import("@/lib/projetAcquereurRepository");
+const { listerPartiesDuProjetAcquereur } = await import("@/lib/partieProjetRepository");
 
 const MARQUEUR = "[test réel] PROJET-COEXISTENCE";
 
@@ -94,7 +95,7 @@ describe("ADR-055 §B — une création acquéreur alimente le modèle canonique
     expect(projet).not.toHaveProperty("email");
 
     // 4. Le rôle est porté par la participation, jamais par la personne.
-    const parties = await listerPartiesDuProjet(projet!.id);
+    const parties = await listerPartiesDuProjetAcquereur(projet!.id);
     expect(parties).toHaveLength(1);
     expect(parties[0].contactId).toBe(acquereur.contactId);
     expect(parties[0].role).toBe("acquereur");

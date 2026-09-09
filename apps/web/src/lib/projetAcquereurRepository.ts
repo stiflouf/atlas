@@ -1,20 +1,14 @@
 import { eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
-import {
-  contacts as contactsTable,
-  partiesProjet as partiesProjetTable,
-  projetsAcquereur as projetsAcquereurTable,
-} from "@/db/schema";
+import { projetsAcquereur as projetsAcquereurTable } from "@/db/schema";
 import type { StadeProjet } from "@/types/client";
-import type { PartieProjet, ProjetAcquereur, RolePartieProjet } from "@/types/projetAcquereur";
+import type { ProjetAcquereur } from "@/types/projetAcquereur";
 
-// ADR-055 §B — accès au projet acquéreur canonique et à ses parties. Volontairement réduit à ce
-// dont le lot a besoin : créer un projet, le relire, y rattacher des contacts, et parcourir la
-// relation dans ses DEUX sens — c'est cette double lecture qui prouve que le modèle est réellement
-// N:N, et non une relation 1:N déguisée.
+// ADR-055 §B — accès au projet acquéreur canonique. Les parties de projet vivent dans
+// `partieProjetRepository.ts` depuis que les projets vendeur existent : la relation est partagée
+// par les deux côtés, et la garder ici en ferait un vocabulaire acquéreur qu'elle n'est plus.
 
 type LigneProjet = typeof projetsAcquereurTable.$inferSelect;
-type LignePartie = typeof partiesProjetTable.$inferSelect;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -34,16 +28,6 @@ function ligneVersProjet(ligne: LigneProjet): ProjetAcquereur {
     necessiteExterieur: ligne.necessiteExterieur ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
     archiveLe: ligne.archiveLe?.toISOString(),
-  };
-}
-
-function ligneVersPartie(ligne: LignePartie): PartieProjet {
-  return {
-    id: ligne.id,
-    contactId: ligne.contactId,
-    projetAcquereurId: ligne.projetAcquereurId,
-    role: ligne.role as RolePartieProjet,
-    creeLe: ligne.creeLe.toISOString(),
   };
 }
 
@@ -85,71 +69,4 @@ export async function getProjetAcquereurById(id: string): Promise<ProjetAcquereu
     .where(eq(projetsAcquereurTable.id, id))
     .limit(1);
   return ligne ? ligneVersProjet(ligne) : undefined;
-}
-
-export type NouvellePartieProjet = {
-  contactId: string;
-  projetAcquereurId: string;
-  role: RolePartieProjet;
-};
-
-// ADR-054 — `parties_projet` est une FEUILLE : elle ne porte pas de `workspace_id`, donc aucune
-// contrainte de base ne peut refuser une participation qui traverserait deux périmètres. Cet
-// invariant est tenu ICI, sur le seul chemin d'écriture canonique, et il échoue bruyamment : relier
-// un contact du workspace A à un projet du workspace B fabriquerait une fuite entre deux
-// conseillers, pas une donnée approximative.
-//
-// Les deux lectures se font dans l'`executeur` reçu : dans une transaction, elles voient le contact
-// et le projet qui viennent d'y être créés, et le refus annule tout le reste avec elle.
-export async function ajouterPartieProjet(
-  input: NouvellePartieProjet,
-  executeur: Executeur = getDb()
-): Promise<PartieProjet> {
-  const [contact] = await executeur
-    .select({ workspaceId: contactsTable.workspaceId })
-    .from(contactsTable)
-    .where(eq(contactsTable.id, input.contactId))
-    .limit(1);
-  if (!contact) throw new Error(`Contact introuvable : ${input.contactId}`);
-
-  const [projet] = await executeur
-    .select({ workspaceId: projetsAcquereurTable.workspaceId })
-    .from(projetsAcquereurTable)
-    .where(eq(projetsAcquereurTable.id, input.projetAcquereurId))
-    .limit(1);
-  if (!projet) throw new Error(`Projet acquéreur introuvable : ${input.projetAcquereurId}`);
-
-  if (contact.workspaceId !== projet.workspaceId) {
-    throw new Error(
-      "Une partie de projet ne peut pas relier un contact et un projet de workspaces différents"
-    );
-  }
-
-  const [ligne] = await executeur
-    .insert(partiesProjetTable)
-    .values({
-      contactId: input.contactId,
-      projetAcquereurId: input.projetAcquereurId,
-      role: input.role,
-    })
-    .returning();
-  return ligneVersPartie(ligne);
-}
-
-// Les deux sens de la relation. Un projet peut avoir plusieurs contacts (couple, coacquéreurs) ;
-// un contact peut porter plusieurs projets (recherches successives ou parallèles). Aucun des deux
-// n'est un cas particulier de l'autre.
-export async function listerPartiesDuProjet(projetAcquereurId: string): Promise<PartieProjet[]> {
-  if (!UUID_REGEX.test(projetAcquereurId)) return [];
-  const lignes = await getDb()
-    .select()
-    .from(partiesProjetTable)
-    .where(eq(partiesProjetTable.projetAcquereurId, projetAcquereurId));
-  return lignes.map(ligneVersPartie);
-}
-
-export async function listerPartiesDuContact(contactId: string): Promise<PartieProjet[]> {
-  if (!UUID_REGEX.test(contactId)) return [];
-  const lignes = await getDb().select().from(partiesProjetTable).where(eq(partiesProjetTable.contactId, contactId));
-  return lignes.map(ligneVersPartie);
 }

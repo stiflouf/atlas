@@ -338,6 +338,79 @@ export const projetsAcquereur = pgTable(
   ]
 );
 
+// ADR-055 §B — PROJET VENDEUR canonique : une intention de VENDRE située dans le temps. C'est la
+// généralisation de `prospects_vendeurs`, dont ADR-027 §1 assume explicitement les limites — « un
+// seul contact principal par opportunité », « une seule opportunité par bien potentiel », et une
+// séparation contact <-> opportunité renvoyée à « une passe ultérieure ». C'est cette passe.
+//
+// AUCUNE IDENTITÉ HUMAINE ICI — ni `nom`, ni `prenom`, ni `email`, ni `telephone`. Les vendeurs
+// sont des Contacts, atteints par `parties_projet`. Un couple qui vend en indivision porte UN
+// projet à deux : y recopier « le » nom obligerait à en désigner un arbitrairement, exactement la
+// limite d'ADR-027 que ce modèle lève.
+//
+// Ce que cette table porte : le PARCOURS de l'intention de vente. Les jalons `timestamptz` sont
+// repris tels quels d'ADR-027 (ADR-055 §B les conserve explicitement), avec leur consommateur déjà
+// écrit : `deriverStatutProspectVendeur()`, qui déduit le statut du jalon le plus avancé RÉELLEMENT
+// atteint. Aucun `stade_projet` n'est créé — le modèle vendeur n'en a jamais eu, et en stocker un
+// créerait la seconde vérité qu'ADR-014/ADR-027 refusent partout.
+//
+// Ce que cette table NE porte PAS, et pourquoi :
+//   - `adresse_bien_potentiel`, `secteur_bien_potentiel`, `ville`, `code_postal`, `type_bien`,
+//     `bien_id` : ils décrivent le BIEN, pas le projet. Les recopier ici figerait la frontière
+//     projet/bien avant que le lot Property/Mandat ne la traite (voir DATA_MODEL.md).
+//   - toute donnée de MANDAT (numéro, type, exclusivité, date de fin, résiliation) : ADR-055 §F en
+//     fait une entité à part entière, non créée à ce jour. `mandat_propose_le` et `mandat_signe_le`
+//     restent ici parce que ce sont des JALONS DU PROJET (« nous avons proposé », « un mandat a été
+//     signé »), pas des attributs du mandat — le jour où `mandats` existera, `mandat_signe_le`
+//     deviendra dérivable de `mandats.date_debut` et cette colonne pourra disparaître.
+//
+// `motif_perte`/`date_perte` (issue commerciale) restent distincts d'`archive_le` (geste
+// administratif, ADR-012) — même distinction que `prospects_vendeurs`, jamais confondus.
+export const projetsVendeur = pgTable(
+  "projets_vendeur",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). RACINE pour la même raison que `projets_acquereur` : un
+    // projet porté par deux vendeurs n'appartient à aucun des deux en particulier.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    origineLead: text("origine_lead"),
+    origineLeadDetail: text("origine_lead_detail"),
+    // Jalons ADR-027, repris tels quels. `rdv_estimation_prevu_le` (planifié) ne fait jamais
+    // avancer le statut : seul `rdv_estimation_realise_le` (tenu) le fait.
+    qualifieLe: timestamp("qualifie_le", { withTimezone: true }),
+    rdvEstimationPrevuLe: timestamp("rdv_estimation_prevu_le", { withTimezone: true }),
+    rdvEstimationRealiseLe: timestamp("rdv_estimation_realise_le", { withTimezone: true }),
+    estimationProposeeCentimes: integer("estimation_proposee_centimes"),
+    estimationProposeeLe: date("estimation_proposee_le"),
+    mandatProposeLe: timestamp("mandat_propose_le", { withTimezone: true }),
+    mandatSigneLe: timestamp("mandat_signe_le", { withTimezone: true }),
+    motifPerte: text("motif_perte"),
+    datePerte: date("date_perte"),
+    // ADR-027 §4 : seules de VRAIES interactions le font avancer, jamais un jalon de pipeline ni
+    // une note interne. La règle voyage avec la colonne.
+    dernierContactLe: timestamp("dernier_contact_le", { withTimezone: true }),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    // Geste administratif (doublon, erreur de saisie), ADR-012 — jamais l'issue commerciale.
+    archiveLe: timestamp("archive_le", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "projets_vendeur_estimation_positive_check",
+      sql`${table.estimationProposeeCentimes} IS NULL OR ${table.estimationProposeeCentimes} > 0`
+    ),
+    check(
+      "projets_vendeur_origine_lead_check",
+      sql`${table.origineLead} IS NULL OR ${table.origineLead} IN ('recommandation','ancien_client','site_web','reseaux_sociaux','prospection_terrain','panneau','salon_evenement','apport_affaire','autre')`
+    ),
+    check(
+      "projets_vendeur_motif_perte_check",
+      sql`${table.motifPerte} IS NULL OR ${table.motifPerte} IN ('projet_abandonne','choix_agence_concurrente','desaccord_estimation','injoignable','bien_vendu_autrement','delai_calendrier','autre')`
+    ),
+  ]
+);
+
 // ADR-055 §B — PARTIE DE PROJET : la relation « cette personne participe à ce projet ». C'est elle,
 // et elle seule, qui fait exister le rôle : un contact est acquéreur PARCE QU'il est partie d'un
 // projet acquéreur. Rien n'est stocké sur le contact — c'est tout l'objet du modèle.
@@ -354,21 +427,26 @@ export const projetsAcquereur = pgTable(
 // refuse), et prouvé par un test. Une contrainte composite l'exigerait en base, au prix exact que
 // ADR-054 §7 refuse.
 //
-// `projet_acquereur_id` est NOT NULL aujourd'hui parce qu'il n'existe qu'un seul type de projet.
-// La cible d'ADR-055 (invariant 5) est un jeu de cibles dédiées + `CHECK` « exactement une », patron
-// `taches`/`evenements_metier` : le jour où `projets_vendeur` existera, ce lot lèvera le NOT NULL et
-// posera le CHECK. Poser dès maintenant une colonne vendeur toujours nulle et un CHECK à un seul
-// terme serait un modèle à moitié construit — jamais un couple polymorphe {type, id}, en revanche.
+// CIBLES DÉDIÉES + `CHECK` « exactement une » (ADR-055, invariant 5), patron `taches` /
+// `evenements_metier` : une partie rattache un contact à UN projet acquéreur OU à UN projet
+// vendeur, jamais aux deux, jamais à aucun. Le couple polymorphe `{projet_type, projet_id}` est
+// explicitement écarté par ADR-055 : il rend les FK impossibles et laisse la base incapable de
+// refuser un identifiant qui ne désigne rien. Les deux colonnes sont donc nullables, et c'est le
+// `CHECK` — pas leur nullabilité — qui porte l'invariant.
 //
-// `role` porte le vocabulaire fermé du côté acquéreur uniquement : les rôles vendeur seront ajoutés
-// au CHECK par le lot qui crée les projets vendeur. Il a un écrivain réel dès aujourd'hui (le flux
-// de création nomme le porteur principal `acquereur`), et il est ce qui distingue les deux
-// personnes d'un couple — sans lui, la ligne historique `acquereurs`, qui ne décrit qu'UNE des deux
-// identités, ne serait plus rattachable à la bonne.
+// `role` porte un vocabulaire fermé, étendu au côté vendeur par ce lot. Il a un écrivain réel des
+// deux côtés (le flux de création nomme le porteur principal `acquereur` ou `vendeur`), et il est
+// ce qui distingue les deux personnes d'un couple — sans lui, la ligne historique `acquereurs` ou
+// `prospects_vendeurs`, qui ne décrit qu'UNE des deux identités, ne serait plus rattachable à la
+// bonne. Aucun rôle de PROPRIÉTÉ juridique (`proprietaire`, `mandant`, `indivisaire`, `usufruitier`)
+// n'est introduit : ADR-055 §C place ce lien sur le mandat et le projet, et aucun consommateur
+// n'existe — l'inventer maintenant affirmerait un fait juridique que DOMIORA ne constate pas.
 //
-// `UNIQUE(projet, contact)` : une personne participe une fois à un projet donné. Changer son rôle
-// est une mise à jour, jamais une seconde ligne — sinon un projet finirait avec deux vérités sur la
-// même personne. Même patron que `secteurs_recherche_acquereur`.
+// `UNIQUE(projet, contact)` de chaque côté : une personne participe une fois à un projet donné.
+// Changer son rôle est une mise à jour, jamais une seconde ligne — sinon un projet finirait avec
+// deux vérités sur la même personne. Les lignes de l'autre côté ont leur colonne à NULL et ne
+// s'y heurtent pas (deux NULL sont distincts pour un UNIQUE Postgres). Même patron que
+// `secteurs_recherche_acquereur`.
 export const partiesProjet = pgTable(
   "parties_projet",
   {
@@ -380,15 +458,29 @@ export const partiesProjet = pgTable(
       .references(() => contacts.id),
     // CASCADE vers son projet, même patron que `secteurs_recherche_acquereur` : une partie n'a
     // aucun sens sans le projet auquel elle rattache quelqu'un.
-    projetAcquereurId: uuid("projet_acquereur_id")
-      .notNull()
-      .references(() => projetsAcquereur.id, { onDelete: "cascade" }),
+    projetAcquereurId: uuid("projet_acquereur_id").references(() => projetsAcquereur.id, { onDelete: "cascade" }),
+    projetVendeurId: uuid("projet_vendeur_id").references(() => projetsVendeur.id, { onDelete: "cascade" }),
     role: text("role").notNull(),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    check("parties_projet_role_check", sql`${table.role} IN ('acquereur','co_acquereur')`),
+    check(
+      "parties_projet_role_check",
+      sql`${table.role} IN ('acquereur','co_acquereur','vendeur','co_vendeur')`
+    ),
+    // EXACTEMENT une cible — jamais zéro (une partie sans projet ne rattache personne à rien),
+    // jamais deux (une même participation ne peut pas être à la fois un achat et une vente).
+    // Écrit en somme d'indicatrices, comme `taches_une_seule_cible_check`, pour rester lisible
+    // quand une troisième cible s'ajoutera.
+    check(
+      "parties_projet_une_seule_cible_check",
+      sql`(
+        (case when ${table.projetAcquereurId} is not null then 1 else 0 end) +
+        (case when ${table.projetVendeurId} is not null then 1 else 0 end)
+      ) = 1`
+    ),
     unique("parties_projet_projet_contact_unique").on(table.projetAcquereurId, table.contactId),
+    unique("parties_projet_projet_vendeur_contact_unique").on(table.projetVendeurId, table.contactId),
   ]
 );
 
@@ -1235,6 +1327,13 @@ export const prospectsVendeurs = pgTable(
     // Pas de CASCADE : aucun contact n'est jamais supprimé, NO ACTION (défaut Drizzle) suffit —
     // même choix que `evenements_metier.compromis_id`.
     contactId: uuid("contact_id").references(() => contacts.id),
+    // ADR-055 §B — PONT vers le projet canonique, volontairement NULLABLE et sans backfill, pendant
+    // vendeur de `acquereurs.projet_acquereur_id`. Cette ligne reste la source de vérité du pipeline
+    // vendeur, de la signature de mandat et des tâches ; elle pointe simplement vers le projet
+    // qu'elle décrit. NULL est l'état de TOUTES les lignes antérieures : un prospect historique peut
+    // être un lead mort, un doublon, ou l'un de plusieurs prospects décrivant le MÊME projet à deux
+    // propriétaires — en faire mécaniquement un projet distinct fabriquerait des faits.
+    projetVendeurId: uuid("projet_vendeur_id").references(() => projetsVendeur.id),
     nom: text("nom").notNull(),
     prenom: text("prenom"),
     email: text("email"),

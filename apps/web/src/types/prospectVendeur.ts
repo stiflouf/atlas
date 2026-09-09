@@ -86,6 +86,9 @@ export type NouveauProspectVendeur = Pick<
   // ADR-055 — pont OPTIONNEL vers l'identité canonique. Voir NouvelAcquereur pour le rationale
   // complet : absent = ligne non rattachée, jamais un rattachement deviné.
   contactId?: string;
+  // ADR-055 §B — pont OPTIONNEL vers le projet vendeur canonique, même discipline que `contactId` :
+  // absent = ligne non rattachée, jamais un rattachement deviné.
+  projetVendeurId?: string;
 };
 
 // Dérivé, jamais stocké (même principe que deriverStatutCommercial, ADR-014) : le jalon le plus

@@ -1,28 +1,30 @@
 # ADR-055 — Modèle canonique : Contact, projets vendeur/acquéreur, Mandat, Interaction
 
-**Statut :** Accepté — **§A et moitié acquéreur de §B implémentés** (migrations `0034`, `0035`)
+**Statut :** Accepté — **§A et §B implémentés** (migrations `0034`, `0035`, `0036`)
 **Date :** 2026-09-08
 
 > **État d'implémentation (2026-09-09).** Construit : la table `contacts` (§A) avec un pont nullable
-> `contact_id` depuis `acquereurs` et `prospects_vendeurs` (migration `0034`) ; puis
-> `projets_acquereur` et `parties_projet` (§B, côté acquéreur uniquement) avec un pont nullable
-> `projet_acquereur_id` depuis `acquereurs` (migration `0035`). Une création acquéreur écrit, dans
-> une seule transaction, le contact, le projet, la partie et la ligne historique.
+> `contact_id` depuis `acquereurs` et `prospects_vendeurs` (migration `0034`) ; `projets_acquereur`
+> et `parties_projet` avec un pont `projet_acquereur_id` (migration `0035`) ; `projets_vendeur` et
+> l'extension de `parties_projet` aux deux types de projet, avec un pont `projet_vendeur_id`
+> (migration `0036`). §B est complet : une création acquéreur ou vendeur écrit, dans une seule
+> transaction, le contact, le projet, la partie et la ligne historique.
+>
+> L'invariant 5 est tenu par la base : cibles dédiées `projet_acquereur_id` / `projet_vendeur_id`
+> + `CHECK` « exactement une », jamais un couple polymorphe. Le CAS 8 est exprimable et testé — un
+> même contact peut être vendeur d'un projet et acquéreur d'un autre, simultanément.
 >
 > NON construit, et volontairement : aucun backfill de l'historique, aucune fusion ni rapprochement
-> automatique (§H), aucun `projets_vendeur`, `projets_vendeur_biens`, `mandats` ni `interactions`
-> (§B/§C/§F/§G), aucune lecture branchée sur le modèle canonique. Le matching, les visites et les
-> offres restent sur le modèle historique, qui demeure la source de vérité des workflows.
+> automatique (§H), aucun `projets_vendeur_biens` (§C, CAS 5), aucun `mandats` (§F), aucune
+> `interactions` (§G), aucune `references_externes` (ADR-056), aucune lecture branchée sur le
+> modèle canonique. Le matching, le tunnel commercial, la signature de mandat et l'UI restent sur
+> les modèles historiques, qui demeurent les sources de vérité.
 >
-> Écarts assumés sur §B, tous additifs le jour où un consommateur existe : `parties_projet` n'a
-> qu'une cible (`projet_acquereur_id NOT NULL`) au lieu des cibles dédiées + `CHECK` de
-> l'invariant 5 — poser dès maintenant une colonne vendeur toujours nulle serait un modèle à moitié
-> construit ; son `CHECK` de rôle ne couvre que `acquereur`/`co_acquereur` ; et
-> `secteurs_recherche_acquereur` reste feuille de `acquereurs`, faute de lecteur canonique.
->
-> Écart assumé avec le modèle de données du §A : `personne_morale` et `archive_le` ne sont pas
-> encore créés — aucun écran ne les saisit, aucune règle ne les lit, et le schéma refuse ailleurs
-> les colonnes sans lecteur ni écrivain. Ajout additif le jour où un consommateur existe.
+> Écarts assumés sur §B, tous additifs le jour où un consommateur existe : `projets_vendeur` ne
+> porte ni description de bien ni attribut de mandat (frontières renvoyées au lot Property/Mandat) ;
+> `secteurs_recherche_acquereur` et `notes_prospect_vendeur` restent feuilles de leurs tables
+> historiques ; aucun rôle de propriété juridique n'est introduit dans `parties_projet`.
+
 **Décideurs :** Steven Gausset (CEO), CTO
 
 > Rubriques : Contexte · Problème · Décision · Alternatives écartées · Modèle de données /
