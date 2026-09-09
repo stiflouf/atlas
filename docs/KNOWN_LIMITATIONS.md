@@ -1050,6 +1050,17 @@ Limites qui en découlent, toutes assumées le temps de la transition :
 - **Les mandants ne sont pas modélisés** : aucun lien `mandats ↔ contacts`, la qualité juridique de
   signataire n'étant pas la participation à un projet de vente.
 - **Aucun mandat pour l'historique** : les biens antérieurs à la migration `0037` n'en ont aucun.
+- **`interactions` existe mais n'a aucun écrivain.** Aucun flux du produit n'en crée : une note
+  vendeur a déjà son foyer (`notes_prospect_vendeur`, dont le `type` pilote `dernier_contact_le`),
+  et `envois_email` n'a ni contact ni contenu — seulement un hash. Un miroir y serait fabriqué, pas
+  constaté. La table attend l'écran de saisie ou l'import, et **aucune donnée historique n'y a été
+  convertie** : le faire produirait les doublons qu'un futur connecteur Gmail ne saurait pas
+  rapprocher, faute de provenance.
+- **Une interaction ne dit pas qui l'a menée** : le produit est mono-conseiller et aucun modèle
+  d'identité interne n'existe. À traiter avec le multi-membre — jamais en réutilisant un `sub`
+  Google comme clé métier.
+- **La mémoire relationnelle n'existe pas** : elle sera un read model dérivé, jamais une table.
+  `memoire_contextuelle` n'est ni remplacée, ni touchée.
 - **`notes_prospect_vendeur` n'est pas migrée** : son vocabulaire est déjà celui des futures
   `interactions` (ADR-055 §G), qui ne sont ni du projet ni de la personne.
 - **L'isolation inter-workspaces des parties de projet est applicative**, pas structurelle :

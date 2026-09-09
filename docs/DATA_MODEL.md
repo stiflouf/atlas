@@ -679,6 +679,98 @@ information aujourd'hui.
 **Source de vérité pendant la coexistence : `biens` et `prospects_vendeurs`.** Un test structurel
 vérifie qu'aucun écran ni aucun moteur pur ne référence `mandats`.
 
+## `interactions` (ADR-055 §G)
+
+**Rôle** : un **échange humain** avec une personne. Cette table comble un **vide réel** — il
+n'existait aucune table d'interaction côté contact/acquéreur — elle ne généralise rien.
+
+**État : fondation, aucun écrivain en production.** Aucun flux existant n'en crée ; le repository
+est la surface d'écriture prête pour le lot qui saisira les interactions.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | identité interne — jamais un identifiant Gmail/Calendar (ADR-056) |
+| `contact_id` | uuid | **non** | FK → `contacts.id`, NO ACTION. **Feuille de `contacts`** |
+| `type` | text | non | `CHECK ('appel','email','sms','rendez_vous','message','note')` |
+| `sens` | text | **oui** | `CHECK` NULL ou `('entrant','sortant','interne')` |
+| `survenu_le` | timestamptz | non | **date métier du fait**, sans `DEFAULT` |
+| `contenu` | text | oui | texte libre, **jamais lu par un moteur** (ADR-008) |
+| `projet_acquereur_id` / `projet_vendeur_id` / `bien_id` | uuid | oui | contexte, **au plus un** |
+| `cree_le` | timestamptz | non | quand DOMIORA l'a enregistré |
+
+**Le contact est obligatoire** : une interaction sans personne ne décrit aucune relation. Une note
+libre sur un bien sans interlocuteur est une `notes_bien`, qui existe déjà.
+
+**`sens` est nullable, et c'est une décision** : `entrant`/`sortant`/`interne` décrivent honnêtement
+un appel, un email, un SMS, un message ou une note — mais **aucun des trois ne décrit un
+rendez-vous**, qui n'est ni reçu, ni émis, ni interne à l'agence. Un `NOT NULL` forcerait une valeur
+inventée sur un cas réel. ADR-055 §G le liste sans `?` ; l'écart est délibéré.
+
+**`survenu_le` ≠ `cree_le`**, et `survenu_le` n'a **aucun `DEFAULT`** : un import futur enregistrera
+des échanges vieux de six mois, et les dater d'aujourd'hui inventerait une chronologie.
+
+**Contexte : cibles dédiées + `CHECK` « au plus une »**, patron `taches` — jamais un couple
+polymorphe `{contexte_type, contexte_id}`, qui remplacerait l'intégrité référentielle par une
+convention. « Au plus » et non « exactement » : un appel de courtoisie sans dossier reste un fait
+relationnel valide. **Trois cibles** là où ADR-055 §G en énumère six : visite, offre et mandat se
+rejoignent depuis leur bien ou leur projet, et les poser maintenant ferait trois colonnes que
+personne n'écrirait. Les ajouter est une migration additive.
+
+**Chronologie déterministe** : `listerInteractionsDuContact()` trie par `survenu_le DESC`, puis
+`cree_le DESC`, puis `id ASC`. Deux interactions peuvent partager `survenu_le` à la seconde près
+(import, saisie en lot) ; un tri partiel rendrait le résultat dépendant du plan d'exécution — donc
+des tests instables et un affichage qui change sans raison.
+
+### Interaction ≠ Event ≠ Task ≠ Domain Record
+
+C'est la frontière que ce lot pose, et la seule chose qu'une table « générique » efface
+irréversiblement — une fois effacée, on ne sait plus lesquelles des lignes décrivaient un échange
+humain et lesquelles un fait du domaine.
+
+| Ce qu'on veut dire | Où ça vit | Exemple |
+|---|---|---|
+| Ce qui s'est passé dans la **relation** | `interactions` | « appelé le vendeur » |
+| Un fait **déterministe du domaine** | `evenements_metier` | « mandat signé » |
+| Ce qui **doit être fait** | `taches` | « rappeler demain » |
+| Un **enregistrement métier structuré** | `comptes_rendus_visite` | intérêt, réserves, suite |
+| Un **audit technique** d'envoi | `envois_email` | hash, état `incertain` (ADR-031-bis) |
+
+**Aucune table n'est fusionnée** (ADR-055 §G, point 1) — et ce n'est pas de la prudence, ce sont
+des invariants qu'une table polymorphe détruirait :
+
+- `comptes_rendus_visite.interet` est un vocabulaire **contrôlé lu par des moteurs**
+  (`opportunites/regles.ts`), pas un « payload » ;
+- `notes_prospect_vendeur.type` **conditionne l'avancement de `dernier_contact_le`** (ADR-027 §4) ;
+- `envois_email` est un audit technique avec clé d'idempotence et état `incertain`, sans contact ni
+  contenu — seulement un hash. « Jamais un fait CRM ».
+
+**Aucun miroir depuis un flux existant, et aucun backfill.** Une note vendeur a déjà un foyer ; la
+recopier fabriquerait un doublon. Convertir les notes, emails et comptes rendus historiques
+produirait exactement les doublons qu'un futur connecteur Gmail/Calendar ne saurait pas rapprocher,
+faute de provenance. L'import viendra avec ADR-056.
+
+### Mémoire relationnelle : un read model, jamais une table (non implémentée)
+
+```
+interactions  +  domain records  +  external evidence
+                        │
+                        ▼
+        Relationship Memory  (fonction pure, dérivée à la lecture)
+                        │
+                        ▼
+                DOMIORA Intelligence
+```
+
+La vue unifiée d'un contact reste **dérivée à la lecture**, sur le patron déjà en production et
+testé (`memoireAcquereur.ts`, `deriverHistoriqueBien`, `deriverJournalProspectVendeur`). Elle
+s'étendra aux nouvelles sources ; elle ne devient **jamais** une table matérialisée.
+`memoire_contextuelle` n'est ni remplacée, ni touchée par ce lot.
+
+**Dette assumée — aucun auteur.** `interactions` ne dit pas *qui* a mené l'échange : le produit est
+mono-conseiller et aucun modèle d'identité interne n'existe. Un `auteur_user_id` posé maintenant
+n'aurait rien à référencer, et réutiliser un `sub` Google comme clé métier serait une facilité que
+la première invitation d'un second membre ferait payer.
+
 ## `connexions_google`
 
 **Rôle** : fait serveur unique — le conseiller est-il connecté à Google Calendar, et avec quel
@@ -1777,6 +1869,8 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0036_smiling_iron_fist.sql` | ADR-055 §B : table `projets_vendeur` (racine, jalons ADR-027, `CHECK` origine/motif/estimation) ; `parties_projet` étendue aux deux côtés (`projet_vendeur_id`, `DROP NOT NULL` sur `projet_acquereur_id`, `CHECK` « exactement une cible », `CHECK` rôle élargi, second `UNIQUE`) ; colonne nullable `projet_vendeur_id` sur `prospects_vendeurs`. Ordre volontaire pour qu'aucune ligne existante ne devienne invalide. Strictement additive, **aucun backfill** |
 
 | `0037_safe_legion.sql` | ADR-055 §F : table `mandats` (feuille de `biens`, `projet_vendeur_id` nullable, auto-référence `remplace_mandat_id`, `CHECK` auto-remplacement / période / résiliation). Aucun statut stocké, aucun identifiant fournisseur, aucun pont sur `biens`. Strictement additive, **aucun backfill** |
+
+| `0038_secret_rawhide_kid.sql` | ADR-055 §G : table `interactions` (feuille de `contacts`, `CHECK` type / sens / « au plus un contexte », `survenu_le` sans `DEFAULT`). Aucune table existante touchée, aucune fusion, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

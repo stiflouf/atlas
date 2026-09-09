@@ -267,6 +267,13 @@
       "when": 1788954258200,
       "tag": "0037_safe_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788959611401,
+      "tag": "0038_secret_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

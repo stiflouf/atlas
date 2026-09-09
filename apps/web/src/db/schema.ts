@@ -1532,6 +1532,89 @@ export const remuneration = pgTable(
 // recréer une relance déjà ouverte pour la même cause) — non implémenté ici puisqu'aucune règle
 // automatique n'existe encore : `origineCode` est le champ prévu pour cela le moment venu, pas un
 // mécanisme construit par avance.
+// ADR-055 §G — INTERACTION : un échange humain avec une personne. C'est le VIDE réel du schéma —
+// il n'existe aujourd'hui AUCUNE table d'interaction côté contact/acquéreur — et non une
+// généralisation de ce qui existe déjà.
+//
+// CE QU'ELLE N'EST PAS, et pourquoi aucune table n'est fusionnée ici (ADR-055 §G, point 1) :
+//   - `comptes_rendus_visite` : `interet` est un vocabulaire CONTRÔLÉ lu par des moteurs
+//     (`opportunites/regles.ts`) — un enregistrement métier structuré, pas un « payload » ;
+//   - `notes_prospect_vendeur` : son `type` conditionne l'avancement de `dernier_contact_le`
+//     (ADR-027 §4). Une note vendeur A déjà un foyer ; la recopier ici créerait le doublon que le
+//     futur connecteur Gmail rendrait indémêlable ;
+//   - `envois_email` : audit TECHNIQUE (ADR-031-bis), avec clé d'idempotence, état `incertain` et
+//     un simple hash du contenu — « jamais un fait CRM », et sans contact à référencer ;
+//   - `evenements_metier` : un fait DÉTERMINISTE du domaine (« mandat signé »), pas un échange ;
+//   - `taches` : une intention FUTURE, pas quelque chose qui a eu lieu.
+// La vue unifiée d'un contact restera DÉRIVÉE À LA LECTURE, sur le patron déjà en production
+// (`memoireAcquereur.ts`) — jamais une table matérialisée.
+//
+// FEUILLE de `contacts` : `contact_id` NOT NULL, donc aucun `workspace_id` dupliqué (ADR-054 §7).
+// Le contact est OBLIGATOIRE et ce n'est pas une commodité : une interaction sans personne ne
+// décrit aucune relation. Une note libre sur un bien sans interlocuteur est une `notes_bien`, qui
+// existe déjà.
+//
+// CONTEXTE : cibles dédiées + `CHECK` « AU PLUS une », patron `taches`/`evenements_metier` — jamais
+// un couple polymorphe {contexte_type, contexte_id}, qui remplacerait l'intégrité référentielle par
+// une convention. « Au plus » et non « exactement » : un appel de courtoisie sans dossier reste un
+// fait relationnel valide.
+//
+// TROIS cibles, là où ADR-055 §G en énumère six (visite, offre, mandat en plus). C'est un écart
+// assumé : ce sont les trois contextes dans lesquels un échange se situe réellement aujourd'hui, et
+// une visite, une offre ou un mandat se rejoignent de toute façon depuis leur bien ou leur projet.
+// Les ajouter est une migration additive (colonne + `CHECK` redéfini) le jour où un appelant les
+// distingue ; les poser maintenant ferait trois colonnes que personne n'écrirait.
+//
+// AUCUN IDENTIFIANT FOURNISSEUR (ADR-056) : ni `gmail_message_id`, ni `calendar_event_id`, ni
+// `playiad_id`. Aucun payload brut non plus : le Core stocke du texte, jamais du JSON Google.
+export const interactions = pgTable(
+  "interactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Pas de CASCADE : aucun contact n'est jamais supprimé (ADR-012), et effacer silencieusement
+    // l'historique relationnel d'une personne serait une perte de faits.
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id),
+    type: text("type").notNull(),
+    // NULLABLE, et c'est une décision : `entrant`/`sortant`/`interne` décrivent honnêtement un
+    // appel, un email, un SMS, un message ou une note — mais AUCUN des trois ne décrit un
+    // rendez-vous, qui n'est ni reçu, ni émis, ni interne à l'agence. Un NOT NULL forcerait donc
+    // une valeur inventée dans un cas réel. ADR-055 §G le liste sans `?` ; l'écart est délibéré.
+    sens: text("sens"),
+    // DATE MÉTIER du fait — quand l'échange a EU LIEU. Jamais la date d'insertion : un import
+    // futur enregistrera des échanges vieux de six mois, et les dater d'aujourd'hui inventerait
+    // une chronologie. Distincte de `cree_le`, qui dit quand DOMIORA l'a su.
+    survenuLe: timestamp("survenu_le", { withTimezone: true }).notNull(),
+    // Texte libre, JAMAIS lu par un moteur de règles (ADR-008). Nullable : un appel dont on ne
+    // retient que la date et le sens reste un fait relationnel complet.
+    contenu: text("contenu"),
+    // CONTEXTE optionnel. Pas de CASCADE vers les projets : une interaction reste un fait même si
+    // le dossier qui l'entourait est réorganisé. `biens` n'est jamais supprimé (ADR-012).
+    projetAcquereurId: uuid("projet_acquereur_id").references(() => projetsAcquereur.id),
+    projetVendeurId: uuid("projet_vendeur_id").references(() => projetsVendeur.id),
+    bienId: uuid("bien_id").references(() => biens.id),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Vocabulaire fermé d'ADR-055 §G. N'y figurent NI `visite`, NI `mandat_signe`, NI
+    // `offre_acceptee` : ces concepts sont déjà des objets métier, et les renommer en interactions
+    // en ferait deux vérités. Une visite POURRA produire une interaction ; elle n'en devient pas
+    // une par changement de nom.
+    check("interactions_type_check", sql`${table.type} IN ('appel','email','sms','rendez_vous','message','note')`),
+    check("interactions_sens_check", sql`${table.sens} IS NULL OR ${table.sens} IN ('entrant','sortant','interne')`),
+    // AU PLUS une cible — somme d'indicatrices, comme `taches_une_seule_cible_check`.
+    check(
+      "interactions_un_seul_contexte_check",
+      sql`(
+        (case when ${table.projetAcquereurId} is not null then 1 else 0 end) +
+        (case when ${table.projetVendeurId} is not null then 1 else 0 end) +
+        (case when ${table.bienId} is not null then 1 else 0 end)
+      ) <= 1`
+    ),
+  ]
+);
+
 export const taches = pgTable(
   "taches",
   {

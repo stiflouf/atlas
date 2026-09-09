@@ -1,6 +1,6 @@
 # ADR-055 — Modèle canonique : Contact, projets vendeur/acquéreur, Mandat, Interaction
 
-**Statut :** Accepté — **§A, §B et §F implémentés** (migrations `0034` à `0037`)
+**Statut :** Accepté — **§A, §B, §F et §G implémentés** (migrations `0034` à `0038`)
 **Date :** 2026-09-08
 
 > **État d'implémentation (2026-09-09).** Construit : la table `contacts` (§A) avec un pont nullable
@@ -10,17 +10,20 @@
 > (migration `0036`). §B est complet : une création acquéreur ou vendeur écrit, dans une seule
 > transaction, le contact, le projet, la partie et la ligne historique. Puis `mandats` (§F,
 > migration `0037`), feuille de `biens`, alimentée par la signature réelle dans sa transaction
-> existante — statut dérivé, renouvellement par nouvelle ligne, jamais par mutation.
+> existante — statut dérivé, renouvellement par nouvelle ligne, jamais par mutation. Enfin
+> `interactions` (§G, migration `0038`), feuille de `contacts`, avec contexte optionnel à cible
+> unique : elle comble le vide côté contact/acquéreur sans fusionner aucune table existante.
 >
 > L'invariant 5 est tenu par la base : cibles dédiées `projet_acquereur_id` / `projet_vendeur_id`
 > + `CHECK` « exactement une », jamais un couple polymorphe. Le CAS 8 est exprimable et testé — un
 > même contact peut être vendeur d'un projet et acquéreur d'un autre, simultanément.
 >
 > NON construit, et volontairement : aucun backfill de l'historique, aucune fusion ni rapprochement
-> automatique (§H), aucun `projets_vendeur_biens` (§C, CAS 5), aucune `interactions` (§G), aucune
-> `references_externes` (ADR-056), aucun mandant modélisé (§F laissait le choix ouvert : ni
-> `parties_mandat`, ni réutilisation de `parties_projet` — la qualité juridique de mandant n'est pas
-> la participation à un projet), aucune lecture branchée sur le modèle canonique. Le matching, le tunnel commercial, la signature de mandat et l'UI restent sur
+> automatique (§H), aucun `projets_vendeur_biens` (§C, CAS 5), aucune `references_externes`
+> (ADR-056), aucun mandant modélisé (§F laissait le choix ouvert : ni `parties_mandat`, ni
+> réutilisation de `parties_projet` — la qualité juridique de mandant n'est pas la participation à
+> un projet), aucun read model de mémoire relationnelle (§G point 3), aucune lecture branchée sur le
+> modèle canonique. Le matching, le tunnel commercial, la signature de mandat et l'UI restent sur
 > les modèles historiques, qui demeurent les sources de vérité.
 >
 > Écarts assumés sur §B, tous additifs le jour où un consommateur existe : `projets_vendeur` ne
@@ -29,7 +32,11 @@
 > historiques ; aucun rôle de propriété juridique n'est introduit dans `parties_projet`. Sur §F :
 > `mandats` ne porte ni `type`, ni `numero`, ni `motif_resiliation` — aucun écran ne les saisit et
 > aucune règle ne les lit ; et la date de signature reste confondue avec la prise d'effet, faute de
-> saisie distincte.
+> saisie distincte. Sur §G : `sens` est NULLABLE (aucun de ses trois termes ne décrit un
+> rendez-vous), le contexte n'a que trois cibles au lieu de six (visite, offre et mandat se
+> rejoignent depuis leur bien ou leur projet), il n'y a pas de colonne `sujet`, aucun auteur n'est
+> modélisé, et aucun flux existant n'écrit d'interaction — une note vendeur a déjà son foyer, et
+> `envois_email` n'a ni contact ni contenu à en tirer.
 
 **Décideurs :** Steven Gausset (CEO), CTO
 
