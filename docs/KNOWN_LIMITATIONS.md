@@ -1019,6 +1019,31 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   primitives `iron-session`/`optionsSessionAtlas()`, jamais un contournement d'authentification.
   Commandes : `pnpm test:e2e` / `pnpm test:e2e:ui`.
 
+## Modèle canonique en coexistence (ADR-055)
+
+`contacts`, `projets_acquereur` et `parties_projet` existent en base et sont alimentés par les
+créations réelles. **Rien ne les lit.** Le matching, les visites, les offres, les tâches et l'UI
+consomment toujours `acquereurs` et `prospects_vendeurs`, qui restent la source de vérité.
+
+Limites qui en découlent, toutes assumées le temps de la transition :
+
+- **Les lignes antérieures ne sont rattachées à rien.** `contact_id` et `projet_acquereur_id` sont
+  `NULL` sur tout l'historique : aucun backfill n'a été fait, parce qu'aucune règle automatique ne
+  peut distinguer deux saisies de la même personne de deux personnes mal saisies (ADR-055 §H).
+- **Une modification diverge.** `modifierAcquereur()` n'écrit que la ligne historique ; la copie
+  canonique garde les valeurs de la création. Sans lecteur canonique, cette divergence est
+  invisible — elle devra être résolue par le lot qui bascule les lectures, jamais par une
+  synchronisation bidirectionnelle.
+- **`parties_projet` ne connaît que le côté acquéreur.** Une seule cible (`projet_acquereur_id`
+  `NOT NULL`) et un `CHECK` de rôle limité à `acquereur`/`co_acquereur`, en attendant les projets
+  vendeur.
+- **L'isolation inter-workspaces des parties de projet est applicative**, pas structurelle :
+  `parties_projet` est une feuille sans `workspace_id` (ADR-054 §7), donc c'est
+  `ajouterPartieProjet()` qui refuse une relation traversant deux périmètres. Une écriture SQL
+  directe la laisserait passer.
+- **Un projet peut n'avoir aucune partie.** Le schéma ne l'interdit pas (une partie référence le
+  projet, donc le projet est écrit en premier) ; l'invariant est tenu par le flux de création.
+
 ## Architecture cible non construite
 
 Rappel (détaillé dans `docs/ARCHITECTURE.md`) : ADR-003/004/005 décrivent une cible (API Python/

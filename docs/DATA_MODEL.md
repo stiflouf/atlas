@@ -379,6 +379,101 @@ la durée de la transition — la bascule des lectures se fera quand les projets
 et `Interaction` comme entités propres. Voir ADR-055. **Le matching restera branché sur le projet
 acquéreur, jamais sur le Contact** : un contact n'est pas une recherche immobilière.
 
+## `projets_acquereur` (ADR-055 §B)
+
+**Rôle** : **projet acquéreur canonique** — une intention immobilière située dans le temps. C'est la
+moitié « projet » de `acquereurs`, extraite pour qu'une même personne puisse porter plusieurs
+recherches successives sans dupliquer son identité, et qu'un projet puisse être porté par deux
+personnes sans dupliquer le projet.
+
+**État : fondation, pas encore la source de vérité.** `acquereurs` reste intact et pilote le
+matching, les visites, les offres, les tâches et l'UI.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | identité canonique interne — jamais un identifiant fournisseur (ADR-056) |
+| `workspace_id` | text | non | FK → `workspaces.id`, sans `DEFAULT` (ADR-054). **Racine**, pas feuille de `contacts` |
+| `budget_min` / `budget_max` | integer | non | |
+| `criteres` | text[] | non | `DEFAULT '{}'` |
+| `stade_projet` | text | non | `DEFAULT 'decouverte'`, `CHECK` — même vocabulaire que `acquereurs` |
+| `pieces_min`, `surface_min`, `accessibilite_requise`, `necessite_parking`, `necessite_exterieur` | | oui | absent = non documenté, jamais « non » (ADR-009) |
+| `cree_le` | timestamptz | non | `defaultNow()` |
+| `archive_le` | timestamptz | oui | ADR-012 — tient lieu de cycle de vie |
+
+**Aucune identité humaine** (`nom`, `prenom`, `email`, `telephone`, `contact_id`) : les personnes
+sont des Contacts, atteints par `parties_projet`. Un projet porté par un couple n'a pas « un » nom.
+
+**Colonnes retenues = exactement ce que lit `evaluerCompatibilite(bien, acquereur, secteurs)`**,
+plus `stade_projet`. Ce n'est pas une recopie de `acquereurs` : c'est le sous-ensemble dont un
+consommateur futur est déjà identifié.
+
+**Cycle de vie** : `archive_le` (ADR-012) + `stade_projet`. Aucune machine à états n'est introduite —
+le modèle actuel n'en a aucune, et en inventer une créerait un vocabulaire que personne n'écrit.
+
+## `parties_projet` (ADR-055 §B)
+
+**Rôle** : la relation « cette personne participe à ce projet ». C'est elle, et elle seule, qui fait
+exister le rôle : un contact est acquéreur **parce qu'il est partie d'un projet acquéreur**.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `contact_id` | uuid | non | FK → `contacts.id`, NO ACTION (un contact n'est jamais supprimé) |
+| `projet_acquereur_id` | uuid | non | FK → `projets_acquereur.id`, CASCADE |
+| `role` | text | non | `CHECK ('acquereur','co_acquereur')` — vocabulaire du seul côté implémenté |
+| `cree_le` | timestamptz | non | |
+
+`UNIQUE(projet_acquereur_id, contact_id)` : une personne participe **une fois** à un projet donné ;
+changer son rôle est une mise à jour, jamais une seconde ligne. **Aucune unicité sur une colonne
+seule** — ce serait faire retomber le modèle en 1:N.
+
+**Feuille (ADR-054 §7)** : pas de `workspace_id` dupliqué. La base seule ne peut donc pas refuser
+une participation traversant deux périmètres : l'invariant est tenu par `ajouterPartieProjet()`, qui
+compare les deux workspaces et **échoue**, et il est prouvé par un test.
+
+`projet_acquereur_id` est `NOT NULL` tant qu'un seul type de projet existe. La cible d'ADR-055
+(invariant 5) est un jeu de cibles dédiées + `CHECK` « exactement une », patron `taches` : le lot qui
+créera `projets_vendeur` lèvera ce `NOT NULL` et posera le `CHECK`. Jamais un couple polymorphe
+`{type, id}`.
+
+## Pont `projet_acquereur_id` (ADR-055 §B)
+
+`acquereurs.projet_acquereur_id` : FK **nullable** vers `projets_acquereur` (NO ACTION), sens ancien
+→ nouveau, même direction et même prudence que `contact_id`.
+
+- `creerAcquereurAction` crée, **dans une seule transaction** : le Contact, le projet canonique, la
+  partie (`role = 'acquereur'`, le porteur que la ligne historique décrit), la ligne `acquereurs`
+  avec ses deux ponts, puis la demande de resynchronisation ADR-036. Tout existe, ou rien.
+- **Toutes les lignes antérieures gardent `projet_acquereur_id = NULL`** : aucun backfill. Un
+  acquéreur historique peut être une recherche close, abandonnée ou saisie deux fois ; en faire
+  mécaniquement un projet actif fabriquerait des faits que personne n'a constatés.
+- `modifierAcquereur()` **ne propage rien** vers le modèle canonique. Décision assumée : ce lot
+  alimente les nouvelles créations, sans miroir en écriture. Une modification fera donc diverger la
+  copie canonique — acceptable tant que **rien ne la lit**, et à traiter par le lot qui bascule les
+  lectures, pas par une synchronisation bidirectionnelle qui fragiliserait le système historique.
+
+**Source de vérité pendant la coexistence : `acquereurs`.** Matching (`lib/compatibilite/`), visites,
+offres, tâches et UI le lisent, inchangés. Un test structurel vérifie qu'aucun fichier de
+`lib/compatibilite/` ni de `src/app` / `src/components` ne référence le modèle canonique.
+
+**Matching** — CURRENT : `acquereurs` → `evaluerCompatibilite`. FUTURE : `projets_acquereur` →
+`evaluerCompatibilite`. La bascule est un lot à part entière, précédé d'un test de caractérisation
+(ADR-055, stratégie de migration étape 3), jamais un glissement silencieux.
+
+**Dettes ouvertes, volontairement non traitées par ce lot :**
+
+- `secteurs_recherche_acquereur` reste feuille de `acquereurs`. Un secteur de recherche appartient
+  conceptuellement au projet, mais lui ajouter un second parent nullable créerait une ambiguïté sur
+  le parent faisant foi, alors que rien ne lit encore le projet canonique. À migrer avec les
+  lectures.
+- `reperes_relationnels_acquereur` reste intact, et son appartenance est **ambiguë par nature** :
+  `preference_contact` et `preference_relationnelle` décrivent la personne (→ `contacts`),
+  `centre_interet` peut relever de l'une ou de l'autre, `autre` n'est pas classable. Trancher sans
+  analyse déplacerait des faits vers la mauvaise entité ; l'existant est laissé en place.
+- `notes` et `date_premiere_contact` de `acquereurs` ne sont **pas** repris dans le projet canonique :
+  ils décrivent la relation avec la personne autant que le projet, et les trancher sans consommateur
+  inventerait une frontière.
+
 ## `connexions_google`
 
 **Rôle** : fait serveur unique — le conseiller est-il connecté à Google Calendar, et avec quel
@@ -1472,6 +1567,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0032_polite_wolverine.sql` | ADR-054 : tables `workspaces` et `workspace_membres` ; INSERT du workspace historique `'default'` (**complété à la main** — indispensable avant les FK, voir l'en-tête du fichier) ; colonne `workspace_id` (`NOT NULL DEFAULT 'default'`, FK NO ACTION) sur les 9 tables racines. Additive : aucune table supprimée, aucune lecture applicative modifiée |
 | `0033_safe_invisible_woman.sql` | ADR-054 : `DROP DEFAULT` sur les 9 colonnes `workspace_id`, une fois tous les chemins d'écriture rendus explicites. `NOT NULL` et les FK restent en place ; aucune donnée historique touchée. Invariant de sécurité : une écriture sans périmètre échoue désormais au lieu de retomber sur le workspace historique |
 | `0034_dark_maverick.sql` | ADR-055 : table `contacts` (identité canonique, racine avec `workspace_id`) ; colonne nullable `contact_id` sur `acquereurs` et `prospects_vendeurs` (FK NO ACTION). Strictement additive : aucune table supprimée, aucune colonne retirée, **aucun backfill** |
+| `0035_mighty_human_fly.sql` | ADR-055 §B : tables `projets_acquereur` (racine, `workspace_id`, `CHECK` stade) et `parties_projet` (feuille, `UNIQUE(projet, contact)`, `CHECK` rôle) ; colonne nullable `projet_acquereur_id` sur `acquereurs` (FK NO ACTION). Strictement additive : aucune table supprimée, aucune colonne retirée, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

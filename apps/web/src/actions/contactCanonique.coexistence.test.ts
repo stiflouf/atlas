@@ -24,6 +24,8 @@ const {
   compatibilitesARessynchroniser,
   compatibilitesBienAcquereurEtat,
   evenementsMetier,
+  partiesProjet: partiesProjetTable,
+  projetsAcquereur: projetsAcquereurTable,
 } = await import("@/db/schema");
 const { creerAcquereurAction } = await import("./creerAcquereur");
 const { creerProspectVendeurAction } = await import("./prospectVendeur");
@@ -42,7 +44,28 @@ afterAll(async () => {
   }
   await getDb().delete(acquereursTable).where(like(acquereursTable.nom, `%${MARQUEUR}%`));
   await getDb().delete(prospectsVendeursTable).where(like(prospectsVendeursTable.nom, `%${MARQUEUR}%`));
-  await getDb().delete(contactsTable).where(like(contactsTable.nom, `%${MARQUEUR}%`));
+
+  // ADR-055 §B — une création acquéreur écrit aussi un projet canonique et sa partie. Le nettoyage
+  // part des CONTACTS et non des acquéreurs : un `acquereurs` déjà supprimé (ou une exécution
+  // précédente interrompue) laisserait sinon des parties orphelines qui bloquent la suppression des
+  // contacts par la FK parties_projet -> contacts.
+  const contactsMarques = await getDb()
+    .select({ id: contactsTable.id })
+    .from(contactsTable)
+    .where(like(contactsTable.nom, `%${MARQUEUR}%`));
+  const idsContacts = contactsMarques.map((contact) => contact.id);
+  if (idsContacts.length > 0) {
+    const parties = await getDb()
+      .select({ projetAcquereurId: partiesProjetTable.projetAcquereurId })
+      .from(partiesProjetTable)
+      .where(inArray(partiesProjetTable.contactId, idsContacts));
+    await getDb().delete(partiesProjetTable).where(inArray(partiesProjetTable.contactId, idsContacts));
+    const idsProjets = [...new Set(parties.map((partie) => partie.projetAcquereurId))];
+    if (idsProjets.length > 0) {
+      await getDb().delete(projetsAcquereurTable).where(inArray(projetsAcquereurTable.id, idsProjets));
+    }
+    await getDb().delete(contactsTable).where(inArray(contactsTable.id, idsContacts));
+  }
 });
 
 function formulaireAcquereur(nom: string, email: string): FormData {

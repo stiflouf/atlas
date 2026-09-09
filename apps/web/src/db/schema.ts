@@ -280,6 +280,118 @@ export const contacts = pgTable("contacts", {
   creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ADR-055 §B — PROJET ACQUÉREUR canonique : une intention immobilière située dans le temps, pas
+// une personne. C'est la moitié « projet » de `acquereurs`, extraite pour que la même personne
+// puisse porter plusieurs recherches successives (CAS 4) sans dupliquer son identité, et pour qu'un
+// projet puisse être porté par deux personnes (CAS 3) sans dupliquer le projet.
+//
+// AUCUNE IDENTITÉ HUMAINE ICI — ni `nom`, ni `prenom`, ni `email`, ni `telephone`. L'identité est
+// celle des Contacts qui participent au projet, atteints par `parties_projet`. La reproduire ici
+// recréerait exactement la confusion personne/projet que ce modèle défait, et rendrait indécidable
+// « à qui » appartient un projet à deux acquéreurs. Invariant verrouillé par
+// projetAcquereurCanonique.structurel.test.ts.
+//
+// Les colonnes retenues sont EXACTEMENT celles que `evaluerCompatibilite(bien, acquereur,
+// secteurs)` lit aujourd'hui, plus `stade_projet`. Ce n'est pas une recopie de `acquereurs` : c'est
+// le sous-ensemble dont un consommateur réel est déjà identifié — le moteur de compatibilité, qui
+// basculera sur ce modèle dans un lot ultérieur. Les champs laissés de côté le sont pour une
+// raison : `notes` et `date_premiere_contact` décrivent la RELATION avec la personne autant que le
+// projet, et les trancher sans consommateur inventerait une frontière (dette documentée dans
+// DATA_MODEL.md). `modifie_le` est absent tant qu'aucun chemin de modification n'écrit ici.
+//
+// `stade_projet` reste STOCKÉ, avec le même vocabulaire fermé que `acquereurs` : c'est le modèle
+// existant, et ADR-055 §B place explicitement le parcours commercial sur le projet, jamais sur le
+// contact. Ne pas le dériver ici serait cohérent avec ADR-014 le jour où des jalons timestamp
+// existeront ; ils n'existent pas côté acquéreur, et en inventer serait fabriquer des faits.
+//
+// `archive_le` suit ADR-012 (jamais de DELETE) et tient lieu de cycle de vie : un projet clos,
+// abandonné ou suspendu est archivé. Aucune machine à états n'est introduite — le modèle actuel
+// n'en a aucune, et en inventer une créerait un vocabulaire que personne n'écrit ni ne lit.
+export const projetsAcquereur = pgTable(
+  "projets_acquereur",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). RACINE, et non feuille de `contacts` : un projet porté
+    // par deux personnes n'appartient à aucune des deux en particulier, son périmètre ne peut donc
+    // pas être dérivé d'un contact. Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    budgetMin: integer("budget_min").notNull(),
+    budgetMax: integer("budget_max").notNull(),
+    criteres: text("criteres").array().notNull().default([]),
+    stadeProjet: text("stade_projet").notNull().default("decouverte"),
+    piecesMin: integer("pieces_min"),
+    surfaceMin: real("surface_min"),
+    accessibiliteRequise: boolean("accessibilite_requise"),
+    necessiteParking: boolean("necessite_parking"),
+    necessiteExterieur: boolean("necessite_exterieur"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    // Même principe que acquereurs.archiveLe (ADR-012).
+    archiveLe: timestamp("archive_le", { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      "projets_acquereur_stade_projet_check",
+      sql`${table.stadeProjet} IN ('decouverte','recherche_active','offre','compromis','acte')`
+    ),
+  ]
+);
+
+// ADR-055 §B — PARTIE DE PROJET : la relation « cette personne participe à ce projet ». C'est elle,
+// et elle seule, qui fait exister le rôle : un contact est acquéreur PARCE QU'il est partie d'un
+// projet acquéreur. Rien n'est stocké sur le contact — c'est tout l'objet du modèle.
+//
+// Vraiment N:N : un contact peut être partie de plusieurs projets (recherches successives, ou une
+// recherche personnelle et une recherche familiale menées en parallèle), et un projet peut avoir
+// plusieurs contacts (couple, coacquéreurs, indivision). `acquereurs` ne sait représenter ni l'un
+// ni l'autre ; c'est précisément la dette que ce modèle solde.
+//
+// FEUILLE (ADR-054 §7) : aucun `workspace_id`. Son périmètre est celui de ses deux parents, et le
+// dupliquer créerait une troisième vérité pouvant diverger. La contrepartie est que la base seule
+// ne peut pas empêcher de relier un contact du workspace A à un projet du workspace B : cet
+// invariant est tenu par le chemin applicatif (`ajouterPartieProjet` compare les deux périmètres et
+// refuse), et prouvé par un test. Une contrainte composite l'exigerait en base, au prix exact que
+// ADR-054 §7 refuse.
+//
+// `projet_acquereur_id` est NOT NULL aujourd'hui parce qu'il n'existe qu'un seul type de projet.
+// La cible d'ADR-055 (invariant 5) est un jeu de cibles dédiées + `CHECK` « exactement une », patron
+// `taches`/`evenements_metier` : le jour où `projets_vendeur` existera, ce lot lèvera le NOT NULL et
+// posera le CHECK. Poser dès maintenant une colonne vendeur toujours nulle et un CHECK à un seul
+// terme serait un modèle à moitié construit — jamais un couple polymorphe {type, id}, en revanche.
+//
+// `role` porte le vocabulaire fermé du côté acquéreur uniquement : les rôles vendeur seront ajoutés
+// au CHECK par le lot qui crée les projets vendeur. Il a un écrivain réel dès aujourd'hui (le flux
+// de création nomme le porteur principal `acquereur`), et il est ce qui distingue les deux
+// personnes d'un couple — sans lui, la ligne historique `acquereurs`, qui ne décrit qu'UNE des deux
+// identités, ne serait plus rattachable à la bonne.
+//
+// `UNIQUE(projet, contact)` : une personne participe une fois à un projet donné. Changer son rôle
+// est une mise à jour, jamais une seconde ligne — sinon un projet finirait avec deux vérités sur la
+// même personne. Même patron que `secteurs_recherche_acquereur`.
+export const partiesProjet = pgTable(
+  "parties_projet",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Pas de CASCADE : aucun contact n'est jamais supprimé (ADR-012 — archivage), et un DELETE de
+    // contact qui effacerait silencieusement sa participation à un projet serait une perte de fait.
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id),
+    // CASCADE vers son projet, même patron que `secteurs_recherche_acquereur` : une partie n'a
+    // aucun sens sans le projet auquel elle rattache quelqu'un.
+    projetAcquereurId: uuid("projet_acquereur_id")
+      .notNull()
+      .references(() => projetsAcquereur.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("parties_projet_role_check", sql`${table.role} IN ('acquereur','co_acquereur')`),
+    unique("parties_projet_projet_contact_unique").on(table.projetAcquereurId, table.contactId),
+  ]
+);
+
 // Premier acquéreur réel persisté (hors mocks data/clients.ts). Mêmes principes que `biens` :
 // colonnes nullable sans défaut pour les champs structurés optionnels.
 export const acquereurs = pgTable(
@@ -301,6 +413,14 @@ export const acquereurs = pgTable(
     // Pas de CASCADE : aucun contact n'est jamais supprimé, NO ACTION (défaut Drizzle) suffit —
     // même choix que `evenements_metier.compromis_id`.
     contactId: uuid("contact_id").references(() => contacts.id),
+    // ADR-055 §B — PONT vers le projet canonique, volontairement NULLABLE et sans backfill, même
+    // direction et même prudence que `contact_id` ci-dessus. Cette ligne reste la source de vérité
+    // du matching, des visites et des offres ; elle pointe simplement vers le projet qu'elle décrit.
+    // NULL est l'état de TOUTES les lignes antérieures : un acquéreur historique peut être une
+    // recherche close, abandonnée ou saisie deux fois, et en faire mécaniquement un projet actif
+    // fabriquerait des faits que personne n'a constatés. Le rattachement de l'historique est un
+    // geste explicite, réservé à son propre lot.
+    projetAcquereurId: uuid("projet_acquereur_id").references(() => projetsAcquereur.id),
     prenom: text("prenom").notNull(),
     nom: text("nom").notNull(),
     email: text("email").notNull(),

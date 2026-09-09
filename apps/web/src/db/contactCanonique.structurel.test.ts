@@ -113,12 +113,13 @@ describe("ADR-055 — le Contact est une identité, jamais un rôle", () => {
     }
   });
 
-  it("aucune table de projet, de mandat, d'interaction ou de provenance n'est créée par ce lot", () => {
-    // Frontière du lot : ADR-055/056 les décident, aucun ne les construit ici.
+  it("aucune table de mandat, d'interaction ou de provenance n'existe encore", () => {
+    // Frontière du modèle canonique : ADR-055/056 les décident, aucun lot ne les a construites.
+    // `projets_acquereur` et `parties_projet` en sont sorties quand le lot §B les a créées — cette
+    // liste dit ce qui n'existe PAS aujourd'hui, jamais ce qu'un lot passé s'était interdit.
     const horsPerimetre = [
       "projets_vendeur",
-      "projets_acquereur",
-      "parties_projet",
+      "projets_vendeur_biens",
       "mandats",
       "interactions",
       "references_externes",

@@ -31,6 +31,9 @@ const TABLES_RACINES = [
   // ADR-055 — l'identité canonique naît directement racine (ADR-054 §7), comme toute table créée
   // après cette ADR.
   "contacts",
+  // ADR-055 §B — RACINE et non feuille de `contacts` : un projet porté par un couple n'appartient
+  // à aucun des deux en particulier, son périmètre ne peut donc pas être dérivé d'un contact.
+  "projets_acquereur",
   "biens",
   "acquereurs",
   "prospects_vendeurs",
@@ -47,6 +50,9 @@ const TABLES_RACINES = [
 // de son parent, exactement ce que le schéma refuse partout ailleurs (photo principale dérivée,
 // statut de tâche dérivé, statut commercial dérivé).
 const TABLES_FEUILLES = [
+  // ADR-055 §B — relation contact <-> projet. Feuille de ses DEUX parents ; ne duplique pas
+  // `workspace_id`, l'invariant inter-workspaces est tenu par `ajouterPartieProjet`.
+  "parties_projet",
   "secteurs_recherche_acquereur",
   "reperes_relationnels_acquereur",
   "notes_bien",

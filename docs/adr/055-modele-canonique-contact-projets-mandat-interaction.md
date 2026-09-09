@@ -1,16 +1,24 @@
 # ADR-055 — Modèle canonique : Contact, projets vendeur/acquéreur, Mandat, Interaction
 
-**Statut :** Accepté — **§A partiellement implémenté** (migration `0034`)
+**Statut :** Accepté — **§A et moitié acquéreur de §B implémentés** (migrations `0034`, `0035`)
 **Date :** 2026-09-08
 
-> **État d'implémentation (2026-09-09).** Construit : la table `contacts` (§A) et un pont nullable
-> `contact_id` depuis `acquereurs` et `prospects_vendeurs`. Les créations passant par les Server
-> Actions alimentent l'identité canonique dans la même transaction que le dossier.
+> **État d'implémentation (2026-09-09).** Construit : la table `contacts` (§A) avec un pont nullable
+> `contact_id` depuis `acquereurs` et `prospects_vendeurs` (migration `0034`) ; puis
+> `projets_acquereur` et `parties_projet` (§B, côté acquéreur uniquement) avec un pont nullable
+> `projet_acquereur_id` depuis `acquereurs` (migration `0035`). Une création acquéreur écrit, dans
+> une seule transaction, le contact, le projet, la partie et la ligne historique.
 >
 > NON construit, et volontairement : aucun backfill de l'historique, aucune fusion ni rapprochement
-> automatique (§H), aucun `parties_projet`, `projets_vendeur`, `projets_acquereur`, `mandats` ni
-> `interactions` (§B/§C/§F/§G), aucune lecture branchée sur `contacts`. Le matching, les visites et
-> les offres restent sur le modèle historique, qui demeure la source de vérité des workflows.
+> automatique (§H), aucun `projets_vendeur`, `projets_vendeur_biens`, `mandats` ni `interactions`
+> (§B/§C/§F/§G), aucune lecture branchée sur le modèle canonique. Le matching, les visites et les
+> offres restent sur le modèle historique, qui demeure la source de vérité des workflows.
+>
+> Écarts assumés sur §B, tous additifs le jour où un consommateur existe : `parties_projet` n'a
+> qu'une cible (`projet_acquereur_id NOT NULL`) au lieu des cibles dédiées + `CHECK` de
+> l'invariant 5 — poser dès maintenant une colonne vendeur toujours nulle serait un modèle à moitié
+> construit ; son `CHECK` de rôle ne couvre que `acquereur`/`co_acquereur` ; et
+> `secteurs_recherche_acquereur` reste feuille de `acquereurs`, faute de lecteur canonique.
 >
 > Écart assumé avec le modèle de données du §A : `personne_morale` et `archive_le` ne sont pas
 > encore créés — aucun écran ne les saisit, aucune règle ne les lit, et le schéma refuse ailleurs

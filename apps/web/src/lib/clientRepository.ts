@@ -143,6 +143,9 @@ export type NouvelAcquereur = Omit<ProfilAcquereur, "id"> & {
   // continuent de fonctionner à l'identique en le laissant absent, et la ligne reste alors
   // simplement non rattachée. Aucun rattachement n'est jamais deviné ici.
   contactId?: string;
+  // ADR-055 §B — pont OPTIONNEL vers le projet canonique, même discipline que `contactId` :
+  // absent = ligne non rattachée, jamais un rattachement deviné.
+  projetAcquereurId?: string;
 };
 
 // Insertion pure : la validation métier (budgetMin <= budgetMax, etc.) est de la responsabilité
@@ -162,6 +165,7 @@ export async function creerAcquereur(
     .values({
       workspaceId,
       contactId: input.contactId ?? null,
+      projetAcquereurId: input.projetAcquereurId ?? null,
       prenom: input.prenom,
       nom: input.nom,
       email: input.email,
