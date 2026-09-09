@@ -589,6 +589,96 @@ personne », ce sont des faits d'échange qui devront être rattachés à un Con
 optionnel. Les déplacer vers `projets_vendeur` les enfermerait dans un contexte qu'elles n'ont pas.
 Elles restent feuilles de `prospects_vendeurs` jusqu'au lot Interaction.
 
+## `mandats` (ADR-055 §F)
+
+**Rôle** : le **contrat** confié au professionnel pour une période donnée. Entité à part entière —
+la décision « OUI » d'ADR-055 §F — et non une poignée de colonnes dispersées sur `biens` et
+`prospects_vendeurs`.
+
+**État : fondation, pas encore la source de vérité.** `biens.statut_mandat` et `biens.date_mandat`
+restent intacts et pilotent les écrans, le tunnel commercial et les automatisations.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | identité interne — jamais un numéro de réseau (ADR-056) |
+| `bien_id` | uuid | **non** | FK → `biens.id`, NO ACTION. **Feuille de `biens`** : le périmètre est celui du bien |
+| `projet_vendeur_id` | uuid | oui | FK → `projets_vendeur.id`. Absent quand le mandat vient d'une opportunité antérieure au modèle canonique |
+| `date_debut` | date | non | **prise d'effet** |
+| `date_fin` | date | oui | terme — dernier jour couvert |
+| `resilie_le` | date | oui | résiliation anticipée, distincte de l'expiration |
+| `remplace_mandat_id` | uuid | oui | FK → `mandats.id` — le mandat renouvelé/remplacé |
+| `cree_le` | timestamptz | non | |
+
+**Aucun `workspace_id`** (ADR-054 §7) : `mandats` est une feuille de `biens`. Ce n'est pas une
+feuille de `projets_vendeur` — un mandat porte sur un **actif identifié**, et un mandat signé sur un
+bien reste un fait même quand aucun projet canonique ne le précède.
+
+**Aucune unicité sur `bien_id` ni sur `projet_vendeur_id`** : un bien remandaté deux ans plus tard a
+deux mandats ; un projet qui a connu un mandat expiré puis un renouvellement en a deux aussi.
+L'imposer rendrait l'historique contractuel inexprimable.
+
+**Aucun statut stocké** (ADR-055 invariant 9, ADR-014) : `deriverStatutMandat(mandat, aujourdhui)`
+retourne `actif` / `expire` / `resilie` à partir des trois dates. Un statut stocké deviendrait faux
+tout seul, le lendemain du jour où un mandat expire. **« Remplacé » n'est pas un statut** : c'est une
+relation portée par le successeur.
+
+**Renouvellement = une ligne, jamais une mutation** (CAS 7). `creerMandatSuccesseur()` crée un
+mandat qui référence celui qu'il remplace ; le précédent n'est **pas** modifié, et aucune date de
+fin ne lui est posée d'autorité — clore l'ancien est un geste distinct, qui n'existe pas encore.
+Un `CHECK` interdit qu'un mandat se remplace lui-même.
+
+**Champs volontairement absents**, tous pour la même raison — aucun écrivain **et** aucun lecteur,
+donc une colonne que rien ne remplirait :
+
+- `type` (`simple` / `exclusif` / `semi_exclusif`, vocabulaire fixé par ADR-055 §F) : **aucun écran,
+  aucun formulaire, aucun import ne saisit le type d'un mandat**. Toujours NULL, il n'exprimerait pas
+  « mandat simple » mais « personne n'a rempli cette colonne ». L'exclusivité arrivera avec lui.
+- `numero` : il vient des registres de réseau, donc d'un connecteur, donc d'ADR-056 — non
+  implémenté. Aucune unicité ne serait honnête : deux réseaux numérotent indépendamment.
+- `motif_resiliation` : le geste de résiliation n'existe pas. `resilie_le` reste, lui, parce que la
+  dérivation du statut le lit.
+
+**Limite de sémantique des dates, assumée** : le produit ne distingue pas encore la date de
+**signature** de la date de **prise d'effet**. Le formulaire de signature ne saisit qu'une date
+(`biens.date_mandat`), qui alimente `date_debut`. Créer une seconde colonne toujours égale à la
+première ne les distinguerait pas davantage.
+
+**Mandants non modélisés.** Aucun lien direct `mandats ↔ contacts`, et aucune table `parties_mandat` :
+la qualité juridique de mandant (qui signe, qui engage une indivision, qui est représenté) n'est
+**pas** la participation à un projet de vente, et réutiliser `parties_projet` pour l'affirmer
+inventerait un fait juridique. Aucun écran, aucune règle et aucun document ne consomme cette
+information aujourd'hui.
+
+**Alimentation et coexistence :**
+
+```
+        Contact
+           │
+     parties_projet
+           │
+     projets_vendeur ──────┐
+                           │ (projet_vendeur_id, nullable)
+     biens ── mandats ─────┘
+                │
+                └── mandats (successeur, remplace_mandat_id)
+```
+
+- `signerMandatProspectVendeur()` crée le mandat **dans la transaction existante**, avec le bien et
+  le jalon `mandat_signe_le` : tout existe, ou rien. Il est créé pour **toute** signature, avec ou
+  sans projet canonique.
+- **Aucun backfill** : un bien historique avec `statut_mandat = 'actif'` peut avoir connu plusieurs
+  mandats successifs, avoir été importé après signature, ou n'avoir aucun projet vendeur. Seules les
+  signatures postérieures à la migration `0037` produisent un mandat canonique.
+- **Aucun pont `biens.mandat_courant_id`** : « le mandat courant » se **déduit** (celui dont le
+  statut dérivé est actif, prise d'effet la plus récente). Le stocker serait un cache permanent sans
+  lecteur, faux dès le jour d'une expiration.
+- `projets_vendeur.mandat_propose_le` reste **légitimement propre au projet** : un mandat peut avoir
+  été proposé sans qu'aucun mandat n'ait jamais existé. `mandat_signe_le` deviendra dérivable de
+  `mandats.date_debut` — plus tard, jamais dans ce lot.
+
+**Source de vérité pendant la coexistence : `biens` et `prospects_vendeurs`.** Un test structurel
+vérifie qu'aucun écran ni aucun moteur pur ne référence `mandats`.
+
 ## `connexions_google`
 
 **Rôle** : fait serveur unique — le conseiller est-il connecté à Google Calendar, et avec quel
@@ -1685,6 +1775,8 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0035_mighty_human_fly.sql` | ADR-055 §B : tables `projets_acquereur` (racine, `workspace_id`, `CHECK` stade) et `parties_projet` (feuille, `UNIQUE(projet, contact)`, `CHECK` rôle) ; colonne nullable `projet_acquereur_id` sur `acquereurs` (FK NO ACTION). Strictement additive : aucune table supprimée, aucune colonne retirée, **aucun backfill** |
 
 | `0036_smiling_iron_fist.sql` | ADR-055 §B : table `projets_vendeur` (racine, jalons ADR-027, `CHECK` origine/motif/estimation) ; `parties_projet` étendue aux deux côtés (`projet_vendeur_id`, `DROP NOT NULL` sur `projet_acquereur_id`, `CHECK` « exactement une cible », `CHECK` rôle élargi, second `UNIQUE`) ; colonne nullable `projet_vendeur_id` sur `prospects_vendeurs`. Ordre volontaire pour qu'aucune ligne existante ne devienne invalide. Strictement additive, **aucun backfill** |
+
+| `0037_safe_legion.sql` | ADR-055 §F : table `mandats` (feuille de `biens`, `projet_vendeur_id` nullable, auto-référence `remplace_mandat_id`, `CHECK` auto-remplacement / période / résiliation). Aucun statut stocké, aucun identifiant fournisseur, aucun pont sur `biens`. Strictement additive, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -40,6 +40,9 @@ const TABLES_A_NETTOYER = [
   "photos_bien",
   "prospects_vendeurs",
   "acquereurs",
+  // ADR-055 §F — `mandats` référence `biens` sans CASCADE : à vider avant lui, sinon la purge
+  // échoue sur la clé étrangère.
+  "mandats",
   "biens",
 ];
 

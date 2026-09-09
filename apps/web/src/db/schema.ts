@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // ADR-054 — périmètre PROPRIÉTAIRE des données métier (OWNERSHIP). Une ligne métier appartient à
@@ -408,6 +408,84 @@ export const projetsVendeur = pgTable(
       "projets_vendeur_motif_perte_check",
       sql`${table.motifPerte} IS NULL OR ${table.motifPerte} IN ('projet_abandonne','choix_agence_concurrente','desaccord_estimation','injoignable','bien_vendu_autrement','delai_calendrier','autre')`
     ),
+  ]
+);
+
+// ADR-055 §F — MANDAT : le contrat confié au professionnel pour une période donnée. Entité à part
+// entière, tranchée « OUI » par l'ADR, et non une poignée de colonnes dispersées sur `biens` et
+// `prospects_vendeurs`.
+//
+// FEUILLE DE `biens` (ADR-055 §F l'écrit ainsi, et ADR-054 §7 en tire les conséquences) :
+// `bien_id` NOT NULL, donc AUCUN `workspace_id` dupliqué — le périmètre est celui du bien.
+// Ce n'est pas une feuille de `projets_vendeur` : un mandat porte sur un ACTIF identifié, et un
+// mandat signé sur un bien reste un fait même quand aucun projet canonique ne le précède (toutes
+// les opportunités antérieures au lot §B sont dans ce cas). Le projet reste rattachable, mais
+// facultatif.
+//
+// UN BIEN, PLUSIEURS MANDATS SUCCESSIFS : aucune unicité sur `bien_id`. Un bien remandaté deux ans
+// plus tard a deux mandats, et le premier n'est ni écrasé ni supprimé.
+// UN PROJET, PLUSIEURS MANDATS : aucune unicité sur `projet_vendeur_id` non plus — sinon
+// l'historique d'un projet qui a connu un mandat expiré puis un renouvellement serait inexprimable.
+//
+// AUCUN STATUT STOCKÉ (ADR-055 §F, invariant 9, et ADR-014 partout ailleurs) : « actif », « expiré »
+// et « résilié » se DÉDUISENT de `date_debut`, `date_fin` et `resilie_le`. Le stocker créerait une
+// seconde vérité qui dériverait dès le lendemain du jour où un mandat expire — précisément le genre
+// de faux fait qu'aucun processus nocturne ne viendrait corriger. Voir `deriverStatutMandat()`.
+// « Remplacé » n'est pas un statut du mandat : c'est une relation portée par son SUCCESSEUR.
+//
+// AUCUN IDENTIFIANT FOURNISSEUR (ADR-056) : ni `playiad_id`, ni `hektor_id`, ni `numero_reseau`.
+//
+// Champs volontairement ABSENTS, chacun pour la même raison — aucun écrivain ET aucun lecteur
+// aujourd'hui, donc une colonne morte que rien ne remplirait :
+//   - `type` ('simple'/'exclusif'/'semi_exclusif', vocabulaire fixé par ADR-055 §F) : AUCUN écran,
+//     aucun formulaire et aucun import ne saisit le type d'un mandat. Le poser toujours NULL
+//     n'exprimerait pas « mandat simple », seulement « personne n'a jamais rempli cette colonne ».
+//     Il arrivera avec la saisie qui le produit — et l'exclusivité avec lui.
+//   - `numero` : il vient des registres de réseau (ADR-055 §F le dit), donc d'un connecteur, donc
+//     d'ADR-056 — non implémenté. Aucune unicité ne serait par ailleurs honnête : deux réseaux
+//     numérotent indépendamment.
+//   - `motif_resiliation` : le geste de résiliation n'existe pas ; le motif n'a donc ni écrivain ni
+//     lecteur, contrairement à `resilie_le` que la dérivation du statut lit déjà.
+export const mandats = pgTable(
+  "mandats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Pas de CASCADE : un bien n'est jamais supprimé (ADR-012 — archivage), et un DELETE qui
+    // effacerait silencieusement l'historique contractuel serait une perte de fait juridique.
+    bienId: uuid("bien_id")
+      .notNull()
+      .references(() => biens.id),
+    // NULLABLE, et ce n'est pas une anomalie : c'est l'état de tout mandat signé depuis une
+    // opportunité antérieure au modèle canonique. Le mandat existe, son projet n'a jamais été créé.
+    projetVendeurId: uuid("projet_vendeur_id").references(() => projetsVendeur.id),
+    // PRISE D'EFFET du mandat. Alimentée aujourd'hui par `biens.date_mandat`, la seule date que le
+    // formulaire de signature saisisse. LIMITE ASSUMÉE : le produit ne distingue pas encore la date
+    // de SIGNATURE de la date de PRISE D'EFFET — elles sont confondues dans cette unique saisie, et
+    // inventer une seconde colonne toujours égale à la première ne les distinguerait pas davantage.
+    dateDebut: date("date_debut").notNull(),
+    // Fin de la période contractuelle. Aucun écrivain aujourd'hui (la durée n'est pas saisie), mais
+    // un LECTEUR réel : `deriverStatutMandat()`. Sans elle, « contrat pour une période donnée » ne
+    // serait pas exprimable — c'est le sujet même de l'entité, pas un champ d'anticipation.
+    dateFin: date("date_fin"),
+    // Résiliation anticipée — distincte de l'expiration, qui est l'arrivée du terme. Lue par la
+    // dérivation du statut.
+    resilieLe: date("resilie_le"),
+    // CAS 7 d'ADR-055 : un renouvellement CRÉE une ligne qui référence celle qu'elle remplace ; il
+    // ne modifie JAMAIS le mandat remplacé. C'est la même discipline qu'ADR-011 (append-only pour
+    // les faits) : l'ancien mandat a réellement existé sur sa période, l'écraser effacerait une
+    // partie de l'histoire du bien.
+    remplaceMandatId: uuid("remplace_mandat_id").references((): AnyPgColumn => mandats.id),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Un mandat ne peut pas se remplacer lui-même. Protection à UN niveau volontairement : les
+    // cycles plus longs sont impossibles en pratique (un successeur référence toujours un mandat
+    // déjà écrit) et les détecter exigerait un trigger récursif sans besoin démontré.
+    check("mandats_pas_d_auto_remplacement_check", sql`${table.remplaceMandatId} IS NULL OR ${table.remplaceMandatId} <> ${table.id}`),
+    // Une période qui finirait avant de commencer n'est pas une période.
+    check("mandats_periode_coherente_check", sql`${table.dateFin} IS NULL OR ${table.dateFin} >= ${table.dateDebut}`),
+    // Une résiliation antérieure à la prise d'effet ne décrit aucun fait possible.
+    check("mandats_resiliation_coherente_check", sql`${table.resilieLe} IS NULL OR ${table.resilieLe} >= ${table.dateDebut}`),
   ]
 );
 

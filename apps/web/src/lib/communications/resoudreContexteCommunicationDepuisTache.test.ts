@@ -16,6 +16,7 @@ const {
   prospectsVendeurs: prospectsVendeursTable,
   evenementsMetier,
   executionsAutomatisation,
+  mandats: mandatsTable,
 } = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
@@ -72,6 +73,9 @@ afterAll(async () => {
   for (const id of idsCompromis) await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
   for (const id of idsProspects) await getDb().delete(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id));
   for (const id of idsAcquereurs) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
+  // ADR-055 §F — la signature de mandat crée désormais un mandat canonique, qui référence le bien
+  // sans CASCADE (un fait contractuel ne disparaît jamais par effet de bord) : à purger d'abord.
+  if (idsBiens.length > 0) await getDb().delete(mandatsTable).where(inArray(mandatsTable.bienId, idsBiens));
   for (const id of idsBiens) await getDb().delete(biensTable).where(eq(biensTable.id, id));
 });
 

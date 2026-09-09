@@ -2,6 +2,7 @@ import { desc, eq, ilike, or } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
+import { creerMandat } from "@/lib/mandatRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import type { NouveauProspectVendeur, ProspectVendeur } from "@/types/prospectVendeur";
@@ -307,6 +308,28 @@ export async function signerMandatProspectVendeur(
       .set({ mandatSigneLe: new Date(), bienId: bien.id, modifieLe: new Date() })
       .where(eq(prospectsVendeursTable.id, id))
       .returning();
+
+    // ADR-055 §F — le MANDAT canonique, dans la MÊME transaction que le bien et le jalon : un
+    // mandat sans bien, ou un bien mandaté sans mandat, seraient tous deux des demi-vérités.
+    //
+    // Créé pour TOUTE signature, y compris depuis une opportunité antérieure au modèle canonique :
+    // qu'un mandat ait été signé sur ce bien à cette date est un fait, que le projet vendeur existe
+    // ou non. Dans ce cas `projetVendeurId` reste simplement absent — jamais deviné.
+    //
+    // `dateDebut` vient de `donneesBien.dateMandat`, la seule date que la signature saisisse. Ni
+    // durée, ni type, ni numéro ne sont posés : le formulaire ne les demande pas, et les inventer
+    // fabriquerait des clauses contractuelles que personne n'a signées.
+    await creerMandat(
+      {
+        bienId: bien.id,
+        // Lu sur la ligne renvoyée par l'UPDATE, pas sur le type métier : le pont canonique est
+        // une donnée d'infrastructure, que `ProspectVendeur` n'expose volontairement pas.
+        projetVendeurId: ligne.projetVendeurId ?? undefined,
+        dateDebut: donneesBien.dateMandat,
+      },
+      tx
+    );
+
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
       { typeEvenement: "mandat_signe", prospectVendeurId: id },
       workspaceId,

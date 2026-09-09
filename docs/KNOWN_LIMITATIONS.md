@@ -1039,9 +1039,17 @@ Limites qui en découlent, toutes assumées le temps de la transition :
 - **Aucune relation projet ↔ bien.** `projets_vendeur` ne pointe vers aucun bien : la frontière
   (un projet, plusieurs biens ? un bien, plusieurs projets successifs ?) est renvoyée au lot
   Property/Mandat. `prospects_vendeurs.bien_id` reste `UNIQUE` et posé uniquement à la signature.
-- **`mandats` n'existe pas.** `mandat_propose_le` et `mandat_signe_le` sont des jalons du projet ;
-  le type, l'exclusivité, le numéro, la date de fin, la résiliation et le renouvellement d'un
-  mandat ne sont **stockés nulle part** aujourd'hui.
+- **`mandats` existe, mais reste creux.** La table est alimentée par chaque signature réelle
+  depuis la migration `0037` ; elle ne porte cependant que le bien, le projet éventuel et la prise
+  d'effet. Le **type de mandat, l'exclusivité et le numéro ne sont saisis nulle part** dans le
+  produit : ils sont donc absents du schéma plutôt que toujours nuls. La **durée** n'est pas non
+  plus saisie, donc `date_fin` reste vide et tout mandat canonique est « actif » indéfiniment ; la
+  **résiliation** n'a aucun geste. `mandat_propose_le` et `mandat_signe_le` restent des jalons du
+  projet, non dérivés.
+- **La date de signature et la prise d'effet sont confondues** : une seule date est saisie.
+- **Les mandants ne sont pas modélisés** : aucun lien `mandats ↔ contacts`, la qualité juridique de
+  signataire n'étant pas la participation à un projet de vente.
+- **Aucun mandat pour l'historique** : les biens antérieurs à la migration `0037` n'en ont aucun.
 - **`notes_prospect_vendeur` n'est pas migrée** : son vocabulaire est déjà celui des futures
   `interactions` (ADR-055 §G), qui ne sont ni du projet ni de la personne.
 - **L'isolation inter-workspaces des parties de projet est applicative**, pas structurelle :

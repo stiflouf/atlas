@@ -153,8 +153,10 @@ describe("ADR-055 invariant 5 — une partie rattache un contact à exactement u
 describe("ADR-055 §B — le tunnel vendeur historique reste sur prospects_vendeurs", () => {
   const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
 
-  it("ni mandat, ni interaction, ni provenance n'existent encore", () => {
-    const horsPerimetre = ["mandats", "projets_vendeur_biens", "interactions", "references_externes"];
+  it("ni interaction, ni provenance, ni relation projet-biens n'existent encore", () => {
+    // `mandats` en est sortie quand le lot §F l'a créée : cette liste dit ce qui n'existe PAS
+    // aujourd'hui, jamais ce qu'un lot passé s'était interdit.
+    const horsPerimetre = ["projets_vendeur_biens", "interactions", "references_externes"];
     expect([...tables.keys()].filter((nom) => horsPerimetre.includes(nom))).toEqual([]);
   });
 

@@ -260,6 +260,13 @@
       "when": 1788946025250,
       "tag": "0036_smiling_iron_fist",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788954258200,
+      "tag": "0037_safe_legion",
+      "breakpoints": true
     }
   ]
 }

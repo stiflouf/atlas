@@ -56,6 +56,9 @@ const TABLES_FEUILLES = [
   // ADR-055 §B — relation contact <-> projet. Feuille de ses DEUX parents ; ne duplique pas
   // `workspace_id`, l'invariant inter-workspaces est tenu par `ajouterPartieProjet`.
   "parties_projet",
+  // ADR-055 §F — FEUILLE de `biens` : le périmètre d'un mandat est celui de l'actif sur lequel il
+  // porte. Le dupliquer permettrait d'écrire un mandat dans un autre workspace que son bien.
+  "mandats",
   "secteurs_recherche_acquereur",
   "reperes_relationnels_acquereur",
   "notes_bien",
