@@ -34,6 +34,18 @@ export function peutEcrireVersExterieur(
   return capacite === "push" || capacite === "bidirectionnel";
 }
 
+// ADR-056 §6 — IMPORTER vers DOMIORA exige `pull` ou `bidirectionnel`. `read_only` ne suffit pas,
+// et la distinction n'est pas cosmétique : `read_only` dit « ce connecteur peut être interrogé »,
+// `pull` dit « ce qu'il renvoie a vocation à entrer dans le Core ». Les confondre ferait écrire
+// dans DOMIORA à partir d'une source qu'on s'était contenté d'autoriser à lire.
+export function peutImporterVersDomiora(
+  descripteur: DescripteurConnecteur,
+  typeEntite: TypeEntiteCanonique
+): boolean {
+  const capacite = descripteur.capacites[typeEntite];
+  return capacite === "pull" || capacite === "bidirectionnel";
+}
+
 // Un connecteur non déclaré pour une entité ne peut rien en lire non plus : « non configuré n'est
 // pas en panne » (§7, point 2), mais ce n'est pas davantage une autorisation tacite.
 export function peutLireDepuisExterieur(

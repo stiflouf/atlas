@@ -184,8 +184,14 @@ export async function listerChampsVerrouilles(cible: CibleVerrouillable): Promis
 }
 
 // La question que pose le moteur de synchronisation avant d'écrire un champ.
-export async function champEstVerrouille(cible: CibleVerrouillable, champ: string): Promise<boolean> {
-  const [ligne] = await getDb()
+export async function champEstVerrouille(
+  cible: CibleVerrouillable,
+  champ: string,
+  // `executeur` optionnel : le Sync Engine lit le verrou DANS sa transaction, jamais avant elle —
+  // sinon il écrirait à partir d'un état de verrou périmé.
+  executeur: Executeur = getDb()
+): Promise<boolean> {
+  const [ligne] = await executeur
     .select({ id: champsVerrouillesTable.id })
     .from(champsVerrouillesTable)
     .where(and(filtreCible(cible), eq(champsVerrouillesTable.champ, champ)))

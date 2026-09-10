@@ -162,7 +162,7 @@ CONNECTEURS ──> SYNC ENGINE ──> CORE <── INTELLIGENCE / AUTOMATISATI
 | Couche | Ce qui existe | Ce qui n'existe pas |
 |---|---|---|
 | **CONNECTEUR** | rien | aucun connecteur, aucun SDK fournisseur dans `package.json` |
-| **SYNC ENGINE** | `references_externes`, `champs_verrouilles`, `lib/provenance/` | aucun moteur, aucune synchronisation exécutée, aucune table de conflit |
+| **SYNC ENGINE** | `references_externes`, `champs_verrouilles`, `lib/provenance/`, le pipeline d'application d'**une** mutation | aucun ordonnanceur, aucun lot, aucune synchronisation exécutée, aucune table de conflit |
 | **CORE** | inchangé | il ne connaît toujours aucun fournisseur |
 
 **Le Core ne dépend de personne**, et c'est vérifié : un test structurel échoue si un moteur pur ou
@@ -172,6 +172,13 @@ fournisseur.
 **Les capacités sont une propriété, pas un réglage.** Un connecteur déclare, par type d'entité,
 `read_only` / `pull` / `push` / `bidirectionnel`. Sans `push`, il ne peut structurellement jamais
 écrire vers l'extérieur — et **l'omission vaut refus**, jamais permission par défaut.
+
+**Le chemin d'entrée est unique.** Une donnée externe ne devient une donnée DOMIORA que par
+`appliquerMutationExterne()` : capacité, validation, identité, verrou, décision, écriture d'un seul
+champ. Un connecteur ne touche jamais le Core directement, et le Sync Engine passe par les
+repositories du Core, jamais par ses tables — un test structurel échoue s'il importe `@/db/schema`.
+La dépendance est à sens unique : rien du Core n'appelle le pipeline. Détail des huit étapes et des
+issues possibles : `docs/DATA_MODEL.md`.
 
 **Une correction humaine est prioritaire, sans condition.** Un champ verrouillé n'est jamais réécrit
 par une synchronisation, même quand le fournisseur fait foi ; le désaccord devient un conflit, jamais

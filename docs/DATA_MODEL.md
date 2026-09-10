@@ -885,6 +885,48 @@ Le Core ne dépend de personne. `lib/provenance/contratConnecteur.ts` déclare l
 ne peut structurellement jamais écrire vers l'extérieur, et **l'omission vaut refus**, jamais
 permission par défaut. Aucun SDK fournisseur n'est ajouté à `package.json`.
 
+#### Le pipeline d'application (`lib/provenance/appliquerMutationExterne.ts`)
+
+Le Sync Engine n'a **qu'une** porte d'entrée, et elle traite **une** mutation :
+
+```
+Connecteur ──(normalisation)──> MutationExterneNormalisee ──> appliquerMutationExterne() ──> Core
+```
+
+Une `MutationExterneNormalisee` (`types/synchronisation.ts`) décrit une intention de mise à jour
+**déjà traduite en concepts DOMIORA** : fournisseur, type et id externes, entité canonique visée,
+champ, valeur. Elle ne transporte ni payload brut, ni en-tête, ni jeton, ni URL — la normalisation
+(« 450 000 € » → `450000`) appartient à l'adaptateur du connecteur, jamais au domaine.
+
+Huit étapes, dans cet ordre, chacune pouvant refuser avant que la suivante ne coûte quoi que ce
+soit — et toutes avant la moindre écriture :
+
+| # | Étape | Refus possible |
+|---|---|---|
+| 1 | capacité déclarée du connecteur (`pull` ou `bidirectionnel`) | `capacite_refusee` |
+| 2 | type de la valeur, validé côté Core | `mutation_invalide` |
+| 3 | résolution d'identité, **uniquement** via `references_externes` | `identite_inconnue` |
+| 4 | type de l'entité résolue | `cible_inattendue` |
+| 5 | valeur canonique actuelle, lue par le repository du Core | — |
+| 6 | verrou humain | — |
+| 7 | `deciderApplicationValeurExterne()` | `ignoree` / `conflit` |
+| 8 | écriture d'**un seul** champ, par mapping explicite | `refus_metier` |
+
+Les étapes 3 à 8 se déroulent dans **une transaction** : lire un verrou hors d'elle reviendrait à
+écrire sur la foi d'un état périmé. Le résultat est un type **discriminé** — aucune de ces issues
+n'est une exception, ce sont des réponses métier normales.
+
+**Ce que le pipeline ne fait jamais** : créer une entité canonique, rapprocher par email, téléphone
+ou nom, poser un verrou (importer n'est pas décider), déclencher un workflow métier, ou toucher un
+autre champ que celui visé. Le périmètre V1 est le **projet acquéreur**, huit champs
+(`ChampProjetAcquereurModifiable`) — `stadeProjet` en est exclu : le parcours commercial du
+conseiller ne recule pas parce qu'un CRM tiers est en retard.
+
+**Les invariants restent au Core.** `budgetMin <= budgetMax` est vérifié par
+`modifierChampProjetAcquereur()`, pas par le Sync Engine et pas par Postgres : un chemin d'écriture
+qui ne passe pas par le formulaire doit porter la règle, sinon une source externe écrirait un
+intervalle impossible un champ à la fois. La valeur est alors abandonnée entière, jamais réparée.
+
 **Non créé, faute d'écrivain** : `synchronisations_entite` (`source_de_verite`, `mode`,
 `synchronise_le`, `dernier_conflit_le`). `mode` et `source_de_verite` sont des propriétés **du
 connecteur** (§6), portées par le contrat typé ; les deux dates attendent le premier moteur de

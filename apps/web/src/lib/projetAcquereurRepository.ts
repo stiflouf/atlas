@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { projetsAcquereur as projetsAcquereurTable } from "@/db/schema";
 import type { StadeProjet } from "@/types/client";
-import type { ProjetAcquereur } from "@/types/projetAcquereur";
+import type { ChampProjetAcquereurModifiable, ProjetAcquereur } from "@/types/projetAcquereur";
 
 // ADR-055 §B — accès au projet acquéreur canonique. Les parties de projet vivent dans
 // `partieProjetRepository.ts` depuis que les projets vendeur existent : la relation est partagée
@@ -61,12 +61,81 @@ export async function creerProjetAcquereur(
 
 // Aucun filtrage par workspace en lecture : ce lot ne l'active pas (il reste un lot à part entière,
 // pour pouvoir en caractériser les régressions séparément). Même choix que `getContactById`.
-export async function getProjetAcquereurById(id: string): Promise<ProjetAcquereur | undefined> {
+export async function getProjetAcquereurById(
+  id: string,
+  // `executeur` optionnel, même patron que partout ailleurs : permet de relire le projet DANS la
+  // transaction qui va l'écrire, sans décider à partir d'un état lu avant elle.
+  executeur: Executeur = getDb()
+): Promise<ProjetAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .select()
     .from(projetsAcquereurTable)
     .where(eq(projetsAcquereurTable.id, id))
     .limit(1);
+  return ligne ? ligneVersProjet(ligne) : undefined;
+}
+
+// Écriture CIBLÉE d'un seul champ, avec un mapping EXPLICITE champ -> colonne. Jamais
+// `.set({ [champ]: valeur })` : un nom de colonne venu de l'extérieur, même filtré en amont,
+// transforme ce repository en interpréteur générique — et la première fois qu'un appelant oublie
+// de filtrer, n'importe quelle colonne devient inscriptible.
+//
+// Le `switch` est exhaustif par construction : ajouter un champ modifiable sans l'écrire ici ne
+// compile pas (`ChampProjetAcquereurModifiable` est fermé, et le `never` final le prouve).
+//
+// INVARIANT MÉTIER vérifié ici, et non laissé à Postgres : `budgetMin <= budgetMax`. Le schéma ne
+// le contraint pas, et la validation vivait jusqu'ici dans la Server Action de saisie — un chemin
+// d'écriture qui ne passe pas par elle doit donc porter la règle, sinon une source externe pourrait
+// écrire un intervalle impossible un champ à la fois. Retourne `undefined` quand la règle est
+// violée : l'appelant en fait un refus explicite, jamais une écriture partielle.
+export async function modifierChampProjetAcquereur(
+  id: string,
+  champ: ChampProjetAcquereurModifiable,
+  valeur: unknown,
+  executeur: Executeur = getDb()
+): Promise<ProjetAcquereur | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [actuel] = await executeur
+    .select()
+    .from(projetsAcquereurTable)
+    .where(eq(projetsAcquereurTable.id, id))
+    .limit(1);
+  if (!actuel) return undefined;
+
+  const budgetMin = champ === "budgetMin" ? (valeur as number) : actuel.budgetMin;
+  const budgetMax = champ === "budgetMax" ? (valeur as number) : actuel.budgetMax;
+  if (budgetMin > budgetMax) return undefined;
+
+  const valeurs = (() => {
+    switch (champ) {
+      case "budgetMin":
+        return { budgetMin: valeur as number };
+      case "budgetMax":
+        return { budgetMax: valeur as number };
+      case "criteres":
+        return { criteres: valeur as string[] };
+      case "piecesMin":
+        return { piecesMin: (valeur as number | null) ?? null };
+      case "surfaceMin":
+        return { surfaceMin: (valeur as number | null) ?? null };
+      case "accessibiliteRequise":
+        return { accessibiliteRequise: (valeur as boolean | null) ?? null };
+      case "necessiteParking":
+        return { necessiteParking: (valeur as boolean | null) ?? null };
+      case "necessiteExterieur":
+        return { necessiteExterieur: (valeur as boolean | null) ?? null };
+      default: {
+        const jamais: never = champ;
+        throw new Error(`Champ synchronisable non géré : ${String(jamais)}`);
+      }
+    }
+  })();
+
+  const [ligne] = await executeur
+    .update(projetsAcquereurTable)
+    .set(valeurs)
+    .where(eq(projetsAcquereurTable.id, id))
+    .returning();
   return ligne ? ligneVersProjet(ligne) : undefined;
 }

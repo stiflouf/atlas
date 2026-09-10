@@ -200,9 +200,12 @@ export async function enregistrerReferenceExterne(
 // La question que pose un connecteur à chaque pull : « cet objet, je le connais déjà ? »
 export async function resoudreEntiteCanonique(
   identite: IdentiteExterne,
-  workspaceId: string
+  workspaceId: string,
+  // `executeur` optionnel : le Sync Engine résout l'identité DANS la transaction qui écrira, pour
+  // ne pas décider à partir d'un état qu'il aurait lu avant.
+  executeur: Executeur = getDb()
 ): Promise<CibleCanonique | undefined> {
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .select()
     .from(referencesExternesTable)
     .where(

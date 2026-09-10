@@ -1070,6 +1070,24 @@ Limites qui en découlent, toutes assumées le temps de la transition :
   « conflit », mais rien ne l'enregistre ni ne l'affiche : ni table dédiée, ni tâche, ni écran. La
   forme reste une question ouverte d'ADR-056. Tant qu'aucun connecteur ne tourne, aucun conflit ne
   peut survenir.
+- **Le pipeline d'application traite UNE mutation, pour UNE entité.** `appliquerMutationExterne()`
+  ne couvre que le projet acquéreur et huit de ses champs. Contact, projet vendeur, bien, mandat et
+  interaction ne sont pas synchronisables : la généralisation attend que le patron soit prouvé par
+  un connecteur réel, pas par cinq copies de la même fonction.
+- **La source de vérité est passée par l'appelant, pas persistée.** ADR-056 §5 la veut déclarée par
+  (entité, fournisseur) ; `synchronisations_entite` n'existe pas, donc le pipeline la reçoit dans
+  son contexte. Tant qu'aucun connecteur ne tourne, personne ne peut la contredire — mais rien
+  n'empêche aujourd'hui deux appels de la déclarer différemment pour la même entité.
+- **Une fenêtre de concurrence subsiste sur le verrou.** Le pipeline lit le verrou et écrit dans la
+  même transaction, en `READ COMMITTED` : un verrou posé par un humain **après** cette lecture et
+  validé **avant** l'écriture ne serait pas vu, et la valeur externe passerait. Fermer la fenêtre
+  demanderait de sérialiser les deux chemins d'écriture (verrou et valeur), ce qu'aucun d'eux ne
+  fait aujourd'hui. La fenêtre est actuellement théorique : `verrouillerChamp()` n'a encore aucun
+  appelant applicatif, et aucun connecteur ne tourne. À rouvrir dès que l'un des deux existe.
+- **Le refus d'un invariant métier et l'entité introuvable rendent la même chose.**
+  `modifierChampProjetAcquereur()` retourne `undefined` dans les deux cas ; le pipeline, qui a déjà
+  relu l'entité dans sa transaction, en conclut le refus métier. C'est exact aujourd'hui, et ce ne
+  le resterait pas si un second appelant utilisait cette primitive sans relire d'abord.
 - **Trois identifiants externes antérieurs restent hors de cette couche** :
   `visites.rendez_vous_calendar_id` (corrélation temporaire, `UNIQUE NOT NULL`),
   `envois_email.gmail_message_id` (audit technique, ADR-031-bis) et `memoire_contextuelle`

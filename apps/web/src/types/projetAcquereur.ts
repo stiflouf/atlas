@@ -31,4 +31,21 @@ export type ProjetAcquereur = {
   archiveLe?: string;
 };
 
+// Les champs de ce projet qu'un chemin d'écriture peut modifier UN PAR UN, sans passer par un
+// formulaire complet. Liste FERMÉE, et c'est le Core qui la tient : elle dit ce qu'il accepte de
+// voir bouger champ par champ, indépendamment de qui le demande.
+//
+// `stadeProjet`, `creeLe` et `archiveLe` en sont volontairement absents : le premier est le
+// parcours commercial du conseiller, les deux autres sont du cycle de vie. Aucun des trois ne se
+// corrige à la pièce.
+export type ChampProjetAcquereurModifiable =
+  | "budgetMin"
+  | "budgetMax"
+  | "criteres"
+  | "piecesMin"
+  | "surfaceMin"
+  | "accessibiliteRequise"
+  | "necessiteParking"
+  | "necessiteExterieur";
+
 // Le rôle vit sur la RELATION, jamais sur ce type : voir `PartieProjet` dans types/partieProjet.ts.

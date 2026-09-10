@@ -32,6 +32,15 @@ function colonnes(nomTable: string): string[] {
   return config(nomTable).columns.map((colonne) => colonne.name);
 }
 
+// Le CODE seul, commentaires retirés. Sans cela ces tests interdiraient d'expliquer l'interdiction :
+// le commentaire qui dit « jamais de rapprochement par email » contient le mot « email », et le
+// fichier le mieux documenté deviendrait le premier fautif.
+function codeSeul(chemin: string): string {
+  return readFileSync(chemin, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/^\s*\/\/.*$/gm, " ");
+}
+
 function listerFichiersSource(racine: string): string[] {
   return readdirSync(racine, { withFileTypes: true }).flatMap((entree) => {
     const chemin = join(racine, entree.name);
@@ -215,5 +224,57 @@ describe("ADR-056 §9 — le Core ne dépend de personne", () => {
     for (const interdit of ["getDb", "fetch(", "@/db/", "await "]) {
       expect(contenu, `decisionImport ne doit pas contenir « ${interdit} »`).not.toContain(interdit);
     }
+  });
+
+  it("le Sync Engine passe par les contrats du Core, jamais par ses tables", () => {
+    // §9 : le Sync Engine connaît les repositories, pas le schéma. S'il ouvrait `@/db/schema`, il
+    // écrirait des colonnes sans passer par les invariants que le Core tient — et `budgetMin >
+    // budgetMax` deviendrait atteignable par un chemin que personne ne relit.
+    const contenu = readFileSync(join("src", "lib", "provenance", "appliquerMutationExterne.ts"), "utf8");
+    expect(contenu, "le pipeline ne doit pas importer le schéma").not.toContain("@/db/schema");
+    // La décision APPLY/IGNORE/CONFLICT n'est pas réimplémentée : elle est appelée.
+    expect(contenu).toContain("deciderApplicationValeurExterne");
+  });
+
+  it("le Sync Engine ne rapproche par aucune heuristique", () => {
+    // ADR-056 §3 : `references_externes` est le SEUL chemin d'identité. Un rapprochement par
+    // email ou téléphone fusionne deux personnes que personne n'a demandé de fusionner, et
+    // aucune suppression ne défait la fusion une fois les faits recopiés.
+    const contenu = codeSeul(join("src", "lib", "provenance", "appliquerMutationExterne.ts"));
+    // Bornées des DEUX côtés pour les noms de champs : « nombre de pièces » n'est pas un
+    // rapprochement par nom.
+    const heuristiques = [/\bemail\b/i, /\btelephone\b/i, /\bnom\b/i, /\badresse\b/i, /\bmatch/i, /\bsimilar/i, /\bfuzzy/i];
+    const trouvees = heuristiques.filter((motif) => motif.test(contenu)).map((motif) => motif.source);
+    expect(trouvees, "aucun rapprochement par ressemblance dans le pipeline").toEqual([]);
+  });
+
+  it("aucun ordonnanceur, aucun lot, aucune synchronisation périodique", () => {
+    // Ce lot applique UNE mutation. Un batch ou un cron transformerait un pipeline relisable en
+    // une machine qui écrit toute seule, avant qu'aucun conflit ne soit observable par un humain.
+    const fichiersProvenance = FICHIERS.filter((chemin) => chemin.includes(join("lib", "provenance")));
+    const fautifs = fichiersProvenance.filter((chemin) =>
+      /\bcron\b|setInterval|scheduler|\bpoll(ing)?\b|synchroniserTout|batch/i.test(codeSeul(chemin))
+    );
+    expect(fautifs).toEqual([]);
+  });
+
+  it("aucun secret ni en-tête fournisseur dans la couche provenance", () => {
+    // Les capacités sont DÉCLARÉES, jamais authentifiées ici : un jeton dans ces modules voudrait
+    // dire qu'ils appellent quelqu'un, et la frontière serait déjà franchie.
+    const fichiersProvenance = FICHIERS.filter((chemin) => chemin.includes(join("lib", "provenance")));
+    const fautifs = fichiersProvenance.filter((chemin) =>
+      /access_token|refresh_token|\boauth\b|client_secret|api[_-]?key|Authorization/i.test(codeSeul(chemin))
+    );
+    expect(fautifs).toEqual([]);
+  });
+
+  it("le Core ne dépend pas du Sync Engine", () => {
+    // La dépendance est à SENS UNIQUE. Un repository Core, une Server Action ou un moteur qui
+    // appellerait le pipeline ferait de la synchronisation une étape d'un flux métier — et le
+    // Core cesserait d'être lisible sans connaître les connecteurs.
+    const fautifs = FICHIERS.filter((chemin) => !chemin.includes(join("lib", "provenance"))).filter((chemin) =>
+      /appliquerMutationExterne|@\/types\/synchronisation/.test(codeSeul(chemin))
+    );
+    expect(fautifs, "seul un futur connecteur appellera le pipeline").toEqual([]);
   });
 });
