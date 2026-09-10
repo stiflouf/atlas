@@ -771,6 +771,136 @@ mono-conseiller et aucun modèle d'identité interne n'existe. Un `auteur_user_i
 n'aurait rien à référencer, et réutiliser un `sub` Google comme clé métier serait une facilité que
 la première invitation d'un second membre ferait payer.
 
+## `references_externes` et `champs_verrouilles` (ADR-056)
+
+**Rôle** : la couche **provenance**. `references_externes` dit « telle entité DOMIORA correspond à
+telle entité chez tel fournisseur ». `champs_verrouilles` dit « cette valeur a été voulue par un
+humain, aucune synchronisation ne la réécrira ».
+
+**État : primitives seules.** Aucun connecteur, aucune synchronisation, aucun écran. Les deux
+tables sont vides et le resteront jusqu'au premier connecteur.
+
+```
+SYSTÈME EXTERNE
+      │  (id chez le fournisseur)
+      ▼
+RÉFÉRENCE EXTERNE          ← assertion d'un connecteur
+      │  (FK réelle)
+      ▼
+ENTITÉ CANONIQUE           ← uuid interne, seule identité du Core
+```
+
+### Quatre notions à ne jamais confondre
+
+| Notion | Où elle vit | Ce qu'elle affirme |
+|---|---|---|
+| **identité externe** | `references_externes` | « cet objet chez ce fournisseur, c'est cette entité » |
+| **identifiant métier** | la table métier (ex. un futur `numero_mandat`) | une donnée du dossier, saisie ou reçue |
+| **credential OAuth** | `connexions_google` | un moyen d'accès — **jamais** une identité |
+| **indice de déduplication** | `memoire_contextuelle` | une **hypothèse** scorée, pas une assertion |
+
+### `references_externes` (racine)
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `workspace_id` | text | non | FK → `workspaces.id`, sans `DEFAULT` |
+| `fournisseur` | text | non | **clé technique**, `CHECK ~ '^[a-z0-9_]+$'` — pas de vocabulaire fermé |
+| `type_entite_externe` | text | non | vocabulaire **du fournisseur**, jamais réinterprété |
+| `id_externe` | text | non | |
+| `contact_id` / `projet_acquereur_id` / `projet_vendeur_id` / `bien_id` / `mandat_id` / `interaction_id` | uuid | oui | **exactement une**, `CHECK` |
+| `vue_pour_la_premiere_fois_le` / `vue_pour_la_derniere_fois_le` | timestamptz | non | |
+
+`UNIQUE (workspace_id, fournisseur, type_entite_externe, id_externe)` — **l'invariant 2 d'ADR-056**,
+tenu par la base : une identité externe désigne au plus une entité canonique. L'inverse reste libre :
+une entité peut porter plusieurs références (invariant 3), un contact reçu de trois sources étant
+trois faits vrais simultanément.
+
+**Le workspace fait partie de la clé, et ce n'est pas une commodité** : deux conseillers parlant à
+deux comptes du même fournisseur peuvent légitimement recevoir le même `id_externe`. Sans lui, l'un
+écraserait l'autre.
+
+**Cibles dédiées, pas de couple polymorphe.** ADR-056 §2 esquisse `type_entite_canonique` +
+`id_entite_canonique` ; ce couple ne peut porter **aucune** clé étrangère, alors que la même ADR
+exige « FK réelle vers une entité canonique ». Un id qui ne désigne rien passerait sans bruit. Même
+patron que `taches`, `parties_projet` et `interactions`.
+
+**`interactions` est une cible** : c'est ainsi qu'un identifiant de message Gmail se rattachera à un
+échange, **sans ajouter la moindre colonne à `interactions`**.
+
+**Résoudre une identité n'est pas dédupliquer.** Rattacher deux références au même contact est une
+assertion portée par l'appelant. Aucune règle ne déduit « même email donc même personne » (ADR-055
+§H).
+
+### `champs_verrouilles` (racine)
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `workspace_id` | text | non | FK → `workspaces.id` |
+| `contact_id` / `projet_acquereur_id` / `projet_vendeur_id` / `bien_id` / `mandat_id` | uuid | oui | **exactement une**, `CHECK` |
+| `champ` | text | non | propriété **canonique** DOMIORA (`budgetMax`), jamais `playiad.budget` |
+| `verrouille_le` | timestamptz | non | date du **premier** verrou |
+
+`UNIQUE` par (cible, `champ`) : verrouiller deux fois le même champ est le même fait.
+
+**Verrou par (entité, champ), pas par (entité, fournisseur)** — écart délibéré vis-à-vis du croquis
+d'ADR-056 §4, et il renforce l'invariant 4 : une correction humaine est un fait sur **la valeur
+DOMIORA**. Verrouiller par fournisseur laisserait un second connecteur écraser ce que le premier
+respecte.
+
+**Provenance hybride** (§4, option C) : cette table ne stocke **que les exceptions**. Une provenance
+colonne par colonne créerait un schéma fantôme aussi gros que le schéma réel, à maintenir à chaque
+migration, pour zéro connecteur en production.
+
+La liste des champs verrouillables est validée **par le repository**, là où le type de l'entité est
+connu — pas par un `CHECK` global qui deviendrait un catalogue de colonnes.
+
+### HUMAN OVERRIDE > EXTERNAL SYNC
+
+`deciderApplicationValeurExterne()` (`lib/provenance/decisionImport.ts`) est une **fonction pure** :
+aucun I/O, aucune base, aucun réseau, aucune IA — donc exhaustivement testable, et l'invariant ne
+dépend d'aucun état d'exécution.
+
+| Situation | Décision |
+|---|---|
+| valeurs identiques | `ignorer` — un accord n'est jamais un conflit, verrou ou pas |
+| **champ verrouillé**, valeurs différentes | **`conflit`** — aucune écriture, quelle que soit la source de vérité |
+| source `domiora`, valeurs différentes | `conflit` — le pull ne sert qu'à **détecter des écarts** |
+| source `externe`, champ libre, différent | `appliquer` |
+
+Le verrou est évalué **avant** la source de vérité : même quand le fournisseur fait foi, une
+correction humaine reste prioritaire. Un conflit est un **fait**, jamais un log silencieux, jamais
+une résolution automatique. Aucune table de conflit n'est créée dans ce lot — sa forme (table dédiée
+ou tâche du moteur existant) reste une question ouverte d'ADR-056.
+
+### Frontière CORE / SYNC ENGINE / CONNECTOR (ADR-056 §9)
+
+```
+CONNECTEURS ──> SYNC ENGINE ──> CORE <── INTELLIGENCE / AUTOMATISATIONS
+```
+
+Le Core ne dépend de personne. `lib/provenance/contratConnecteur.ts` déclare les capacités
+(`read_only` / `pull` / `push` / `bidirectionnel`) **par type d'entité** : un connecteur sans `push`
+ne peut structurellement jamais écrire vers l'extérieur, et **l'omission vaut refus**, jamais
+permission par défaut. Aucun SDK fournisseur n'est ajouté à `package.json`.
+
+**Non créé, faute d'écrivain** : `synchronisations_entite` (`source_de_verite`, `mode`,
+`synchronise_le`, `dernier_conflit_le`). `mode` et `source_de_verite` sont des propriétés **du
+connecteur** (§6), portées par le contrat typé ; les deux dates attendent le premier moteur de
+synchronisation.
+
+### Aucun backfill — candidats de migration futurs, documentés
+
+| Existant | Nature réelle | Pourquoi il n'est pas converti |
+|---|---|---|
+| `visites.rendez_vous_calendar_id` | corrélation temporaire avec un événement d'agenda | `UNIQUE` et `NOT NULL` aujourd'hui ; une conversion changerait des invariants du tunnel visite |
+| `envois_email.gmail_message_id` | audit **technique** d'un envoi sortant (ADR-031-bis) | ce n'est pas un fait CRM, et il n'a pas d'entité canonique à désigner |
+| `memoire_contextuelle.source` + `identifiant_externe` | **hypothèse** scorée, cibles en texte sans FK | une confiance n'a aucun sens sur un `id` d'API ; ADR-056 §2 refuse explicitement la fusion |
+
+Les convertir affirmerait des identités que personne n'a constatées. Ces trois exceptions sont
+**constatées et gelées** (ADR-056 §10) : elles ne créent aucun précédent et ne s'étendent pas.
+
 ## `connexions_google`
 
 **Rôle** : fait serveur unique — le conseiller est-il connecté à Google Calendar, et avec quel
@@ -1871,6 +2001,8 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0037_safe_legion.sql` | ADR-055 §F : table `mandats` (feuille de `biens`, `projet_vendeur_id` nullable, auto-référence `remplace_mandat_id`, `CHECK` auto-remplacement / période / résiliation). Aucun statut stocké, aucun identifiant fournisseur, aucun pont sur `biens`. Strictement additive, **aucun backfill** |
 
 | `0038_secret_rawhide_kid.sql` | ADR-055 §G : table `interactions` (feuille de `contacts`, `CHECK` type / sens / « au plus un contexte », `survenu_le` sans `DEFAULT`). Aucune table existante touchée, aucune fusion, **aucun backfill** |
+
+| `0039_overconfident_sentinel.sql` | ADR-056 : tables `references_externes` (racine, `UNIQUE` d'identité par workspace, `CHECK` « exactement une cible », `CHECK` format de clé fournisseur) et `champs_verrouilles` (racine, `CHECK` « exactement une cible », `UNIQUE` par cible+champ). Aucune table existante modifiée, aucune colonne ajoutée au Core, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

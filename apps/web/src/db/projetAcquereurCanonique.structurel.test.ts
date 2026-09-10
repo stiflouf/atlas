@@ -112,8 +112,8 @@ describe("ADR-055 §B — le projet est une intention immobilière, jamais une p
     }
   });
 
-  it("aucune provenance n'existe encore", () => {
-    const horsPerimetre = ["projets_vendeur_biens", "references_externes"];
+  it("aucune table de synchronisation n'existe encore", () => {
+    const horsPerimetre = ["projets_vendeur_biens"];
     expect([...tables.keys()].filter((nom) => horsPerimetre.includes(nom))).toEqual([]);
   });
 

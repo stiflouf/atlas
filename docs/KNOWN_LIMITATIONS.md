@@ -1061,6 +1061,21 @@ Limites qui en découlent, toutes assumées le temps de la transition :
   Google comme clé métier.
 - **La mémoire relationnelle n'existe pas** : elle sera un read model dérivé, jamais une table.
   `memoire_contextuelle` n'est ni remplacée, ni touchée.
+- **La couche provenance existe mais est vide.** `references_externes` et `champs_verrouilles`
+  (migration `0039`) n'ont aucun écrivain en production : **aucun connecteur n'existe**, aucune
+  synchronisation ne tourne, et aucun identifiant existant n'y a été converti. `mode` et
+  `source_de_verite` sont des types, pas des lignes : `synchronisations_entite` attend le premier
+  connecteur.
+- **Un conflit n'est pas encore matérialisé.** `deciderApplicationValeurExterne()` sait dire
+  « conflit », mais rien ne l'enregistre ni ne l'affiche : ni table dédiée, ni tâche, ni écran. La
+  forme reste une question ouverte d'ADR-056. Tant qu'aucun connecteur ne tourne, aucun conflit ne
+  peut survenir.
+- **Trois identifiants externes antérieurs restent hors de cette couche** :
+  `visites.rendez_vous_calendar_id` (corrélation temporaire, `UNIQUE NOT NULL`),
+  `envois_email.gmail_message_id` (audit technique, ADR-031-bis) et `memoire_contextuelle`
+  (hypothèse scorée). Constatés et gelés (ADR-056 §10), ils ne créent aucun précédent.
+- **Aucun auteur sur un verrou** : DOMIORA sait qu'un humain a corrigé une valeur, pas lequel.
+  Même dette que sur les interactions, à traiter avec le multi-membre.
 - **`notes_prospect_vendeur` n'est pas migrée** : son vocabulaire est déjà celui des futures
   `interactions` (ADR-055 §G), qui ne sont ni du projet ni de la personne.
 - **L'isolation inter-workspaces des parties de projet est applicative**, pas structurelle :

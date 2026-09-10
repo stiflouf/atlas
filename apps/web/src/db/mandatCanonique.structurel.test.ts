@@ -127,8 +127,8 @@ describe("ADR-055 §F — le modèle historique du mandat reste intact et fait f
     }
   });
 
-  it("ni provenance, ni connecteur", () => {
-    const horsPerimetre = ["references_externes", "projets_vendeur_biens", "mandat_biens"];
+  it("ni connecteur, ni relation projet-biens", () => {
+    const horsPerimetre = ["projets_vendeur_biens", "mandat_biens"];
     expect([...tables.keys()].filter((nom) => horsPerimetre.includes(nom))).toEqual([]);
   });
 

@@ -1615,6 +1615,163 @@ export const interactions = pgTable(
   ]
 );
 
+// ADR-056 §2 — RÉFÉRENCE EXTERNE : « telle entité DOMIORA correspond à telle entité chez tel
+// fournisseur ». C'est une ASSERTION d'identité faite par un connecteur, jamais une hypothèse.
+//
+// POURQUOI PAS `memoire_contextuelle` (ADR-056 §2, décision explicite) : cette table-là porte une
+// HYPOTHÈSE produite par un moteur flou — trois scores de confiance, un statut de validation, une
+// empreinte de contenu pour l'invalider, et des cibles en texte sans FK. Ici il n'y a rien à
+// scorer : un `id` livré par une API est affirmé ou absent. Les fusionner mettrait deux vérités de
+// nature différente dans une même table. `memoire_contextuelle` n'est pas touchée.
+//
+// RACINE (ADR-054 §7, et ADR-056 « Modèle de données » l'écrit explicitement) : `workspace_id` NOT
+// NULL. Ce n'est pas une commodité pour l'unicité — deux workspaces peuvent légitimement recevoir
+// le MÊME `id_externe` du MÊME fournisseur sans que ce soit une collision, parce qu'ils parlent à
+// deux comptes différents. Sans `workspace_id` dans la clé, l'un écraserait l'autre.
+//
+// CIBLES DÉDIÉES + `CHECK` « exactement une », et non le couple `type_entite_canonique` +
+// `id_entite_canonique` que le croquis d'ADR-056 §2 esquisse : ce couple ne peut porter AUCUNE clé
+// étrangère, alors que la même ADR exige « FK réelle vers une entité canonique » (§2, tableau
+// comparatif). Un id canonique qui ne désigne rien passerait sans bruit, et c'est exactement ce que
+// `taches`, `evenements_metier`, `parties_projet` et `interactions` refusent déjà. L'écart de forme
+// sert l'invariant que l'ADR énonce.
+//
+// N:1 (ADR-056 §3) : une entité canonique peut porter PLUSIEURS références — un contact reçu de
+// Playiad, d'un CRM tiers et de Google est trois faits vrais simultanément. L'inverse est interdit
+// par le `UNIQUE` : une identité externe ne désigne qu'une entité canonique.
+//
+// RÉSOUDRE UNE IDENTITÉ N'EST PAS DÉDUPLIQUER (ADR-056 §3, ADR-055 §H). Rattacher deux références
+// au même contact est une ASSERTION, jamais une déduction sur l'email ou le téléphone.
+export const referencesExternes = pgTable(
+  "references_externes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    // CLÉ TECHNIQUE stable, jamais un libellé affichable : elle vivra dans des clés d'unicité et
+    // des logs pendant des années, et un renommage marketing ne doit pas casser des identités.
+    // Aucun vocabulaire fermé : encoder 'playiad'/'hektor'/'apimo' aujourd'hui figerait une liste
+    // qu'aucun connecteur ne peut encore justifier. Seule la FORME est contrainte.
+    fournisseur: text("fournisseur").notNull(),
+    // Vocabulaire DU FOURNISSEUR, jamais réinterprété (ADR-056 §2). Le `buyer` de Playiad n'est pas
+    // le `projet_acquereur` de DOMIORA : conserver les deux évite de faire croire à une équivalence
+    // que seul l'adaptateur connaît.
+    typeEntiteExterne: text("type_entite_externe").notNull(),
+    idExterne: text("id_externe").notNull(),
+    // Les six entités canoniques qu'un connecteur peut désigner aujourd'hui. `interactions` en fait
+    // partie : c'est ainsi qu'un identifiant de message Gmail se rattachera à un échange, SANS
+    // ajouter la moindre colonne à `interactions` (ADR-056 §8).
+    // Pas de CASCADE : une entité canonique n'est jamais supprimée (ADR-012).
+    contactId: uuid("contact_id").references(() => contacts.id),
+    projetAcquereurId: uuid("projet_acquereur_id").references(() => projetsAcquereur.id),
+    projetVendeurId: uuid("projet_vendeur_id").references(() => projetsVendeur.id),
+    bienId: uuid("bien_id").references(() => biens.id),
+    mandatId: uuid("mandat_id").references(() => mandats.id),
+    interactionId: uuid("interaction_id").references(() => interactions.id),
+    // Les deux seules dates utiles : quand cette identité est apparue, et quand elle a été revue
+    // pour la dernière fois. La seconde est le seul moyen de savoir qu'une référence est devenue
+    // obsolète côté fournisseur. Pas de `cree_le` en plus : ce serait un troisième horodatage
+    // toujours égal au premier.
+    vuePourLaPremiereFoisLe: timestamp("vue_pour_la_premiere_fois_le", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    vuePourLaDerniereFoisLe: timestamp("vue_pour_la_derniere_fois_le", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Clé technique : minuscules, chiffres, tiret bas. Contraint la FORME, jamais le vocabulaire —
+    // 'Playiad (réseau)' est refusé, un fournisseur encore inconnu ne l'est pas.
+    check("references_externes_fournisseur_check", sql`${table.fournisseur} ~ '^[a-z0-9_]+$'`),
+    // EXACTEMENT une entité canonique — jamais zéro (une référence qui ne désigne rien n'est pas
+    // une identité), jamais deux (une identité externe ne peut pas être deux choses à la fois).
+    check(
+      "references_externes_une_seule_cible_check",
+      sql`(
+        (case when ${table.contactId} is not null then 1 else 0 end) +
+        (case when ${table.projetAcquereurId} is not null then 1 else 0 end) +
+        (case when ${table.projetVendeurId} is not null then 1 else 0 end) +
+        (case when ${table.bienId} is not null then 1 else 0 end) +
+        (case when ${table.mandatId} is not null then 1 else 0 end) +
+        (case when ${table.interactionId} is not null then 1 else 0 end)
+      ) = 1`
+    ),
+    // ADR-056 invariant 2 : une identité externe désigne AU PLUS une entité canonique, garanti par
+    // la base et non par une discipline applicative. Le workspace fait partie de la clé : deux
+    // conseillers parlant à deux comptes du même fournisseur ne se marchent pas dessus.
+    unique("references_externes_identite_unique").on(
+      table.workspaceId,
+      table.fournisseur,
+      table.typeEntiteExterne,
+      table.idExterne
+    ),
+  ]
+);
+
+// ADR-056 §4 — CHAMP VERROUILLÉ : une valeur que DOMIORA sait avoir été VOULUE par un humain, et
+// qu'aucune synchronisation ne réécrira. C'est la seule chose qui résout le cas fondateur d'ADR-056
+// (450 000 importé, 470 000 corrigé, 450 000 renvoyé au pull suivant).
+//
+// Provenance HYBRIDE (§4, option C) : ce modèle ne stocke QUE les exceptions. Une provenance
+// colonne par colonne créerait un schéma fantôme aussi gros que le schéma réel, à maintenir à
+// chaque ajout de colonne, pour zéro connecteur en production.
+//
+// VERROU PAR (ENTITÉ, CHAMP), et NON par (entité, fournisseur) comme le croquis d'ADR-056 §4 le
+// range dans `synchronisations_entite`. Écart délibéré, et il renforce l'invariant 4 : une
+// correction humaine est un fait sur LA VALEUR DOMIORA, pas sur la relation avec un fournisseur
+// particulier. Verrouiller par fournisseur laisserait un second connecteur écraser la correction
+// que le premier respecte — précisément le contraire de ce que le verrou promet.
+//
+// `synchronisations_entite` (source_de_verite, mode, synchronise_le, dernier_conflit_le) n'est PAS
+// créée ici : sans connecteur, aucune de ces quatre colonnes n'aurait d'écrivain. `mode` et
+// `source_de_verite` sont d'ailleurs des propriétés DU CONNECTEUR (§6), pas des lignes — elles
+// vivent dans le contrat typé, où elles ont un lecteur réel.
+//
+// Cinq cibles et non six : `interactions` en est absente. Un échange est un fait append-only ;
+// aucune synchronisation ne « corrige » un appel qui a eu lieu, il n'y a donc rien à y verrouiller.
+export const champsVerrouilles = pgTable(
+  "champs_verrouilles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — RACINE, comme `references_externes` (ADR-056, « Modèle de données »).
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    contactId: uuid("contact_id").references(() => contacts.id),
+    projetAcquereurId: uuid("projet_acquereur_id").references(() => projetsAcquereur.id),
+    projetVendeurId: uuid("projet_vendeur_id").references(() => projetsVendeur.id),
+    bienId: uuid("bien_id").references(() => biens.id),
+    mandatId: uuid("mandat_id").references(() => mandats.id),
+    // Nom d'une propriété CANONIQUE DOMIORA (`budgetMax`), jamais un chemin fournisseur
+    // (`playiad.budget`) : le verrou protège le Core, pas une correspondance. Aucun catalogue
+    // global de colonnes en base — la liste des champs verrouillables dépend du type d'entité et
+    // est validée par le repository, là où le type de l'entité est connu.
+    champ: text("champ").notNull(),
+    verrouilleLe: timestamp("verrouille_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "champs_verrouilles_une_seule_cible_check",
+      sql`(
+        (case when ${table.contactId} is not null then 1 else 0 end) +
+        (case when ${table.projetAcquereurId} is not null then 1 else 0 end) +
+        (case when ${table.projetVendeurId} is not null then 1 else 0 end) +
+        (case when ${table.bienId} is not null then 1 else 0 end) +
+        (case when ${table.mandatId} is not null then 1 else 0 end)
+      ) = 1`
+    ),
+    // Un verrou par (entité, champ) : verrouiller deux fois le même champ est le même fait, pas
+    // deux. Les lignes visant une autre entité ont leur colonne à NULL et ne s'y heurtent pas.
+    unique("champs_verrouilles_contact_champ_unique").on(table.contactId, table.champ),
+    unique("champs_verrouilles_projet_acquereur_champ_unique").on(table.projetAcquereurId, table.champ),
+    unique("champs_verrouilles_projet_vendeur_champ_unique").on(table.projetVendeurId, table.champ),
+    unique("champs_verrouilles_bien_champ_unique").on(table.bienId, table.champ),
+    unique("champs_verrouilles_mandat_champ_unique").on(table.mandatId, table.champ),
+  ]
+);
+
 export const taches = pgTable(
   "taches",
   {

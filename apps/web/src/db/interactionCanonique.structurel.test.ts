@@ -162,8 +162,8 @@ describe("ADR-055 §G — aucune table existante n'est fusionnée ni remplacée"
     expect(colonnes("memoire_contextuelle")).not.toContain("interaction_id");
   });
 
-  it("ni provenance, ni connecteur, ni relation projet-biens", () => {
-    const horsPerimetre = ["references_externes", "synchronisations_entite", "projets_vendeur_biens"];
+  it("ni connecteur, ni relation projet-biens", () => {
+    const horsPerimetre = ["synchronisations_entite", "projets_vendeur_biens"];
     expect([...tables.keys()].filter((nom) => horsPerimetre.includes(nom))).toEqual([]);
   });
 });

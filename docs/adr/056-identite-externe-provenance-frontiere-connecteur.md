@@ -1,7 +1,34 @@
 # ADR-056 — Identité externe, provenance des données et frontière connecteur
 
-**Statut :** Accepté
+**Statut :** Accepté — **primitives implémentées** (migration `0039`)
 **Date :** 2026-09-08
+
+> **État d'implémentation (2026-09-09).** Construit : `references_externes` (§2/§3) avec son
+> `UNIQUE` d'identité par workspace, `champs_verrouilles` (§4, la moitié « verrou » de la provenance
+> hybride), la fonction pure `deciderApplicationValeurExterne()` qui tient l'invariant 4, et le
+> contrat typé de capacités de connecteur (§6) avec sa garde `peutEcrireVersExterieur()`.
+>
+> NON construit, et volontairement : aucun connecteur réel, aucune synchronisation exécutée, aucune
+> UI de conflit ni d'écran Connectors, aucun SDK fournisseur, aucun backfill des identifiants
+> existants. Les trois exceptions de §10 (`visites.rendez_vous_calendar_id`,
+> `envois_email.gmail_message_id`, `memoire_contextuelle`) restent constatées et gelées.
+>
+> Écarts assumés sur la forme, tous au service des invariants que l'ADR énonce :
+>
+> - **Cibles dédiées + `CHECK` « exactement une »** au lieu du couple `type_entite_canonique` +
+>   `id_entite_canonique` esquissé en §2 : ce couple ne peut porter aucune clé étrangère, alors que
+>   le tableau comparatif de la même §2 exige « FK réelle vers une entité canonique ». Même patron
+>   que `taches`, `parties_projet` et `interactions`.
+> - **Verrou par (entité, champ)** et non par (entité, fournisseur) comme le range le croquis de §4 :
+>   une correction humaine est un fait sur la valeur DOMIORA, et verrouiller par fournisseur
+>   laisserait un second connecteur écraser ce que le premier respecte. L'écart renforce
+>   l'invariant 4.
+> - **`synchronisations_entite` non créée** : sans connecteur, `source_de_verite`, `mode`,
+>   `synchronise_le` et `dernier_conflit_le` n'auraient aucun écrivain. `mode` et `source_de_verite`
+>   sont d'ailleurs des propriétés DU CONNECTEUR (§6) : elles vivent dans le contrat typé, où elles
+>   ont un lecteur réel.
+> - **`interactions` est une cible de référence externe** mais pas de verrou : un échange qui a eu
+>   lieu n'est pas corrigé par une synchronisation.
 **Décideurs :** Steven Gausset (CEO), CTO
 
 > Rubriques : Contexte · Problème · Décision · Alternatives écartées · Modèle de données /

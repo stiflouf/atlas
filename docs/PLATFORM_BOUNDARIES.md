@@ -150,6 +150,33 @@ dans le Core ne change, seule la provenance des données change.
 
 ---
 
+## Ce qui existe déjà de cette frontière (ADR-056, migration `0039`)
+
+La frontière est **logique, pas physique** : elle n'exige ni worker, ni package séparé. Ce qui est
+posé aujourd'hui en est le strict nécessaire.
+
+```
+CONNECTEURS ──> SYNC ENGINE ──> CORE <── INTELLIGENCE / AUTOMATISATIONS <── PACKS
+```
+
+| Couche | Ce qui existe | Ce qui n'existe pas |
+|---|---|---|
+| **CONNECTEUR** | rien | aucun connecteur, aucun SDK fournisseur dans `package.json` |
+| **SYNC ENGINE** | `references_externes`, `champs_verrouilles`, `lib/provenance/` | aucun moteur, aucune synchronisation exécutée, aucune table de conflit |
+| **CORE** | inchangé | il ne connaît toujours aucun fournisseur |
+
+**Le Core ne dépend de personne**, et c'est vérifié : un test structurel échoue si un moteur pur ou
+un écran importe `lib/provenance/`, ou si une entité canonique gagne une colonne d'identifiant
+fournisseur.
+
+**Les capacités sont une propriété, pas un réglage.** Un connecteur déclare, par type d'entité,
+`read_only` / `pull` / `push` / `bidirectionnel`. Sans `push`, il ne peut structurellement jamais
+écrire vers l'extérieur — et **l'omission vaut refus**, jamais permission par défaut.
+
+**Une correction humaine est prioritaire, sans condition.** Un champ verrouillé n'est jamais réécrit
+par une synchronisation, même quand le fournisseur fait foi ; le désaccord devient un conflit, jamais
+un log silencieux. Voir `docs/DATA_MODEL.md`.
+
 ## Ce que cette carte ne dit pas
 
 - Ce qui est **construit** aujourd'hui : voir `docs/ARCHITECTURE.md` (état réel, avec sa mise en

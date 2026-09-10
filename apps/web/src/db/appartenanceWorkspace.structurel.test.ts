@@ -46,6 +46,10 @@ const TABLES_RACINES = [
   "configurations_automatisation",
   "runs_scan_automatisation",
   "compatibilites_a_resynchroniser",
+  // ADR-056 — la couche provenance naît racine : deux workspaces peuvent légitimement recevoir le
+  // MÊME identifiant du MÊME fournisseur sans que ce soit une collision.
+  "references_externes",
+  "champs_verrouilles",
 ];
 
 // FEUILLES — appartenance dérivée d'au moins une FK NOT NULL vers un parent possédé. Aucune ne
