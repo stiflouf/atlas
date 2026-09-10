@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq, like } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
@@ -132,29 +132,50 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
   });
 
   it("visite planifiée : CTA Préparer réel vers /visites/[id]/preparer ; une fois réalisée, CTA absent et jamais de compte rendu inventé", async () => {
-    const acquereur = await acquereurDeTest("VISITE");
-    const bien = await bienDeTest("VISITE");
-    const visite = await materialiserVisite({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      datePrevue: "2026-09-10",
-      rendezVousCalendarId: `gcal-fiche-acquereur-${bien.id}`,
-    });
+    // HORLOGE FIGÉE, et pas seulement une autre date en dur. Le scénario a besoin d'une visite qui
+    // n'a pas encore eu lieu : tant que sa date est à venir, `regleSuiviVisite` ne réclame aucun
+    // compte rendu (`depuisJours < 0`), et la dernière assertion vérifie bien ce qu'elle prétend.
+    // La date était écrite en dur, donc « à venir » a cessé de l'être le jour où le calendrier l'a
+    // rattrapée : le test s'est alors retourné contre un comportement métier correct. Une date plus
+    // lointaine n'aurait fait que reculer l'échéance — d'où l'horloge, et une date de visite
+    // dérivée d'elle.
+    //
+    // Même patron que clientRepository.test.ts et bienRepository.test.ts : seul `Date` est simulé,
+    // les timers réels du pool Postgres continuent de tourner.
+    const MAINTENANT = new Date("2026-06-15T09:00:00Z");
+    const UNE_SEMAINE = 7 * 24 * 60 * 60 * 1000;
+    const datePrevue = new Date(MAINTENANT.getTime() + UNE_SEMAINE).toISOString().slice(0, 10);
 
-    const avantRealisation = renderToStaticMarkup(
-      await rendreFiche(acquereur.id)
-    );
-    expect(avantRealisation).toContain(`href="/visites/${visite.id}/preparer"`);
-    expect(avantRealisation).toContain(bien.titre);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(MAINTENANT);
+    try {
+      const acquereur = await acquereurDeTest("VISITE");
+      const bien = await bienDeTest("VISITE");
+      const visite = await materialiserVisite({
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        datePrevue,
+        rendezVousCalendarId: `gcal-fiche-acquereur-${bien.id}`,
+      });
 
-    await marquerVisiteRealisee(visite.id);
+      const avantRealisation = renderToStaticMarkup(
+        await rendreFiche(acquereur.id)
+      );
+      expect(avantRealisation).toContain(`href="/visites/${visite.id}/preparer"`);
+      expect(avantRealisation).toContain(bien.titre);
 
-    const apresRealisation = renderToStaticMarkup(
-      await rendreFiche(acquereur.id)
-    );
-    expect(apresRealisation).not.toContain(`href="/visites/${visite.id}/preparer"`);
-    expect(apresRealisation).toContain("Réalisée");
-    expect(apresRealisation).not.toMatch(/compte[\s-]?rendu/i);
+      await marquerVisiteRealisee(visite.id);
+
+      const apresRealisation = renderToStaticMarkup(
+        await rendreFiche(acquereur.id)
+      );
+      expect(apresRealisation).not.toContain(`href="/visites/${visite.id}/preparer"`);
+      expect(apresRealisation).toContain("Réalisée");
+      expect(apresRealisation).not.toMatch(/compte[\s-]?rendu/i);
+    } finally {
+      // Restaurée même en cas d'échec : une horloge figée qui fuit fausserait les tests suivants.
+      vi.useRealTimers();
+    }
   });
 });
 
