@@ -161,7 +161,7 @@ CONNECTEURS ──> SYNC ENGINE ──> CORE <── INTELLIGENCE / AUTOMATISATI
 
 | Couche | Ce qui existe | Ce qui n'existe pas |
 |---|---|---|
-| **CONNECTEUR** | rien | aucun connecteur, aucun SDK fournisseur dans `package.json` |
+| **CONNECTEUR** | Gmail en SORTANT seul (`users.messages.send`, scope `gmail.send`) et Google Calendar en LECTURE seule | aucun pull Gmail, aucun SDK fournisseur dans `package.json`, aucun connecteur générique |
 | **SYNC ENGINE** | `references_externes`, `champs_verrouilles`, `lib/provenance/`, le pipeline d'application d'**une** mutation | aucun ordonnanceur, aucun lot, aucune synchronisation exécutée, aucune table de conflit |
 | **CORE** | inchangé | il ne connaît toujours aucun fournisseur |
 
@@ -179,6 +179,13 @@ champ. Un connecteur ne touche jamais le Core directement, et le Sync Engine pas
 repositories du Core, jamais par ses tables — un test structurel échoue s'il importe `@/db/schema`.
 La dépendance est à sens unique : rien du Core n'appelle le pipeline. Détail des huit étapes et des
 issues possibles : `docs/DATA_MODEL.md`.
+
+**Un fait externe n'est pas une mutation.** Un email parti est append-only : il n'a pas de valeur
+locale à contredire, donc ni décision d'import, ni verrou humain (`champs_verrouilles` exclut
+d'ailleurs `interactions` de ses cinq cibles). Il ne passe donc PAS par
+`appliquerMutationExterne()` — un test structurel le vérifie. C'est la distinction
+**ingestion / mutation**, et elle restera : la primitive générique d'ingestion n'existera que
+lorsqu'un deuxième type de fait externe la justifiera.
 
 **Une correction humaine est prioritaire, sans condition.** Un champ verrouillé n'est jamais réécrit
 par une synchronisation, même quand le fournisseur fait foi ; le désaccord devient un conflit, jamais

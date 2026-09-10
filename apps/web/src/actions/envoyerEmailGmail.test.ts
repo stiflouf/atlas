@@ -31,11 +31,19 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SEND_URL = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 
 const { getDb } = await import("@/db/client");
-const { envoisEmail: envoisEmailTable, prospectsVendeurs: prospectsVendeursTable, notesProspectVendeur: notesTable } =
-  await import("@/db/schema");
+const {
+  contacts: contactsTable,
+  envoisEmail: envoisEmailTable,
+  interactions: interactionsTable,
+  notesProspectVendeur: notesTable,
+  prospectsVendeurs: prospectsVendeursTable,
+  referencesExternes: referencesExternesTable,
+} = await import("@/db/schema");
 const { ecrireConnexionGoogle, supprimerConnexionGoogle } = await import("@/lib/google/connexion");
 const { SCOPE_GMAIL_SEND } = await import("@/lib/google/oauth");
 const { creerProspectVendeur } = await import("@/lib/prospectVendeurRepository");
+const { creerContact } = await import("@/lib/contactRepository");
+const { listerInteractionsDuContact } = await import("@/lib/interactionRepository");
 const { listerNotesProspectVendeur } = await import("@/lib/noteProspectVendeurRepository");
 const { getEnvoiEmailById } = await import("@/lib/envoiEmailRepository");
 const { deriverEtatEnvoiEmail } = await import("@/types/envoiEmail");
@@ -43,6 +51,7 @@ const { envoyerEmailGmailAction } = await import("./envoyerEmailGmail");
 
 const idsEnvois: string[] = [];
 const idsProspects: string[] = [];
+const idsContacts: string[] = [];
 
 beforeAll(async () => {
   await ecrireConnexionGoogle("refresh-token-test", `https://www.googleapis.com/auth/calendar.events.readonly ${SCOPE_GMAIL_SEND}`);
@@ -51,6 +60,19 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const id of idsEnvois) await getDb().delete(envoisEmailTable).where(eq(envoisEmailTable.id, id));
   for (const id of idsProspects) await getDb().delete(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id));
+  for (const id of idsContacts) {
+    const interactions = await getDb()
+      .select({ id: interactionsTable.id })
+      .from(interactionsTable)
+      .where(eq(interactionsTable.contactId, id));
+    for (const interaction of interactions) {
+      await getDb()
+        .delete(referencesExternesTable)
+        .where(eq(referencesExternesTable.interactionId, interaction.id));
+    }
+    await getDb().delete(interactionsTable).where(eq(interactionsTable.contactId, id));
+    await getDb().delete(contactsTable).where(eq(contactsTable.id, id));
+  }
   await supprimerConnexionGoogle();
 });
 
@@ -277,5 +299,135 @@ describe("envoyerEmailGmailAction", () => {
     // les deux "envoye" indépendamment, et surtout jamais deux appels Gmail réels.
     expect(statuts).toContain("envoye");
     expect(compteur.n).toBe(1);
+  });
+});
+
+
+// ADR-055 §G + ADR-056 — la chaîne complète, depuis l'action : Gmail répond, l'audit technique est
+// résolu, et le fait relationnel canonique naît de ce succès. Ce qui est vérifié ici et nulle part
+// ailleurs, c'est le CHAÎNAGE : que rien de canonique ne s'écrive avant la réponse de Google, et
+// que la date de l'interaction soit exactement celle de l'audit.
+describe("envoyerEmailGmailAction — fait canonique et identité Gmail", () => {
+  async function unProspectRattache(nom: string) {
+    const contact = await creerContact({ nom: `[test réel] ${nom}` }, WORKSPACE_TEST);
+    idsContacts.push(contact.id);
+    const prospect = await creerProspectVendeur({ nom, contactId: contact.id }, WORKSPACE_TEST);
+    idsProspects.push(prospect.id);
+    return { contact, prospect };
+  }
+
+  it("succès Gmail vers un destinataire rattaché : interaction email sortante + référence Gmail", async () => {
+    const { contact, prospect } = await unProspectRattache("Canonique");
+    const gmailMessageId = `gmail-msg-canonique-${randomUUID()}`;
+    mockFetchRoute(() => new Response(JSON.stringify({ id: gmailMessageId }), { status: 200 }));
+
+    const id = randomUUID();
+    idsEnvois.push(id);
+    const resultat = await envoyerEmailGmailAction(null, formulaire({
+      idempotencyKey: id,
+      destinataireEmail: "sophie@test.local",
+      objet: "Suivi de dossier",
+      corps: "Bonjour,\n\nMerci.",
+      destinataireType: "prospectVendeur",
+      destinataireId: prospect.id,
+    }));
+
+    expect(resultat.statut).toBe("envoye");
+
+    // L'audit technique reste intact et reste la source de vérité de l'envoi.
+    const envoi = await getEnvoiEmailById(id);
+    expect(deriverEtatEnvoiEmail(envoi!)).toBe("envoye");
+    expect(envoi!.gmailMessageId).toBe(gmailMessageId);
+
+    // Le fait relationnel, daté du MÊME instant que l'audit — pas d'une seconde lecture d'horloge.
+    const interactions = await listerInteractionsDuContact(contact.id);
+    expect(interactions).toHaveLength(1);
+    expect(interactions[0]).toMatchObject({ type: "email", sens: "sortant" });
+    expect(interactions[0].survenuLe).toBe(envoi!.reussiLe);
+    expect(interactions[0].contenu, "le corps n'est jamais recopié").toBeUndefined();
+
+    // L'identité Gmail du message, sur l'interaction et sur rien d'autre.
+    const [reference] = await getDb()
+      .select()
+      .from(referencesExternesTable)
+      .where(eq(referencesExternesTable.idExterne, gmailMessageId));
+    expect(reference).toMatchObject({
+      fournisseur: "gmail",
+      typeEntiteExterne: "message",
+      interactionId: interactions[0].id,
+    });
+
+    // La note ADR-027 existe TOUJOURS : le fait canonique ne remplace aucun flux historique.
+    const notes = await listerNotesProspectVendeur(prospect.id);
+    expect(notes.some((n) => n.type === "email")).toBe(true);
+  });
+
+  it("échec Gmail : aucune interaction, aucune identité externe", async () => {
+    const { contact, prospect } = await unProspectRattache("Echec canonique");
+    mockFetchRoute(() => new Response("erreur", { status: 500 }));
+
+    const id = randomUUID();
+    idsEnvois.push(id);
+    const resultat = await envoyerEmailGmailAction(null, formulaire({
+      idempotencyKey: id,
+      destinataireEmail: "sophie@test.local",
+      objet: "Objet",
+      corps: "Corps",
+      destinataireType: "prospectVendeur",
+      destinataireId: prospect.id,
+    }));
+
+    expect(resultat.statut).toBe("echec");
+    // Un email non parti n'est pas un échange : rien n'est affirmé.
+    expect(await listerInteractionsDuContact(contact.id)).toEqual([]);
+  });
+
+  it("incertain (aucune réponse exploitable) : aucune interaction", async () => {
+    // Sans identifiant de message fiable, il n'y a rien à rattacher — et surtout, on ne sait pas
+    // si l'email est parti. Affirmer un échange serait inventer un fait.
+    const { contact, prospect } = await unProspectRattache("Incertain canonique");
+    mockFetchRoute(() => {
+      throw new TypeError("fetch failed");
+    });
+
+    const id = randomUUID();
+    idsEnvois.push(id);
+    const resultat = await envoyerEmailGmailAction(null, formulaire({
+      idempotencyKey: id,
+      destinataireEmail: "sophie@test.local",
+      objet: "Objet",
+      corps: "Corps",
+      destinataireType: "prospectVendeur",
+      destinataireId: prospect.id,
+    }));
+
+    expect(resultat.statut).toBe("incertain");
+    expect(await listerInteractionsDuContact(contact.id)).toEqual([]);
+  });
+
+  it("destinataire non rattaché : l'envoi réussit, rien de canonique n'est inventé", async () => {
+    const prospect = await creerProspectVendeur({ nom: "Non rattaché" }, WORKSPACE_TEST);
+    idsProspects.push(prospect.id);
+    const gmailMessageId = `gmail-msg-orphelin-${randomUUID()}`;
+    mockFetchRoute(() => new Response(JSON.stringify({ id: gmailMessageId }), { status: 200 }));
+
+    const id = randomUUID();
+    idsEnvois.push(id);
+    const resultat = await envoyerEmailGmailAction(null, formulaire({
+      idempotencyKey: id,
+      destinataireEmail: "sophie@test.local",
+      objet: "Objet",
+      corps: "Corps",
+      destinataireType: "prospectVendeur",
+      destinataireId: prospect.id,
+    }));
+
+    expect(resultat.statut).toBe("envoye");
+    expect(deriverEtatEnvoiEmail((await getEnvoiEmailById(id))!)).toBe("envoye");
+    const references = await getDb()
+      .select()
+      .from(referencesExternesTable)
+      .where(eq(referencesExternesTable.idExterne, gmailMessageId));
+    expect(references, "aucune identité externe sans cible canonique").toEqual([]);
   });
 });

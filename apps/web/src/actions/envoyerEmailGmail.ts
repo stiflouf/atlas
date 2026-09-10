@@ -13,6 +13,10 @@ import {
   marquerEnvoiReussi,
 } from "@/lib/envoiEmailRepository";
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
+import {
+  finaliserEnvoiGmailReussi,
+  type DestinataireEnvoi,
+} from "@/lib/communications/finaliserEnvoiGmail";
 import { deriverEtatEnvoiEmail } from "@/types/envoiEmail";
 import type { IntentionCommunication } from "@/lib/communications/contexteCommunication";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -44,6 +48,34 @@ function texteOptionnel(valeur: FormDataEntryValue | null): string | undefined {
 
 function parseIntentionOptionnelle(valeur: FormDataEntryValue | null): IntentionCommunication | undefined {
   return INTENTIONS_VALIDES.includes(valeur as IntentionCommunication) ? (valeur as IntentionCommunication) : undefined;
+}
+
+// Le couple (type, id) vient de champs cachés du formulaire : il est donc VÉRIFIÉ ici contre les
+// deux seuls types que le flux sait produire, jamais transmis tel quel. Une valeur inconnue ne
+// produit pas d'erreur — simplement aucun destinataire canonique, donc aucune interaction.
+function parseDestinataire(type: string | undefined, id: string | undefined): DestinataireEnvoi | undefined {
+  if (!id) return undefined;
+  if (type === "acquereur") return { type: "acquereur", id };
+  if (type === "prospectVendeur") return { type: "prospectVendeur", id };
+  return undefined;
+}
+
+// Écrit le fait relationnel canonique (ADR-055 §G) et l'identité Gmail de ce message (ADR-056),
+// UNIQUEMENT après un succès confirmé. Même discipline que l'écriture ADR-027 juste en dessous :
+// l'échec de cette écriture secondaire n'invalide jamais l'envoi lui-même — Google a bien envoyé
+// l'email, et le prétendre incertain serait un mensonge plus grave que l'absence d'interaction.
+// L'audit `envois_email` a déjà été marqué réussi, dans sa propre transaction, avant cet appel.
+async function enregistrerFaitCanoniqueSiPertinent(
+  gmailMessageId: string,
+  survenuLe: string,
+  destinataire: DestinataireEnvoi | undefined,
+  workspaceId: string
+): Promise<void> {
+  try {
+    await finaliserEnvoiGmailReussi({ gmailMessageId, survenuLe, destinataire, workspaceId });
+  } catch (erreur) {
+    console.error("[envoi-email] échec de l'enregistrement de l'interaction canonique :", erreur);
+  }
 }
 
 // Écrit l'interaction ADR-027 SEULEMENT si l'envoi Gmail est un succès CONFIRMÉ (appelé après
@@ -95,11 +127,13 @@ export async function envoyerEmailGmailAction(
     return { statut: "echec", message: "Gmail n'est pas autorisé — autorisez Gmail avant d'envoyer." };
   }
 
+  // ADR-054 — appartenance explicite, résolue UNE fois : le même périmètre porte l'audit d'envoi
+  // et la référence externe du message.
+  const workspaceId = await exigerWorkspaceCourant();
   const contenuHash = calculerContenuHash(destinataireEmail, objet, corps);
   const tentative = await demarrerTentativeEnvoi({
     id: idempotencyKey,
-    // ADR-054 — appartenance explicite de l'audit d'envoi (table racine).
-    workspaceId: await exigerWorkspaceCourant(),
+    workspaceId,
     destinataireEmail,
     objet,
     contenuHash,
@@ -149,7 +183,19 @@ export async function envoyerEmailGmailAction(
   const resultat = await envoyerMessageGmail(accessToken, destinataireEmail, objet, corps);
 
   if (resultat.type === "succes") {
-    await marquerEnvoiReussi(idempotencyKey, resultat.gmailMessageId);
+    // L'audit d'abord, seul et dans sa propre transaction : c'est lui qui répond « l'email est-il
+    // parti ? », et aucune écriture canonique ne doit pouvoir le faire mentir.
+    const envoi = await marquerEnvoiReussi(idempotencyKey, resultat.gmailMessageId);
+    if (envoi?.reussiLe) {
+      // La MÊME date que `reussi_le`, relue de la ligne écrite — jamais une seconde lecture
+      // d'horloge : les deux tables décrivent un seul fait temporel.
+      await enregistrerFaitCanoniqueSiPertinent(
+        resultat.gmailMessageId,
+        envoi.reussiLe,
+        parseDestinataire(destinataireType, destinataireId),
+        workspaceId
+      );
+    }
     await enregistrerInteractionSiPertinent(destinataireType, destinataireId, objet);
     return { statut: "envoye" };
   }

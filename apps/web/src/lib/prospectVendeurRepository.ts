@@ -121,6 +121,22 @@ export async function rechercherProspectsVendeurs(params: { q?: string; vue: Vue
   return lignes.map(ligneVersProspectVendeur).filter(predicatVue(params.vue));
 }
 
+// ADR-055 — pendant vendeur de `getContactCanoniqueDeLAcquereur`, même rationale : le pont vers
+// l'identité canonique n'a pas à voyager sur le type que lisent les écrans. `undefined` = ligne
+// inexistante OU non rattachée ; dans les deux cas, rien de canonique n'est écrit.
+export async function getContactCanoniqueDuProspectVendeur(
+  prospectVendeurId: string,
+  executeur: Executeur = getDb()
+): Promise<string | undefined> {
+  if (!UUID_REGEX.test(prospectVendeurId)) return undefined;
+  const [ligne] = await executeur
+    .select({ contactId: prospectsVendeursTable.contactId })
+    .from(prospectsVendeursTable)
+    .where(eq(prospectsVendeursTable.id, prospectVendeurId))
+    .limit(1);
+  return ligne?.contactId ?? undefined;
+}
+
 export async function getProspectVendeurById(id: string): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb().select().from(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id)).limit(1);

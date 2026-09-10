@@ -885,6 +885,54 @@ Le Core ne dépend de personne. `lib/provenance/contratConnecteur.ts` déclare l
 ne peut structurellement jamais écrire vers l'extérieur, et **l'omission vaut refus**, jamais
 permission par défaut. Aucun SDK fournisseur n'est ajouté à `package.json`.
 
+#### Le premier fournisseur réel : Gmail sortant (`lib/communications/finaliserEnvoiGmail.ts`)
+
+Un email parti de DOMIORA vers une personne connue **canoniquement** devient un fait relationnel,
+et l'identifiant Gmail de ce message devient l'identité externe de ce fait :
+
+```
+Gmail send ── message.id ──> finaliserEnvoiGmailReussi()
+                                  ├── envois_email      = audit TECHNIQUE (déjà écrit, intact)
+                                  ├── interactions      = fait relationnel (email / sortant)
+                                  └── references_externes = identité Gmail du message
+```
+
+| | `envois_email` | `interactions` |
+|---|---|---|
+| Répond à | « l'email est-il parti ? » | « que s'est-il passé dans cette relation ? » |
+| Porte | clé d'idempotence, état `incertain`, hash, catégorie d'erreur | contact, type, sens, date |
+| Statut | audit technique, jamais un fait CRM (ADR-031-bis) | fait canonique (ADR-055 §G) |
+
+Les deux coexistent, aucune ne remplace l'autre. **L'audit reste la source de vérité de l'envoi** :
+il est marqué réussi dans sa propre transaction, **avant** toute écriture canonique, et l'échec de
+l'écriture canonique ne le fait jamais mentir — Google a envoyé l'email, prétendre l'inverse serait
+plus grave que l'absence d'interaction.
+
+**Identité externe** : `fournisseur = gmail`, `type_entite_externe = message`, `id_externe` = le
+`message.id` **brut** rendu par l'API — sans préfixe, contrairement à
+`visites.rendez_vous_calendar_id` (`gcal-…`), exception antérieure et gelée.
+
+**Le rattachement passe par une colonne, jamais par une adresse.** `acquereurs.contact_id` ou
+`prospects_vendeurs.contact_id` : deux primitives dédiées les lisent, et rien d'autre. Ces colonnes
+sont **NULL sur toutes les lignes antérieures à ADR-055** — dans ce cas l'envoi réussit, l'audit est
+correct, et **aucune interaction n'est créée**. Ce n'est pas une erreur : c'est le refus de fabriquer
+une identité que personne n'a rattachée (ADR-055 §H).
+
+**Aucun contenu, aucun contexte métier.** Le corps n'est jamais persisté (ADR-031-bis) et
+`interactions` n'a pas de champ `sujet` : recopier l'objet dans `contenu` le ferait passer pour le
+message. Quant au contexte, le flux d'envoi connaît un `bienId` (ce dont le message parle) et le
+dossier du destinataire (une propriété de la personne) — ni l'un ni l'autre n'établit dans quel
+dossier l'échange a eu lieu.
+
+**Un message Gmail, une interaction.** L'identité externe est interrogée **avant** toute création ;
+interaction et référence sont écrites dans **une** transaction. Face à deux finalisations
+concurrentes, c'est la contrainte `UNIQUE (workspace, fournisseur, type, id externe)` qui tranche :
+la transaction perdante emporte son interaction, aucune orpheline ne subsiste. Aucun verrou
+applicatif.
+
+**Aucun backfill** : seuls les envois postérieurs à ce lot produisent une interaction. Convertir
+l'historique fabriquerait les doublons qu'un futur pull Gmail ne saurait pas rapprocher.
+
 #### Le pipeline d'application (`lib/provenance/appliquerMutationExterne.ts`)
 
 Le Sync Engine n'a **qu'une** porte d'entrée, et elle traite **une** mutation :

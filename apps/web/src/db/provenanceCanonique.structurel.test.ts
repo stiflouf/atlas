@@ -268,6 +268,65 @@ describe("ADR-056 §9 — le Core ne dépend de personne", () => {
     expect(fautifs).toEqual([]);
   });
 
+  it("Gmail reste un fournisseur SORTANT : aucun scope de lecture, aucun pull", () => {
+    // Le premier fournisseur réel de DOMIORA écrit un fait relationnel à partir d'un envoi. Lire
+    // la boîte serait un autre produit, avec un autre consentement et une autre politique de
+    // rétention — et la frontière se perdrait le jour où « juste les en-têtes » paraîtrait anodin.
+    const SCOPES_INTERDITS = ["gmail.readonly", "gmail.metadata", "gmail.modify", "gmail.compose", "gmail.labels"];
+    const PULL_GMAIL = [
+      "users/me/messages?",
+      "users/me/threads",
+      "users/me/history",
+      "users/me/labels",
+      "users/me/drafts",
+      "messages.list",
+      "messages.get",
+      "historyId",
+      "internalDate",
+    ];
+    const fautifs = FICHIERS.filter((chemin) => {
+      const contenu = codeSeul(chemin);
+      return [...SCOPES_INTERDITS, ...PULL_GMAIL].some((interdit) => contenu.includes(interdit));
+    });
+    expect(fautifs, "aucune lecture Gmail dans le code").toEqual([]);
+
+    // Le seul endpoint Gmail du dépôt reste l'envoi.
+    const gmail = readFileSync(join("src", "lib", "google", "gmailClient.ts"), "utf8");
+    expect(gmail).toContain("gmail/v1/users/me/messages/send");
+    // Et le seul scope Gmail demandé reste celui de l'envoi.
+    const oauth = readFileSync(join("src", "lib", "google", "oauth.ts"), "utf8");
+    expect(oauth).toContain("https://www.googleapis.com/auth/gmail.send");
+    expect(oauth).toContain("https://www.googleapis.com/auth/calendar.events.readonly");
+  });
+
+  it("le fait canonique tiré d'un envoi Gmail n'emprunte ni le pipeline de mutation ni les verrous", () => {
+    // Un email parti est un fait append-only. Il n'a pas de valeur locale à contredire, donc rien
+    // à arbitrer : ni `deciderApplicationValeurExterne`, ni `champs_verrouilles` (dont les cinq
+    // cibles excluent déjà `interactions`).
+    const contenu = codeSeul(join("src", "lib", "communications", "finaliserEnvoiGmail.ts"));
+    for (const interdit of ["appliquerMutationExterne", "champVerrouille", "champsVerrouilles", "deciderApplication"]) {
+      expect(contenu, `la finalisation ne doit pas contenir « ${interdit} »`).not.toContain(interdit);
+    }
+    // Elle ne parle pas non plus à Google : elle reçoit un identifiant déjà obtenu.
+    expect(contenu).not.toMatch(/\bfetch\(|https?:\/\//);
+  });
+
+  it("le rattachement d'un email à une personne passe par une colonne, jamais par une adresse", () => {
+    // ADR-055 §H. Deux personnes peuvent partager une adresse, et une adresse peut changer de
+    // main : rapprocher là-dessus fusionnerait des gens que personne n'a demandé de fusionner.
+    const contenu = codeSeul(join("src", "lib", "communications", "finaliserEnvoiGmail.ts"));
+    // Ce qui est interdit, c'est de LIRE une personne par son adresse — pas le mot « email », qui
+    // est aussi le type légitime de l'interaction produite.
+    for (const motif of [/destinataireEmail/, /\.email\b/, /\btelephone\b/i]) {
+      expect(contenu, `aucun rapprochement par ${motif.source}`).not.toMatch(motif);
+    }
+    // Et elle ne recopie aucun corps ni objet de message : la politique de rétention d'ADR-031-bis
+    // reste celle qu'elle était.
+    for (const interdit of ["corps", "objet", "contenuHash"]) {
+      expect(contenu, `la finalisation ne persiste pas « ${interdit} »`).not.toContain(interdit);
+    }
+  });
+
   it("le Core ne dépend pas du Sync Engine", () => {
     // La dépendance est à SENS UNIQUE. Un repository Core, une Server Action ou un moteur qui
     // appellerait le pipeline ferait de la synchronisation une étape d'un flux métier — et le

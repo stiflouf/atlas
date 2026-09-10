@@ -119,6 +119,26 @@ export async function rechercherAcquereursPage(params: {
 
 // Même règle de repli que getBienById() : dataset réel non vide => lookup DB uniquement, même
 // pour un id de démo direct.
+// ADR-055 — le PONT vers l'identité canonique, et rien d'autre. Une primitive dédiée plutôt que
+// `contactId` ajouté à `ProfilAcquereur` : ce champ n'a aucun sens pour un écran, et l'exposer sur
+// le type que toute l'application lit inviterait à le rendre partout.
+//
+// `undefined` couvre DEUX cas volontairement indistincts ici — acquéreur inexistant, et acquéreur
+// existant mais non rattaché (toutes les lignes antérieures à ADR-055). L'appelant n'en fait qu'une
+// chose : ne rien écrire de canonique. Aucun repli mock : ce chemin ne sert pas l'affichage.
+export async function getContactCanoniqueDeLAcquereur(
+  acquereurId: string,
+  executeur: Executeur = getDb()
+): Promise<string | undefined> {
+  if (!UUID_REGEX.test(acquereurId)) return undefined;
+  const [ligne] = await executeur
+    .select({ contactId: acquereursTable.contactId })
+    .from(acquereursTable)
+    .where(eq(acquereursTable.id, acquereurId))
+    .limit(1);
+  return ligne?.contactId ?? undefined;
+}
+
 export async function getClientById(id: string): Promise<ProfilAcquereur | undefined> {
   try {
     if (UUID_REGEX.test(id)) {

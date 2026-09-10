@@ -1070,6 +1070,19 @@ Limites qui en découlent, toutes assumées le temps de la transition :
   « conflit », mais rien ne l'enregistre ni ne l'affiche : ni table dédiée, ni tâche, ni écran. La
   forme reste une question ouverte d'ADR-056. Tant qu'aucun connecteur ne tourne, aucun conflit ne
   peut survenir.
+- **L'interaction canonique tirée d'un envoi Gmail ne couvre qu'une partie du portefeuille.** Elle
+  n'est créée que si la ligne destinataire porte un `contact_id`, donc uniquement pour les
+  acquéreurs et prospects vendeurs créés depuis le lot ADR-055. Les lignes antérieures restent
+  silencieuses : l'envoi réussit, l'audit est correct, aucun échange n'est enregistré. La couverture
+  réelle dépend donc de l'âge du portefeuille, et elle n'a pas été mesurée.
+- **Un seul type d'échange, une seule direction.** Seul l'email SORTANT envoyé par l'API Gmail
+  produit une interaction. Un `mailto:` (le chemin par défaut de l'écran de communication) n'en
+  produit aucune, faute d'identifiant de message et de preuve d'envoi. L'entrant n'existe pas.
+- **Une interaction d'email peut être perdue sans que rien ne le signale.** L'écriture canonique
+  suit l'audit dans une transaction séparée, et son échec est journalisé sans jamais invalider
+  l'envoi (même principe qu'ADR-028). Si elle échoue, l'email est parti, l'audit le dit, et aucun
+  échange n'est enregistré — aucun rattrapage n'existe. C'est le prix assumé de ne jamais faire
+  mentir l'audit d'envoi.
 - **Le pipeline d'application traite UNE mutation, pour UNE entité.** `appliquerMutationExterne()`
   ne couvre que le projet acquéreur et huit de ses champs. Contact, projet vendeur, bien, mandat et
   interaction ne sont pas synchronisables : la généralisation attend que le patron soit prouvé par
