@@ -77,6 +77,61 @@ export async function getProjetAcquereurById(
   return ligne ? ligneVersProjet(ligne) : undefined;
 }
 
+// ADR-055 §B — écriture du BLOC de critères, pour une modification HUMAINE complète. Distincte de
+// `modifierChampProjetAcquereur` et pas un sucre syntaxique par-dessus : appliquer un formulaire
+// champ par champ ferait échouer des saisies parfaitement valides. `budgetMin` et `budgetMax` ne
+// sont vrais qu'ENSEMBLE — passer un couple (100k, 200k) à (300k, 400k) refuserait la première
+// écriture, `300k > 200k`, sur un état intermédiaire que l'utilisateur n'a jamais demandé.
+// L'invariant est donc vérifié sur l'état FINAL, une seule fois.
+//
+// Ce que cette primitive NE touche PAS : `stadeProjet` (le parcours commercial reste lu et écrit
+// sur le dossier tant que ses écrans n'ont pas basculé) et `archiveLe` (cycle de vie). Les écrire
+// ici sans lecteur créerait une seconde vérité muette.
+//
+// `undefined` = refus métier, jamais une écriture partielle — même contrat que
+// `modifierChampProjetAcquereur`, dont l'appelant fait déjà un refus explicite.
+export type CriteresProjetAcquereur = {
+  budgetMin: number;
+  budgetMax: number;
+  criteres: string[];
+  piecesMin?: number;
+  surfaceMin?: number;
+  accessibiliteRequise?: boolean;
+  necessiteParking?: boolean;
+  necessiteExterieur?: boolean;
+};
+
+export async function modifierCriteresProjetAcquereur(
+  id: string,
+  input: CriteresProjetAcquereur,
+  executeur: Executeur = getDb()
+): Promise<ProjetAcquereur | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  if (input.budgetMin > input.budgetMax) return undefined;
+
+  const [ligne] = await executeur
+    .update(projetsAcquereurTable)
+    .set({
+      budgetMin: input.budgetMin,
+      budgetMax: input.budgetMax,
+      criteres: input.criteres,
+      piecesMin: input.piecesMin ?? null,
+      surfaceMin: input.surfaceMin ?? null,
+      accessibiliteRequise: input.accessibiliteRequise ?? null,
+      necessiteParking: input.necessiteParking ?? null,
+      necessiteExterieur: input.necessiteExterieur ?? null,
+    })
+    .where(eq(projetsAcquereurTable.id, id))
+    .returning();
+  if (!ligne) return undefined;
+
+  // Même invalidation que l'écriture champ par champ, et portée par le writer Core pour la même
+  // raison : l'appelant n'a pas à savoir qu'un moteur de matching existe.
+  await enqueuerResynchronisationProjetAcquereur(id, executeur);
+
+  return ligneVersProjet(ligne);
+}
+
 // Écriture CIBLÉE d'un seul champ, avec un mapping EXPLICITE champ -> colonne. Jamais
 // `.set({ [champ]: valeur })` : un nom de colonne venu de l'extérieur, même filtré en amont,
 // transforme ce repository en interpréteur générique — et la première fois qu'un appelant oublie

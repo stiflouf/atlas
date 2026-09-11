@@ -260,7 +260,7 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
       notes: acquereur.notes,
       datePremiereContact: acquereur.datePremiereContact,
       necessiteParking: true,
-    });
+    }, "dossier");
     const evenement = {
       id: "n/a",
       workspaceId: WORKSPACE_TEST,

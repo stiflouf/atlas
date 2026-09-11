@@ -32,7 +32,7 @@ const MOTEUR = [
   join("src", "lib", "compatibilite", "criteres.ts"),
 ];
 
-const RESOLUTION = join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts");
+const RESOLUTION = join("src", "lib", "criteresAcquereurEffectifs.ts");
 
 describe("ADR-034 — le moteur reste pur et ignore le stockage", () => {
   it("n'importe ni base, ni repository, ni résolution de source", () => {
@@ -100,7 +100,10 @@ describe("ADR-055 §B — la règle de source est appliquée au même endroit, u
     // porte connaît le pont. Une seconde signifierait deux règles de source, qui divergeront.
     const chaine = FICHIERS.filter((chemin) => chemin.includes(join("lib", "compatibilite")));
     const connaissentLePont = chaine.filter((chemin) => /projetAcquereurId|projet_acquereur_id/.test(codeSeul(chemin)));
-    expect(connaissentLePont).toEqual([RESOLUTION, join("src", "lib", "compatibilite", "resynchronisationRepository.ts")]);
+    // Seule l'INVALIDATION y reste : elle doit remonter du projet vers les dossiers qui le
+    // référencent. La résolution de source, elle, a quitté ce dossier pour `criteresAcquereurEffectifs`,
+    // partagée avec l'affichage — le moteur n'en est plus que l'un des deux consommateurs.
+    expect(connaissentLePont).toEqual([join("src", "lib", "compatibilite", "resynchronisationRepository.ts")]);
   });
 
   it("aucun repli champ par champ dans la résolution", () => {
@@ -109,6 +112,66 @@ describe("ADR-055 §B — la règle de source est appliquée au même endroit, u
     const code = codeSeul(RESOLUTION);
     expect(code).not.toMatch(/projet\.\w+\s*\?\?\s*acquereur\./);
     expect(code).not.toMatch(/acquereur\.\w+\s*\?\?\s*projet\./);
+  });
+});
+
+describe("ADR-055 §B — l'écriture humaine suit la même règle de source", () => {
+  const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
+  const REGLE = join("src", "lib", "criteresAcquereurEffectifs.ts");
+
+  it("la règle de source n'est écrite qu'une fois, et les deux projections en dépendent", () => {
+    // L'affichage et le matching répondent à la même question. Deux implémentations de la règle
+    // finiraient par y répondre différemment — et l'écart serait invisible, chacune étant verte de
+    // son côté.
+    const jointure = /leftJoin\(\s*projetsAcquereurTable/;
+    const porteurs = FICHIERS.filter((chemin) => jointure.test(codeSeul(chemin)));
+    expect(porteurs).toEqual([REGLE]);
+
+    for (const projection of [
+      join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts"),
+      join("src", "lib", "clientRepository.ts"),
+    ]) {
+      expect(codeSeul(projection), projection).toContain("criteresAcquereurEffectifs");
+    }
+  });
+
+  it("aucun repli champ par champ, dans aucune des deux projections", () => {
+    for (const chemin of [
+      REGLE,
+      join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts"),
+      join("src", "lib", "clientRepository.ts"),
+    ]) {
+      const code = codeSeul(chemin);
+      expect(code, chemin).not.toMatch(/projet\.\w+\s*\?\?\s*acquereur\./);
+      expect(code, chemin).not.toMatch(/criteres\.\w+\s*\?\?\s*acquereur\./);
+    }
+  });
+
+  it("la Server Action passe par les writers Core, jamais par Drizzle", () => {
+    // Un UPDATE direct depuis l'action contournerait l'invariant budget du Core ET son invalidation
+    // ADR-036 — deux garanties qui ne vivent que dans le writer canonique.
+    const code = codeSeul(join("src", "actions", "modifierAcquereur.ts"));
+    expect(code).not.toMatch(/drizzle-orm/);
+    expect(code).not.toMatch(/@\/db\/schema/);
+    expect(code).toContain("modifierCriteresProjetAcquereur");
+  });
+
+  it("l'édition ne canonicalise jamais un dossier historique", () => {
+    // Rattacher l'historique est un geste explicite, réservé à son propre lot : une édition ne doit
+    // pas pouvoir créer un Contact ou un projet au passage.
+    const code = codeSeul(join("src", "actions", "modifierAcquereur.ts"));
+    for (const createur of ["creerContact", "creerProjetAcquereur", "ajouterPartieProjet"]) {
+      expect(code, createur).not.toContain(createur);
+    }
+  });
+
+  it("aucun écran ne connaît le Sync Engine", () => {
+    // L'action pose un verrou humain (ADR-056 §4) : c'est une primitive du Core de provenance, pas
+    // le pipeline d'import. La frontière tient tant qu'aucune UI n'appelle `appliquerMutationExterne`.
+    const fautifs = FICHIERS.filter(
+      (chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components"))
+    ).filter((chemin) => /appliquerMutationExterne|contratConnecteur/.test(codeSeul(chemin)));
+    expect(fautifs).toEqual([]);
   });
 });
 

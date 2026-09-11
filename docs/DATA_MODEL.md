@@ -517,6 +517,48 @@ de le recalculer. La porter dans le writer Core plutôt que dans `appliquerMutat
 frontière ADR-056 §9 : une source externe pousse une valeur au Core et n'a jamais à savoir qu'un
 moteur de matching existe.
 
+## Écriture humaine des critères acquéreur (ADR-055 §B, lot « human write bridge »)
+
+**La règle d'écriture est le miroir exact de la règle de lecture, au niveau de l'AGRÉGAT :**
+
+| État de la ligne `acquereurs` | Où `modifierAcquereurAction` écrit les critères |
+| --- | --- |
+| `projet_acquereur_id` **présent** | **`projets_acquereur`** — et les colonnes de critères du dossier ne sont plus touchées |
+| `projet_acquereur_id` **absent** | `acquereurs`, exactement comme avant |
+
+**Aucun double-write.** Une fois le projet présent, il est la source de vérité de son périmètre.
+Continuer à écrire les colonnes du dossier « pour rester synchronisé » recréerait les deux vérités
+que la bascule des lectures a défaites. `modifierAcquereur()` prend donc une cible **obligatoire**
+(`'dossier'` / `'projet_canonique'`) : un oubli refuse de compiler au lieu d'écrire au mauvais
+endroit.
+
+**Lecture pour affichage et pour édition, même source.** `getClientById()`, `listerClients()`,
+`listerClientsArchives()` et `rechercherAcquereursPage()` superposent les critères effectifs au
+dossier rendu. Sans cela, un dossier rattaché afficherait ses colonnes gelées à la création — le
+formulaire rechargerait une valeur que le matching n'utilise pas, et un simple réenregistrement
+écraserait le canonique. `listerClientsActifsPersistes()` reste volontairement brute : ses seuls
+consommateurs (synchroniseur et baseline ADR-036) résolvent eux-mêmes le profil du moteur.
+
+**Une seule règle, deux projections.** `lib/criteresAcquereurEffectifs.ts` porte la règle et la
+requête ; `lib/compatibilite/profilCompatibiliteRepository.ts` en projette ce que le moteur lit,
+`lib/clientRepository.ts` ce que l'écran affiche. Verrouillé par un test structurel : une seconde
+jointure `acquereurs ⟕ projets_acquereur` ailleurs dans `src/` fait échouer la suite.
+
+**Verrou humain (ADR-056 §4).** Une correction humaine d'un critère pose un `champs_verrouilles` sur
+`(projet_acquereur, champ)` — une valeur corrigée par un humain n'est plus jamais réécrite par une
+synchronisation. Seuls les champs **réellement modifiés** sont verrouillés : réenregistrer un
+formulaire à l'identique n'est pas une correction, et verrouillerait sinon les huit champs d'un coup.
+
+**Atomicité.** Résolution de la source, écriture du projet, écriture du dossier, verrous et demande
+de resynchronisation ADR-036 sont dans **une seule transaction**.
+
+**Ce que ce lot ne déplace PAS**, faute d'écran et de writer côté canonique : l'identité
+(`nom`, `prenom`, `email`, `telephone` — elles vivront sur `contacts`), le parcours
+(`stade_projet`), le cycle de vie (`archive_le`), `notes`, `date_premiere_contact` et les secteurs
+de recherche. Conséquence assumée : `projets_acquereur.stade_projet`, écrit à la création, n'est plus
+mis à jour ensuite — aucun lecteur ne s'en sert, et le corriger demanderait de basculer le pipeline
+commercial, qui est un lot à part entière.
+
 **Consommateurs basculés** : `lib/compatibilite/orchestration.ts` (écrans bien et acquéreur),
 `lib/compatibilite/synchronisation.ts` (ADR-036), `lib/compatibilite/baseline.ts`,
 `lib/opportunites/contexte.ts` (écran Aujourd'hui), `lib/automatisations/catalogueRegles.ts`

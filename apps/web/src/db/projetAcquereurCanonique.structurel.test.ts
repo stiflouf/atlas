@@ -134,18 +134,32 @@ describe("ADR-055 §B — le projet est une intention immobilière, jamais une p
 describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le modèle historique", () => {
   const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
 
-  it("une seule porte de la chaîne de compatibilité connaît le modèle canonique", () => {
+  it("une seule porte connaît le modèle canonique, et ce n'est plus le moteur", () => {
     // La bascule annoncée par ADR-055 (stratégie de migration, étape 3) a eu lieu pour les CRITÈRES
-    // acquéreur : `projets_acquereur` fait foi dès qu'une ligne `acquereurs` est rattachée. Ce test
-    // ne dit donc plus « personne ne lit le canonique » — il dit où cette connaissance a le droit
-    // de vivre. Une seconde porte signifierait deux règles de source, qui divergeront.
-    const fautifs = FICHIERS.filter((chemin) => chemin.includes(join("lib", "compatibilite"))).filter((chemin) => {
+    // acquéreur : `projets_acquereur` fait foi dès qu'une ligne `acquereurs` est rattachée, en
+    // lecture comme en écriture humaine. Ce test ne dit donc plus « personne ne lit le canonique »
+    // — il dit où cette connaissance a le droit de vivre. Une seconde porte signifierait deux
+    // règles de source, qui divergeront sans que rien ne le signale.
+    //
+    // `lib/compatibilite` n'en fait plus partie : la règle a été extraite dans
+    // `criteresAcquereurEffectifs`, que le matching ET l'affichage consomment. Ne restent ici que
+    // les chemins qui NOMMENT le projet pour l'invalider ou l'écrire, jamais pour arbitrer la source.
+    const porteurs = FICHIERS.filter((chemin) => {
       const contenu = readFileSync(chemin, "utf8");
-      return /projetsAcquereur|projetAcquereurRepository|partiesProjet/.test(contenu);
+      return /projetsAcquereurTable|partiesProjetTable/.test(contenu);
     });
-    expect(fautifs, "seule la résolution de source lit le projet canonique").toEqual([
-      join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts"),
-    ]);
+    expect(porteurs.sort(), "seuls le pont, la règle de source et les writers canoniques").toEqual(
+      [
+        join("src", "lib", "criteresAcquereurEffectifs.ts"),
+        join("src", "lib", "projetAcquereurRepository.ts"),
+        join("src", "lib", "partieProjetRepository.ts"),
+        // `interactions` est une feuille de `contacts` qui peut CONTEXTUALISER un projet
+        // (ADR-055 §G) : elle nomme la table pour sa FK, jamais pour lire un critère.
+        join("src", "lib", "interactionRepository.ts"),
+        join("src", "lib", "provenance", "champVerrouilleRepository.ts"),
+        join("src", "lib", "provenance", "referenceExterneRepository.ts"),
+      ].sort()
+    );
     // La contrepartie — le moteur lui-même n'importe ni base, ni repository, ni résolution — est
     // verrouillée par lib/compatibilite/lectureCanonique.structurel.test.ts, qui neutralise les
     // commentaires avant d'inspecter. La dupliquer ici sur le fichier brut ferait échouer le module

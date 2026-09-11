@@ -2,6 +2,7 @@ import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } fro
 import { getDb, type Executeur } from "@/db/client";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
+import { resoudreSourcesCriteres } from "@/lib/criteresAcquereurEffectifs";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
 import type { PageResultat } from "@/types/pagination";
 
@@ -40,13 +41,43 @@ function ligneVersAcquereur(ligne: LigneAcquereur): ProfilAcquereur {
   };
 }
 
+// ADR-055 §B — PROJECTION D'AFFICHAGE. Depuis que le projet canonique fait foi pour ses critères,
+// un dossier rattaché ne peut plus être rendu tel qu'il est stocké : ses colonnes de critères ne
+// sont plus écrites (voir `modifierAcquereur`, cible `projet_canonique`) et affichent une valeur
+// gelée à la création. Les montrer produirait exactement le mensonge symétrique de celui que la
+// bascule des lectures a corrigé — l'écran annoncerait un budget que le matching n'utilise pas.
+//
+// La RÈGLE de source n'est pas réécrite ici : `lib/criteresAcquereurEffectifs.ts` la tient, et le
+// moteur de compatibilité s'appuie sur le même module. Une seule question, une seule réponse.
+//
+// `listerClientsActifsPersistes()` est volontairement LAISSÉE BRUTE : ses seuls consommateurs
+// (synchroniseur et baseline ADR-036) résolvent eux-mêmes le profil du moteur juste après, et
+// superposer deux fois la même règle coûterait une requête sans rien garantir de plus.
+async function appliquerCriteresEffectifs(
+  acquereurs: ProfilAcquereur[],
+  executeur: Executeur = getDb()
+): Promise<ProfilAcquereur[]> {
+  if (acquereurs.length === 0) return acquereurs;
+  const sources = await resoudreSourcesCriteres(
+    acquereurs.map((a) => a.id),
+    executeur
+  );
+  return acquereurs.map((acquereur) => {
+    const source = sources.get(acquereur.id);
+    // Repli au niveau de l'AGRÉGAT : soit le projet fournit tous ses champs, soit aucun. Un NULL
+    // canonique reste `undefined` — jamais recomblé avec la vieille valeur du dossier.
+    if (!source || source.source === "dossier") return acquereur;
+    return { ...acquereur, ...source.criteres };
+  });
+}
+
 // Acquéreurs réels si au moins un existe, sinon les acquéreurs de démonstration — jamais un
 // mélange, même principe que listerBiens(). La bascule compte TOUTES les lignes réelles
 // (archivées comprises) — seul le résultat retourné exclut les archivés (ADR-012).
 export async function listerClients(): Promise<ProfilAcquereur[]> {
   try {
     const lignes = await getDb().select().from(acquereursTable);
-    if (lignes.length > 0) return lignes.filter((l) => !l.archiveLe).map(ligneVersAcquereur);
+    if (lignes.length > 0) return appliquerCriteresEffectifs(lignes.filter((l) => !l.archiveLe).map(ligneVersAcquereur));
   } catch (erreur) {
     console.error("[acquereurs] lecture Postgres indisponible :", erreur);
     if (estProduction()) throw erreur;
@@ -69,7 +100,7 @@ export async function listerClientsActifsPersistes(): Promise<ProfilAcquereur[]>
 export async function listerClientsArchives(): Promise<ProfilAcquereur[]> {
   try {
     const lignes = await getDb().select().from(acquereursTable);
-    return lignes.filter((l) => l.archiveLe).map(ligneVersAcquereur);
+    return appliquerCriteresEffectifs(lignes.filter((l) => l.archiveLe).map(ligneVersAcquereur));
   } catch (erreur) {
     console.error("[acquereurs] lecture Postgres indisponible :", erreur);
     return [];
@@ -114,7 +145,7 @@ export async function rechercherAcquereursPage(params: {
     getDb().select({ total: count() }).from(acquereursTable).where(conditions),
   ]);
 
-  return { lignes: lignes.map(ligneVersAcquereur), total };
+  return { lignes: await appliquerCriteresEffectifs(lignes.map(ligneVersAcquereur)), total };
 }
 
 // Même règle de repli que getBienById() : dataset réel non vide => lookup DB uniquement, même
@@ -143,7 +174,10 @@ export async function getClientById(id: string): Promise<ProfilAcquereur | undef
   try {
     if (UUID_REGEX.test(id)) {
       const [ligne] = await getDb().select().from(acquereursTable).where(eq(acquereursTable.id, id)).limit(1);
-      if (ligne) return ligneVersAcquereur(ligne);
+      if (ligne) {
+        const [effectif] = await appliquerCriteresEffectifs([ligneVersAcquereur(ligne)]);
+        return effectif;
+      }
     }
 
     const [{ total }] = await getDb().select({ total: sql<number>`count(*)::int` }).from(acquereursTable);
@@ -206,35 +240,60 @@ export async function creerAcquereur(
   return ligneVersAcquereur(ligne);
 }
 
+// ADR-055 §B — OÙ vont les critères de cette modification. Paramètre OBLIGATOIRE, jamais une valeur
+// par défaut : se tromper de cible n'échoue pas, ça écrit au mauvais endroit et le produit affiche
+// ensuite une valeur que le matching n'utilise pas. Même discipline que `workspaceId` (ADR-054), et
+// pour la même raison — un oubli doit refuser de compiler, pas être silencieusement rangé quelque
+// part.
+//
+//   'dossier'          -> le dossier porte ses critères (aucun projet canonique rattaché)
+//   'projet_canonique' -> le projet les porte ; cet UPDATE n'y touche PAS
+//
+// `projet_canonique` n'est PAS un cas dégradé : c'est l'établissement de la propriété des données.
+// Continuer à écrire les colonnes du dossier « pour rester synchronisé » recréerait deux sources de
+// vérité — précisément ce que la bascule des lectures a défait.
+export type CibleCriteresAcquereur = "dossier" | "projet_canonique";
+
 // Update pur, même principe que creerAcquereur. modifieLe posé explicitement (voir
 // bienRepository.modifierBien pour le détail). Retourne undefined si id ne correspond à aucune
 // ligne réelle plutôt que de supposer une modification effective.
 export async function modifierAcquereur(
   id: string,
   input: NouvelAcquereur,
+  cibleCriteres: CibleCriteresAcquereur,
   executeur: Executeur = getDb()
 ): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
+  // Identité, parcours et notes restent portés par le dossier dans les deux cas : ni `contacts` ni
+  // `projets_acquereur` n'ont encore d'écran ni de writer pour eux (dette nommée dans
+  // DATA_MODEL.md). Ce lot établit la propriété des CRITÈRES, il ne déplace rien d'autre.
+  const colonnesDossier = {
+    prenom: input.prenom,
+    nom: input.nom,
+    email: input.email,
+    telephone: input.telephone,
+    stadeProjet: input.stadeProjet,
+    notes: input.notes,
+    datePremiereContact: input.datePremiereContact,
+    modifieLe: new Date(),
+  };
+  const colonnesCriteres =
+    cibleCriteres === "dossier"
+      ? {
+          budgetMin: input.budgetMin,
+          budgetMax: input.budgetMax,
+          criteres: input.criteres,
+          piecesMin: input.piecesMin ?? null,
+          surfaceMin: input.surfaceMin ?? null,
+          accessibiliteRequise: input.accessibiliteRequise ?? null,
+          necessiteParking: input.necessiteParking ?? null,
+          necessiteExterieur: input.necessiteExterieur ?? null,
+        }
+      : {};
+
   const [ligne] = await executeur
     .update(acquereursTable)
-    .set({
-      prenom: input.prenom,
-      nom: input.nom,
-      email: input.email,
-      telephone: input.telephone,
-      budgetMin: input.budgetMin,
-      budgetMax: input.budgetMax,
-      criteres: input.criteres,
-      stadeProjet: input.stadeProjet,
-      notes: input.notes,
-      datePremiereContact: input.datePremiereContact,
-      piecesMin: input.piecesMin ?? null,
-      surfaceMin: input.surfaceMin ?? null,
-      accessibiliteRequise: input.accessibiliteRequise ?? null,
-      necessiteParking: input.necessiteParking ?? null,
-      necessiteExterieur: input.necessiteExterieur ?? null,
-      modifieLe: new Date(),
-    })
+    .set({ ...colonnesDossier, ...colonnesCriteres })
     .where(eq(acquereursTable.id, id))
     .returning();
   return ligne ? ligneVersAcquereur(ligne) : undefined;

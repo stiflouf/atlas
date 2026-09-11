@@ -1134,10 +1134,16 @@ ouvert :
 - **Les secteurs de recherche restent legacy.** `secteurs_recherche_acquereur` est toujours une
   feuille de `acquereurs`, chargée par l'id du dossier. Le modèle de lecture est donc **hybride** :
   critères canoniques, secteurs historiques. Assumé et documenté, jamais implicite.
-- **Le formulaire de modification d'acquéreur écrit toujours le seul dossier historique.** Pour un
-  acquéreur rattaché, modifier son budget dans l'UI ne change plus le matching — c'est le projet
-  canonique qui fait foi pour ses critères. C'est la conséquence directe de la bascule des lectures,
-  et le lot qui bascule ce formulaire n'est pas fait.
+- **Limite LEVÉE** : le formulaire de modification d'acquéreur écrit désormais les critères dans le
+  projet canonique quand le dossier est rattaché, et les recharge depuis lui. L'identité
+  (`nom`/`prenom`/`email`/`telephone`) reste en revanche éditée sur le dossier : `contacts` n'a
+  aucun écran ni writer, et en fabriquer un mal conçu pour « tout régler d'un coup » coûterait plus
+  qu'il ne rapporte. La copie d'identité portée par le Contact diverge donc dès la première
+  modification — à traiter par le lot qui donnera un écran au Contact.
+- **`projets_acquereur.stade_projet` n'est plus mis à jour après la création.** Le parcours
+  commercial reste lu et écrit sur le dossier ; la copie du projet reste à sa valeur initiale.
+  Aucun lecteur ne s'en sert aujourd'hui. La corriger demanderait de basculer tout le pipeline
+  commercial, lot à part entière — la dupliquer en écriture recréerait une seconde vérité.
 - **Le recalcul dépend du balayage de reprise.** `modifierChampProjetAcquereur()` enfile une demande
   de resynchronisation ADR-036 dans la transaction de l'appelant, mais ne la traite pas : c'est
   `/api/compatibilite/scan` qui la consomme. Une mutation canonique est donc durable mais pas

@@ -45,12 +45,12 @@ function acquereurTest(surcharge: Partial<Parameters<typeof creerAcquereur>[0]> 
 
 describe("clientRepository (intégration Postgres)", () => {
   it("modifierAcquereur() retourne undefined pour un id non-UUID (acquéreur mocké)", async () => {
-    await expect(modifierAcquereur("client-001", acquereurTest())).resolves.toBeUndefined();
+    await expect(modifierAcquereur("client-001", acquereurTest(), "dossier")).resolves.toBeUndefined();
   });
 
   it("modifierAcquereur() retourne undefined pour un UUID inexistant", async () => {
     await expect(
-      modifierAcquereur("00000000-0000-0000-0000-000000000000", acquereurTest())
+      modifierAcquereur("00000000-0000-0000-0000-000000000000", acquereurTest(), "dossier")
     ).resolves.toBeUndefined();
   });
 
@@ -72,9 +72,12 @@ describe("clientRepository (intégration Postgres)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(modifieLeAvant + 1000));
 
+    // "dossier" : ces acquéreurs de test n'ont aucun projet canonique, c'est donc bien la ligne
+    // historique qui porte ses critères (ADR-055 §B).
     const modifie = await modifierAcquereur(
       cree.id,
-      acquereurTest({ prenom: "Prénom modifié", necessiteParking: true })
+      acquereurTest({ prenom: "Prénom modifié", necessiteParking: true }),
+      "dossier"
     );
 
     vi.useRealTimers();
@@ -94,7 +97,7 @@ describe("clientRepository (intégration Postgres)", () => {
     const cree = await creerAcquereur(acquereurTest(), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
-    const modifie = await modifierAcquereur(cree.id, acquereurTest());
+    const modifie = await modifierAcquereur(cree.id, acquereurTest(), "dossier");
 
     expect(modifie?.accessibiliteRequise).toBeUndefined();
     expect(modifie?.necessiteParking).toBeUndefined();
