@@ -281,6 +281,13 @@
       "when": 1788967624756,
       "tag": "0039_overconfident_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1789113993348,
+      "tag": "0040_nosy_morlocks",
+      "breakpoints": true
     }
   ]
 }

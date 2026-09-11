@@ -48,17 +48,27 @@ export async function terminerRunScanAutomatisation(
     .where(eq(runsScanAutomatisation.id, id));
 }
 
-// Tie-break sur `id` (uuid aléatoire, sans signification chronologique) : deux runs peuvent
-// partager le même `demarreLe` (defaultNow() à la milliseconde, deux inserts rapprochés) — sans ce
-// second critère, `ORDER BY demarreLe DESC LIMIT 1` devient non déterministe entre égalités. Le
-// rôle de ce tie-break est uniquement de rendre la sélection déterministe, jamais de représenter un
-// ordre temporel supplémentaire (audit V1 Candidate, classe de flakiness scanTemporel.test.ts).
+// LE DERNIER RUN = le `demarreLe` le plus récent ; à égalité, le `ordre` le plus grand.
+//
+// Deux runs PEUVENT partager exactement le même `demarreLe` : c'est `now()`, donc le
+// `transaction_timestamp()` à la microseconde, et deux scans concurrents (l'endpoint n'a aucun
+// verrou, ADR-033) démarrent à quelques centaines de microsecondes l'un de l'autre — mesuré à
+// 344 µs sur cette base. La collision est rare, jamais impossible.
+//
+// Le tie-break précédent était `id DESC`. Il rendait bien la sélection déterministe, mais sur un
+// uuid aléatoire : à égalité de timestamp, c'était le plus grand uuid qui gagnait, pas le run
+// réellement démarré en dernier. Déterministe et faux est le pire des deux mondes — la valeur ne
+// bouge pas, donc rien ne signale l'erreur. `ordre` est une séquence allouée à l'INSERT : elle dit
+// l'ordre réel des démarrages, et donne au journal l'ordre TOTAL que `demarreLe` seul n'a pas.
+//
+// `demarreLe` reste le critère PRINCIPAL : c'est lui qui porte le sens métier (« quand ce scan
+// a-t-il démarré »), `ordre` ne fait que trancher ce qu'il ne sait pas trancher.
 export async function getDernierRunScanPourRegle(regleCode: CodeRegleAutomatisation): Promise<RunScanAutomatisation | undefined> {
   const [ligne] = await getDb()
     .select()
     .from(runsScanAutomatisation)
     .where(eq(runsScanAutomatisation.regleCode, regleCode))
-    .orderBy(desc(runsScanAutomatisation.demarreLe), desc(runsScanAutomatisation.id))
+    .orderBy(desc(runsScanAutomatisation.demarreLe), desc(runsScanAutomatisation.ordre))
     .limit(1);
   return ligne ? ligneVersRun(ligne) : undefined;
 }

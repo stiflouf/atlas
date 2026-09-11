@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
+import { getTableConfig, type PgTable } from "drizzle-orm/pg-core";
+import * as schema from "@/db/schema";
 import { join } from "node:path";
 
 // ADR-055 §B — garanties STRUCTURELLES du pont de LECTURE canonique. Ce que ces tests protègent
@@ -111,9 +113,25 @@ describe("ADR-055 §B — la règle de source est appliquée au même endroit, u
 });
 
 describe("ce lot ne migre ni ne duplique rien", () => {
-  it("aucune migration n'est créée : le schéma existant suffit", () => {
-    const migrations = readdirSync(join("src", "db", "migrations")).filter((f) => f.endsWith(".sql"));
-    expect(migrations).toHaveLength(40);
+  it("le pont de lecture n'a étendu aucune des deux tables qu'il lit", () => {
+    // Énoncé DIRECT de l'invariant, et non un comptage global des fichiers de migration : le compte
+    // était un proxy commode tant que rien d'autre ne bougeait, mais il échouait à la première
+    // migration sans rapport (ordre total du journal de scan, ADR-033) — et un test qui échoue pour
+    // une raison étrangère à ce qu'il protège finit par être ajusté sans être lu.
+    const colonnes = (table: PgTable) => getTableConfig(table).columns.map((c) => c.name).sort();
+    expect(colonnes(schema.projetsAcquereur)).toEqual(
+      [
+        "id", "workspace_id", "budget_min", "budget_max", "criteres", "stade_projet", "pieces_min",
+        "surface_min", "accessibilite_requise", "necessite_parking", "necessite_exterieur",
+        "cree_le", "archive_le",
+      ].sort()
+    );
+    // Les deux ponts restent nullables et seuls : lire le canonique n'a demandé aucune colonne de
+    // plus sur le dossier historique.
+    const dossier = colonnes(schema.acquereurs);
+    expect(dossier).toContain("contact_id");
+    expect(dossier).toContain("projet_acquereur_id");
+    expect(dossier.filter((c) => /^(projet|contact).*_id$/.test(c))).toEqual(["contact_id", "projet_acquereur_id"]);
   });
 
   it("aucun backfill : le pont reste nullable et personne ne le remplit en masse", () => {

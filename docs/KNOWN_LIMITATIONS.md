@@ -1008,8 +1008,7 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   défaut, `ATLAS_TEST_DATABASE_URL` pour surcharger explicitement, refus loud si la variable
   ambiante ressemble à autre chose que la convention de dev locale documentée.
 - **Flakiness de classe corrigée et validée** (stabilisation V1 Candidate) : tie-break déterministe
-  sur `getDernierRunScanPourRegle()` (`ORDER BY demarre_le DESC, id DESC` — `id` sert uniquement à
-  départager, jamais une chronologie), horloge contrôlée (`vi.useFakeTimers({toFake:["Date"]})`) au
+  sur `getDernierRunScanPourRegle()`, horloge contrôlée (`vi.useFakeTimers({toFake:["Date"]})`) au
   lieu d'un `setTimeout` arbitraire dans `clientRepository.test.ts`/`bienRepository.test.ts`,
   fixture de `page.test.tsx` (cockpit) rendue unique par exécution. Validé par 3 exécutions
   complètes consécutives 100 % vertes + stress ciblé (10 exécutions supplémentaires, 0 échec).
@@ -1018,6 +1017,16 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   test`, jamais dans une CI (absente, voir ci-dessus). Session Atlas injectée via les vraies
   primitives `iron-session`/`optionsSessionAtlas()`, jamais un contournement d'authentification.
   Commandes : `pnpm test:e2e` / `pnpm test:e2e:ui`.
+- **Ordre du journal de scan : limite LEVÉE** (migration `0040`). Le tie-break posé par la
+  stabilisation V1 Candidate était `ORDER BY demarre_le DESC, id DESC` : déterministe, mais fondé
+  sur un uuid aléatoire — à `demarre_le` égal, c'était le plus grand uuid qui passait pour « le
+  dernier run », pas celui réellement démarré en dernier. L'égalité est atteignable : `demarre_le`
+  vaut `now()`, donc le `transaction_timestamp()`, et deux scans concurrents démarrent à quelques
+  centaines de microsecondes d'écart (344 µs mesurées). **Le dernier run est désormais défini par
+  `demarre_le` décroissant, puis `ordre` décroissant** — une séquence allouée à l'INSERT, seule
+  notion d'ordre TOTAL que ce journal possède. Verrouillé par
+  `runScanAutomatisationRepository.test.ts`, dont deux cas échouent si un ordre fondé sur l'uuid
+  est réintroduit.
 
 ## Modèle canonique en coexistence (ADR-055)
 

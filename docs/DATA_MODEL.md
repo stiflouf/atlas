@@ -2138,6 +2138,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0038_secret_rawhide_kid.sql` | ADR-055 §G : table `interactions` (feuille de `contacts`, `CHECK` type / sens / « au plus un contexte », `survenu_le` sans `DEFAULT`). Aucune table existante touchée, aucune fusion, **aucun backfill** |
 
 | `0039_overconfident_sentinel.sql` | ADR-056 : tables `references_externes` (racine, `UNIQUE` d'identité par workspace, `CHECK` « exactement une cible », `CHECK` format de clé fournisseur) et `champs_verrouilles` (racine, `CHECK` « exactement une cible », `UNIQUE` par cible+champ). Aucune table existante modifiée, aucune colonne ajoutée au Core, **aucun backfill** |
+| `0040_nosy_morlocks.sql` | ADR-033 : colonne `ordre` (`bigint GENERATED ALWAYS AS IDENTITY`) sur `runs_scan_automatisation`. Donne au journal de scan l'ordre TOTAL que `demarre_le` seul n'a pas — `now()` est le `transaction_timestamp()`, et deux scans concurrents peuvent le partager. Strictement additive, aucune colonne retirée, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

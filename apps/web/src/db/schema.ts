@@ -1,4 +1,4 @@
-import { pgTable, text, real, integer, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, text, real, integer, bigint, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 // ADR-054 — périmètre PROPRIÉTAIRE des données métier (OWNERSHIP). Une ligne métier appartient à
@@ -2097,6 +2097,17 @@ export const runsScanAutomatisation = pgTable(
       .references(() => workspaces.id),
     regleCode: text("regle_code").notNull(),
     demarreLe: timestamp("demarre_le", { withTimezone: true }).notNull().defaultNow(),
+    // ORDRE TOTAL du journal, et rien d'autre. `demarre_le` vaut `now()`, c'est-à-dire le
+    // `transaction_timestamp()` : deux scans concurrents (l'endpoint de scan n'a aucun verrou, et
+    // c'est voulu) peuvent démarrer dans la même microseconde, et `demarre_le` seul cesse alors
+    // d'être un ordre. Aucune autre colonne ne pouvait le départager honnêtement : `id` est un uuid
+    // aléatoire sans chronologie, `termine_le` est NULL tant que le run tourne et un run démarré
+    // plus tard peut finir plus tôt. Cette séquence est donc la seule notion d'ordre total que le
+    // modèle possède — allouée à l'INSERT, donc dans l'ordre réel des démarrages.
+    //
+    // Volontairement ABSENTE de `RunScanAutomatisation` (types/automatisation.ts) : c'est une clé
+    // d'ordre, jamais une donnée à afficher ni à comparer dans une règle métier.
+    ordre: bigint("ordre", { mode: "number" }).generatedAlwaysAsIdentity(),
     termineLe: timestamp("termine_le", { withTimezone: true }),
     nombreCandidats: integer("nombre_candidats"),
     nombreOccurrencesCreees: integer("nombre_occurrences_creees"),

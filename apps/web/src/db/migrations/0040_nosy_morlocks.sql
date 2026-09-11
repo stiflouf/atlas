@@ -1,0 +1,1 @@
+ALTER TABLE "runs_scan_automatisation" ADD COLUMN "ordre" bigint NOT NULL GENERATED ALWAYS AS IDENTITY (sequence name "runs_scan_automatisation_ordre_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1);
