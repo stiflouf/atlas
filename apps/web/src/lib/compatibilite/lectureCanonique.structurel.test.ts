@@ -177,7 +177,7 @@ describe("ADR-055 §B — l'écriture humaine suit la même règle de source", (
 
 describe("ADR-057 — l'identité canonique suit la même discipline", () => {
   const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
-  const REGLE_IDENTITE = join("src", "lib", "identiteAcquereurEffective.ts");
+  const REGLE_IDENTITE = join("src", "lib", "identiteContactEffective.ts");
 
   it("la règle de source d'identité n'est écrite qu'une fois", () => {
     // Même raison que pour les critères : l'affichage, l'email sortant et l'écriture répondent à la
@@ -228,17 +228,35 @@ describe("ADR-057 — l'identité canonique suit la même discipline", () => {
     // `ProfilAcquereur` déjà projeté par le repository.
     const communications = FICHIERS.filter((chemin) => chemin.includes(join("lib", "communications")));
     const fautifs = communications.filter((chemin) =>
-      /contactsTable|identiteAcquereurEffective|getContactById/.test(codeSeul(chemin))
+      /contactsTable|identiteContactEffective|getContactById/.test(codeSeul(chemin))
     );
     expect(fautifs).toEqual([]);
   });
 
-  it("le bridge VENDEUR n'est pas touché par ce lot", () => {
-    // `prospects_vendeurs` garde sa divergence d'identité, documentée. La canonicaliser ici sans
-    // ses propres tests la ferait basculer par ricochet.
-    const code = codeSeul(join("src", "lib", "prospectVendeurRepository.ts"));
-    expect(code).not.toContain("identiteAcquereurEffective");
-    expect(code).not.toContain("modifierIdentiteContact");
+  it("les deux côtés du CRM partagent UNE règle d'identité, jamais deux copies", () => {
+    // Acquéreur et vendeur ne diffèrent que par la table qui porte le pont. Deux modules de
+    // résolution divergeraient au premier ajustement, et l'écart serait invisible — chaque copie
+    // restant verte de son côté. Une personne n'a pas deux identités selon le rôle sous lequel on
+    // la regarde ; le code ne doit pas pouvoir le contredire.
+    for (const projection of [
+      join("src", "lib", "clientRepository.ts"),
+      join("src", "lib", "prospectVendeurRepository.ts"),
+    ]) {
+      expect(codeSeul(projection), projection).toContain("identiteContactEffective");
+    }
+    // Un SEUL writer Contact, transverse : pas de writer d'identité spécifique au vendeur.
+    const FICHIERS_LIB = FICHIERS.filter((chemin) => chemin.includes(join("src", "lib")));
+    const writers = FICHIERS_LIB.filter((chemin) => /update\(\s*contactsTable/.test(codeSeul(chemin)));
+    expect(writers).toEqual([join("src", "lib", "contactRepository.ts")]);
+  });
+
+  it("les deux Server Actions d'identité exigent le workspace courant", () => {
+    for (const action of [
+      join("src", "actions", "modifierAcquereur.ts"),
+      join("src", "actions", "prospectVendeur.ts"),
+    ]) {
+      expect(codeSeul(action), action).toContain("exigerWorkspaceCourant");
+    }
   });
 
   it("le Sync Engine ne connaît toujours pas Contact", () => {

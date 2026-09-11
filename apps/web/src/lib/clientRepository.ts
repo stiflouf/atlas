@@ -3,7 +3,7 @@ import { getDb, type Executeur } from "@/db/client";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
 import { resoudreSourcesCriteres } from "@/lib/criteresAcquereurEffectifs";
-import { resoudreSourcesIdentite } from "@/lib/identiteAcquereurEffective";
+import { resoudreSourcesIdentiteAcquereur } from "@/lib/identiteContactEffective";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
 import type { PageResultat } from "@/types/pagination";
 
@@ -65,7 +65,7 @@ async function appliquerCriteresEffectifs(
       acquereurs.map((a) => a.id),
       executeur
     ),
-    resoudreSourcesIdentite(
+    resoudreSourcesIdentiteAcquereur(
       acquereurs.map((a) => a.id),
       executeur
     ),

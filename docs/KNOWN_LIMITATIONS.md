@@ -1137,11 +1137,13 @@ ouvert :
 - **Limite LEVÉE** (critères, puis identité) : pour un acquéreur rattaché, le formulaire écrit les
   critères dans le projet canonique et l'identité dans le Contact, et recharge les deux depuis eux.
   La divergence d'identité acquéreur n'existe plus (ADR-057).
-- **L'identité VENDEUR diverge toujours.** `modifierProspectVendeurAction` écrit
-  `prospects_vendeurs` sans jamais toucher le Contact créé à la création du prospect. Même défaut,
-  même correctif à venir, pas encore appliqué. Deux faiblesses préexistantes du même chemin restent
-  ouvertes : `modifierProspectVendeur` n'est ni transactionnel ni filtré par workspace, et
-  `modifierProspectVendeurAction` n'appelle pas `exigerWorkspaceCourant()`.
+- **Limite LEVÉE (vendeur)** : un prospect rattaché lit et écrit son identité sur son Contact, comme
+  un acquéreur. Les deux faiblesses du même chemin sont fermées — l'action exige le workspace
+  courant, et le writer est transactionnel et filtré par périmètre.
+- **L'identité des dossiers NON RATTACHÉS reste legacy**, des deux côtés. C'est voulu : les
+  rattacher demanderait de décider quel humain est lequel, et ce rapprochement est un geste explicite
+  réservé à son propre lot. Aucun backfill, aucune déduplication automatique : `contacts` n'a
+  toujours ni unicité ni index sur email ou téléphone.
 - **`projets_acquereur.stade_projet` n'est plus mis à jour après la création.** Le parcours
   commercial reste lu et écrit sur le dossier ; la copie du projet reste à sa valeur initiale.
   Aucun lecteur ne s'en sert aujourd'hui. La corriger demanderait de basculer tout le pipeline

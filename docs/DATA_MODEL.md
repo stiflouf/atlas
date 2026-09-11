@@ -552,8 +552,22 @@ cette primitive n'a aucun chemin machine : elle est humaine par construction.
 **`contacts.modifie_le`** (migration `0041`) est posée avec ce premier chemin d'écriture. Égale à
 `cree_le` pour un contact jamais corrigé.
 
-**Reste LEGACY** : l'identité vendeur (`prospects_vendeurs`), le parcours (`stade_projet`), les
-notes, la date de premier contact et les secteurs de recherche.
+**Le vendeur suit la MÊME règle.** `prospects_vendeurs.contact_id` présent → le Contact fait foi en
+lecture comme en écriture ; absent → le prospect. `lib/identiteContactEffective.ts` porte la règle
+**pour les deux côtés**, paramétrée par la table qui porte le pont : acquéreur et vendeur ne
+diffèrent que par elle, et une seconde copie divergerait au premier ajustement. Le writer Contact
+est transverse et ignore les rôles — il n'existe qu'un seul `UPDATE contacts` dans tout le produit.
+
+**Un contact, deux rôles.** Le même humain peut vendre un bien et en chercher un autre : corriger son
+numéro depuis la fiche vendeur le corrige aussi pour le parcours acquéreur, sans qu'aucun des deux
+dossiers legacy ne soit réécrit. C'est la promesse d'ADR-055 §A, rendue observable par un test.
+
+**Deux trous préexistants fermés au passage** : `modifierProspectVendeurAction` n'exigeait aucun
+workspace, et `modifierProspectVendeur` n'était ni transactionnel ni filtré par périmètre. Les deux
+le sont désormais, comme leurs pendants acquéreur.
+
+**Reste LEGACY** : le parcours (`stade_projet`, jalons vendeur), les notes, la date de premier
+contact et les secteurs de recherche.
 
 ## Écriture humaine des critères acquéreur (ADR-055 §B, lot « human write bridge »)
 

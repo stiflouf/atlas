@@ -5,7 +5,7 @@ import { getDb } from "@/db/client";
 import { modifierAcquereur } from "@/lib/clientRepository";
 import { modifierIdentiteContact } from "@/lib/contactRepository";
 import { resoudreSourceCriteres } from "@/lib/criteresAcquereurEffectifs";
-import { resoudreSourceIdentite } from "@/lib/identiteAcquereurEffective";
+import { resoudreSourceIdentiteAcquereur } from "@/lib/identiteContactEffective";
 import { modifierCriteresProjetAcquereur } from "@/lib/projetAcquereurRepository";
 import { verrouillerChamp } from "@/lib/provenance/champVerrouilleRepository";
 import { parseAcquereurFormData } from "@/lib/acquereurFormulaire";
@@ -70,7 +70,7 @@ export async function modifierAcquereurAction(formData: FormData): Promise<void>
     // silencieux vers le dossier.
     const [sourceCriteres, sourceIdentite] = await Promise.all([
       resoudreSourceCriteres(id, tx),
-      resoudreSourceIdentite(id, tx),
+      resoudreSourceIdentiteAcquereur(id, tx),
     ]);
 
     if (sourceCriteres.source === "projet") {

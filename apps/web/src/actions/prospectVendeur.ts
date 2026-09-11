@@ -17,12 +17,13 @@ import {
 } from "@/lib/prospectVendeurRepository";
 import { ajouterNoteProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { getDb } from "@/db/client";
-import { creerContact } from "@/lib/contactRepository";
+import { creerContact, modifierIdentiteContact } from "@/lib/contactRepository";
 import { creerProjetVendeur } from "@/lib/projetVendeurRepository";
 import { ajouterPartieProjet } from "@/lib/partieProjetRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import { parseProspectVendeurFormData, parseSignatureMandatFormData } from "@/lib/prospectVendeurFormulaire";
+import { resoudreSourceIdentiteProspectVendeur } from "@/lib/identiteContactEffective";
 import { parseMontantCentimes } from "@/types/remuneration";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import { MOTIFS_PERTE_PROSPECT_VENDEUR, type MotifPerteProspectVendeur } from "@/types/motifPerteProspectVendeur";
@@ -91,11 +92,49 @@ export async function creerProspectVendeurAction(formData: FormData): Promise<vo
   redirect(`/prospects-vendeurs/${prospect.id}`);
 }
 
+// ADR-057 — l'identité d'un prospect RATTACHÉ vit sur son Contact, exactement comme celle d'un
+// acquéreur. Deux trous préexistants sont fermés au passage, tous deux relevés par l'audit
+// d'identité : cette action n'exigeait aucun workspace, et son writer n'en portait pas non plus.
+//
+// UNE SEULE TRANSACTION : source de vérité résolue, Contact écrit, prospect écrit. Les séparer
+// laisserait un état où la fiche montre une adresse et les communications en utilisent une autre.
 export async function modifierProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  // ADR-054 — périmètre du prospect modifié, du Contact et de ses verrous.
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
-  const prospect = await modifierProspectVendeur(id, parseProspectVendeurFormData(formData));
+
+  const donnees = parseProspectVendeurFormData(formData);
+
+  const prospect = await getDb().transaction(async (tx) => {
+    // Résolue DANS la transaction : décider d'après un pont lu avant elle reviendrait à écrire sur
+    // la foi d'un état périmé. Lève si la référence est cassée — fail closed, jamais un repli
+    // silencieux vers le dossier.
+    const source = await resoudreSourceIdentiteProspectVendeur(id, tx);
+
+    if (source.source === "contact") {
+      // Le writer Contact est TRANSVERSE et ignore les rôles : c'est le même que celui de
+      // l'acquéreur, et il pose lui-même le verrou humain (ADR-056 §4) sur les champs corrigés.
+      const contact = await modifierIdentiteContact(
+        source.contactId,
+        { nom: donnees.nom, prenom: donnees.prenom, email: donnees.email, telephone: donnees.telephone },
+        workspaceId,
+        tx
+      );
+      if (!contact) throw new Error("Contact canonique introuvable pour ce prospect vendeur.");
+    }
+
+    // Aucun Contact, aucun projet vendeur n'est créé au passage pour un prospect historique — le
+    // rattachement de l'historique est un geste explicite, réservé à son propre lot.
+    return modifierProspectVendeur(
+      id,
+      donnees,
+      source.source === "contact" ? "contact_canonique" : "dossier",
+      workspaceId,
+      tx
+    );
+  });
   if (!prospect) notFound();
   redirect(`/prospects-vendeurs/${prospect.id}`);
 }

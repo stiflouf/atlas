@@ -1,9 +1,10 @@
-import { desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
 import { creerMandat } from "@/lib/mandatRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
+import { resoudreSourcesIdentiteProspectVendeur } from "@/lib/identiteContactEffective";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import type { NouveauProspectVendeur, ProspectVendeur } from "@/types/prospectVendeur";
 import type { TypeBien } from "@/types/bien";
@@ -60,6 +61,39 @@ export type VueProspectVendeur = "en_cours" | "perdus" | "convertis" | "archives
 // une seconde définition qui pourrait diverger. Le statut n'étant jamais stocké (voir
 // deriverStatutProspectVendeur), le filtrage reste en mémoire après lecture, inchangé depuis avant
 // cette ADR — seul le point d'appel est désormais partagé plutôt que dupliqué quatre fois.
+// ADR-057 — PROJECTION D'AFFICHAGE de l'identité, pendant vendeur de celle de `clientRepository`.
+// Depuis que le Contact fait foi pour un prospect rattaché, ses colonnes `nom`/`prenom`/`email`/
+// `telephone` ne sont plus écrites (voir `modifierProspectVendeur`, cible `contact_canonique`) et
+// afficheraient une valeur gelée à la création — donc une adresse que les communications
+// n'utilisent plus.
+//
+// La RÈGLE de source n'est pas réécrite ici : `lib/identiteContactEffective.ts` la tient pour les
+// deux côtés du CRM. Une personne n'a pas deux identités selon le rôle sous lequel on la regarde.
+async function appliquerIdentiteEffective(
+  prospects: ProspectVendeur[],
+  executeur: Executeur = getDb()
+): Promise<ProspectVendeur[]> {
+  if (prospects.length === 0) return prospects;
+  const sources = await resoudreSourcesIdentiteProspectVendeur(
+    prospects.map((p) => p.id),
+    executeur
+  );
+  return prospects.map((prospect) => {
+    const source = sources.get(prospect.id);
+    // Repli au niveau de l'AGRÉGAT : soit le Contact fournit les quatre champs, soit aucun. `email`
+    // et `telephone` sont réécrits même à `undefined` — c'est précisément le cas qui distingue
+    // « le Contact n'a pas d'adresse » d'un repli sur celle du dossier.
+    if (!source || source.source === "dossier") return prospect;
+    return {
+      ...prospect,
+      nom: source.identite.nom,
+      prenom: source.identite.prenom,
+      email: source.identite.email,
+      telephone: source.identite.telephone,
+    };
+  });
+}
+
 function predicatVue(vue: VueProspectVendeur): (p: ProspectVendeur) => boolean {
   return (p) => {
     if (vue === "archives") return Boolean(p.archiveLe);
@@ -74,24 +108,24 @@ function predicatVue(vue: VueProspectVendeur): (p: ProspectVendeur) => boolean {
 // Vue par défaut : non archivés, statut en cours (ni perdu, ni déjà converti).
 export async function listerProspectsVendeurs(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
-  return tous.filter(predicatVue("en_cours"));
+  return appliquerIdentiteEffective(tous.filter(predicatVue("en_cours")));
 }
 
 export async function listerProspectsVendeursPerdus(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
-  return tous.filter(predicatVue("perdus"));
+  return appliquerIdentiteEffective(tous.filter(predicatVue("perdus")));
 }
 
 export async function listerProspectsVendeursConvertis(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
-  return tous.filter(predicatVue("convertis"));
+  return appliquerIdentiteEffective(tous.filter(predicatVue("convertis")));
 }
 
 // Réservé aux prospects archivés — orthogonal au statut (un prospect archivé peut être dans
 // n'importe quel état, y compris perdu ou converti).
 export async function listerProspectsVendeursArchives(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
-  return tous.filter(predicatVue("archives"));
+  return appliquerIdentiteEffective(tous.filter(predicatVue("archives")));
 }
 
 // ADR-048 — recherche serveur (ILIKE nom/prénom) + ordre déterministe (`creeLe DESC, id DESC`,
@@ -118,7 +152,7 @@ export async function rechercherProspectsVendeurs(params: { q?: string; vue: Vue
     .where(conditionTexte)
     .orderBy(desc(prospectsVendeursTable.creeLe), desc(prospectsVendeursTable.id));
 
-  return lignes.map(ligneVersProspectVendeur).filter(predicatVue(params.vue));
+  return appliquerIdentiteEffective(lignes.map(ligneVersProspectVendeur).filter(predicatVue(params.vue)));
 }
 
 // ADR-055 — pendant vendeur de `getContactCanoniqueDeLAcquereur`, même rationale : le pont vers
@@ -140,7 +174,9 @@ export async function getContactCanoniqueDuProspectVendeur(
 export async function getProspectVendeurById(id: string): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb().select().from(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id)).limit(1);
-  return ligne ? ligneVersProspectVendeur(ligne) : undefined;
+  if (!ligne) return undefined;
+  const [effectif] = await appliquerIdentiteEffective([ligneVersProspectVendeur(ligne)]);
+  return effectif;
 }
 
 // Le prospect vendeur ayant converti ce bien, s'il existe (ADR-029) — bienId porte une contrainte
@@ -154,7 +190,9 @@ export async function getProspectVendeurParBien(bienId: string): Promise<Prospec
     .from(prospectsVendeursTable)
     .where(eq(prospectsVendeursTable.bienId, bienId))
     .limit(1);
-  return ligne ? ligneVersProspectVendeur(ligne) : undefined;
+  if (!ligne) return undefined;
+  const [effectif] = await appliquerIdentiteEffective([ligneVersProspectVendeur(ligne)]);
+  return effectif;
 }
 
 // Insertion pure : la validation métier (email/téléphone, etc.) est de la responsabilité de
@@ -193,18 +231,39 @@ export async function creerProspectVendeur(
   return ligneVersProspectVendeur(ligne);
 }
 
+// ADR-057 — OÙ va l'identité de cette modification. Paramètre OBLIGATOIRE, jamais une valeur par
+// défaut : se tromper de cible n'échoue pas, ça écrit au mauvais endroit et le produit envoie
+// ensuite ses emails à une adresse que plus personne n'affiche. Même discipline que
+// `CibleIdentiteAcquereur`, et pour la même raison.
+//
+//   'dossier'           -> le prospect porte son identité (aucun Contact rattaché)
+//   'contact_canonique' -> le Contact la porte ; cet UPDATE n'y touche PAS
+export type CibleIdentiteProspectVendeur = "dossier" | "contact_canonique";
+
 export async function modifierProspectVendeur(
   id: string,
-  input: NouveauProspectVendeur
+  input: NouveauProspectVendeur,
+  cibleIdentite: CibleIdentiteProspectVendeur,
+  // ADR-054 — le périmètre est vérifié DANS le `WHERE` : un id d'un autre workspace ne correspond à
+  // aucune ligne, la fonction rend `undefined`, et l'appelant en fait un `notFound()`. Ce writer
+  // n'avait jusqu'ici ni périmètre ni exécuteur partagé — deux trous relevés par l'audit d'identité.
+  workspaceId: string,
+  executeur: Executeur = getDb()
 ): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const colonnesIdentite =
+    cibleIdentite === "dossier"
+      ? {
+          nom: input.nom,
+          prenom: input.prenom ?? null,
+          email: input.email ?? null,
+          telephone: input.telephone ?? null,
+        }
+      : {};
+  const [ligne] = await executeur
     .update(prospectsVendeursTable)
     .set({
-      nom: input.nom,
-      prenom: input.prenom ?? null,
-      email: input.email ?? null,
-      telephone: input.telephone ?? null,
+      ...colonnesIdentite,
       origineLead: input.origineLead ?? null,
       origineLeadDetail: input.origineLeadDetail ?? null,
       adresseBienPotentiel: input.adresseBienPotentiel ?? null,
@@ -214,9 +273,11 @@ export async function modifierProspectVendeur(
       typeBien: input.typeBien ?? null,
       modifieLe: new Date(),
     })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
-  return ligne ? ligneVersProspectVendeur(ligne) : undefined;
+  if (!ligne) return undefined;
+  const [effectif] = await appliquerIdentiteEffective([ligneVersProspectVendeur(ligne)], executeur);
+  return effectif;
 }
 
 // Jalons de pipeline (ADR-027) : écriture pure, aucune garde métier interne (pas perdu, pas déjà

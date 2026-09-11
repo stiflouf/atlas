@@ -190,14 +190,14 @@ describe("ADR-057 — identité effective en LECTURE", () => {
     // écriture réelle : Postgres refuse de pointer vers un contact absent comme de supprimer un
     // contact référencé. La garde est donc éprouvée sur un exécuteur qui rend ce que rendrait une
     // base incohérente.
-    const { resoudreSourceIdentite } = await import("@/lib/identiteAcquereurEffective");
+    const { resoudreSourceIdentiteAcquereur } = await import("@/lib/identiteContactEffective");
     const executeurIncoherent = {
       select: () => ({
         from: () => ({
           leftJoin: () => ({
             where: async () => [
               {
-                acquereurId: "00000000-0000-4000-8000-000000000001",
+                dossierId: "00000000-0000-4000-8000-000000000001",
                 contactId: "00000000-0000-4000-8000-0000000000ff",
                 contactTrouveId: null,
                 nom: null,
@@ -212,7 +212,7 @@ describe("ADR-057 — identité effective en LECTURE", () => {
     };
 
     await expect(
-      resoudreSourceIdentite("00000000-0000-4000-8000-000000000001", executeurIncoherent as never)
+      resoudreSourceIdentiteAcquereur("00000000-0000-4000-8000-000000000001", executeurIncoherent as never)
     ).rejects.toThrow(/Contact référencé mais introuvable/);
   });
 });
