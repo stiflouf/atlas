@@ -175,6 +175,81 @@ describe("ADR-055 §B — l'écriture humaine suit la même règle de source", (
   });
 });
 
+describe("ADR-057 — l'identité canonique suit la même discipline", () => {
+  const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
+  const REGLE_IDENTITE = join("src", "lib", "identiteAcquereurEffective.ts");
+
+  it("la règle de source d'identité n'est écrite qu'une fois", () => {
+    // Même raison que pour les critères : l'affichage, l'email sortant et l'écriture répondent à la
+    // même question. Deux implémentations y répondraient différemment, et l'écart serait invisible.
+    const jointure = /leftJoin\(\s*contactsTable/;
+    expect(FICHIERS.filter((chemin) => jointure.test(codeSeul(chemin)))).toEqual([REGLE_IDENTITE]);
+  });
+
+  it("aucun repli champ par champ sur l'identité", () => {
+    // La forme interdite : `contact.email ?? acquereur.email`. Un NULL canonique est une
+    // information — « on ne connaît pas son adresse » — pas un trou à combler.
+    for (const chemin of [REGLE_IDENTITE, join("src", "lib", "clientRepository.ts")]) {
+      const code = codeSeul(chemin);
+      expect(code, chemin).not.toMatch(/contact\.\w+\s*\?\?\s*acquereur\./);
+      expect(code, chemin).not.toMatch(/identite\.\w+\s*\?\?\s*acquereur\./);
+      expect(code, chemin).not.toMatch(/identite\.email\s*\?\?/);
+      expect(code, chemin).not.toMatch(/identite\.telephone\s*\?\?/);
+    }
+  });
+
+  it("la Server Action passe par le writer Core Contact, jamais par Drizzle", () => {
+    const code = codeSeul(join("src", "actions", "modifierAcquereur.ts"));
+    expect(code).not.toMatch(/contactsTable|@\/db\/schema/);
+    expect(code).toContain("modifierIdentiteContact");
+  });
+
+  it("le writer Contact exige un workspace et n'est pas contournable", () => {
+    // Un seul UPDATE de `contacts` dans tout le produit, et il vérifie le périmètre.
+    const porteurs = FICHIERS.filter((chemin) => /update\(\s*contactsTable/.test(codeSeul(chemin)));
+    expect(porteurs).toEqual([join("src", "lib", "contactRepository.ts")]);
+    const code = codeSeul(join("src", "lib", "contactRepository.ts"));
+    expect(code).toContain("workspaceId");
+    expect(code).toContain("autre workspace");
+  });
+
+  it("aucune déduplication : le Contact ne se cherche jamais par email ou téléphone", () => {
+    // `creerContact` crée TOUJOURS une nouvelle ligne. Un « find or create » sur une adresse
+    // fusionnerait un couple qui la partage — une fusion à tort ne se corrige pas.
+    const code = codeSeul(join("src", "lib", "contactRepository.ts"));
+    for (const interdit of ["findOrCreate", "trouverOuCreer", "rapprocher", "fusionner", "dedup"]) {
+      expect(code, interdit).not.toContain(interdit);
+    }
+    expect(code).not.toMatch(/where\([^)]*contactsTable\.(email|telephone)/);
+  });
+
+  it("Gmail ne connaît pas la coexistence : il consomme la projection", () => {
+    // Le flux de communication ne doit jamais interroger `contacts` lui-même — il reçoit un
+    // `ProfilAcquereur` déjà projeté par le repository.
+    const communications = FICHIERS.filter((chemin) => chemin.includes(join("lib", "communications")));
+    const fautifs = communications.filter((chemin) =>
+      /contactsTable|identiteAcquereurEffective|getContactById/.test(codeSeul(chemin))
+    );
+    expect(fautifs).toEqual([]);
+  });
+
+  it("le bridge VENDEUR n'est pas touché par ce lot", () => {
+    // `prospects_vendeurs` garde sa divergence d'identité, documentée. La canonicaliser ici sans
+    // ses propres tests la ferait basculer par ricochet.
+    const code = codeSeul(join("src", "lib", "prospectVendeurRepository.ts"));
+    expect(code).not.toContain("identiteAcquereurEffective");
+    expect(code).not.toContain("modifierIdentiteContact");
+  });
+
+  it("le Sync Engine ne connaît toujours pas Contact", () => {
+    // `references_externes` et `champs_verrouilles` acceptent déjà une cible `contact` ; le pipeline
+    // d'application, lui, reste limité au projet acquéreur. L'étendre est un lot à part entière.
+    const code = codeSeul(join("src", "types", "synchronisation.ts"));
+    expect(code).toContain('typeEntiteCanonique: "projet_acquereur"');
+    expect(code).not.toMatch(/typeEntiteCanonique:\s*"contact"/);
+  });
+});
+
 describe("ce lot ne migre ni ne duplique rien", () => {
   it("le pont de lecture n'a étendu aucune des deux tables qu'il lit", () => {
     // Énoncé DIRECT de l'invariant, et non un comptage global des fichiers de migration : le compte

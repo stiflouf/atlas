@@ -3,6 +3,7 @@ import { getDb, type Executeur } from "@/db/client";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
 import { resoudreSourcesCriteres } from "@/lib/criteresAcquereurEffectifs";
+import { resoudreSourcesIdentite } from "@/lib/identiteAcquereurEffective";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
 import type { PageResultat } from "@/types/pagination";
 
@@ -41,7 +42,8 @@ function ligneVersAcquereur(ligne: LigneAcquereur): ProfilAcquereur {
   };
 }
 
-// ADR-055 §B — PROJECTION D'AFFICHAGE. Depuis que le projet canonique fait foi pour ses critères,
+// ADR-055 §B + ADR-057 — PROJECTION D'AFFICHAGE, pour les CRITÈRES et pour l'IDENTITÉ.
+// Depuis que le projet canonique fait foi pour ses critères et le Contact pour l'identité,
 // un dossier rattaché ne peut plus être rendu tel qu'il est stocké : ses colonnes de critères ne
 // sont plus écrites (voir `modifierAcquereur`, cible `projet_canonique`) et affichent une valeur
 // gelée à la création. Les montrer produirait exactement le mensonge symétrique de celui que la
@@ -58,16 +60,39 @@ async function appliquerCriteresEffectifs(
   executeur: Executeur = getDb()
 ): Promise<ProfilAcquereur[]> {
   if (acquereurs.length === 0) return acquereurs;
-  const sources = await resoudreSourcesCriteres(
-    acquereurs.map((a) => a.id),
-    executeur
-  );
+  const [criteres, identites] = await Promise.all([
+    resoudreSourcesCriteres(
+      acquereurs.map((a) => a.id),
+      executeur
+    ),
+    resoudreSourcesIdentite(
+      acquereurs.map((a) => a.id),
+      executeur
+    ),
+  ]);
   return acquereurs.map((acquereur) => {
-    const source = sources.get(acquereur.id);
-    // Repli au niveau de l'AGRÉGAT : soit le projet fournit tous ses champs, soit aucun. Un NULL
-    // canonique reste `undefined` — jamais recomblé avec la vieille valeur du dossier.
-    if (!source || source.source === "dossier") return acquereur;
-    return { ...acquereur, ...source.criteres };
+    // DEUX ponts INDÉPENDANTS, et c'est voulu : un dossier peut être rattaché à un Contact sans
+    // projet canonique, ou l'inverse. Chacun applique sa propre règle d'agrégat sur son propre
+    // périmètre, et aucun ne complète l'autre.
+    const sourceCriteres = criteres.get(acquereur.id);
+    const sourceIdentite = identites.get(acquereur.id);
+    // Repli au niveau de l'AGRÉGAT : soit la source canonique fournit tous ses champs, soit aucun.
+    // Un NULL canonique reste `undefined` — jamais recomblé avec la vieille valeur du dossier.
+    const avecCriteres =
+      sourceCriteres && sourceCriteres.source === "projet"
+        ? { ...acquereur, ...sourceCriteres.criteres }
+        : acquereur;
+    // `email` et `telephone` sont réécrits même à `undefined` : c'est précisément le cas qui
+    // distingue « le Contact n'a pas d'adresse » d'un repli sur celle du dossier.
+    return sourceIdentite && sourceIdentite.source === "contact"
+      ? {
+          ...avecCriteres,
+          nom: sourceIdentite.identite.nom,
+          prenom: sourceIdentite.identite.prenom ?? "",
+          email: sourceIdentite.identite.email,
+          telephone: sourceIdentite.identite.telephone,
+        }
+      : avecCriteres;
   });
 }
 
@@ -191,7 +216,13 @@ export async function getClientById(id: string): Promise<ProfilAcquereur | undef
   return getClientDemoById(id);
 }
 
-export type NouvelAcquereur = Omit<ProfilAcquereur, "id"> & {
+// ADR-057 — `email` et `telephone` redeviennent OBLIGATOIRES ici, alors qu'ils sont optionnels en
+// lecture. Ce n'est pas une incohérence : `acquereurs.email`/`telephone` sont `NOT NULL` en base, une
+// création DOIT donc les fournir. C'est la lecture qui a changé de nature — elle peut désormais
+// rendre l'identité d'un Contact, où l'adresse peut légitimement être inconnue.
+export type NouvelAcquereur = Omit<ProfilAcquereur, "id" | "email" | "telephone"> & {
+  email: string;
+  telephone: string;
   // ADR-055 — pont OPTIONNEL vers l'identité canonique. Optionnel et non requis : les chemins qui
   // ne connaissent pas encore le modèle canonique (tests d'intégration, seed, appels internes)
   // continuent de fonctionner à l'identique en le laissant absent, et la ligne reste alors
@@ -240,7 +271,8 @@ export async function creerAcquereur(
   return ligneVersAcquereur(ligne);
 }
 
-// ADR-055 §B — OÙ vont les critères de cette modification. Paramètre OBLIGATOIRE, jamais une valeur
+// ADR-055 §B — OÙ vont les CRITÈRES de cette modification (l'identité a sa propre cible, voir
+// `CibleIdentiteAcquereur`). Paramètre OBLIGATOIRE, jamais une valeur
 // par défaut : se tromper de cible n'échoue pas, ça écrit au mauvais endroit et le produit affiche
 // ensuite une valeur que le matching n'utilise pas. Même discipline que `workspaceId` (ADR-054), et
 // pour la même raison — un oubli doit refuser de compiler, pas être silencieusement rangé quelque
@@ -254,31 +286,47 @@ export async function creerAcquereur(
 // vérité — précisément ce que la bascule des lectures a défait.
 export type CibleCriteresAcquereur = "dossier" | "projet_canonique";
 
+// ADR-057 — même discipline pour l'IDENTITÉ, et deux ponts INDÉPENDANTS : un dossier peut être
+// rattaché à un Contact sans projet canonique, ou l'inverse. Les fusionner en un seul drapeau
+// « canonique » ferait écrire au mauvais endroit à la première ligne asymétrique.
+//
+//   'dossier'           -> le dossier porte son identité (aucun Contact rattaché)
+//   'contact_canonique' -> le Contact la porte ; cet UPDATE n'y touche PAS
+export type CibleIdentiteAcquereur = "dossier" | "contact_canonique";
+
+export type CiblesEcritureAcquereur = {
+  criteres: CibleCriteresAcquereur;
+  identite: CibleIdentiteAcquereur;
+};
+
 // Update pur, même principe que creerAcquereur. modifieLe posé explicitement (voir
 // bienRepository.modifierBien pour le détail). Retourne undefined si id ne correspond à aucune
 // ligne réelle plutôt que de supposer une modification effective.
 export async function modifierAcquereur(
   id: string,
   input: NouvelAcquereur,
-  cibleCriteres: CibleCriteresAcquereur,
+  cibles: CiblesEcritureAcquereur,
+  // ADR-054 — le périmètre est vérifié DANS le `WHERE` : un id d'un autre workspace ne correspond à
+  // aucune ligne, la fonction rend `undefined`, et l'appelant en fait un `notFound()`. Un filtre
+  // applicatif posé après coup laisserait passer la première écriture qui l'oublierait.
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  // Identité, parcours et notes restent portés par le dossier dans les deux cas : ni `contacts` ni
-  // `projets_acquereur` n'ont encore d'écran ni de writer pour eux (dette nommée dans
-  // DATA_MODEL.md). Ce lot établit la propriété des CRITÈRES, il ne déplace rien d'autre.
+  // Parcours, notes et date de premier contact restent portés par le dossier dans tous les cas :
+  // ni `contacts` ni `projets_acquereur` n'ont d'écran pour eux (dette nommée dans DATA_MODEL.md).
   const colonnesDossier = {
-    prenom: input.prenom,
-    nom: input.nom,
-    email: input.email,
-    telephone: input.telephone,
     stadeProjet: input.stadeProjet,
     notes: input.notes,
     datePremiereContact: input.datePremiereContact,
     modifieLe: new Date(),
   };
+  const colonnesIdentite =
+    cibles.identite === "dossier"
+      ? { prenom: input.prenom, nom: input.nom, email: input.email, telephone: input.telephone }
+      : {};
   const colonnesCriteres =
-    cibleCriteres === "dossier"
+    cibles.criteres === "dossier"
       ? {
           budgetMin: input.budgetMin,
           budgetMax: input.budgetMax,
@@ -293,8 +341,8 @@ export async function modifierAcquereur(
 
   const [ligne] = await executeur
     .update(acquereursTable)
-    .set({ ...colonnesDossier, ...colonnesCriteres })
-    .where(eq(acquereursTable.id, id))
+    .set({ ...colonnesDossier, ...colonnesIdentite, ...colonnesCriteres })
+    .where(and(eq(acquereursTable.id, id), eq(acquereursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersAcquereur(ligne) : undefined;
 }

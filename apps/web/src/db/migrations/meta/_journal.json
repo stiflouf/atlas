@@ -288,6 +288,13 @@
       "when": 1789113993348,
       "tag": "0040_nosy_morlocks",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789120789725,
+      "tag": "0041_fresh_black_queen",
+      "breakpoints": true
     }
   ]
 }

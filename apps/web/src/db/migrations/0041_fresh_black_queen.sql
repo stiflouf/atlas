@@ -1,0 +1,1 @@
+ALTER TABLE "contacts" ADD COLUMN "modifie_le" timestamp with time zone DEFAULT now() NOT NULL;

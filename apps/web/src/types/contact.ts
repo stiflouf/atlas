@@ -17,4 +17,7 @@ export type Contact = {
   email?: string;
   telephone?: string;
   creeLe: string;
+  // ADR-057 — posé avec le premier chemin d'écriture (`modifierIdentiteContact`). Égal à `creeLe`
+  // pour un contact jamais corrigé : « jamais modifié » se lit, il ne se devine pas.
+  modifieLe: string;
 };

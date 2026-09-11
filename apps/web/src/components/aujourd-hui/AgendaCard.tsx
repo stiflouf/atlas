@@ -65,7 +65,9 @@ export default async function AgendaCard({
       : undefined;
   const { label, variant } = typeDeduit ?? typeConfig[rdv.type];
   const client = rdv.client ? await getClientById(rdv.client.id) : undefined;
-  const callHref = client ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
+  // ADR-057 — l'identité effective vient du Contact quand le dossier y est rattaché, et un Contact
+  // peut n'avoir aucun numéro connu. Pas de bouton d'appel dans ce cas, jamais un `tel:` vide.
+  const callHref = client?.telephone ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
 
   // Le contexte n'est exploité que s'il dépasse le seuil "ambigu" au global : en dessous,
   // Atlas n'a rien d'assez solide à proposer et se comporte comme avant ce sprint.

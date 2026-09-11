@@ -517,6 +517,44 @@ de le recalculer. La porter dans le writer Core plutôt que dans `appliquerMutat
 frontière ADR-056 §9 : une source externe pousse une valeur au Core et n'a jamais à savoir qu'un
 moteur de matching existe.
 
+## Identité canonique effective (ADR-057)
+
+**Deux ponts INDÉPENDANTS.** `acquereurs.contact_id` et `acquereurs.projet_acquereur_id` sont
+nullables séparément : un dossier peut être rattaché à un Contact sans projet canonique, ou
+l'inverse. Chacun porte sa propre règle, sur son propre périmètre, et aucun ne complète l'autre.
+
+| État de la ligne `acquereurs` | Identité lue ET écrite |
+| --- | --- |
+| `contact_id` **présent** | **`contacts`** — `nom`, `prenom`, `email`, `telephone` |
+| `contact_id` **absent** | `acquereurs`, exactement comme avant |
+
+**Aucun repli champ par champ.** `contact.email` à NULL signifie « on ne connaît pas son adresse »,
+jamais « reprendre celle du dossier ». C'est la règle qui compte le plus ici : un repli ferait
+repartir un email à une adresse qu'un humain vient peut-être d'effacer.
+
+**Après la création, une seule copie bouge.** `acquereurs.nom/prenom/email/telephone` sont `NOT NULL`
+et restent écrits **à la création**, comme instantané et couche de compatibilité ; ils ne sont plus
+jamais réécrits pour un dossier rattaché. `modifierAcquereur()` prend donc deux cibles obligatoires
+(`identite`, `criteres`) : un oubli refuse de compiler.
+
+**Conséquence sur les communications.** `versCandidatAcquereur()` reçoit un `ProfilAcquereur` déjà
+projeté : pour un dossier rattaché, **l'email Gmail part à l'adresse du Contact**. Le code de
+communication n'interroge jamais `contacts` lui-même — un test structurel le vérifie.
+
+**`ProfilAcquereur.email` et `.telephone` sont optionnels** depuis ce lot, parce que
+`contacts.email`/`telephone` sont nullables. `NouvelAcquereur` les redéclare obligatoires : une
+création doit satisfaire les colonnes `NOT NULL` du dossier.
+
+**Verrou humain (ADR-056 §4).** `modifierIdentiteContact` pose lui-même le verrou sur les champs
+réellement corrigés. Contrairement à `modifierChampProjetAcquereur`, partagé avec le Sync Engine,
+cette primitive n'a aucun chemin machine : elle est humaine par construction.
+
+**`contacts.modifie_le`** (migration `0041`) est posée avec ce premier chemin d'écriture. Égale à
+`cree_le` pour un contact jamais corrigé.
+
+**Reste LEGACY** : l'identité vendeur (`prospects_vendeurs`), le parcours (`stade_projet`), les
+notes, la date de premier contact et les secteurs de recherche.
+
 ## Écriture humaine des critères acquéreur (ADR-055 §B, lot « human write bridge »)
 
 **La règle d'écriture est le miroir exact de la règle de lecture, au niveau de l'AGRÉGAT :**
@@ -2181,6 +2219,7 @@ toute notion de résolution définitive pour ce handoff technique.
 
 | `0039_overconfident_sentinel.sql` | ADR-056 : tables `references_externes` (racine, `UNIQUE` d'identité par workspace, `CHECK` « exactement une cible », `CHECK` format de clé fournisseur) et `champs_verrouilles` (racine, `CHECK` « exactement une cible », `UNIQUE` par cible+champ). Aucune table existante modifiée, aucune colonne ajoutée au Core, **aucun backfill** |
 | `0040_nosy_morlocks.sql` | ADR-033 : colonne `ordre` (`bigint GENERATED ALWAYS AS IDENTITY`) sur `runs_scan_automatisation`. Donne au journal de scan l'ordre TOTAL que `demarre_le` seul n'a pas — `now()` est le `transaction_timestamp()`, et deux scans concurrents peuvent le partager. Strictement additive, aucune colonne retirée, **aucun backfill** |
+| `0041_fresh_black_queen.sql` | ADR-057 : colonne `modifie_le` (`timestamptz NOT NULL DEFAULT now()`) sur `contacts`, posée avec le premier chemin d'écriture d'un contact existant. Strictement additive — aucun index, aucune unicité sur email ou téléphone, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

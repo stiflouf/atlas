@@ -87,8 +87,11 @@ describe("ADR-055 — le Contact est une identité, jamais un rôle", () => {
   it("contacts se limite à l'identité, et rien de plus", () => {
     // Verrouille la surface exacte : ajouter un champ à cette table doit être un geste conscient,
     // qui passe par ce test.
+    // `modifie_le` a rejoint la surface avec le PREMIER chemin d'écriture (ADR-057,
+    // `modifierIdentiteContact`), jamais avant. Toujours aucun `email_normalise`, aucun
+    // `telephone_normalise`, aucun `archive_le`, aucun `personne_morale` : ils n'ont pas de lecteur.
     expect(colonnes("contacts").sort()).toEqual(
-      ["cree_le", "email", "id", "nom", "prenom", "telephone", "workspace_id"].sort()
+      ["cree_le", "email", "id", "modifie_le", "nom", "prenom", "telephone", "workspace_id"].sort()
     );
   });
 

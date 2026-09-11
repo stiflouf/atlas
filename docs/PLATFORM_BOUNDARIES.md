@@ -194,6 +194,13 @@ d'un match, et n'atterrit plus dans une table que personne ne relisait. L'invali
 possible est portée par le **writer du Core**, jamais par le pipeline — le Sync Engine continue
 d'ignorer qu'un moteur de matching existe, et la dépendance reste à sens unique.
 
+**Le verrou humain a désormais deux écrivains, et la frontière tient.** Les critères d'un projet
+acquéreur sont verrouillés par la Server Action, parce que le writer Core correspondant est partagé
+avec le pipeline d'import et ne peut pas savoir qui l'appelle. L'identité d'un Contact est
+verrouillée par son writer Core lui-même (ADR-057), parce qu'il n'existe aucun chemin machine vers
+`contacts` — la primitive est humaine par construction. Dans les deux cas, le Sync Engine continue
+d'ignorer qu'un verrou existe : c'est lui qui le lit, jamais lui qui le pose.
+
 **Une correction humaine est prioritaire, sans condition.** Un champ verrouillé n'est jamais réécrit
 par une synchronisation, même quand le fournisseur fait foi ; le désaccord devient un conflit, jamais
 un log silencieux. Voir `docs/DATA_MODEL.md`.

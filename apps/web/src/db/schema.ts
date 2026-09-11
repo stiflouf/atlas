@@ -278,6 +278,12 @@ export const contacts = pgTable("contacts", {
   email: text("email"),
   telephone: text("telephone"),
   creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  // ADR-057 — posée AVEC le premier chemin d'écriture, jamais avant : ce commentaire disait
+  // « absent tant qu'aucun chemin de modification n'écrit ici », et ce chemin existe désormais
+  // (`modifierIdentiteContact`). Même patron que `acquereurs.modifie_le` et `biens.modifie_le` :
+  // NOT NULL avec défaut, donc égale à `cree_le` pour une ligne jamais corrigée — aucune migration
+  // n'invente de date, et « jamais modifié » se lit `modifie_le = cree_le`.
+  modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ADR-055 §B — PROJET ACQUÉREUR canonique : une intention immobilière située dans le temps, pas

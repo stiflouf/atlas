@@ -75,6 +75,9 @@ afterAll(async () => {
     await getDb().delete(projetsAcquereurTable).where(inArray(projetsAcquereurTable.id, idsProjets));
   }
   if (idsContacts.length > 0) {
+    // ADR-057 — une correction d'identité verrouille le champ corrigé : les verrous tombent avant
+    // leur contact, comme ceux du projet tombent avant lui.
+    await getDb().delete(champsVerrouillesTable).where(inArray(champsVerrouillesTable.contactId, idsContacts));
     await getDb().delete(contactsTable).where(inArray(contactsTable.id, idsContacts));
   }
 });
@@ -245,8 +248,11 @@ describe("modifierAcquereurAction — acquéreur canonique", () => {
     const relu = await getClientById(dossier.id);
     expect(relu?.budgetMax).toBe(500_000);
     expect(relu?.piecesMin).toBe(4);
-    // L'identité et le parcours restent ceux du dossier : ce lot ne déplace pas leur propriété.
-    expect(relu?.email).toBe(`ecriture-relecture@example.com`);
+    // Le parcours reste porté par le dossier. L'identité, elle, a changé de propriétaire depuis
+    // ADR-057 : ce graphe de test crée un Contact sans email, et l'identité effective n'en a donc
+    // pas — surtout pas celle, périmée, du dossier. C'est la règle d'agrégat, vérifiée en détail
+    // par modifierAcquereur.identite.test.ts.
+    expect(relu?.email).toBeUndefined();
     expect(relu?.stadeProjet).toBe("recherche_active");
   });
 

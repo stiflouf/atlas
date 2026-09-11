@@ -1134,12 +1134,14 @@ ouvert :
 - **Les secteurs de recherche restent legacy.** `secteurs_recherche_acquereur` est toujours une
   feuille de `acquereurs`, chargée par l'id du dossier. Le modèle de lecture est donc **hybride** :
   critères canoniques, secteurs historiques. Assumé et documenté, jamais implicite.
-- **Limite LEVÉE** : le formulaire de modification d'acquéreur écrit désormais les critères dans le
-  projet canonique quand le dossier est rattaché, et les recharge depuis lui. L'identité
-  (`nom`/`prenom`/`email`/`telephone`) reste en revanche éditée sur le dossier : `contacts` n'a
-  aucun écran ni writer, et en fabriquer un mal conçu pour « tout régler d'un coup » coûterait plus
-  qu'il ne rapporte. La copie d'identité portée par le Contact diverge donc dès la première
-  modification — à traiter par le lot qui donnera un écran au Contact.
+- **Limite LEVÉE** (critères, puis identité) : pour un acquéreur rattaché, le formulaire écrit les
+  critères dans le projet canonique et l'identité dans le Contact, et recharge les deux depuis eux.
+  La divergence d'identité acquéreur n'existe plus (ADR-057).
+- **L'identité VENDEUR diverge toujours.** `modifierProspectVendeurAction` écrit
+  `prospects_vendeurs` sans jamais toucher le Contact créé à la création du prospect. Même défaut,
+  même correctif à venir, pas encore appliqué. Deux faiblesses préexistantes du même chemin restent
+  ouvertes : `modifierProspectVendeur` n'est ni transactionnel ni filtré par workspace, et
+  `modifierProspectVendeurAction` n'appelle pas `exigerWorkspaceCourant()`.
 - **`projets_acquereur.stade_projet` n'est plus mis à jour après la création.** Le parcours
   commercial reste lu et écrit sur le dossier ; la copie du projet reste à sa valeur initiale.
   Aucun lecteur ne s'en sert aujourd'hui. La corriger demanderait de basculer tout le pipeline

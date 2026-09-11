@@ -9,8 +9,13 @@ export type ProfilAcquereur = {
   id: string;
   prenom: string;
   nom: string;
-  email: string;
-  telephone: string;
+  // ADR-057 — OPTIONNELS depuis que le Contact fait foi pour un dossier rattaché. Les colonnes
+  // `acquereurs.email`/`telephone` restent NOT NULL, mais `contacts.email`/`telephone` sont
+  // nullables : un Contact sans adresse connue rend une identité effective sans email, et la
+  // remplacer par celle du dossier serait exactement le repli champ par champ qu'ADR-057 interdit.
+  // Absent = adresse/numéro inconnus, jamais une chaîne vide.
+  email?: string;
+  telephone?: string;
   budgetMin: number;
   budgetMax: number;
   criteres: string[];

@@ -45,12 +45,12 @@ function acquereurTest(surcharge: Partial<Parameters<typeof creerAcquereur>[0]> 
 
 describe("clientRepository (intégration Postgres)", () => {
   it("modifierAcquereur() retourne undefined pour un id non-UUID (acquéreur mocké)", async () => {
-    await expect(modifierAcquereur("client-001", acquereurTest(), "dossier")).resolves.toBeUndefined();
+    await expect(modifierAcquereur("client-001", acquereurTest(), { criteres: "dossier", identite: "dossier" }, WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("modifierAcquereur() retourne undefined pour un UUID inexistant", async () => {
     await expect(
-      modifierAcquereur("00000000-0000-0000-0000-000000000000", acquereurTest(), "dossier")
+      modifierAcquereur("00000000-0000-0000-0000-000000000000", acquereurTest(), { criteres: "dossier", identite: "dossier" }, WORKSPACE_TEST)
     ).resolves.toBeUndefined();
   });
 
@@ -77,7 +77,8 @@ describe("clientRepository (intégration Postgres)", () => {
     const modifie = await modifierAcquereur(
       cree.id,
       acquereurTest({ prenom: "Prénom modifié", necessiteParking: true }),
-      "dossier"
+      { criteres: "dossier", identite: "dossier" },
+      WORKSPACE_TEST
     );
 
     vi.useRealTimers();
@@ -97,7 +98,7 @@ describe("clientRepository (intégration Postgres)", () => {
     const cree = await creerAcquereur(acquereurTest(), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
-    const modifie = await modifierAcquereur(cree.id, acquereurTest(), "dossier");
+    const modifie = await modifierAcquereur(cree.id, acquereurTest(), { criteres: "dossier", identite: "dossier" }, WORKSPACE_TEST);
 
     expect(modifie?.accessibiliteRequise).toBeUndefined();
     expect(modifie?.necessiteParking).toBeUndefined();
