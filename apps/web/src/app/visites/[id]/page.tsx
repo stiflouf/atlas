@@ -18,6 +18,7 @@ import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import { listerConfigurationsAutomatisation } from "@/lib/automatisations/configurationAutomatisationRepository";
 import { construireSuiteVisite } from "@/lib/visites/suiteVisite";
 import { creerTacheProchaineEtapeAction } from "@/actions/creerTacheProchaineEtape";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -116,7 +117,7 @@ export default async function VisitePage({ params }: PageProps) {
         <p className="text-[14px] text-text-1 mt-3">
           Acquéreur :{" "}
           <Link href={`/clients/${acquereur.id}`} className="font-medium text-accent hover:text-accent-hover transition-colors">
-            {acquereur.prenom} {acquereur.nom}
+            {nomComplet(acquereur)}
           </Link>
         </p>
       </div>

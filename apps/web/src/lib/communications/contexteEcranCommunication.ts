@@ -33,6 +33,7 @@ import {
   resoudreDestinatairesDepuisDocument,
   versCandidatAcquereur,
 } from "@/lib/communications/destinataireCommunication";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 // Paramètres d'écran, partagés par la page ET par la Server Action de reformulation (VALUE-05) :
 // aucune des deux ne fait jamais confiance à ce qui vient du client, toutes deux rejouent la
@@ -162,7 +163,7 @@ async function resoudreDepuisAcquereur(acquereurId: string): Promise<ResultatCon
   if (!reprise || reprise.tacheId || !reprise.intention || !reprise.faitsPartageables) return undefined;
 
   return {
-    titre: `${acquereur.prenom} ${acquereur.nom}`,
+    titre: nomComplet(acquereur),
     determinerIntention: () => reprise.intention!,
     candidats: [versCandidatAcquereur(acquereur)],
     // Seuls les faits de la liste blanche entrent ici : le type FaitsPartageablesAcquereur interdit

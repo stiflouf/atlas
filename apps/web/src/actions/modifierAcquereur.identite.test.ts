@@ -222,7 +222,16 @@ describe("ADR-057 — identité effective en ÉCRITURE", () => {
     const { contact, dossier } = await unAcquereurRattache("ecriture");
     const avant = await getContactById(contact.id);
 
+    // `modifie_le` de la ligne créée vient de l'horloge POSTGRES (defaultNow()), celui de l'UPDATE
+    // de l'horloge NODE : les comparer directement dépend de la dérive entre les deux (mesurée à
+    // plusieurs secondes sous WSL2). On pousse donc l'horloge Node au-delà de la valeur lue, même
+    // précédent que clientRepository.test.ts.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(new Date(avant!.modifieLe).getTime() + 1000));
+
     await enregistrer(formulaire(dossier.id));
+
+    vi.useRealTimers();
 
     const contactApres = await getContactById(contact.id);
     expect(contactApres?.nom).toBe(IDENTITE_B.nom);

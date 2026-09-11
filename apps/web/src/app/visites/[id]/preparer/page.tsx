@@ -40,6 +40,7 @@ import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
 import type { ProfilAcquereur } from "@/types/client";
 import type { RendezVous } from "@/types/agenda";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -157,7 +158,7 @@ export default async function PreparerVisite({ params }: PageProps) {
             {bien.adresse}, {bien.codePostal} {bien.ville}
           </p>
           <p className="text-[14px] text-text-1 mt-3">
-            Acquéreur : {acquereur.prenom} {acquereur.nom}
+            Acquéreur : {nomComplet(acquereur)}
           </p>
         </div>
         <form action={materialiserVisiteAction}>
@@ -318,7 +319,7 @@ export default async function PreparerVisite({ params }: PageProps) {
       <section className="mb-8 bg-surface rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
         <SectionTitle>Acquéreur</SectionTitle>
         <p className="text-[15px] font-medium text-text-1">
-          {aq.prenom} {aq.nom}
+          {nomComplet(aq)}
         </p>
         <div className="flex flex-wrap gap-2 mt-2">
           <Badge variant="default">{stadeLabel[aq.stadeProjet]}</Badge>
@@ -355,7 +356,7 @@ export default async function PreparerVisite({ params }: PageProps) {
           {comptesRendusRecents.length > 0 && (
             <div className="mb-4">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-text-3 mb-2">
-                Comptes rendus précédents avec {aq.prenom} {aq.nom}
+                Comptes rendus précédents avec {nomComplet(aq)}
               </p>
               <div className="flex flex-col gap-2">
                 {comptesRendusRecents.map((cr) => (

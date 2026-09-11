@@ -166,7 +166,14 @@ describe("ADR-057 vendeur — écriture", () => {
     const prospect = await unProspect("ecriture", contact.id);
     const avant = await getContactById(contact.id);
 
+    // Même précaution que côté acquéreur : `cree_le`/`modifie_le` initial viennent de l'horloge
+    // POSTGRES, l'UPDATE de l'horloge NODE. Comparer les deux dépendrait de leur dérive.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(new Date(avant!.modifieLe).getTime() + 1000));
+
     await enregistrer(formulaire(prospect.id));
+
+    vi.useRealTimers();
 
     const apres = await getContactById(contact.id);
     expect(apres?.nom).toBe(IDENTITE_D.nom);

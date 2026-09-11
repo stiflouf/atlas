@@ -8,6 +8,7 @@ import Select from "@/components/ui/Select";
 import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { ProfilAcquereur } from "@/types/client";
 import type { Offre } from "@/types/offre";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 function formatPrix(montant: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(montant);
@@ -68,7 +69,7 @@ export default function OffreFormulaire(props: Props) {
         <div>
           <p className="text-[11px] font-medium text-text-secondary mb-1">Acquéreur</p>
           <p className="text-[14px] font-medium text-text-primary bg-surface-subtle border border-border-subtle rounded-lg px-3 py-2">
-            {props.acquereur.prenom} {props.acquereur.nom}
+            {nomComplet(props.acquereur)}
           </p>
           <input type="hidden" name="acquereurId" value={props.acquereur.id} />
         </div>
@@ -84,7 +85,7 @@ export default function OffreFormulaire(props: Props) {
           </option>
           {props.acquereurs.map((a) => (
             <option key={a.id} value={a.id}>
-              {a.prenom} {a.nom}
+              {nomComplet(a)}
             </option>
           ))}
         </Select>

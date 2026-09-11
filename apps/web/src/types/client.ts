@@ -7,7 +7,11 @@ export type StadeProjet =
 
 export type ProfilAcquereur = {
   id: string;
-  prenom: string;
+  // ADR-057 — OPTIONNEL depuis que le Contact fait foi pour un dossier rattaché. `acquereurs.prenom`
+  // reste NOT NULL, mais `contacts.prenom` est nullable : « Dupont » sans prénom est un état normal
+  // (ADR-055 §A, `nom` est le seul champ que les deux modèles garantissent). Le traduire en chaîne
+  // vide ferait passer une absence pour une valeur — la même altération de sens qu'un repli.
+  prenom?: string;
   nom: string;
   // ADR-057 — OPTIONNELS depuis que le Contact fait foi pour un dossier rattaché. Les colonnes
   // `acquereurs.email`/`telephone` restent NOT NULL, mais `contacts.email`/`telephone` sont

@@ -91,7 +91,17 @@ export async function modifierAcquereurAction(formData: FormData): Promise<void>
       // l'instantané de sa création, et le writer legacy ci-dessous ne les touche pas.
       const contact = await modifierIdentiteContact(
         sourceIdentite.contactId,
-        { nom: donnees.nom, prenom: donnees.prenom, email: donnees.email, telephone: donnees.telephone },
+        {
+          nom: donnees.nom,
+          // FRONTIÈRE DE FORMULAIRE, et le seul endroit où elle a le droit d'exister. Un input HTML
+          // vide arrive en chaîne vide ; les colonnes du DOSSIER sont NOT NULL et s'en accommodent,
+          // celles du Contact sont nullables et doivent recevoir une ABSENCE. Écrire `""` dans
+          // `contacts.prenom` déguiserait un champ non renseigné en valeur — exactement la dette que
+          // ce lot ferme côté lecture, réintroduite côté écriture.
+          prenom: donnees.prenom || undefined,
+          email: donnees.email || undefined,
+          telephone: donnees.telephone || undefined,
+        },
         workspaceId,
         tx
       );

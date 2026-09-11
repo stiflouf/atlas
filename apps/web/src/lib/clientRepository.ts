@@ -88,7 +88,7 @@ async function appliquerCriteresEffectifs(
       ? {
           ...avecCriteres,
           nom: sourceIdentite.identite.nom,
-          prenom: sourceIdentite.identite.prenom ?? "",
+          prenom: sourceIdentite.identite.prenom,
           email: sourceIdentite.identite.email,
           telephone: sourceIdentite.identite.telephone,
         }
@@ -220,7 +220,8 @@ export async function getClientById(id: string): Promise<ProfilAcquereur | undef
 // lecture. Ce n'est pas une incohérence : `acquereurs.email`/`telephone` sont `NOT NULL` en base, une
 // création DOIT donc les fournir. C'est la lecture qui a changé de nature — elle peut désormais
 // rendre l'identité d'un Contact, où l'adresse peut légitimement être inconnue.
-export type NouvelAcquereur = Omit<ProfilAcquereur, "id" | "email" | "telephone"> & {
+export type NouvelAcquereur = Omit<ProfilAcquereur, "id" | "prenom" | "email" | "telephone"> & {
+  prenom: string;
   email: string;
   telephone: string;
   // ADR-055 — pont OPTIONNEL vers l'identité canonique. Optionnel et non requis : les chemins qui

@@ -9,6 +9,7 @@ import { getClientById } from "@/lib/clientRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 // Contexte du pack notaire (ADR-030) — étend ContexteDossier (ADR-029) d'un acquéreur déjà
 // résolu, nécessaire au nommage d'export et au manifeste. N'étend jamais ContexteDossier
@@ -354,7 +355,7 @@ export function genererManifestePackNotaire(
   lignes.push(`${ctx.bien.adresse}, ${ctx.bien.codePostal} ${ctx.bien.ville}`);
   lignes.push("");
   lignes.push(`Contact vendeur principal : ${ctx.prospectVendeurOrigine?.nom ?? "non renseigné"}`);
-  lignes.push(`Acquéreur enregistré : ${ctx.acquereur ? `${ctx.acquereur.prenom} ${ctx.acquereur.nom}` : "non renseigné"}`);
+  lignes.push(`Acquéreur enregistré : ${ctx.acquereur ? nomComplet(ctx.acquereur) : "non renseigné"}`);
   lignes.push(
     `Charge des honoraires : ${ctx.bien.chargeHonoraires ? LABEL_CHARGE_HONORAIRES[ctx.bien.chargeHonoraires] : "non renseignée"}`
   );

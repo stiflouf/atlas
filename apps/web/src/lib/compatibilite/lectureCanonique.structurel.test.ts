@@ -250,6 +250,22 @@ describe("ADR-057 — l'identité canonique suit la même discipline", () => {
     expect(writers).toEqual([join("src", "lib", "contactRepository.ts")]);
   });
 
+  it("aucune absence canonique n'est traduite en chaîne vide dans le domaine", () => {
+    // `contacts.prenom`/`email`/`telephone` sont nullables : une absence est une information. La
+    // convertir en `""` la déguise en valeur — plus discret qu'un repli champ par champ, aussi faux.
+    // La conversion reste légitime à la FRONTIÈRE d'un input HTML contrôlé, jamais dans un
+    // repository ni dans une règle.
+    for (const chemin of [
+      join("src", "lib", "clientRepository.ts"),
+      join("src", "lib", "prospectVendeurRepository.ts"),
+      join("src", "lib", "identiteContactEffective.ts"),
+    ]) {
+      const code = codeSeul(chemin);
+      expect(code, chemin).not.toMatch(/identite\.\w+\s*\?\?\s*""/);
+      expect(code, chemin).not.toMatch(/prenom:\s*[\w.]+\s*\?\?\s*""/);
+    }
+  });
+
   it("les deux Server Actions d'identité exigent le workspace courant", () => {
     for (const action of [
       join("src", "actions", "modifierAcquereur.ts"),

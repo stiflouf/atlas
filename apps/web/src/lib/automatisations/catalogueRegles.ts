@@ -11,6 +11,7 @@ import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
 import { resoudreProfilCompatibilite } from "@/lib/compatibilite/profilCompatibiliteRepository";
 import { existeExecutionAvecTacheOuvertePourPaire } from "./executionAutomatisationRepository";
 import type { ChampsTacheAutomatique, CodeRegleAutomatisation, EvenementMetier, TypeEvenementMetier } from "@/types/automatisation";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 // Catalogue de règles déterministes (ADR-032) — versionné et testé en code (pas de constructeur
 // no-code en V1, pas de règles en base : seule leur ACTIVATION vit en base,
@@ -62,21 +63,21 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
       switch (compteRendu.interet) {
         case "interesse":
           return {
-            titre: `Faire le point avec ${acquereur.prenom} ${acquereur.nom} sur une éventuelle offre pour ${bien.reference}`,
+            titre: `Faire le point avec ${nomComplet(acquereur)} sur une éventuelle offre pour ${bien.reference}`,
             type: "relance",
             priorite: "normale",
             cible: { type: "acquereur", id: acquereur.id },
           };
         case "a_reflechir":
           return {
-            titre: `Relancer ${acquereur.prenom} ${acquereur.nom} après la visite de ${bien.reference}`,
+            titre: `Relancer ${nomComplet(acquereur)} après la visite de ${bien.reference}`,
             type: "relance",
             priorite: "normale",
             cible: { type: "acquereur", id: acquereur.id },
           };
         case "inconnu":
           return {
-            titre: `Recueillir le retour de ${acquereur.prenom} ${acquereur.nom} après la visite de ${bien.reference}`,
+            titre: `Recueillir le retour de ${nomComplet(acquereur)} après la visite de ${bien.reference}`,
             type: "relance",
             priorite: "normale",
             cible: { type: "acquereur", id: acquereur.id },
@@ -273,7 +274,7 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
       if (dejaUneTacheOuverte) return undefined;
 
       return {
-        titre: `Nouveau match — contacter ${acquereur.prenom} ${acquereur.nom} pour ${bien.reference}`,
+        titre: `Nouveau match — contacter ${nomComplet(acquereur)} pour ${bien.reference}`,
         contexte: `${PRODUCT_NAME} a détecté une nouvelle compatibilité avec ce bien. Vérifier les critères puis contacter l'acquéreur si pertinent.`,
         type: "appel",
         priorite: "normale",

@@ -8,6 +8,7 @@ import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
 import Avatar from "@/components/ui/Avatar";
 import { listerClients, rechercherAcquereursPage } from "@/lib/clientRepository";
+import { nomComplet, initialesPersonne } from "@/lib/identite/nomPersonne";
 
 const PAR_PAGE = 25;
 
@@ -125,10 +126,10 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               <Link key={client.id} href={`/clients/${client.id}`}>
                 <Card variant="interactive">
                   <div className="flex items-center gap-4 p-3">
-                    <Avatar initiales={`${client.prenom.charAt(0)}${client.nom.charAt(0)}`} size={40} />
+                    <Avatar initiales={initialesPersonne(client)} size={40} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[14px] font-medium text-text-1 truncate">
-                        {client.prenom} {client.nom}
+                        {nomComplet(client)}
                       </p>
                       <div className="flex items-center gap-2 mt-1.5">
                         <span className="text-[13px] text-text-2">

@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { modifierAcquereurAction } from "@/actions/modifierAcquereur";
 import AcquereurFormulaire from "@/components/client/AcquereurFormulaire";
 import { getClientById } from "@/lib/clientRepository";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,7 +26,7 @@ export default async function ModifierAcquereurPage({ params }: PageProps) {
         className="inline-flex items-center gap-1.5 text-[13px] text-[#64748b] hover:text-[#0f172a] transition-colors mb-6"
       >
         <ArrowLeft size={14} />
-        {acquereur.prenom} {acquereur.nom}
+        {nomComplet(acquereur)}
       </Link>
 
       <h1 className="text-[20px] md:text-[24px] font-semibold text-[#0f172a] leading-tight mb-6">

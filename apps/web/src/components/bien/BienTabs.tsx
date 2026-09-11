@@ -63,6 +63,7 @@ import {
 } from "@/actions/remuneration";
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 import type { TransmissionDossierNotaire } from "@/types/transmissionDossierNotaire";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 const CATEGORIES_DOCUMENT: CategorieDocument[] = [
   "mandat",
@@ -430,7 +431,7 @@ export default function BienTabs({
                         <span className="text-[11px] font-medium text-ink-900">{LABEL_STATUT_VISITE[v.statut]}</span>
                       </div>
                       <p className="text-[14px] font-medium text-text-primary">
-                        {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                        {acquereur ? nomComplet(acquereur) : "Acquéreur indisponible"}
                       </p>
                     </Link>
                   );
@@ -469,7 +470,7 @@ export default function BienTabs({
                         <span className="text-[11px] font-medium text-ink-900">{LABEL_INTERET[cr.interet]}</span>
                       </div>
                       <p className="text-[14px] font-medium text-text-primary">
-                        {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                        {acquereur ? nomComplet(acquereur) : "Acquéreur indisponible"}
                       </p>
                       <p className="text-[13px] text-text-muted mt-1 leading-snug whitespace-pre-wrap">{cr.retour}</p>
                       {cr.prochaineEtape && (
@@ -641,7 +642,7 @@ export default function BienTabs({
                       <option value="">Acquéreur — aucun</option>
                       {acquereursActifs.map((a) => (
                         <option key={a.id} value={a.id}>
-                          {a.prenom} {a.nom}
+                          {nomComplet(a)}
                         </option>
                       ))}
                     </Select>
@@ -823,7 +824,7 @@ export default function BienTabs({
                               <option value="">Acquéreur — aucun</option>
                               {acquereursActifs.map((a) => (
                                 <option key={a.id} value={a.id}>
-                                  {a.prenom} {a.nom}
+                                  {nomComplet(a)}
                                 </option>
                               ))}
                             </Select>
@@ -929,7 +930,7 @@ export default function BienTabs({
                         </div>
                         <p className="text-[14px] font-medium text-text-primary">
                           {formatPrix(offre.montant)} —{" "}
-                          {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                          {acquereur ? nomComplet(acquereur) : "Acquéreur indisponible"}
                         </p>
                       </div>
                     </div>
@@ -1130,7 +1131,7 @@ export default function BienTabs({
                         </div>
                         <p className="text-[14px] font-medium text-text-primary">
                           {formatPrix(c.prixConvenu)} —{" "}
-                          {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+                          {acquereur ? nomComplet(acquereur) : "Acquéreur indisponible"}
                         </p>
                       </div>
                     </div>

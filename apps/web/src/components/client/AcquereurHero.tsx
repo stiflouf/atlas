@@ -4,6 +4,7 @@ import Button from "@/components/ui/Button";
 import ButtonLink from "@/components/ui/ButtonLink";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
 import { archiverAcquereurAction, desarchiverAcquereurAction } from "@/actions/archivageAcquereur";
+import { initialesPersonne, nomComplet } from "@/lib/identite/nomPersonne";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -36,11 +37,11 @@ export default function AcquereurHero({ client }: { client: ProfilAcquereur }) {
     <div className="bg-surface border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] p-5 md:p-6">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
-          <Avatar initiales={`${client.prenom.charAt(0)}${client.nom.charAt(0)}`} size={52} />
+          <Avatar initiales={initialesPersonne(client)} size={52} />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <h1 className="font-serif text-[21px] md:text-[24px] font-semibold text-text-1 leading-tight">
-                {client.prenom} {client.nom}
+                {nomComplet(client)}
               </h1>
               <Badge variant="default">{LABEL_STADE_PROJET[client.stadeProjet]}</Badge>
               {client.archiveLe && <Badge variant="muted">Archivé le {formatDate(client.archiveLe)}</Badge>}

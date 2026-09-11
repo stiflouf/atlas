@@ -249,11 +249,11 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
     // Force l'acquéreur à exiger un parking, information inconnue côté bien -> a_verifier.
     const { modifierAcquereur } = await import("@/lib/clientRepository");
     await modifierAcquereur(acquereur.id, {
-      prenom: acquereur.prenom,
+      // ADR-057 — `prenom`/`email`/`telephone` sont optionnels en LECTURE (le Contact peut ne pas en
+      // avoir) mais obligatoires à l'écriture d'un dossier, dont les colonnes sont NOT NULL. Cet
+      // acquéreur vient d'être créé avec les trois, sans Contact rattaché.
+      prenom: acquereur.prenom!,
       nom: acquereur.nom,
-      // ADR-057 — `email`/`telephone` sont optionnels en LECTURE (le Contact peut ne pas en avoir)
-      // mais obligatoires à l'écriture d'un dossier, dont les colonnes sont NOT NULL. Cet acquéreur
-      // vient d'être créé avec les deux, sans Contact rattaché.
       email: acquereur.email!,
       telephone: acquereur.telephone!,
       budgetMin: acquereur.budgetMin,

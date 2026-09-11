@@ -5,6 +5,7 @@ import CibleTacheSelecteur from "@/components/tache/CibleTacheSelecteur";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -113,7 +114,7 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
 
         <CibleTacheSelecteur
           biens={biens.map((bien) => ({ id: bien.id, label: bien.titre }))}
-          acquereurs={clients.map((client) => ({ id: client.id, label: `${client.prenom} ${client.nom}` }))}
+          acquereurs={clients.map((client) => ({ id: client.id, label: nomComplet(client) }))}
           prospectsVendeurs={prospects.map((prospect) => ({
             id: prospect.id,
             label: `${prospect.prenom ? `${prospect.prenom} ` : ""}${prospect.nom}`,

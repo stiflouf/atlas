@@ -1140,6 +1140,11 @@ ouvert :
 - **Limite LEVÉE (vendeur)** : un prospect rattaché lit et écrit son identité sur son Contact, comme
   un acquéreur. Les deux faiblesses du même chemin sont fermées — l'action exige le workspace
   courant, et le writer est transactionnel et filtré par périmètre.
+- **Limite LEVÉE** : un `contacts.prenom` NULL n'est plus traduit en chaîne vide par la projection
+  acquéreur. `ProfilAcquereur.prenom` est optionnel, comme `ProspectVendeur.prenom` et
+  `Contact.prenom` — une personne connue par son seul nom (ADR-055 §A) le reste jusqu'à l'écran.
+  La conversion en `""` subsiste uniquement à la frontière d'un input HTML contrôlé, jamais dans un
+  repository ni dans une règle.
 - **L'identité des dossiers NON RATTACHÉS reste legacy**, des deux côtés. C'est voulu : les
   rattacher demanderait de décider quel humain est lequel, et ce rapprochement est un geste explicite
   réservé à son propre lot. Aucun backfill, aucune déduplication automatique : `contacts` n'a

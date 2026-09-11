@@ -7,6 +7,7 @@ import { SEUIL_AMBIGU, SEUIL_FORT } from "@/lib/matching/resoudre";
 import { getClientById } from "@/lib/clientRepository";
 import { getBienById } from "@/lib/bienRepository";
 import ConfirmationBienRdv from "./ConfirmationBienRdv";
+import { nomComplet } from "@/lib/identite/nomPersonne";
 
 type BadgeConfig = { label: string; variant: "accent" | "default" | "muted" | "success" };
 
@@ -124,7 +125,7 @@ export default async function AgendaCard({
         {rdv.lieu && <p className="text-[13px] text-text-secondary mt-0.5 truncate">{rdv.lieu}</p>}
         {rdv.client && (
           <p className="text-[13px] text-text-muted mt-0.5">
-            {rdv.client.prenom} {rdv.client.nom}
+            {nomComplet(rdv.client)}
           </p>
         )}
 

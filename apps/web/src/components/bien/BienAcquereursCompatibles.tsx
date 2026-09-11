@@ -2,6 +2,7 @@ import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import type { ProfilAcquereur } from "@/types/client";
 import { LABEL_STATUT_COMPATIBILITE, type ResultatCompatibilite } from "@/lib/compatibilite/types";
+import { nomComplet, initialesPersonne } from "@/lib/identite/nomPersonne";
 
 const VARIANT_PAR_STATUT_COMPATIBILITE = {
   compatible: "success",
@@ -51,7 +52,7 @@ export default function BienAcquereursCompatibles({
     // Initiales (design validé Claude Design, artifact ec9f41b8) — purement présentationnel,
     // dérivé du prénom/nom réels, jamais une photo ni un score : "?" uniquement quand l'acquéreur
     // n'est plus résolu (même garde que le nom "Acquéreur indisponible" ci-dessous).
-    const initiales = acquereur ? `${acquereur.prenom.charAt(0)}${acquereur.nom.charAt(0)}`.toUpperCase() : "?";
+    const initiales = acquereur ? initialesPersonne(acquereur) : "?";
     return (
       <div
         key={resultat.acquereurId}
@@ -63,7 +64,7 @@ export default function BienAcquereursCompatibles({
           </span>
           <div className="min-w-0">
             <p className="text-[13px] font-medium text-text-primary truncate">
-              {acquereur ? `${acquereur.prenom} ${acquereur.nom}` : "Acquéreur indisponible"}
+              {acquereur ? nomComplet(acquereur) : "Acquéreur indisponible"}
             </p>
             {explication && <p className="text-[12px] text-text-muted truncate">{explication}</p>}
           </div>
