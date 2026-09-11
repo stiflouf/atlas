@@ -2,6 +2,7 @@ import { getBienById, listerBiens } from "@/lib/bienRepository";
 import { getClientById, listerClients } from "@/lib/clientRepository";
 import { listerSecteursPourAcquereur, listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
 import { evaluerCompatibilite } from "./evaluerCompatibilite";
+import { resoudreProfilCompatibilite, resoudreProfilsCompatibilite } from "./profilCompatibiliteRepository";
 import type { ResultatCompatibilite } from "./types";
 
 // Composition minimale (ADR-034, section 13) : réutilise les repositories déjà existants — aucune
@@ -16,20 +17,30 @@ import type { ResultatCompatibilite } from "./types";
 // Secteurs de recherche (ADR-035) : chargés en une seule requête groupée par sens d'orchestration,
 // jamais une requête par paire bien × acquéreur ni une requête par acquéreur dans la boucle
 // evaluerCompatibiliteBien — voir listerSecteursPourAcquereurs (secteurRechercheRepository.ts).
+//
+// ADR-055 §B — les CRITÈRES passés au moteur ne sortent plus du dossier chargé ici : ils sont
+// résolus par resoudreProfilsCompatibilite(), qui rend le projet canonique quand l'acquéreur en a
+// un et le dossier historique sinon. Le dossier reste chargé pour ce qu'il porte encore (identité,
+// archivage, id des secteurs) — jamais pour ses critères.
 
 export async function evaluerCompatibiliteBien(bienId: string): Promise<ResultatCompatibilite[]> {
   const bien = await getBienById(bienId);
   if (!bien) return [];
   const acquereurs = await listerClients();
-  const secteursParAcquereur = await listerSecteursPourAcquereurs(acquereurs.map((a) => a.id));
-  return acquereurs.map((acquereur) =>
-    evaluerCompatibilite(bien, acquereur, secteursParAcquereur.get(acquereur.id) ?? [])
-  );
+  const [profils, secteursParAcquereur] = await Promise.all([
+    resoudreProfilsCompatibilite(acquereurs),
+    listerSecteursPourAcquereurs(acquereurs.map((a) => a.id)),
+  ]);
+  return profils.map((profil) => evaluerCompatibilite(bien, profil, secteursParAcquereur.get(profil.id) ?? []));
 }
 
 export async function evaluerCompatibiliteAcquereur(acquereurId: string): Promise<ResultatCompatibilite[]> {
   const acquereur = await getClientById(acquereurId);
   if (!acquereur) return [];
-  const [biens, secteursRecherche] = await Promise.all([listerBiens(), listerSecteursPourAcquereur(acquereurId)]);
-  return biens.map((bien) => evaluerCompatibilite(bien, acquereur, secteursRecherche));
+  const [biens, secteursRecherche, profil] = await Promise.all([
+    listerBiens(),
+    listerSecteursPourAcquereur(acquereurId),
+    resoudreProfilCompatibilite(acquereur),
+  ]);
+  return biens.map((bien) => evaluerCompatibilite(bien, profil, secteursRecherche));
 }

@@ -1,0 +1,132 @@
+import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+// ADR-055 §B — garanties STRUCTURELLES du pont de LECTURE canonique. Ce que ces tests protègent
+// n'est pas un comportement (les tests d'intégration s'en chargent) mais une FRONTIÈRE, et une
+// frontière ne se perd jamais d'un coup : elle se perd le jour où « juste pour ce cas-là » un
+// critère manquant est repris du dossier historique, ou où le moteur lit lui-même une table parce
+// que la résolution était pénible à passer en paramètre.
+
+function listerFichiersSource(racine: string): string[] {
+  return readdirSync(racine, { withFileTypes: true }).flatMap((entree) => {
+    const chemin = join(racine, entree.name);
+    if (entree.isDirectory()) return listerFichiersSource(chemin);
+    return /\.tsx?$/.test(entree.name) ? [chemin] : [];
+  });
+}
+
+// Le CODE seul : sans cela ces tests interdiraient d'expliquer l'interdiction — le commentaire qui
+// dit « jamais de repli champ par champ » contient les mots surveillés (même précaution que
+// provenanceCanonique.structurel.test.ts).
+function codeSeul(chemin: string): string {
+  return readFileSync(chemin, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/^\s*\/\/.*$/gm, " ");
+}
+
+const MOTEUR = [
+  join("src", "lib", "compatibilite", "evaluerCompatibilite.ts"),
+  join("src", "lib", "compatibilite", "criteres.ts"),
+];
+
+const RESOLUTION = join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts");
+
+describe("ADR-034 — le moteur reste pur et ignore le stockage", () => {
+  it("n'importe ni base, ni repository, ni résolution de source", () => {
+    // Y compris la résolution qu'introduit ce lot : un moteur qui saurait résoudre lui-même sa
+    // source pourrait décider, paire par paire, laquelle utiliser — exactement la dualité que ce
+    // lot fait disparaître de ses règles.
+    const interdits = [
+      /@\/db\//,
+      /drizzle-orm/,
+      /Repository/,
+      /profilCompatibiliteRepository/,
+      /lib\/provenance/,
+      /@\/types\/provenance/,
+      /synchronisation/,
+      /appliquerMutationExterne/,
+    ];
+    for (const chemin of MOTEUR) {
+      const code = codeSeul(chemin);
+      for (const interdit of interdits) {
+        expect(interdit.test(code), `${chemin} ne doit pas référencer ${interdit}`).toBe(false);
+      }
+    }
+  });
+
+  it("son contrat d'entrée acquéreur n'est plus le type du dossier historique", () => {
+    // `ProfilAcquereur` porte nom, email et téléphone : le passer au moteur maintenait un couplage
+    // au dossier ET donnait à toute règle future un accès à l'identité humaine.
+    for (const chemin of MOTEUR) {
+      const code = codeSeul(chemin);
+      expect(code, chemin).toContain("ProfilCompatibiliteAcquereur");
+      expect(code, chemin).not.toContain("ProfilAcquereur;");
+    }
+  });
+
+  it("le profil de compatibilité ne porte aucune identité humaine", () => {
+    const code = codeSeul(join("src", "types", "profilCompatibiliteAcquereur.ts"));
+    for (const champ of ["prenom", "nom:", "email", "telephone", "contactId", "notes"]) {
+      expect(code, `profil de compatibilité : ${champ}`).not.toContain(champ);
+    }
+  });
+});
+
+describe("ADR-055 §B — la règle de source est appliquée au même endroit, une seule fois", () => {
+  const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
+
+  it("tout appelant du moteur passe par la résolution de source", () => {
+    // Un appelant qui passerait directement un `ProfilAcquereur` compilerait sans erreur (le type
+    // du dossier est structurellement compatible) et matcherait silencieusement sur des critères
+    // legacy pour un acquéreur canonique. C'est précisément le bug que ce lot corrige : seul un
+    // test structurel peut l'empêcher de revenir.
+    const appelants = FICHIERS.filter((chemin) => {
+      const code = codeSeul(chemin);
+      return /evaluerCompatibilite\s*\(/.test(code) && !MOTEUR.includes(chemin);
+    });
+    expect(appelants.length, "au moins un appelant doit exister").toBeGreaterThan(0);
+
+    const sansResolution = appelants.filter((chemin) => !/profilCompatibiliteRepository/.test(codeSeul(chemin)));
+    expect(sansResolution).toEqual([]);
+  });
+
+  it("dans la chaîne du moteur, un seul module sait qu'il existe deux stockages", () => {
+    // Ailleurs dans le produit, `projet_acquereur_id` est nommé par les chemins qui l'écrivent ou
+    // le déclarent (schéma, création, provenance, parties de projet) — c'est leur travail. Ce qui
+    // est verrouillé ici est plus étroit et plus important : DANS la chaîne du moteur, une seule
+    // porte connaît le pont. Une seconde signifierait deux règles de source, qui divergeront.
+    const chaine = FICHIERS.filter((chemin) => chemin.includes(join("lib", "compatibilite")));
+    const connaissentLePont = chaine.filter((chemin) => /projetAcquereurId|projet_acquereur_id/.test(codeSeul(chemin)));
+    expect(connaissentLePont).toEqual([RESOLUTION, join("src", "lib", "compatibilite", "resynchronisationRepository.ts")]);
+  });
+
+  it("aucun repli champ par champ dans la résolution", () => {
+    // La forme interdite : `projet.piecesMin ?? acquereur.piecesMin`. Le repli est au niveau de
+    // l'AGRÉGAT, jamais du champ — un NULL canonique est une information, pas un trou.
+    const code = codeSeul(RESOLUTION);
+    expect(code).not.toMatch(/projet\.\w+\s*\?\?\s*acquereur\./);
+    expect(code).not.toMatch(/acquereur\.\w+\s*\?\?\s*projet\./);
+  });
+});
+
+describe("ce lot ne migre ni ne duplique rien", () => {
+  it("aucune migration n'est créée : le schéma existant suffit", () => {
+    const migrations = readdirSync(join("src", "db", "migrations")).filter((f) => f.endsWith(".sql"));
+    expect(migrations).toHaveLength(40);
+  });
+
+  it("aucun backfill : le pont reste nullable et personne ne le remplit en masse", () => {
+    const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
+    const fautifs = FICHIERS.filter((chemin) => /backfill|rattacherHistorique|migrerAcquereurs/i.test(codeSeul(chemin)));
+    expect(fautifs).toEqual([]);
+  });
+
+  it("le writer canonique n'écrit jamais dans le dossier historique", () => {
+    // Aucun miroir canonical -> legacy ni legacy -> canonical n'est introduit : le but est que le
+    // canonique devienne consommable, pas qu'il soit recopié.
+    const code = codeSeul(join("src", "lib", "projetAcquereurRepository.ts"));
+    expect(code).not.toContain("acquereursTable");
+    expect(code).not.toContain("@/lib/clientRepository");
+  });
+});

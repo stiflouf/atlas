@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { projetsAcquereur as projetsAcquereurTable } from "@/db/schema";
+import { enqueuerResynchronisationProjetAcquereur } from "@/lib/compatibilite/resynchronisationRepository";
 import type { StadeProjet } from "@/types/client";
 import type { ChampProjetAcquereurModifiable, ProjetAcquereur } from "@/types/projetAcquereur";
 
@@ -137,5 +138,18 @@ export async function modifierChampProjetAcquereur(
     .set(valeurs)
     .where(eq(projetsAcquereurTable.id, id))
     .returning();
-  return ligne ? ligneVersProjet(ligne) : undefined;
+  if (!ligne) return undefined;
+
+  // INVALIDATION, portée par le writer Core lui-même et non par ses appelants. Depuis ADR-055 §B,
+  // ces colonnes sont les critères que le moteur de compatibilité lit réellement : les modifier
+  // sans demander de recalcul laisserait le produit afficher un statut périmé. La poser ici plutôt
+  // que dans le Sync Engine tient la frontière d'ADR-056 §9 — une source externe pousse une valeur
+  // au Core et n'a jamais à savoir qu'un moteur de matching existe.
+  //
+  // Le writer legacy équivalent (`modifierAcquereur`) laisse cette responsabilité à sa Server
+  // Action, qui a une session, une transaction et un `workspaceId` sous la main. Ce chemin-ci n'a
+  // rien de tout cela : son appelant peut être une machine, et l'oubli y serait invisible.
+  await enqueuerResynchronisationProjetAcquereur(id, executeur);
+
+  return ligneVersProjet(ligne);
 }

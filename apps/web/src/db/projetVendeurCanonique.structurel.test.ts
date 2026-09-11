@@ -167,14 +167,17 @@ describe("ADR-055 §B — le tunnel vendeur historique reste sur prospects_vende
     expect(fautifs, "le modèle canonique est encore une fondation, pas une lecture").toEqual([]);
   });
 
-  it("les moteurs purs ne consomment pas le modèle canonique", () => {
+  it("les moteurs purs ne consomment pas le modèle canonique VENDEUR", () => {
+    // Le côté acquéreur a basculé (ADR-055 §B, lot « read bridge ») : ses critères sont lus sur
+    // `projets_acquereur` par une porte unique, verrouillée par
+    // projetAcquereurCanonique.structurel.test.ts. Le côté VENDEUR n'a pas bougé — et rien ici ne
+    // doit laisser penser que sa bascule serait acquise par ricochet. Les PARTIES de projet restent
+    // hors des moteurs des deux côtés : aucune règle n'a besoin de savoir qui porte un projet.
     const moteurs = [join("lib", "compatibilite"), join("lib", "opportunites"), join("lib", "alertes"), join("lib", "fiscal")];
     const fautifs = FICHIERS.filter((chemin) => moteurs.some((moteur) => chemin.includes(moteur))).filter((chemin) =>
-      /projetsVendeur|projetsAcquereur|partiesProjet|projetVendeurRepository|projetAcquereurRepository|partieProjetRepository/.test(
-        readFileSync(chemin, "utf8")
-      )
+      /projetsVendeur|partiesProjet|projetVendeurRepository|partieProjetRepository/.test(readFileSync(chemin, "utf8"))
     );
-    expect(fautifs, "les moteurs purs restent branchés sur le modèle historique").toEqual([]);
+    expect(fautifs, "le modèle vendeur canonique reste une fondation, pas une lecture").toEqual([]);
   });
 
   it("visites, offres et tâches ne sont pas migrées vers les projets canoniques", () => {

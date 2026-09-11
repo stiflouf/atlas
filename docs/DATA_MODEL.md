@@ -470,25 +470,70 @@ il rendrait les FK impossibles.
 - **Toutes les lignes antérieures gardent `projet_acquereur_id = NULL`** : aucun backfill. Un
   acquéreur historique peut être une recherche close, abandonnée ou saisie deux fois ; en faire
   mécaniquement un projet actif fabriquerait des faits que personne n'a constatés.
-- `modifierAcquereur()` **ne propage rien** vers le modèle canonique. Décision assumée : ce lot
-  alimente les nouvelles créations, sans miroir en écriture. Une modification fera donc diverger la
-  copie canonique — acceptable tant que **rien ne la lit**, et à traiter par le lot qui bascule les
-  lectures, pas par une synchronisation bidirectionnelle qui fragiliserait le système historique.
+- `modifierAcquereur()` **ne propage rien** vers le modèle canonique, et réciproquement : aucun
+  miroir en écriture n'existe dans un sens ni dans l'autre. Depuis la bascule des lectures
+  ci-dessous, une modification du dossier historique sur un acquéreur **rattaché** ne change plus le
+  matching — c'est le projet canonique qui fait foi pour ses critères. Le formulaire de modification
+  reste donc à basculer sur le projet, dans son propre lot.
 
-**Source de vérité pendant la coexistence : `acquereurs`.** Matching (`lib/compatibilite/`), visites,
-offres, tâches et UI le lisent, inchangés. Un test structurel vérifie qu'aucun fichier de
-`lib/compatibilite/` ni de `src/app` / `src/components` ne référence le modèle canonique.
+## Lecture effective des critères acquéreur (ADR-055 §B, lot « read bridge »)
 
-**Matching** — CURRENT : `acquereurs` → `evaluerCompatibilite`. FUTURE : `projets_acquereur` →
-`evaluerCompatibilite`. La bascule est un lot à part entière, précédé d'un test de caractérisation
-(ADR-055, stratégie de migration étape 3), jamais un glissement silencieux.
+**La règle, au niveau de l'AGRÉGAT :**
+
+| État de la ligne `acquereurs` | Critères lus par `evaluerCompatibilite` |
+| --- | --- |
+| `projet_acquereur_id` **présent** | **`projets_acquereur`** — pour **tous** les champs qu'il porte |
+| `projet_acquereur_id` **absent** | `acquereurs` — pour tous les champs |
+
+**Jamais de repli champ par champ.** Un `pieces_min` NULL sur un projet canonique est une
+information — « ce critère n'est pas documenté » — pas un trou à combler avec la vieille valeur du
+dossier. Reprendre le legacy champ à champ ressusciterait silencieusement un critère qu'une source
+externe vient précisément d'effacer, et rendrait indécidable ce que le produit affiche. Un test
+structurel interdit la forme `projet.x ?? acquereur.x`.
+
+**Référence de projet cassée : fail closed.** `projet_acquereur_id` non nul pointant vers un projet
+introuvable est impossible par FK ; y arriver signifie une incohérence de données, jamais un cas
+métier. La lecture lève une erreur explicite au lieu de retomber sur le legacy — présenter des
+critères périmés comme canoniques serait un mensonge stable, bien pire qu'une erreur visible.
+
+**Où vit cette règle** : `lib/compatibilite/profilCompatibiliteRepository.ts`, et nulle part
+ailleurs. Le moteur (`evaluerCompatibilite.ts`, `criteres.ts`) reçoit un
+`ProfilCompatibiliteAcquereur` — type sans identité humaine, sans `budgetMin` (aucune sémantique de
+compatibilité, ADR-034) et sans `criteres` (texte libre, ADR-008) — et ignore d'où viennent les
+valeurs.
+
+**Champs canoniques réellement lus** : `budget_max`, `pieces_min`, `surface_min`,
+`accessibilite_requise`, `necessite_parking`, `necessite_exterieur`.
+
+**Inputs restés LEGACY, et assumés** : `secteurs_recherche_acquereur` (ADR-035) reste une table
+enfant de `acquereurs`, chargée par l'id du **dossier** et passée au moteur comme avant. Le modèle
+de lecture effectif est donc **hybride** — critères canoniques, enfants encore ancrés au dossier —
+jusqu'au lot qui canonicalisera ces enfants. Aucune FK n'est déplacée ici.
+
+**Invalidation** : `modifierChampProjetAcquereur()` enfile lui-même une demande de resynchronisation
+ADR-036 pour chaque dossier qui référence le projet, sur l'`executeur` de l'appelant. Sans elle, une
+mutation canonique (Sync Engine compris) changerait le verdict du matching sans que rien ne demande
+de le recalculer. La porter dans le writer Core plutôt que dans `appliquerMutationExterne()` tient la
+frontière ADR-056 §9 : une source externe pousse une valeur au Core et n'a jamais à savoir qu'un
+moteur de matching existe.
+
+**Consommateurs basculés** : `lib/compatibilite/orchestration.ts` (écrans bien et acquéreur),
+`lib/compatibilite/synchronisation.ts` (ADR-036), `lib/compatibilite/baseline.ts`,
+`lib/opportunites/contexte.ts` (écran Aujourd'hui), `lib/automatisations/catalogueRegles.ts`
+(revalidation ADR-037).
+
+**Consommateurs encore LEGACY, volontairement non touchés** : `lib/pointsAttention/moteur.ts` et
+`lib/pointsForts/moteur.ts` (réutilisent les fonctions de `criteres.ts` avec le dossier),
+`lib/matching/` (rapprochement flou d'événements d'agenda, jamais une décision de compatibilité),
+`lib/relations/`, `lib/communications/`, `lib/visites/suiteVisite.ts`, `lib/documents/packNotaire.ts`
+et toute l'UI. Aucun ne décide d'une compatibilité.
 
 **Dettes ouvertes, volontairement non traitées par ce lot :**
 
-- `secteurs_recherche_acquereur` reste feuille de `acquereurs`. Un secteur de recherche appartient
-  conceptuellement au projet, mais lui ajouter un second parent nullable créerait une ambiguïté sur
-  le parent faisant foi, alors que rien ne lit encore le projet canonique. À migrer avec les
-  lectures.
+- `secteurs_recherche_acquereur` reste feuille de `acquereurs`, y compris depuis que les critères
+  sont lus sur le projet : un secteur appartient conceptuellement au projet, mais lui ajouter un
+  second parent nullable créerait une ambiguïté sur le parent faisant foi. Le moteur les reçoit donc
+  toujours par l'id du dossier — frontière explicite, à lever dans son propre lot.
 - `reperes_relationnels_acquereur` reste intact, et son appartenance est **ambiguë par nature** :
   `preference_contact` et `preference_relationnelle` décrivent la personne (→ `contacts`),
   `centre_interet` peut relever de l'une ou de l'autre, `autre` n'est pas classable. Trancher sans

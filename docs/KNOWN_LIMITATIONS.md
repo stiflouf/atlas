@@ -1116,6 +1116,36 @@ Limites qui en découlent, toutes assumées le temps de la transition :
 - **Un projet peut n'avoir aucune partie.** Le schéma ne l'interdit pas (une partie référence le
   projet, donc le projet est écrit en premier) ; l'invariant est tenu par le flux de création.
 
+## Lecture canonique des critères acquéreur (ADR-055 §B, lot « read bridge »)
+
+Le moteur de compatibilité lit désormais `projets_acquereur` dès qu'un dossier `acquereurs` est
+rattaché, et `acquereurs` sinon — au niveau de l'agrégat, jamais champ par champ. Ce qui reste
+ouvert :
+
+- **Les secteurs de recherche restent legacy.** `secteurs_recherche_acquereur` est toujours une
+  feuille de `acquereurs`, chargée par l'id du dossier. Le modèle de lecture est donc **hybride** :
+  critères canoniques, secteurs historiques. Assumé et documenté, jamais implicite.
+- **Le formulaire de modification d'acquéreur écrit toujours le seul dossier historique.** Pour un
+  acquéreur rattaché, modifier son budget dans l'UI ne change plus le matching — c'est le projet
+  canonique qui fait foi pour ses critères. C'est la conséquence directe de la bascule des lectures,
+  et le lot qui bascule ce formulaire n'est pas fait.
+- **Le recalcul dépend du balayage de reprise.** `modifierChampProjetAcquereur()` enfile une demande
+  de resynchronisation ADR-036 dans la transaction de l'appelant, mais ne la traite pas : c'est
+  `/api/compatibilite/scan` qui la consomme. Une mutation canonique est donc durable mais pas
+  instantanée, contrairement aux Server Actions qui appellent `traiterDemandeResynchronisation()`
+  après commit. Le Sync Engine ne le fait pas, et ne doit pas le faire — il connaîtrait le moteur de
+  matching.
+- **Aucun filtrage par workspace dans cette lecture.** La résolution suit la FK du dossier vers son
+  projet ; elle ne re-vérifie pas que les deux partagent le même périmètre. C'est la même décision
+  que `getProjetAcquereurById()` (« ce lot ne l'active pas »), et le flux de création écrit les trois
+  entités dans un seul workspace. Une écriture SQL directe qui croiserait deux périmètres ne serait
+  pas rattrapée ici.
+- **Les moteurs de points d'attention et de points forts restent sur le dossier.** Ils réutilisent
+  les fonctions pures de `criteres.ts` avec un `ProfilAcquereur` — structurellement compatible avec
+  le contrat du moteur. Ils peuvent donc afficher un point d'attention fondé sur un critère legacy
+  pendant que la compatibilité est jugée sur le critère canonique. Aucun des deux ne décide d'une
+  compatibilité, mais l'écart est réel.
+
 ## Architecture cible non construite
 
 Rappel (détaillé dans `docs/ARCHITECTURE.md`) : ADR-003/004/005 décrivent une cible (API Python/

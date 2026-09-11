@@ -1,5 +1,5 @@
 import type { Bien } from "@/types/bien";
-import type { ProfilAcquereur } from "@/types/client";
+import type { ProfilCompatibiliteAcquereur } from "@/types/profilCompatibiliteAcquereur";
 import type { SecteurRecherche } from "@/types/secteurRecherche";
 import type { EvaluationCritere } from "./types";
 
@@ -19,7 +19,7 @@ function formatMontant(centimes: number): string {
 // budgetMin n'a volontairement AUCUNE sémantique dans ce moteur (décision explicite ADR-034) :
 // un bien moins cher que budgetMin n'est jamais incompatible pour ce seul motif — le champ reste
 // dans le modèle sans être lu ici.
-export function evaluerBudgetMax(bien: Bien, acquereur: ProfilAcquereur): EvaluationCritere {
+export function evaluerBudgetMax(bien: Bien, acquereur: ProfilCompatibiliteAcquereur): EvaluationCritere {
   const critere = "budget_max";
   const label = "Budget maximum";
   const exigenceAcquereur = acquereur.budgetMax;
@@ -48,7 +48,7 @@ export function evaluerBudgetMax(bien: Bien, acquereur: ProfilAcquereur): Evalua
 // pour cette ADR, jamais undefined pour un bien réel. Si le modèle venait un jour à autoriser une
 // valeur réellement inconnue à l'exécution, elle devrait produire 'a_verifier', jamais une
 // hypothèse — mais ce cas n'existe pas aujourd'hui, aucune branche morte n'est ajoutée pour lui.
-export function evaluerPieces(bien: Bien, acquereur: ProfilAcquereur): EvaluationCritere {
+export function evaluerPieces(bien: Bien, acquereur: ProfilCompatibiliteAcquereur): EvaluationCritere {
   const critere = "pieces_min";
   const label = "Nombre de pièces minimum";
   if (acquereur.piecesMin === undefined) {
@@ -82,7 +82,7 @@ export function evaluerPieces(bien: Bien, acquereur: ProfilAcquereur): Evaluatio
 }
 
 // Même garantie que evaluerPieces() : bien.surface est NOT NULL en base (real("surface").notNull()).
-export function evaluerSurface(bien: Bien, acquereur: ProfilAcquereur): EvaluationCritere {
+export function evaluerSurface(bien: Bien, acquereur: ProfilCompatibiliteAcquereur): EvaluationCritere {
   const critere = "surface_min";
   const label = "Surface minimum";
   if (acquereur.surfaceMin === undefined) {
@@ -117,7 +117,7 @@ export function evaluerSurface(bien: Bien, acquereur: ProfilAcquereur): Evaluati
 
 // Invariant absolu (ADR-009) : inconnu ≠ false. bien.parking undefined produit 'a_verifier',
 // jamais 'incompatible' — seule une valeur false explicite le fait.
-export function evaluerParking(bien: Bien, acquereur: ProfilAcquereur): EvaluationCritere {
+export function evaluerParking(bien: Bien, acquereur: ProfilCompatibiliteAcquereur): EvaluationCritere {
   const critere = "parking";
   const label = "Parking";
   if (acquereur.necessiteParking !== true) {
@@ -160,7 +160,7 @@ export function evaluerParking(bien: Bien, acquereur: ProfilAcquereur): Evaluati
 
 // Jamais déduit de caracteristiques/description/notes (ADR-008) : uniquement bien.exterieur, le
 // seul champ structuré. Invariant inconnu ≠ false : absent produit 'a_verifier'.
-export function evaluerExterieur(bien: Bien, acquereur: ProfilAcquereur): EvaluationCritere {
+export function evaluerExterieur(bien: Bien, acquereur: ProfilCompatibiliteAcquereur): EvaluationCritere {
   const critere = "exterieur";
   const label = "Extérieur";
   if (acquereur.necessiteExterieur !== true) {
@@ -208,7 +208,7 @@ export function evaluerExterieur(bien: Bien, acquereur: ProfilAcquereur): Evalua
 // une valeur négative malgré tout présente (import direct, etc.) produit 'a_verifier' plutôt
 // qu'une sémantique de sous-sol inventée. Invariant inconnu ≠ false pour ascenseur comme pour
 // etage : jamais transformé en false.
-export function evaluerAccessibilite(bien: Bien, acquereur: ProfilAcquereur): EvaluationCritere {
+export function evaluerAccessibilite(bien: Bien, acquereur: ProfilCompatibiliteAcquereur): EvaluationCritere {
   const critere = "accessibilite";
   const label = "Accessibilité (étage / ascenseur)";
   if (acquereur.accessibiliteRequise !== true) {

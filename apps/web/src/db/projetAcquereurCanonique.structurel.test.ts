@@ -134,15 +134,22 @@ describe("ADR-055 §B — le projet est une intention immobilière, jamais une p
 describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le modèle historique", () => {
   const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
 
-  it("aucun moteur de compatibilité ne consomme le modèle canonique", () => {
-    // CURRENT : acquereurs -> matching. FUTURE : projets_acquereur -> matching. La bascule est un
-    // lot à part entière, précédé d'un test de caractérisation (ADR-055, stratégie de migration
-    // étape 3) — jamais un glissement silencieux.
+  it("une seule porte de la chaîne de compatibilité connaît le modèle canonique", () => {
+    // La bascule annoncée par ADR-055 (stratégie de migration, étape 3) a eu lieu pour les CRITÈRES
+    // acquéreur : `projets_acquereur` fait foi dès qu'une ligne `acquereurs` est rattachée. Ce test
+    // ne dit donc plus « personne ne lit le canonique » — il dit où cette connaissance a le droit
+    // de vivre. Une seconde porte signifierait deux règles de source, qui divergeront.
     const fautifs = FICHIERS.filter((chemin) => chemin.includes(join("lib", "compatibilite"))).filter((chemin) => {
       const contenu = readFileSync(chemin, "utf8");
       return /projetsAcquereur|projetAcquereurRepository|partiesProjet/.test(contenu);
     });
-    expect(fautifs, "le moteur de compatibilité doit rester branché sur acquereurs").toEqual([]);
+    expect(fautifs, "seule la résolution de source lit le projet canonique").toEqual([
+      join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts"),
+    ]);
+    // La contrepartie — le moteur lui-même n'importe ni base, ni repository, ni résolution — est
+    // verrouillée par lib/compatibilite/lectureCanonique.structurel.test.ts, qui neutralise les
+    // commentaires avant d'inspecter. La dupliquer ici sur le fichier brut ferait échouer le module
+    // le mieux documenté au seul motif qu'il explique l'interdiction.
   });
 
   it("visites et offres restent rattachées au modèle historique", () => {

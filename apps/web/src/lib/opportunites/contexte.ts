@@ -10,6 +10,7 @@ import { listerVisites } from "@/lib/visiteRepository";
 import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
 import { listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
 import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
+import { resoudreProfilsCompatibilite } from "@/lib/compatibilite/profilCompatibiliteRepository";
 
 // Faits structurés consommés par detecterOpportunites(). Aucune requête Drizzle n'est écrite ici
 // ni dans les règles : même séparation repository/domaine que chargerContexteAlertes() (ADR-026)
@@ -37,19 +38,23 @@ export async function chargerContexteOpportunites(deja: {
   acquereurs: ProfilAcquereur[];
   tachesActives: Tache[];
 }): Promise<ContexteOpportunites> {
-  const [prospectsVendeurs, visites, comptesRendus, secteursParAcquereur] = await Promise.all([
+  const [prospectsVendeurs, visites, comptesRendus, secteursParAcquereur, profils] = await Promise.all([
     listerProspectsVendeurs(),
     listerVisites(),
     listerComptesRendus(),
     listerSecteursPourAcquereurs(deja.acquereurs.map((a) => a.id)),
+    // ADR-055 §B — critères effectifs : projet acquéreur canonique dès que le dossier est rattaché,
+    // dossier historique sinon, résolus en une requête pour toute la liste. `acquereurs` reste
+    // exposé tel quel dans le contexte : les règles d'opportunité s'en servent pour nommer et
+    // joindre une personne, jamais pour rejuger une compatibilité — c'est `compatibilites` qui
+    // porte ce verdict, et il ne doit pas exister deux réponses à la même question dans un contexte.
+    resoudreProfilsCompatibilite(deja.acquereurs),
   ]);
 
   // Croisement complet bien × acquéreur par le moteur canonique (ADR-034) — fonction pure, aucune
   // requête par paire : les secteurs sont chargés en une fois ci-dessus.
   const compatibilites = deja.biens.flatMap((bien) =>
-    deja.acquereurs.map((acquereur) =>
-      evaluerCompatibilite(bien, acquereur, secteursParAcquereur.get(acquereur.id) ?? [])
-    )
+    profils.map((profil) => evaluerCompatibilite(bien, profil, secteursParAcquereur.get(profil.id) ?? []))
   );
 
   return {

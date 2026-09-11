@@ -8,6 +8,7 @@ import { listerOffresPourBien } from "@/lib/offreRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { existeVisitePlanifieePourPaire } from "@/lib/visiteRepository";
 import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
+import { resoudreProfilCompatibilite } from "@/lib/compatibilite/profilCompatibiliteRepository";
 import { existeExecutionAvecTacheOuvertePourPaire } from "./executionAutomatisationRepository";
 import type { ChampsTacheAutomatique, CodeRegleAutomatisation, EvenementMetier, TypeEvenementMetier } from "@/types/automatisation";
 
@@ -232,8 +233,14 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
       if (!bien || !acquereur) return undefined; // entité introuvable — jamais de retry infini
       if (bien.archiveLe || acquereur.archiveLe) return undefined; // sorti du périmètre commercial actif
 
-      const secteurs = await listerSecteursPourAcquereur(acquereurId);
-      const resultat = evaluerCompatibilite(bien, acquereur, secteurs);
+      // ADR-055 §B — critères effectifs : projet canonique si l'acquéreur en a un, dossier
+      // historique sinon. Revalider sur le dossier pendant que l'écran évalue le projet
+      // recréerait une tâche pour une paire que le produit ne montre plus comme compatible.
+      const [secteurs, profil] = await Promise.all([
+        listerSecteursPourAcquereur(acquereurId),
+        resoudreProfilCompatibilite(acquereur),
+      ]);
+      const resultat = evaluerCompatibilite(bien, profil, secteurs);
       if (resultat.statutGlobal !== "compatible") return undefined; // redevenu incompatible/à vérifier
 
       // Relation commerciale déjà avancée pour cette paire précise (ADR-037) — règle minimale sûre,

@@ -4,6 +4,7 @@ import { getClientById, listerClientsActifsPersistes } from "@/lib/clientReposit
 import { listerSecteursPourAcquereur, listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { evaluerCompatibilite } from "./evaluerCompatibilite";
+import { resoudreProfilCompatibilite, resoudreProfilsCompatibilite } from "./profilCompatibiliteRepository";
 import { ecrireEtatPaire, verrouillerEtatPaire } from "./etatRepository";
 import type { StatutCompatibilite } from "./types";
 
@@ -16,6 +17,11 @@ import type { StatutCompatibilite } from "./types";
 // Un nouveau critère ajouté plus tard à evaluerCompatibilite() (src/lib/compatibilite/criteres.ts)
 // n'exige AUCUN changement ici : ce module ne connaît que statutGlobal, jamais le détail des
 // critères — evaluerCompatibilite() reste l'unique source de vérité appelée.
+//
+// ADR-055 §B — les critères évalués sont ceux du PROJET canonique dès que l'acquéreur en a un
+// (resoudreProfilsCompatibilite), du dossier historique sinon. C'est ce qui rend une mutation
+// canonique — Sync Engine compris — capable de changer réellement un statut de compatibilité, au
+// lieu d'être écrite dans une table que personne ne relisait.
 
 export type ResultatSynchronisation = {
   pairesTraitees: number;
@@ -102,21 +108,24 @@ export async function synchroniserCompatibilitesPourBien(
   if (!bien || bien.archiveLe) return { pairesTraitees: 0, evenementsEmis: 0, erreurs: [] };
 
   const acquereurs = await listerClientsActifsPersistes();
-  const secteursParAcquereur = await listerSecteursPourAcquereurs(acquereurs.map((a) => a.id));
+  const [profils, secteursParAcquereur] = await Promise.all([
+    resoudreProfilsCompatibilite(acquereurs),
+    listerSecteursPourAcquereurs(acquereurs.map((a) => a.id)),
+  ]);
 
   let evenementsEmis = 0;
   const erreurs: string[] = [];
-  for (const acquereur of acquereurs) {
-    const resultat = evaluerCompatibilite(bien, acquereur, secteursParAcquereur.get(acquereur.id) ?? []);
-    const traitement = await traiterPaire(bien.id, acquereur.id, resultat.statutGlobal, true, workspaceId);
+  for (const profil of profils) {
+    const resultat = evaluerCompatibilite(bien, profil, secteursParAcquereur.get(profil.id) ?? []);
+    const traitement = await traiterPaire(bien.id, profil.id, resultat.statutGlobal, true, workspaceId);
     if ("erreur" in traitement) {
-      console.error(`[compatibilite] échec de synchronisation pour la paire bien=${bien.id} acquereur=${acquereur.id} :`, traitement.erreur);
+      console.error(`[compatibilite] échec de synchronisation pour la paire bien=${bien.id} acquereur=${profil.id} :`, traitement.erreur);
       erreurs.push(traitement.erreur);
     } else if (traitement.emis) {
       evenementsEmis += 1;
     }
   }
-  return { pairesTraitees: acquereurs.length, evenementsEmis, erreurs };
+  return { pairesTraitees: profils.length, evenementsEmis, erreurs };
 }
 
 // Symétrique côté acquéreur (création, modification, ajout/suppression de secteur, désarchivage) :
@@ -128,15 +137,16 @@ export async function synchroniserCompatibilitesPourAcquereur(
   const acquereur = await getClientById(acquereurId);
   if (!acquereur || acquereur.archiveLe) return { pairesTraitees: 0, evenementsEmis: 0, erreurs: [] };
 
-  const [biens, secteursRecherche] = await Promise.all([
+  const [biens, secteursRecherche, profil] = await Promise.all([
     listerBiensActifsPersistes(),
     listerSecteursPourAcquereur(acquereurId),
+    resoudreProfilCompatibilite(acquereur),
   ]);
 
   let evenementsEmis = 0;
   const erreurs: string[] = [];
   for (const bien of biens) {
-    const resultat = evaluerCompatibilite(bien, acquereur, secteursRecherche);
+    const resultat = evaluerCompatibilite(bien, profil, secteursRecherche);
     const traitement = await traiterPaire(bien.id, acquereur.id, resultat.statutGlobal, true, workspaceId);
     if ("erreur" in traitement) {
       console.error(`[compatibilite] échec de synchronisation pour la paire bien=${bien.id} acquereur=${acquereur.id} :`, traitement.erreur);

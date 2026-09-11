@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
-import { compatibilitesARessynchroniser } from "@/db/schema";
+import { acquereurs as acquereursTable, compatibilitesARessynchroniser } from "@/db/schema";
 
 type LigneDemande = typeof compatibilitesARessynchroniser.$inferSelect;
 
@@ -69,6 +69,42 @@ export async function enqueuerResynchronisationAcquereur(
     })
     .returning({ id: compatibilitesARessynchroniser.id });
   return ligne.id;
+}
+
+// ADR-036 + ADR-055 §B — invalidation déclenchée par une écriture sur le PROJET canonique, depuis
+// que ce sont ses critères que le moteur lit (profilCompatibiliteRepository.ts). Sans elle, une
+// mutation canonique (Sync Engine compris) changerait le résultat du matching sans que rien ne
+// demande de le recalculer : les écrans continueraient d'afficher un statut périmé, et
+// `compatibilites_bien_acquereur_etat` retiendrait une observation devenue fausse — silencieusement,
+// donc bien pire qu'une erreur.
+//
+// La file existante est indexée par DOSSIER acquéreur, comme la mémoire technique et les
+// événements : un changement de projet est donc traduit en autant de demandes que de dossiers qui
+// pointent vers lui — aucun aujourd'hui pour un projet non rattaché (rien à invalider, aucune ligne
+// insérée), un seul pour le flux de création actuel, et le jour où un projet en portera deux, les
+// deux seront invalidés sans que ce code change.
+//
+// `workspaceId` n'est PAS un paramètre : il est lu sur le dossier lui-même. Ce n'est pas une
+// entorse à ADR-054 mais son application — l'appartenance d'une ligne qui existe déjà est un fait,
+// et laisser un appelant la proposer permettrait d'émettre l'événement de compatibilité dans un
+// autre périmètre que celui de la paire.
+//
+// S'exécute sur l'`executeur` de l'appelant : l'enqueue est donc dans la même transaction que la
+// mutation source exactement quand celle-ci en ouvre une, ce qu'exige le handoff durable ADR-036.
+export async function enqueuerResynchronisationProjetAcquereur(
+  projetAcquereurId: string,
+  executeur: Executeur
+): Promise<string[]> {
+  const dossiers = await executeur
+    .select({ id: acquereursTable.id, workspaceId: acquereursTable.workspaceId })
+    .from(acquereursTable)
+    .where(eq(acquereursTable.projetAcquereurId, projetAcquereurId));
+
+  const idsDemandes: string[] = [];
+  for (const dossier of dossiers) {
+    idsDemandes.push(await enqueuerResynchronisationAcquereur(dossier.id, dossier.workspaceId, executeur));
+  }
+  return idsDemandes;
 }
 
 // Verrouille UNE demande précise pour traitement — appelée aussi bien par le traitement immédiat

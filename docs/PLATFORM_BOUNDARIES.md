@@ -187,6 +187,13 @@ d'ailleurs `interactions` de ses cinq cibles). Il ne passe donc PAS par
 **ingestion / mutation**, et elle restera : la primitive générique d'ingestion n'existera que
 lorsqu'un deuxième type de fait externe la justifiera.
 
+**Une mutation externe a désormais un effet métier observable.** Depuis le lot « read bridge »
+(ADR-055 §B), les critères qu'`appliquerMutationExterne()` écrit sur `projets_acquereur` sont ceux
+que le moteur de compatibilité lit réellement : une valeur poussée par une source change le verdict
+d'un match, et n'atterrit plus dans une table que personne ne relisait. L'invalidation qui le rend
+possible est portée par le **writer du Core**, jamais par le pipeline — le Sync Engine continue
+d'ignorer qu'un moteur de matching existe, et la dépendance reste à sens unique.
+
 **Une correction humaine est prioritaire, sans condition.** Un champ verrouillé n'est jamais réécrit
 par une synchronisation, même quand le fournisseur fait foi ; le désaccord devient un conflit, jamais
 un log silencieux. Voir `docs/DATA_MODEL.md`.

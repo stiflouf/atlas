@@ -338,6 +338,14 @@ Séquence cible (chaque étape est un lot autonome, livrable et réversible) :
 5. Le retrait éventuel des colonnes d'identité de `acquereurs`/`prospects_vendeurs` est le
    **dernier** lot, conditionné à zéro lecture résiduelle — et reste facultatif.
 
+**État d'avancement de l'étape 3 (constat, pas une décision nouvelle) :** la première bascule de
+lecture est faite — le moteur de compatibilité lit les critères du **projet acquéreur canonique**
+dès que la ligne `acquereurs` est rattachée, et le dossier historique sinon. Le repli est au niveau
+de l'**agrégat**, jamais champ par champ : un NULL canonique reste un NULL. L'étape 2 (backfill)
+n'a **pas** été exécutée et ne l'est toujours pas — les lignes historiques restent volontairement
+non rattachées et matchent exactement comme avant. Les secteurs de recherche restent legacy.
+Détail : `docs/DATA_MODEL.md#lecture-effective-des-critères-acquéreur-adr-055-b-lot--read-bridge-`.
+
 **Ce qui n'est jamais touché :** le tunnel commercial (`visites` → `comptes_rendus_visite` →
 `offres` → `compromis` → `remuneration` → pack notaire), les moteurs purs
 (`lib/compatibilite/`, `lib/opportunites/`, `lib/alertes/`, `lib/fiscal/`), et les invariants de

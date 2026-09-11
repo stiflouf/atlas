@@ -1,5 +1,5 @@
 import type { Bien } from "@/types/bien";
-import type { ProfilAcquereur } from "@/types/client";
+import type { ProfilCompatibiliteAcquereur } from "@/types/profilCompatibiliteAcquereur";
 import type { SecteurRecherche } from "@/types/secteurRecherche";
 import type { EvaluationCritere, ResultatCompatibilite, StatutCompatibilite } from "./types";
 import {
@@ -30,9 +30,15 @@ function agregerStatutGlobal(criteres: EvaluationCritere[]): StatutCompatibilite
 // `secteursRecherche` (ADR-035) est fourni par l'appelant (orchestration.ts, déjà chargé, jamais
 // requêté ici) — défaut `[]` pour rester compatible avec tout appel à deux arguments (équivaut à
 // "aucun secteur connu pour cet acquéreur", exactement la même sémantique que ne rien fournir).
+//
+// ADR-055 §B — l'entrée acquéreur est un `ProfilCompatibiliteAcquereur`, pas le dossier
+// `acquereurs` : ce moteur ne sait pas si les critères viennent du projet canonique ou du dossier
+// historique, et la résolution de cette source a lieu avant lui
+// (lib/compatibilite/profilCompatibiliteRepository.ts). Ajouter ici la moindre branche « si un
+// projet existe » ramènerait le stockage dans les règles.
 export function evaluerCompatibilite(
   bien: Bien,
-  acquereur: ProfilAcquereur,
+  acquereur: ProfilCompatibiliteAcquereur,
   secteursRecherche: SecteurRecherche[] = []
 ): ResultatCompatibilite {
   const criteres: EvaluationCritere[] = [

@@ -5,6 +5,7 @@ import { listerBiensActifsPersistes } from "@/lib/bienRepository";
 import { listerClientsActifsPersistes } from "@/lib/clientRepository";
 import { listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
 import { evaluerCompatibilite } from "./evaluerCompatibilite";
+import { resoudreProfilsCompatibilite } from "./profilCompatibiliteRepository";
 import { ecrireEtatPaire } from "./etatRepository";
 import type { StatutCompatibilite } from "./types";
 
@@ -57,7 +58,13 @@ async function cyclePlancherPourPaire(bienId: string, acquereurId: string): Prom
 async function calculerRapport(mode: "dry-run" | "apply"): Promise<RapportBaseline> {
   const biens = await listerBiensActifsPersistes();
   const acquereurs = await listerClientsActifsPersistes();
-  const secteursParAcquereur = await listerSecteursPourAcquereurs(acquereurs.map((a) => a.id));
+  // ADR-055 §B — mêmes critères effectifs que le synchroniseur : une baseline qui évaluerait le
+  // dossier historique pendant que le produit évalue le projet canonique écrirait une mémoire
+  // technique en désaccord avec ce que l'écran montre.
+  const [profils, secteursParAcquereur] = await Promise.all([
+    resoudreProfilsCompatibilite(acquereurs),
+    listerSecteursPourAcquereurs(acquereurs.map((a) => a.id)),
+  ]);
 
   let compatibles = 0;
   let incompatibles = 0;
@@ -65,19 +72,19 @@ async function calculerRapport(mode: "dry-run" | "apply"): Promise<RapportBaseli
   let etatsEcrits = 0;
 
   for (const bien of biens) {
-    for (const acquereur of acquereurs) {
-      const resultat = evaluerCompatibilite(bien, acquereur, secteursParAcquereur.get(acquereur.id) ?? []);
+    for (const profil of profils) {
+      const resultat = evaluerCompatibilite(bien, profil, secteursParAcquereur.get(profil.id) ?? []);
       const statut: StatutCompatibilite = resultat.statutGlobal;
       if (statut === "compatible") compatibles += 1;
       else if (statut === "incompatible") incompatibles += 1;
       else aVerifier += 1;
 
       if (mode === "apply") {
-        const cyclePlancher = statut === "compatible" ? Math.max(1, await cyclePlancherPourPaire(bien.id, acquereur.id)) : 0;
+        const cyclePlancher = statut === "compatible" ? Math.max(1, await cyclePlancherPourPaire(bien.id, profil.id)) : 0;
         await ecrireEtatPaire(
           {
             bienId: bien.id,
-            acquereurId: acquereur.id,
+            acquereurId: profil.id,
             dernierStatut: statut,
             dansPerimetreActif: true,
             cycleCompatibilite: cyclePlancher,
