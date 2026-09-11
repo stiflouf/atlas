@@ -2,6 +2,14 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import ProspectVendeurHero from "@/components/prospectVendeur/ProspectVendeurHero";
+import RattachementContactSection from "@/components/contact/RattachementContactSection";
+import { getContactCanoniqueDuProspectVendeur } from "@/lib/prospectVendeurRepository";
+import { rechercherContactsCandidats } from "@/lib/rattachementContact";
+import {
+  creerContactDepuisProspectVendeurAction,
+  rattacherProspectVendeurContactExistantAction,
+} from "@/actions/rattacherContact";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import ProspectVendeurProgression from "@/components/prospectVendeur/ProspectVendeurProgression";
 import ProspectVendeurProchaineEtape from "@/components/prospectVendeur/ProspectVendeurProchaineEtape";
 import ProspectVendeurJournal from "@/components/prospectVendeur/ProspectVendeurJournal";
@@ -40,7 +48,7 @@ function formatDate(iso: string): string {
 
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tacheTerminee?: string }>;
+  searchParams: Promise<{ tacheTerminee?: string; q?: string; rattachement?: string }>;
 };
 
 // Cockpit de prise de mandat (design validé) — un prospect vendeur est une PERSONNE, un PROJET DE
@@ -53,9 +61,15 @@ type PageProps = {
 // des Server Actions existantes, avec leurs gardes existantes.
 export default async function FicheProspectVendeur({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { tacheTerminee } = await searchParams;
+  const { tacheTerminee, q, rattachement } = await searchParams;
   const prospect = await getProspectVendeurById(id);
   if (!prospect) notFound();
+
+  // ADR-055 §H — même geste que côté acquéreur, mêmes primitives : une personne n'a pas deux
+  // manières d'être rattachée selon le rôle sous lequel on la regarde.
+  const contactCanonique = await getContactCanoniqueDuProspectVendeur(prospect.id);
+  const candidatsContact =
+    contactCanonique === undefined && q ? await rechercherContactsCandidats(q, await exigerWorkspaceCourant()) : [];
 
   const notes = await listerNotesProspectVendeur(prospect.id);
   const taches = await getTachesPourProspectVendeur(prospect.id);
@@ -102,6 +116,21 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
           <ProspectVendeurProgression jalons={parcours} />
         </div>
       </div>
+
+      {contactCanonique === undefined && (
+        <div className="mb-6">
+          <RattachementContactSection
+            champIdDossier="prospectId"
+            idDossier={prospect.id}
+            cheminRetour={`/prospects-vendeurs/${prospect.id}`}
+            q={q}
+            candidats={candidatsContact}
+            refus={rattachement}
+            actionRattacherExistant={rattacherProspectVendeurContactExistantAction}
+            actionCreerContact={creerContactDepuisProspectVendeurAction}
+          />
+        </div>
+      )}
 
       {/* Bande navy réservée à la prochaine transition — absente dès qu'il n'y en a plus, jamais un
           bandeau vide ni un bouton mort. */}

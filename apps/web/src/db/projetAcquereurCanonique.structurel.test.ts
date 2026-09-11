@@ -153,6 +153,10 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
         join("src", "lib", "criteresAcquereurEffectifs.ts"),
         join("src", "lib", "projetAcquereurRepository.ts"),
         join("src", "lib", "partieProjetRepository.ts"),
+        // ADR-055 §H — le rattachement d'un dossier historique crée la partie manquante quand un
+        // projet canonique existe déjà. Il nomme donc la table pour la LIRE et l'écrire, jamais
+        // pour arbitrer une source de critères.
+        join("src", "lib", "rattachementContact.ts"),
         // `interactions` est une feuille de `contacts` qui peut CONTEXTUALISER un projet
         // (ADR-055 §G) : elle nomme la table pour sa FK, jamais pour lire un critère.
         join("src", "lib", "interactionRepository.ts"),

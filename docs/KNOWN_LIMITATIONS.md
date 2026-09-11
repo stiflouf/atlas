@@ -1145,10 +1145,16 @@ ouvert :
   `Contact.prenom` — une personne connue par son seul nom (ADR-055 §A) le reste jusqu'à l'écran.
   La conversion en `""` subsiste uniquement à la frontière d'un input HTML contrôlé, jamais dans un
   repository ni dans une règle.
-- **L'identité des dossiers NON RATTACHÉS reste legacy**, des deux côtés. C'est voulu : les
-  rattacher demanderait de décider quel humain est lequel, et ce rapprochement est un geste explicite
-  réservé à son propre lot. Aucun backfill, aucune déduplication automatique : `contacts` n'a
-  toujours ni unicité ni index sur email ou téléphone.
+- **Les dossiers non rattachés peuvent désormais l'être, à la main** (ADR-055 §H) : deux gestes
+  explicites depuis la fiche, jamais un rapprochement déduit. Aucun backfill de masse n'existe et
+  n'est prévu : `contacts` n'a toujours ni unicité ni index sur email ou téléphone.
+- **Aucun rattachement des interactions et références externes historiques.** Une interaction créée
+  avant le rattachement reste liée à ce qu'elle portait ; rien n'est rerouté vers le contact
+  nouvellement lié. Les deviner par email serait exactement la fusion qu'ADR-055 §H interdit.
+- **Aucun geste « changer de contact ».** Un dossier déjà rattaché ne peut pas être re-pointé :
+  l'opération emporterait son historique relationnel et mérite ses propres garanties.
+- **Aucune déduplication, même assistée.** Le produit ne signale pas encore deux contacts
+  probablement identiques ; la recherche de candidats sert uniquement au rattachement.
 - **`projets_acquereur.stade_projet` n'est plus mis à jour après la création.** Le parcours
   commercial reste lu et écrit sur le dossier ; la copie du projet reste à sa valeur initiale.
   Aucun lecteur ne s'en sert aujourd'hui. La corriger demanderait de basculer tout le pipeline

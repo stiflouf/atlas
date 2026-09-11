@@ -517,6 +517,47 @@ de le recalculer. La porter dans le writer Core plutôt que dans `appliquerMutat
 frontière ADR-056 §9 : une source externe pousse une valeur au Core et n'a jamais à savoir qu'un
 moteur de matching existe.
 
+## Rattachement assisté de l'historique (ADR-055 §H)
+
+**Suggérer n'est pas rattacher.** Un dossier historique (`contact_id = NULL`) peut être rattaché à
+une identité canonique par **deux gestes humains explicitement distincts**, jamais par déduction :
+
+| Geste | Effet |
+| --- | --- |
+| Rattacher à un contact **existant** | `contact_id` renseigné ; partie de projet créée si un projet canonique existe |
+| **Créer** un contact depuis ce dossier | contact créé à l'image de l'instantané legacy, puis rattaché — dans la même transaction |
+
+**Aucun rapprochement automatique.** Ni email, ni téléphone, ni nom, ni score ne déclenchent quoi que
+ce soit. `rechercherContactsCandidats()` sert à ce qu'un humain **reconnaisse** quelqu'un ; elle
+n'est jamais appelée par un chemin d'écriture, et « créer un nouveau contact » reste offert même
+quand des candidats sont proposés. Un couple partage une adresse, une famille un numéro : le coût
+d'une fusion à tort dépasse celui d'un doublon, qui se corrige.
+
+**Aucun relink silencieux.** Un dossier déjà rattaché est refusé explicitement
+(`deja_rattache`). Changer la personne canonique d'un dossier emporterait tout son historique
+relationnel : ce geste aura ses propres garanties.
+
+**Concurrence.** La garde vit dans le `WHERE ... AND contact_id IS NULL` de l'`UPDATE` : deux
+rattachements simultanés du même dossier ne peuvent pas tous deux réussir, et le perdant reçoit un
+refus explicite plutôt qu'un succès silencieux. C'est la même condition qui interdit le relink.
+
+**Ce geste canonicalise l'IDENTITÉ, pas le projet.** Aucun `projets_acquereur` ni `projets_vendeur`
+n'est créé au passage : un dossier peut légitimement porter un `contact_id` sans projet canonique.
+La partie de projet n'est créée que si le projet existe déjà, et une seule fois.
+
+**Multi-rôle et multi-projets.** Un contact déjà acquéreur peut recevoir un ancien dossier vendeur ;
+un contact peut porter plusieurs projets successifs. Rien ne l'en empêche, et c'est le point du
+modèle.
+
+**Après rattachement**, l'identité effective bascule immédiatement pour tous les lecteurs —
+communications comprises — par les projections existantes. Aucun consommateur n'a été modifié.
+L'instantané legacy n'est jamais réécrit.
+
+**Hors périmètre, volontairement** : aucun verrou humain posé à la création d'un contact depuis
+l'historique (transcrire ce que le dossier dit n'est pas corriger une valeur proposée par une
+source), aucun rattachement des interactions ou références externes historiques, aucune
+déduplication, aucune fusion, aucun alias.
+
 ## Identité canonique effective (ADR-057)
 
 **Deux ponts INDÉPENDANTS.** `acquereurs.contact_id` et `acquereurs.projet_acquereur_id` sont

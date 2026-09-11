@@ -4,6 +4,14 @@ import { ArrowLeft, Handshake, FileSignature, ListChecks, Check } from "lucide-r
 import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
 import AcquereurHero from "@/components/client/AcquereurHero";
+import RattachementContactSection from "@/components/contact/RattachementContactSection";
+import { getContactCanoniqueDeLAcquereur } from "@/lib/clientRepository";
+import { rechercherContactsCandidats } from "@/lib/rattachementContact";
+import {
+  creerContactDepuisAcquereurAction,
+  rattacherAcquereurContactExistantAction,
+} from "@/actions/rattacherContact";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import AcquereurBrief from "@/components/client/AcquereurBrief";
 import AcquereurBiensCompatibles from "@/components/client/AcquereurBiensCompatibles";
 import AcquereurVisites from "@/components/client/AcquereurVisites";
@@ -46,7 +54,10 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ tacheTerminee?: string }> };
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tacheTerminee?: string; q?: string; rattachement?: string }>;
+};
 
 // Fiche Acquéreur Premium — "le brief d'achat" (design validé). Raconte un projet d'achat : qui
 // (AcquereurHero), où (secteurs), où en est le projet (stade, dans le hero), quels biens
@@ -60,9 +71,16 @@ type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ tach
 // inventée pour cette page.
 export default async function FicheClient({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { tacheTerminee } = await searchParams;
+  const { tacheTerminee, q, rattachement } = await searchParams;
   const client = await getClientById(id);
   if (!client) notFound();
+
+  // ADR-055 §H — le pont, lu pour savoir s'il reste un geste de rattachement à proposer. Les
+  // candidats ne sont cherchés que si l'humain a tapé quelque chose : rien n'est suggéré d'office,
+  // et surtout rien n'est rapproché tout seul.
+  const contactCanonique = await getContactCanoniqueDeLAcquereur(client.id);
+  const candidatsContact =
+    contactCanonique === undefined && q ? await rechercherContactsCandidats(q, await exigerWorkspaceCourant()) : [];
 
   const taches = await getTachesPourAcquereur(client.id);
   const tachesAFaire = taches.filter((t) => deriverStatutTache(t) === "a_faire");
@@ -174,6 +192,24 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
       <div className="mb-4">
         <AcquereurHero client={client} />
       </div>
+
+      {/* ADR-055 §H — proposé UNIQUEMENT tant que le dossier n'est rattaché à personne. Une fois
+          rattaché, il n'y a plus de geste à offrir ici : changer la personne d'un dossier est une
+          opération distincte, qui n'existe pas encore. */}
+      {contactCanonique === undefined && (
+        <div className="mb-6">
+          <RattachementContactSection
+            champIdDossier="acquereurId"
+            idDossier={client.id}
+            cheminRetour={`/clients/${client.id}`}
+            q={q}
+            candidats={candidatsContact}
+            refus={rattachement}
+            actionRattacherExistant={rattacherAcquereurContactExistantAction}
+            actionCreerContact={creerContactDepuisAcquereurAction}
+          />
+        </div>
+      )}
 
       <div className="mb-6">
         <SecteursRechercheSection

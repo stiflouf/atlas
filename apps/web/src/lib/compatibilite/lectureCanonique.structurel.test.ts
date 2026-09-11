@@ -284,6 +284,46 @@ describe("ADR-057 — l'identité canonique suit la même discipline", () => {
   });
 });
 
+describe("ADR-055 §H — rattacher est un geste humain, jamais une déduction", () => {
+  const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
+  const RATTACHEMENT = join("src", "lib", "rattachementContact.ts");
+
+  it("aucun chemin d'écriture ne rapproche par email, téléphone ou nom", () => {
+    // La recherche de candidats a le droit de filtrer sur ces colonnes — c'est une aide à la
+    // reconnaissance humaine. Ce qui est interdit, c'est qu'un rattachement en DÉCOULE.
+    const code = codeSeul(RATTACHEMENT);
+    for (const interdit of ["findOrCreate", "trouverOuCreer", "fusionner", "dedup", "score", "similarite"]) {
+      expect(code, interdit).not.toContain(interdit);
+    }
+    // Le rattachement ne prend qu'un identifiant de contact choisi : jamais une identité à résoudre.
+    expect(code).toMatch(/rattacher\(\s*\n?\s*dossier: Dossier,\s*\n?\s*dossierId: string,\s*\n?\s*contactId: string/);
+  });
+
+  it("le rattachement refuse de remplacer un contact déjà posé", () => {
+    // Changer la personne canonique d'un dossier emporterait tout son historique relationnel : ce
+    // geste-là aura ses propres garanties, il n'est pas un effet de bord de celui-ci.
+    const code = codeSeul(RATTACHEMENT);
+    expect(code).toContain("deja_rattache");
+    // La garde de concurrence ET le refus de relink vivent dans le même `WHERE`.
+    expect(code).toMatch(/isNull\(dossier\.contactId\)/);
+  });
+
+  it("le rattachement ne fabrique jamais de projet canonique", () => {
+    const code = codeSeul(RATTACHEMENT);
+    for (const createur of ["creerProjetAcquereur", "creerProjetVendeur"]) {
+      expect(code, createur).not.toContain(createur);
+    }
+  });
+
+  it("les écrans de rattachement passent par les Server Actions, jamais par le repository", () => {
+    const ecrans = FICHIERS.filter(
+      (chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components"))
+    );
+    const fautifs = ecrans.filter((chemin) => /rattacherAcquereurAuContact|rattacherProspectVendeurAuContact|creerContactEtRattacher/.test(codeSeul(chemin)));
+    expect(fautifs).toEqual([]);
+  });
+});
+
 describe("ce lot ne migre ni ne duplique rien", () => {
   it("le pont de lecture n'a étendu aucune des deux tables qu'il lit", () => {
     // Énoncé DIRECT de l'invariant, et non un comptage global des fichiers de migration : le compte
