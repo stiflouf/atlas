@@ -157,6 +157,9 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
         // projet canonique existe déjà. Il nomme donc la table pour la LIRE et l'écrire, jamais
         // pour arbitrer une source de critères.
         join("src", "lib", "rattachementContact.ts"),
+        // ADR-058 — la recherche de personnes lit les projets pour en RÉSUMER le stade dans un
+        // résultat, jamais pour arbitrer d'où viennent les critères d'un acquéreur.
+        join("src", "lib", "rechercheContactRepository.ts"),
         // `interactions` est une feuille de `contacts` qui peut CONTEXTUALISER un projet
         // (ADR-055 §G) : elle nomme la table pour sa FK, jamais pour lire un critère.
         join("src", "lib", "interactionRepository.ts"),

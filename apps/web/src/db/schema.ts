@@ -284,7 +284,15 @@ export const contacts = pgTable("contacts", {
   // NOT NULL avec défaut, donc égale à `cree_le` pour une ligne jamais corrigée — aucune migration
   // n'invente de date, et « jamais modifié » se lit `modifie_le = cree_le`.
   modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
-});
+},
+  (table) => [
+    // ADR-058 — le filtre le plus sélectif de toute recherche de personne, et le seul qui manquait :
+    // `contacts` n'avait que sa PK. Posé AVEC le premier lecteur de production de cette table, pas
+    // avant. Aucun index sur `email` ni `telephone` : la recherche a besoin de ressemblance, pas
+    // d'égalité, et un index d'unicité sur ces colonnes serait le mensonge qu'ADR-055 §H écarte.
+    index("contacts_workspace_idx").on(table.workspaceId),
+  ]
+);
 
 // ADR-055 §B — PROJET ACQUÉREUR canonique : une intention immobilière située dans le temps, pas
 // une personne. C'est la moitié « projet » de `acquereurs`, extraite pour que la même personne

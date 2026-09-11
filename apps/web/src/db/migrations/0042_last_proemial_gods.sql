@@ -1,0 +1,1 @@
+CREATE INDEX "contacts_workspace_idx" ON "contacts" USING btree ("workspace_id");

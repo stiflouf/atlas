@@ -517,6 +517,46 @@ de le recalculer. La porter dans le writer Core plutôt que dans `appliquerMutat
 frontière ADR-056 §9 : une source externe pousse une valeur au Core et n'a jamais à savoir qu'un
 moteur de matching existe.
 
+## Recherche de personnes (ADR-058)
+
+**SEARCH UNIT = `contacts`.** On cherche une personne ; ses dossiers sont du contexte. Un contact
+multi-rôle et multi-projets donne **une seule ligne** de résultat.
+
+**NOT DEDUP KEY = `email`, `telephone`.** Deux contacts partageant une adresse ou un numéro restent
+**deux résultats**. Aucun `GROUP BY`, aucun `DISTINCT ON`, aucun regroupement visuel : les mettre
+côte à côte est ce qui permet à un humain de trancher, et à lui seul (ADR-055 §H).
+
+**WORKSPACE = obligatoire.** `workspaceId` est un paramètre requis, jamais optionnel, jamais avec
+repli. C'est la deuxième surface de recherche du produit à l'être.
+
+**Champs cherchés** : `nom`, `prenom`, `email`, `telephone`, **et le nom complet concaténé** —
+« Jean Dupont » n'est contenu dans aucune colonne prise seule, alors que c'est la façon la plus
+naturelle de chercher quelqu'un.
+
+**Ranking déterministe, en paliers** : email exact, téléphone exact, nom complet exact, préfixe de
+nom ou prénom, puis contient ; départage par `nom`, `id`. Calculé en SQL pour que le tri et la
+pagination portent sur le même ordre — trier en mémoire après un `LIMIT` rendrait la page 2
+incohérente avec la page 1. Aucun score composite : il ne s'explique pas.
+
+**Trois requêtes, quel que soit le nombre de résultats** : la page de contacts, puis les rôles et
+résumés de projets, puis `MAX(survenu_le)` par contact. Les deux agrégats sont batchés sur les ids
+de la page. Une page de 25 coûte autant qu'une page d'un seul.
+
+**Rôles dérivés de `parties_projet`**, jamais stockés. Le **statut vendeur** est calculé par
+`deriverStatutProspectVendeur` sur les jalons bruts — sa cascade n'est pas réécrite en SQL
+(le paramètre de la primitive a été élargi aux seuls jalons qu'elle lit, `ProspectVendeur` restant
+assignable).
+
+**Pagination** `limit`/`offset`, bornée à 100. `hasMore` obtenu en demandant une ligne de plus —
+aucun `COUNT(*)` global, puisque aucun écran n'affiche encore de total.
+
+**Index** : `contacts(workspace_id)` (migration `0042`), le filtre le plus sélectif et le seul qui
+manquait. Aucun index trigram, aucune colonne normalisée, aucune unicité sur email ou téléphone.
+
+**Hors périmètre** : les dossiers legacy non rattachés n'apparaissent pas dans cette recherche — ils
+seront des résultats secondaires explicitement non canoniques, dans leur propre lot. Aucune page,
+aucun composant, aucune fiche Contact.
+
 ## Rattachement assisté de l'historique (ADR-055 §H)
 
 **Suggérer n'est pas rattacher.** Un dossier historique (`contact_id = NULL`) peut être rattaché à
@@ -2275,6 +2315,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0039_overconfident_sentinel.sql` | ADR-056 : tables `references_externes` (racine, `UNIQUE` d'identité par workspace, `CHECK` « exactement une cible », `CHECK` format de clé fournisseur) et `champs_verrouilles` (racine, `CHECK` « exactement une cible », `UNIQUE` par cible+champ). Aucune table existante modifiée, aucune colonne ajoutée au Core, **aucun backfill** |
 | `0040_nosy_morlocks.sql` | ADR-033 : colonne `ordre` (`bigint GENERATED ALWAYS AS IDENTITY`) sur `runs_scan_automatisation`. Donne au journal de scan l'ordre TOTAL que `demarre_le` seul n'a pas — `now()` est le `transaction_timestamp()`, et deux scans concurrents peuvent le partager. Strictement additive, aucune colonne retirée, **aucun backfill** |
 | `0041_fresh_black_queen.sql` | ADR-057 : colonne `modifie_le` (`timestamptz NOT NULL DEFAULT now()`) sur `contacts`, posée avec le premier chemin d'écriture d'un contact existant. Strictement additive — aucun index, aucune unicité sur email ou téléphone, **aucun backfill** |
+| `0042_last_proemial_gods.sql` | ADR-058 : index `contacts_workspace_idx` sur `contacts(workspace_id)`, posé avec le premier lecteur de production de cette table. Strictement additif — aucun index sur email ou téléphone, aucune unicité, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

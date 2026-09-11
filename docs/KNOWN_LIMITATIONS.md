@@ -1155,6 +1155,13 @@ ouvert :
   l'opération emporterait son historique relationnel et mérite ses propres garanties.
 - **Aucune déduplication, même assistée.** Le produit ne signale pas encore deux contacts
   probablement identiques ; la recherche de candidats sert uniquement au rattachement.
+- **La recherche de personnes n'a aucun écran** (ADR-058). Le read model existe et est testé, mais
+  il n'a pas de page `/contacts`, pas d'autosuggest et pas de fiche Contact : rien ne l'appelle
+  encore en production. C'est voulu — la règle est posée avant l'interface.
+- **Les dossiers legacy non rattachés sont invisibles de cette recherche.** Elle ne lit que
+  `contacts`. Les faire apparaître comme résultats secondaires non canoniques est un lot distinct.
+- **Aucune tolérance aux fautes.** « Dupond » ne trouve pas « Dupont ». `pg_trgm` et `unaccent` sont
+  disponibles sur l'instance ; ils seront posés quand une mesure le justifiera, pas avant.
 - **`projets_acquereur.stade_projet` n'est plus mis à jour après la création.** Le parcours
   commercial reste lu et écrit sur le dossier ; la copie du projet reste à sa valeur initiale.
   Aucun lecteur ne s'en sert aujourd'hui. La corriger demanderait de basculer tout le pipeline

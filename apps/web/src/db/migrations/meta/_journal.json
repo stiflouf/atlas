@@ -295,6 +295,13 @@
       "when": 1789120789725,
       "tag": "0041_fresh_black_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1789138864399,
+      "tag": "0042_last_proemial_gods",
+      "breakpoints": true
     }
   ]
 }

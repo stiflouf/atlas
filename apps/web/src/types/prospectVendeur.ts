@@ -100,7 +100,15 @@ export type NouveauProspectVendeur = Pick<
 // réalisé — mais aucun ordre strict n'est imposé à la SAISIE (une estimation peut être chiffrée
 // avant même qu'un rendez-vous soit marqué réalisé), cette cascade ne fixe que la représentation
 // du stade le plus avancé.
-export function deriverStatutProspectVendeur(prospect: ProspectVendeur): StatutProspectVendeur {
+// ADR-058 — paramètre ÉLARGI aux seuls jalons que cette cascade lit réellement, pour que
+// `projets_vendeur` (qui porte les mêmes colonnes, ADR-055 §B) puisse l'appeler sans cast et sans
+// que la règle soit réécrite en SQL. `ProspectVendeur` reste assignable : aucun appelant ne change.
+export type JalonsStatutProspectVendeur = Pick<
+  ProspectVendeur,
+  "datePerte" | "mandatSigneLe" | "mandatProposeLe" | "estimationProposeeLe" | "rdvEstimationRealiseLe" | "qualifieLe"
+>;
+
+export function deriverStatutProspectVendeur(prospect: JalonsStatutProspectVendeur): StatutProspectVendeur {
   if (prospect.datePerte) return "perdu";
   if (prospect.mandatSigneLe) return "mandat_signe";
   if (prospect.mandatProposeLe) return "mandat_propose";

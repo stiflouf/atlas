@@ -125,7 +125,10 @@ describe("ADR-055 §B — l'écriture humaine suit la même règle de source", (
     // son côté.
     const jointure = /leftJoin\(\s*projetsAcquereurTable/;
     const porteurs = FICHIERS.filter((chemin) => jointure.test(codeSeul(chemin)));
-    expect(porteurs).toEqual([REGLE]);
+    // La recherche de personnes (ADR-058) joint elle aussi le projet, mais pour en RÉSUMER le stade
+    // et le budget dans un résultat — jamais pour arbitrer d'où viennent les critères d'un
+    // acquéreur. C'est cette dernière question qui n'a le droit d'avoir qu'une seule réponse.
+    expect(porteurs.sort()).toEqual([REGLE, join("src", "lib", "rechercheContactRepository.ts")].sort());
 
     for (const projection of [
       join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts"),
@@ -321,6 +324,62 @@ describe("ADR-055 §H — rattacher est un geste humain, jamais une déduction",
     );
     const fautifs = ecrans.filter((chemin) => /rattacherAcquereurAuContact|rattacherProspectVendeurAuContact|creerContactEtRattacher/.test(codeSeul(chemin)));
     expect(fautifs).toEqual([]);
+  });
+});
+
+describe("ADR-058 — la recherche ne fusionne jamais deux personnes", () => {
+  const RECHERCHE = join("src", "lib", "rechercheContactRepository.ts");
+
+  it("aucune déduplication par email ou téléphone", () => {
+    // La pente naturelle de cet écran : regrouper deux lignes qui « se ressemblent ». Ce serait la
+    // fusion silencieuse qu'ADR-055 §H interdit, déguisée en confort d'affichage.
+    const code = codeSeul(RECHERCHE);
+    expect(code).not.toMatch(/groupBy\([^)]*email/i);
+    expect(code).not.toMatch(/groupBy\([^)]*telephone/i);
+    expect(code).not.toMatch(/distinct/i);
+    expect(code).not.toMatch(/new Set\([^)]*email/i);
+    // Le seul `groupBy` légitime agrège les interactions PAR CONTACT.
+    expect(code).toContain("groupBy(interactionsTable.contactId)");
+  });
+
+  it("le workspace est obligatoire, jamais optionnel ni avec repli", () => {
+    const code = codeSeul(RECHERCHE);
+    expect(code).toMatch(/workspaceId: string;/);
+    expect(code).not.toMatch(/workspaceId\?:/);
+    expect(code).not.toMatch(/workspaceId\s*(=|\?\?)\s*["'`]/);
+    expect(code).toContain("eq(contactsTable.workspaceId, params.workspaceId)");
+  });
+
+  it("aucune requête par contact : les agrégats sont batchés", () => {
+    // Une page de 25 résultats doit coûter autant qu'une page d'un seul.
+    const code = codeSeul(RECHERCHE);
+    expect(code).not.toMatch(/for\s*\([^)]*\)\s*{[^}]*await executeur/);
+    expect(code).not.toMatch(/\.map\([^)]*=>\s*executeur/);
+    for (const batch of ["inArray(partiesProjetTable.contactId, contactIds)", "inArray(interactionsTable.contactId, contactIds)"]) {
+      expect(code, batch).toContain(batch);
+    }
+  });
+
+  it("la recherche ignore la provenance et les dossiers legacy", () => {
+    // Provider-agnostique (ADR-058 décision 7) et sans UNION legacy : ce sera son propre lot.
+    const code = codeSeul(RECHERCHE);
+    for (const interdit of ["referencesExternes", "lib/provenance", "acquereursTable", "prospectsVendeursTable"]) {
+      expect(code, interdit).not.toContain(interdit);
+    }
+  });
+
+  it("aucun terme de recherche n'est journalisé", () => {
+    // Une requête peut contenir un email ou un téléphone.
+    const code = codeSeul(RECHERCHE);
+    expect(code).not.toMatch(/console\.\w+/);
+  });
+
+  it("la règle de statut vendeur n'est pas réécrite en SQL", () => {
+    const code = codeSeul(RECHERCHE);
+    expect(code).toContain("deriverStatutProspectVendeur");
+    for (const jalon of ["mandat_signe", "mandat_propose", "'perdu'"]) {
+      expect(code, jalon).not.toContain(jalon);
+    }
   });
 });
 
