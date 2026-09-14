@@ -1176,6 +1176,15 @@ ouvert :
   avertissement (ADR-055 §H) ; aucune validation de forme d'email ou de téléphone au-delà du reste
   du produit ; aucun verrouillage optimiste (dernier enregistrement gagnant, comme partout). Un
   projet sans dossier historique n'a pas de lien : aucune fiche n'accepte un id de projet.
+- **La détection de Contacts similaires existe, mais rien ne l'affiche ni ne fusionne.**
+  `trouverContactsSimilaires` signale les Contacts d'un workspace partageant un email ou un
+  téléphone normalisés ; un email ou un numéro commun n'est jamais une preuve d'identité (couple,
+  famille, standard), et le résultat n'est qu'une liste de faits (« même email »), sans score.
+  Nom + prénom seuls ne font jamais remonter un candidat ; ils corroborent seulement. Aucun effet
+  de bord, aucune suggestion stockée, aucun index dédié (`contacts_workspace_idx` seul — à
+  reconsidérer sur mesure réelle). Non détectés : ancien email ou numéro changé, fautes de
+  saisie, alias de messagerie. Aucune section sur la fiche, aucune fusion, aucun marqueur de
+  Contact absorbé : ce sont des lots distincts (ADR à venir).
 - **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
   historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.

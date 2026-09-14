@@ -599,6 +599,17 @@ frontière de formulaire (`contactFormulaire.ts` : `nom` obligatoire, `""` → a
 `modifierIdentiteContact` dans une transaction — et n'écrit rien elle-même. Un seul `UPDATE contacts`
 existe dans le produit, verrouillé structurellement. Soumission à l'identique = aucun UPDATE.
 
+**Contacts potentiellement similaires (`trouverContactsSimilaires(contactId, workspaceId)`,
+`similariteContactRepository.ts`).** Lecture seule, calculée à la demande, jamais persistée. Un
+Contact B remonte pour A si, dans le même workspace, ils partagent un email normalisé (trim +
+minuscules) ou un téléphone normalisé (ponctuation retirée, `+33`/`0033` → `0`, huit chiffres
+minimum) — expressions SQL de `similariteContactNormalisation.ts`, qui ne réécrivent jamais la
+valeur stockée. Nom + prénom identiques (accents, casse, tirets neutralisés) s'ajoutent en
+corroboration, jamais en déclencheur. Chaque candidat porte ses `signaux` (`email`, `telephone`,
+`nom_prenom`) : des faits, pas un score. Au plus 10 candidats, ordonnés par signaux forts
+décroissants, nom, id ; rôles et projets par l'assembleur de la recherche (nombre de requêtes
+fixe). Aucune UI ni fusion ne consomme encore ce read model.
+
 ## Rattachement assisté de l'historique (ADR-055 §H)
 
 **Suggérer n'est pas rattacher.** Un dossier historique (`contact_id = NULL`) peut être rattaché à
