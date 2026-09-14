@@ -34,6 +34,17 @@ describe("NavItems", () => {
     expect(lienVers(html, "/dashboard")).not.toContain("aria-current");
   });
 
+  it("« Contacts » figure dans les deux variantes, sans retirer les vues de pipeline (ADR-058)", () => {
+    usePathnameMock.mockReturnValue("/contacts");
+    for (const variant of ["sidebar", "bottom"] as const) {
+      const html = renderToStaticMarkup(<NavItems variant={variant} />);
+      expect(lienVers(html, "/contacts")).toContain('aria-current="page"');
+      expect(html).toContain(">Contacts<");
+      expect(lienVers(html, "/clients")).toBeDefined();
+      expect(lienVers(html, "/prospects-vendeurs")).toBeDefined();
+    }
+  });
+
   it("variante bottom : landmark nommé et état actif également exprimé", () => {
     usePathnameMock.mockReturnValue("/clients");
     const html = renderToStaticMarkup(<NavItems variant="bottom" />);

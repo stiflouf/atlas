@@ -20,7 +20,14 @@ export default function ChampRecherche({ action, q, placeholder, champsCaches, h
     <form method="GET" action={action} className="flex items-center gap-2 mb-6">
       <div className="relative flex-1 max-w-xs">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-3" strokeWidth={1.8} />
-        <Input type="text" name="q" defaultValue={q ?? ""} placeholder={placeholder} className="pl-9 pr-3" />
+        <Input
+          type="text"
+          name="q"
+          aria-label="Rechercher"
+          defaultValue={q ?? ""}
+          placeholder={placeholder}
+          className="pl-9 pr-3"
+        />
       </div>
       {champsCaches &&
         Object.entries(champsCaches).map(([nom, valeur]) => <input key={nom} type="hidden" name={nom} value={valeur} />)}

@@ -1155,11 +1155,21 @@ ouvert :
   l'opération emporterait son historique relationnel et mérite ses propres garanties.
 - **Aucune déduplication, même assistée.** Le produit ne signale pas encore deux contacts
   probablement identiques ; la recherche de candidats sert uniquement au rattachement.
-- **La recherche de personnes n'a aucun écran** (ADR-058). Le read model existe et est testé, mais
-  il n'a pas de page `/contacts`, pas d'autosuggest et pas de fiche Contact : rien ne l'appelle
-  encore en production. C'est voulu — la règle est posée avant l'interface.
-- **Les dossiers legacy non rattachés sont invisibles de cette recherche.** Elle ne lit que
-  `contacts`. Les faire apparaître comme résultats secondaires non canoniques est un lot distinct.
+- **`/contacts` ne montre que les Contacts canoniques** (ADR-058). La page existe (recherche GET par
+  nom, prénom, nom complet, email ou téléphone ; contacts récents à requête vide ; pagination
+  `hasMore` sans total) et consomme `rechercherContacts()` tel quel. Une personne qui n'existe que
+  dans `acquereurs.contact_id IS NULL` ou `prospects_vendeurs.contact_id IS NULL` n'y apparaît donc
+  pas encore : les dossiers historiques non rattachés seront intégrés comme résultats secondaires
+  explicitement non canoniques dans le lot suivant, jamais par un `UNION` dans la page.
+- **Aucune fiche Contact dédiée, aucun lien depuis une carte.** Le read model expose les projets
+  canoniques (`projetId`), alors que les seules fiches existantes sont indexées par dossier
+  historique (`/clients/[id]`, `/prospects-vendeurs/[id]`). Plutôt qu'un lien deviné par nom ou un
+  `/contacts/[id]` cassé, la carte reste informative (identité, rôles, résumé de projets, dernière
+  interaction) jusqu'à la fiche Contact. Pas d'autosuggest, pas de barre globale, pas de filtre par
+  rôle (le read model ne le supporte pas ; reporté), pas d'édition depuis cette page.
+- **Le terme de recherche transite dans l'URL** (`?q=`), comme sur `/clients` et
+  `/prospects-vendeurs` : un email ou un téléphone cherché figure dans l'historique du navigateur.
+  Aucun terme n'est journalisé côté serveur ; passer en POST est une décision dédiée, hors de ce lot.
 - **Aucune tolérance aux fautes.** « Dupond » ne trouve pas « Dupont ». `pg_trgm` et `unaccent` sont
   disponibles sur l'instance ; ils seront posés quand une mesure le justifiera, pas avant.
 - **`projets_acquereur.stade_projet` n'est plus mis à jour après la création.** Le parcours

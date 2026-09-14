@@ -160,10 +160,16 @@ describe("ADR-055 §B — le tunnel vendeur historique reste sur prospects_vende
     expect([...tables.keys()].filter((nom) => horsPerimetre.includes(nom))).toEqual([]);
   });
 
-  it("aucun écran ne lit le modèle vendeur canonique", () => {
+  it("aucun écran ne lit le modèle vendeur canonique directement", () => {
+    // ADR-058 — même exception que côté acquéreur : la carte de résultat de `/contacts` affiche
+    // `projetsVendeur`, un champ du read model, sans importer ni table ni repository (verrouillé par
+    // src/app/contacts/page.structurel.test.ts).
+    const ecransReadModel = [join("src", "components", "contact", "ContactResultatCard.tsx")];
     const fautifs = FICHIERS.filter(
       (chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components"))
-    ).filter((chemin) => /projetVendeurRepository|projetsVendeur|partieProjetRepository/.test(readFileSync(chemin, "utf8")));
+    )
+      .filter((chemin) => !ecransReadModel.some((exception) => chemin.endsWith(exception)))
+      .filter((chemin) => /projetVendeurRepository|projetsVendeur|partieProjetRepository/.test(readFileSync(chemin, "utf8")));
     expect(fautifs, "le modèle canonique est encore une fondation, pas une lecture").toEqual([]);
   });
 

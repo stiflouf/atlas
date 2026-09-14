@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Building2, Users, LayoutDashboard, Landmark, UserSearch, Zap } from "lucide-react";
+import { Home, Building2, BookUser, Users, LayoutDashboard, Landmark, UserSearch, Zap } from "lucide-react";
 
 const items = [
   { label: "Aujourd'hui", href: "/", icon: Home },
   { label: "Tableau de bord", href: "/dashboard", icon: LayoutDashboard },
   { label: "Biens", href: "/biens", icon: Building2 },
+  // ADR-058 — le carnet de personnes, avant les vues de pipeline (acquéreurs, prospects vendeurs).
+  { label: "Contacts", href: "/contacts", icon: BookUser },
   { label: "Clients", href: "/clients", icon: Users },
   { label: "Prospects vendeurs", href: "/prospects-vendeurs", icon: UserSearch },
   { label: "Fiscal", href: "/fiscal", icon: Landmark },

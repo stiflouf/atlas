@@ -182,9 +182,14 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
     }
   });
 
-  it("aucun écran ne lit le modèle canonique", () => {
-    // Aucune UI dans ce lot : le comportement utilisateur est strictement identique.
+  it("aucun écran ne lit le modèle canonique directement", () => {
+    // ADR-058 — une seule exception, et elle ne lit ni table ni repository : la carte de résultat
+    // de `/contacts` affiche `projetsAcquereur`, un champ du read model `ResultatRechercheContact`.
+    // Qu'elle n'importe ni `@/db/` ni un repository est verrouillé par
+    // src/app/contacts/page.structurel.test.ts. Tout le reste de l'UI reste sur le modèle historique.
+    const ecransReadModel = [join("src", "components", "contact", "ContactResultatCard.tsx")];
     const fautifs = FICHIERS.filter((chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components")))
+      .filter((chemin) => !ecransReadModel.some((exception) => chemin.endsWith(exception)))
       .filter((chemin) => /projetAcquereurRepository|projetsAcquereur|partiesProjet/.test(readFileSync(chemin, "utf8")));
     expect(fautifs, "le modèle canonique est encore une fondation, pas une lecture").toEqual([]);
   });
