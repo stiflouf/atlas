@@ -7,6 +7,7 @@ import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import ContactFusionneFiche from "@/components/contact/ContactFusionneFiche";
 import ContactsSimilairesSection from "@/components/contact/ContactsSimilairesSection";
 import { chargerContactDetail } from "@/lib/contactDetailRepository";
 import { trouverContactsSimilaires } from "@/lib/similariteContactRepository";
@@ -32,6 +33,10 @@ import type { ContexteInteractionRecente } from "@/types/contactDetail";
 // `trouverContactsSimilaires`, calculé à chaque rendu et jamais persisté : la page ne compare
 // aucune coordonnée elle-même. Son `undefined` (source introuvable) est déjà couvert par le 404
 // de la fiche, qui reste maître.
+//
+// ADR-059 — un Contact ABSORBÉ a sa propre page (ContactFusionneFiche), rendue en HTTP 200 sans
+// redirection : l'utilisateur doit comprendre où il est arrivé. Pour lui, aucun second read model
+// n'est appelé — ni projets, ni similarité : tout cela appartient au survivant.
 
 export const dynamic = "force-dynamic";
 
@@ -60,11 +65,20 @@ export default async function FicheContact({ params }: PageProps) {
   const { id } = await params;
   // ADR-054 — le périmètre vient de la session ; un contact hors périmètre est introuvable.
   const workspaceId = await exigerWorkspaceCourant();
-  const [detail, contactsSimilaires] = await Promise.all([
-    chargerContactDetail(id, workspaceId),
-    trouverContactsSimilaires(id, workspaceId),
-  ]);
-  if (!detail) notFound();
+  const resultat = await chargerContactDetail(id, workspaceId);
+  if (!resultat) notFound();
+  if (resultat.type === "fusionne") {
+    return (
+      <ContactFusionneFiche
+        contact={resultat.contact}
+        contactActifId={resultat.contactActifId}
+        fusionneLe={resultat.fusionneLe}
+      />
+    );
+  }
+
+  const { detail } = resultat;
+  const contactsSimilaires = await trouverContactsSimilaires(id, workspaceId);
 
   const { contact, roles, projetsAcquereur, projetsVendeur, dossiersAcquereurContactOnly, dossiersVendeurContactOnly } =
     detail;

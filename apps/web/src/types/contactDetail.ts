@@ -63,6 +63,24 @@ export type InteractionRecente = {
   contexte?: ContexteInteractionRecente;
 };
 
+// ADR-059 — la fiche d'un Contact ABSORBÉ n'est pas une fiche avec des listes vides : c'est un
+// autre état, dit explicitement. Union discriminée plutôt que des optionnels sur `ContactDetail` :
+// une fiche active ne porte aucune nullable « au cas où », et une fiche absorbée ne charge ni
+// projets, ni dossiers, ni interactions — l'historique de la personne continue sur le survivant.
+//
+// Pour un absorbé, deux ids distincts : `fusionneDansContactId` est le maillon IMMÉDIAT tel qu'il
+// est stocké (la trace, jamais compactée) ; `contactActifId` est le Contact ACTIF FINAL, résolu en
+// suivant la chaîne (`resoudreContactActif`) — c'est lui que la fiche propose d'ouvrir.
+export type ResultatContactDetail =
+  | { type: "actif"; detail: ContactDetail }
+  | {
+      type: "fusionne";
+      contact: Contact;
+      fusionneDansContactId: string;
+      contactActifId: string;
+      fusionneLe: string;
+    };
+
 export type ContactDetail = {
   contact: Contact;
   // Dérivés des projets canoniques, jamais stockés (ADR-055 §A). Vides pour une personne sans

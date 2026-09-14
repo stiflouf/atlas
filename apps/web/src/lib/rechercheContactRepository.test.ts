@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 import type { StadeProjet } from "@/types/client";
 
@@ -236,6 +236,31 @@ describe("rechercherContacts — contexte et absences", () => {
     const { items } = await chercher(`${M} Statutvendeur`);
     // Le jalon le plus avancé réellement atteint l'emporte (ADR-027 §4).
     expect(items[0]!.projetsVendeur[0]!.statut).toBe("mandat_propose");
+  });
+});
+
+describe("rechercherContacts — contacts absorbés (ADR-059)", () => {
+  it("un contact absorbé est exclu : requête précise, requête vide, et avant la pagination", async () => {
+    const email = `${M}.absorbe@example.test`;
+    const survivant = await unContact({ nom: `${M} Absorption survivant`, email });
+    const absorbe = await unContact({ nom: `${M} Absorption absorbé`, email });
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: survivant.id, fusionneLe: new Date() })
+      .where(eq(contactsTable.id, absorbe.id));
+
+    // Requête précise sur l'absorbé : rien ; sur l'email partagé : le survivant seul.
+    expect((await chercher(`${M} Absorption absorbé`)).items).toEqual([]);
+    expect((await chercher(email)).items.map((i) => i.contactId)).toEqual([survivant.id]);
+
+    // Requête vide (récents) : l'absorbé n'y figure pas ; limite 1 rend le survivant, pas un trou.
+    const recents = await rechercherContacts({ workspaceId: WORKSPACE_TEST, limite: 100 });
+    expect(recents.items.map((i) => i.contactId)).not.toContain(absorbe.id);
+    const premier = await rechercherContacts({ workspaceId: WORKSPACE_TEST, q: `${M} Absorption`, limite: 1 });
+    expect(premier.items.map((i) => i.contactId)).toEqual([survivant.id]);
+    expect(premier.hasMore).toBe(false);
+
+    await getDb().update(contactsTable).set({ fusionneDansContactId: null, fusionneLe: null }).where(eq(contactsTable.id, absorbe.id));
   });
 });
 

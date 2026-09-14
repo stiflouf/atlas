@@ -72,9 +72,12 @@ describe("contactDetailRepository — lecture seule, par clés réelles", () => 
   it("n'écrit jamais et n'importe aucun chemin d'écriture", () => {
     expect(readModel).not.toMatch(/\.(insert|update|delete)\(/);
     expect(readModel).not.toMatch(/transaction\(/);
-    for (const interdit of ["contactRepository", "rattachementContact", "partieProjetRepository", "@/actions/"]) {
+    for (const interdit of ["rattachementContact", "partieProjetRepository", "@/actions/"]) {
       expect(readModel, interdit).not.toContain(interdit);
     }
+    // ADR-059 — de contactRepository, UNE lecture : la résolution de chaîne. Aucun writer.
+    expect(readModel).toMatch(/import \{ resoudreContactActif \} from "@\/lib\/contactRepository"/);
+    expect(readModel).not.toMatch(/modifierIdentiteContact|creerContact|getContactDuWorkspace|getContactById/);
   });
 
   it("aucun rapprochement par email, téléphone ou nom : uniquement contact_id et projet_*_id", () => {

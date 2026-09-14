@@ -367,4 +367,24 @@ describe("candidats — une aide, jamais une décision", () => {
     expect(await rechercherContactsCandidats("", WORKSPACE_TEST)).toEqual([]);
     expect(await rechercherContactsCandidats("   ", WORKSPACE_TEST)).toEqual([]);
   });
+
+  it("ADR-059 — un contact absorbé n'est ni candidat, ni destination de rattachement", async () => {
+    const marqueur = `Absorbe${Date.now()}`;
+    const survivant = await unContact(`${marqueur} survivant`);
+    const absorbe = await unContact(`${marqueur} absorbé`);
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: survivant.id, fusionneLe: new Date() })
+      .where(eq(contactsTable.id, absorbe.id));
+
+    const ids = (await rechercherContactsCandidats(marqueur, WORKSPACE_TEST)).map((c) => c.id);
+    expect(ids).toContain(survivant.id);
+    expect(ids).not.toContain(absorbe.id);
+
+    const dossier = await unAcquereurHistorique("vers absorbé");
+    expect(await rattacherAcquereurAuContact(dossier.id, absorbe.id, WORKSPACE_TEST)).toEqual({ statut: "contact_introuvable" });
+    expect((await ligneAcquereur(dossier.id)).contactId).toBeNull();
+
+    await getDb().update(contactsTable).set({ fusionneDansContactId: null, fusionneLe: null }).where(eq(contactsTable.id, absorbe.id));
+  });
 });

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-055 §H — la détection SIGNALE, elle ne conclut pas. Ce que ces tests fixent : seuls un email
@@ -249,6 +249,24 @@ describe("trouverContactsSimilaires — périmètre", () => {
     expect(await similaires("00000000-0000-4000-8000-000000000000")).toBeUndefined();
     expect(await similaires(ailleurs.id)).toBeUndefined();
     expect(await similaires(ailleurs.id, autre)).toEqual([]);
+  });
+});
+
+describe("trouverContactsSimilaires — contacts absorbés (ADR-059)", () => {
+  it("un candidat absorbé n'est jamais proposé ; une source absorbée est introuvable", async () => {
+    const email = unEmail();
+    const a = await unContact({ nom: `${M} Absorption A`, email });
+    const b = await unContact({ nom: `${M} Absorption B`, email });
+    const c = await unContact({ nom: `${M} Absorption C`, email });
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: a.id, fusionneLe: new Date() })
+      .where(eq(contactsTable.id, b.id));
+
+    expect((await similaires(a.id))?.map((r) => r.contactId)).toEqual([c.id]);
+    expect(await similaires(b.id)).toBeUndefined();
+
+    await getDb().update(contactsTable).set({ fusionneDansContactId: null, fusionneLe: null }).where(eq(contactsTable.id, b.id));
   });
 });
 

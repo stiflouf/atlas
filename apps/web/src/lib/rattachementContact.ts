@@ -73,11 +73,13 @@ async function rattacher(
   if (!UUID_REGEX.test(dossierId) || !UUID_REGEX.test(contactId)) return { statut: "dossier_introuvable" };
 
   const [contact] = await executeur
-    .select({ workspaceId: contactsTable.workspaceId })
+    .select({ workspaceId: contactsTable.workspaceId, fusionneDansContactId: contactsTable.fusionneDansContactId })
     .from(contactsTable)
     .where(eq(contactsTable.id, contactId))
     .limit(1);
-  if (!contact) return { statut: "contact_introuvable" };
+  // ADR-059 — un contact absorbé n'est plus une destination : on ne rattache jamais un dossier à
+  // une personne dont l'historique continue ailleurs.
+  if (!contact || contact.fusionneDansContactId !== null) return { statut: "contact_introuvable" };
   // ADR-054 — aucune relation ne traverse deux périmètres. Vérifié avant l'écriture, et à nouveau
   // par `ajouterPartieProjet` pour la partie : deux gardes, aucune ne suffit seule.
   if (contact.workspaceId !== workspaceId) return { statut: "workspaces_differents" };
@@ -215,7 +217,8 @@ export async function rechercherContactsCandidats(
   const lignes = await executeur
     .select()
     .from(contactsTable)
-    .where(and(eq(contactsTable.workspaceId, workspaceId), filtre))
+    // ADR-059 — jamais un contact absorbé parmi les candidats.
+    .where(and(eq(contactsTable.workspaceId, workspaceId), isNull(contactsTable.fusionneDansContactId), filtre))
     .orderBy(contactsTable.nom)
     .limit(limite);
 

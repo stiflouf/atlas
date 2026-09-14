@@ -236,6 +236,26 @@ describe("rechercherPersonnes — les dossiers rattachés ne réapparaissent pas
   });
 });
 
+describe("rechercherPersonnes — contacts absorbés (ADR-059)", () => {
+  it("un contact absorbé n'apparaît ni avec un texte, ni à requête vide ; le legacy non rattaché est inchangé", async () => {
+    const survivant = await unContact({ nom: `${M} Mixte survivant` });
+    const absorbe = await unContact({ nom: `${M} Mixte absorbé` });
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: survivant.id, fusionneLe: new Date() })
+      .where(eq(contactsTable.id, absorbe.id));
+
+    const avecTexte = await chercher(`${M} Mixte`);
+    const ids = avecTexte.items.map((i) => (i.type === "contact" ? i.contactId : undefined));
+    expect(ids).toContain(survivant.id);
+    expect(ids).not.toContain(absorbe.id);
+    expect((await chercher(`${M} Mixte absorbé`)).items).toEqual([]);
+    expect((await chercher("")).items.map((i) => (i.type === "contact" ? i.contactId : undefined))).not.toContain(absorbe.id);
+
+    await getDb().update(contactsTable).set({ fusionneDansContactId: null, fusionneLe: null }).where(eq(contactsTable.id, absorbe.id));
+  });
+});
+
 describe("rechercherPersonnes — ranking, workspace, pagination, requête vide", () => {
   it("J. l'email exact passe devant un « contient », quelle que soit la source", async () => {
     const cible = `${M}.exact@example.test`;

@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 const { workspaceCourantMock } = vi.hoisted(() => ({ workspaceCourantMock: vi.fn() }));
@@ -117,6 +117,20 @@ describe("/contacts/[id]/modifier", () => {
     expect(valeurInput(html, "email")).toBe("");
     expect(html).not.toContain("Legacy");
     expect(html).not.toContain("Ancien");
+  });
+
+  it("ADR-059 — un contact absorbé est figé : notFound(), indistinguable d'un inconnu", async () => {
+    const survivant = await unContact({ nom: `${M} Survivant` });
+    const absorbe = await unContact({ nom: `${M} Absorbé` });
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: survivant.id, fusionneLe: new Date() })
+      .where(eq(contactsTable.id, absorbe.id));
+
+    await expect(rendre(absorbe.id)).rejects.toThrow(/NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/);
+    // Le survivant reste éditable.
+    expect(await rendre(survivant.id)).toContain("Modifier le contact");
+    await getDb().update(contactsTable).set({ fusionneDansContactId: null, fusionneLe: null }).where(eq(contactsTable.id, absorbe.id));
   });
 
   it("autre workspace ou id inconnu : notFound()", async () => {

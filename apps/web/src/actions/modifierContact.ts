@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getDb } from "@/db/client";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { estContactFusionne } from "@/lib/contactFusion";
 import { getContactDuWorkspace, modifierIdentiteContact } from "@/lib/contactRepository";
 import { identiteIdentique, parseContactFormData } from "@/lib/contactFormulaire";
 
@@ -28,7 +29,8 @@ export async function modifierContactAction(formData: FormData): Promise<void> {
   const saisie = parseContactFormData(formData);
 
   const actuel = await getContactDuWorkspace(id, workspaceId);
-  if (!actuel) notFound();
+  // ADR-059 — un contact absorbé est figé ; le writer le refuse aussi, ceci évite une erreur.
+  if (!actuel || estContactFusionne(actuel)) notFound();
 
   // Soumission à l'identique : ni UPDATE, ni verrou, ni `modifie_le` déplacé — rouvrir un formulaire
   // et le réenregistrer n'est pas une correction.

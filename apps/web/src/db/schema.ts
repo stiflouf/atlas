@@ -1,5 +1,6 @@
 import { pgTable, text, real, integer, bigint, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { ChoixFusionParChamp, IdentiteContactSnapshot, IdsDeplacesFusionContact } from "../types/contactFusion";
 
 // ADR-054 — périmètre PROPRIÉTAIRE des données métier (OWNERSHIP). Une ligne métier appartient à
 // exactement un workspace, pour toute sa vie ; aucun transfert d'un workspace à un autre n'existe.
@@ -284,6 +285,16 @@ export const contacts = pgTable("contacts", {
   // NOT NULL avec défaut, donc égale à `cree_le` pour une ligne jamais corrigée — aucune migration
   // n'invente de date, et « jamais modifié » se lit `modifie_le = cree_le`.
   modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
+  // ADR-059 — MARQUEUR DE FUSION, jamais un DELETE (ADR-012, ADR-055 §H : « l'un devient alias de
+  // l'autre »). NULL = contact ACTIF, l'état de toute ligne créée ; non NULL = contact ABSORBÉ,
+  // figé : il pointe la personne sous laquelle son historique continue. Les deux colonnes vont
+  // ensemble (CHECK) : un pointeur sans date, ou une date sans pointeur, serait un état que
+  // personne n'a décidé. Auto-référence sans CASCADE, comme `mandats.remplace_mandat_id`.
+  //
+  // Posées AVEC le modèle de fusion (lecture d'un absorbé, exclusion des recherches actives), AVANT
+  // le moteur qui les écrira : aucun chemin de production ne les renseigne encore.
+  fusionneDansContactId: uuid("fusionne_dans_contact_id").references((): AnyPgColumn => contacts.id),
+  fusionneLe: timestamp("fusionne_le", { withTimezone: true }),
 },
   (table) => [
     // ADR-058 — le filtre le plus sélectif de toute recherche de personne, et le seul qui manquait :
@@ -291,6 +302,66 @@ export const contacts = pgTable("contacts", {
     // avant. Aucun index sur `email` ni `telephone` : la recherche a besoin de ressemblance, pas
     // d'égalité, et un index d'unicité sur ces colonnes serait le mensonge qu'ADR-055 §H écarte.
     index("contacts_workspace_idx").on(table.workspaceId),
+    // ADR-059 — un contact est fusionné tout entier ou pas du tout.
+    check(
+      "contacts_fusion_coherente_check",
+      sql`(${table.fusionneDansContactId} IS NULL) = (${table.fusionneLe} IS NULL)`
+    ),
+    // Un contact ne peut pas être absorbé par lui-même : la chaîne de fusion doit pouvoir se
+    // résoudre (bornée côté lecture, mais le cas trivial est refusé par la base).
+    check(
+      "contacts_fusion_pas_soi_meme_check",
+      sql`${table.fusionneDansContactId} IS NULL OR ${table.fusionneDansContactId} <> ${table.id}`
+    ),
+    // Partiel : seuls les absorbés y figurent — la résolution d'une chaîne et la lecture inverse
+    // (« qui a été fusionné dans X ? ») n'ont rien à faire des actifs.
+    index("contacts_fusionne_dans_idx")
+      .on(table.fusionneDansContactId)
+      .where(sql`${table.fusionneDansContactId} IS NOT NULL`),
+  ]
+);
+
+// ADR-059 — JOURNAL DE FUSION : une ligne par fusion humaine, écrite une fois, jamais modifiée ni
+// supprimée (verrouillé structurellement : aucun UPDATE ni DELETE de cette table dans src). C'est
+// la trace qui permet de comprendre, et le jour venu de défaire à la main, ce qu'une fusion a
+// déplacé : identités avant/après, choix humain champ par champ, ids déplacés par table,
+// avertissements acquittés. `contacts.fusionne_dans_contact_id` dit OÙ ; cette table dit QUOI, QUI,
+// QUAND et COMMENT.
+//
+// FEUILLE de `contacts` (ADR-054 §7) : ses deux FK sont NOT NULL, donc aucun `workspace_id`
+// dupliqué — l'appartenance est celle des deux contacts, que le moteur futur vérifiera identique
+// (fusion inter-workspace interdite). Pas de CASCADE : aucun contact n'est jamais supprimé.
+//
+// Les colonnes `jsonb` portent des STRUCTURES typées côté application (types/contactFusion.ts),
+// jamais un payload libre : un journal qu'on ne sait plus relire ne trace rien.
+//
+// Aucun écrivain de production dans ce lot : le moteur transactionnel de fusion viendra à part.
+export const contactFusions = pgTable(
+  "contact_fusions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contactSurvivantId: uuid("contact_survivant_id")
+      .notNull()
+      .references(() => contacts.id),
+    contactAbsorbeId: uuid("contact_absorbe_id")
+      .notNull()
+      .references(() => contacts.id),
+    fusionneLe: timestamp("fusionne_le", { withTimezone: true }).notNull().defaultNow(),
+    // Qui a décidé (ADR-054 : identité de session). Nullable : une restauration technique future
+    // pourrait ne pas avoir de session humaine derrière elle — le journal ne doit pas mentir.
+    fusionneParSub: text("fusionne_par_sub"),
+    fusionneParEmail: text("fusionne_par_email"),
+    identiteAvantSurvivant: jsonb("identite_avant_survivant").$type<IdentiteContactSnapshot>().notNull(),
+    identiteAvantAbsorbe: jsonb("identite_avant_absorbe").$type<IdentiteContactSnapshot>().notNull(),
+    identiteFinale: jsonb("identite_finale").$type<IdentiteContactSnapshot>().notNull(),
+    choixParChamp: jsonb("choix_par_champ").$type<ChoixFusionParChamp>().notNull(),
+    idsDeplaces: jsonb("ids_deplaces").$type<IdsDeplacesFusionContact>().notNull(),
+    avertissementsAcquittes: jsonb("avertissements_acquittes").$type<string[]>().notNull(),
+  },
+  (table) => [
+    check("contact_fusions_pas_soi_meme_check", sql`${table.contactSurvivantId} <> ${table.contactAbsorbeId}`),
+    index("contact_fusions_survivant_idx").on(table.contactSurvivantId),
+    index("contact_fusions_absorbe_idx").on(table.contactAbsorbeId),
   ]
 );
 

@@ -106,8 +106,14 @@ describe("similariteContactRepository — lecture seule", () => {
   });
 
   it("aucune suggestion persistée : aucune table de similarité n'existe dans le schéma", () => {
+    // Le MARQUEUR de fusion (ADR-059, `contacts.fusionne_dans_contact_id`) n'est pas une suggestion :
+    // c'est une décision humaine déjà prise. Ce qui reste interdit, c'est toute table de candidats.
     const schema = codeSeul(join(__dirname, "..", "db", "schema.ts"));
-    expect(schema).not.toMatch(/similarit|duplicate|dedup|doublon|fusionne_dans|merged_into/i);
+    expect(schema).not.toMatch(/similarit|duplicate|dedup|doublon/i);
+  });
+
+  it("ADR-059 — un contact absorbé n'est ni source ni candidat", () => {
+    expect(repository.match(/isNull\(contactsTable\.fusionneDansContactId\)/g)?.length).toBe(2);
   });
 
   it("la normalisation email ne porte aucune règle de fournisseur", () => {

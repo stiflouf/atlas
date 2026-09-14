@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, max, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, max, or, sql, type SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { getDb, type Executeur } from "@/db/client";
 import {
@@ -245,11 +245,14 @@ export async function rechercherContacts(
   const rang = texte.length > 0 ? expressionRang(texte, COLONNES_CONTACT) : undefined;
 
   // REQUÊTE 1 — la page de contacts. Le filtre de workspace est toujours présent, la recherche
-  // textuelle seulement si l'utilisateur a tapé quelque chose.
+  // textuelle seulement si l'utilisateur a tapé quelque chose. ADR-059 — un contact absorbé n'est
+  // plus une personne qu'on cherche : exclu en SQL, AVANT la pagination, jamais filtré en mémoire.
   const conditionTexte = texte.length > 0 ? filtreTexte(texte, COLONNES_CONTACT) : undefined;
-  const conditions = conditionTexte
-    ? and(eq(contactsTable.workspaceId, params.workspaceId), conditionTexte)
-    : eq(contactsTable.workspaceId, params.workspaceId);
+  const conditions = and(
+    eq(contactsTable.workspaceId, params.workspaceId),
+    isNull(contactsTable.fusionneDansContactId),
+    conditionTexte
+  );
 
   const base = executeur
     .select({

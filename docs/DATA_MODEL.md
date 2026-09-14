@@ -609,7 +609,26 @@ corroboration, jamais en déclencheur. Chaque candidat porte ses `signaux` (`ema
 `nom_prenom`) : des faits, pas un score. Au plus 10 candidats, ordonnés par signaux forts
 décroissants, nom, id ; rôles et projets par l'assembleur de la recherche (nombre de requêtes
 fixe). Consommé par la section « Contacts partageant un email ou un téléphone » de
-`/contacts/[id]` (rendu pur, aucun geste) ; aucune fusion n'existe.
+`/contacts/[id]` (rendu pur, aucun geste) ; aucun moteur de fusion n'existe.
+
+**Modèle de fusion (ADR-059, migration `0043`) — sans moteur.** `contacts.fusionne_dans_contact_id`
+(FK auto-référente, NO ACTION) + `contacts.fusionne_le`, nullables ENSEMBLE (CHECK
+`contacts_fusion_coherente_check`), jamais vers soi (CHECK `contacts_fusion_pas_soi_meme_check`),
+index partiel `contacts_fusionne_dans_idx` sur les seuls absorbés. Actif ⇔ pointeur NULL ; absorbé
+⇔ les deux non NULL (`estContactFusionne`, `lib/contactFusion.ts`). `contact_fusions` : journal
+append-only (aucun UPDATE/DELETE dans `src`, garde structurelle), feuille de `contacts` par ses deux
+FK NOT NULL (ADR-054 §7, donc sans `workspace_id`), colonnes `jsonb` typées
+(`types/contactFusion.ts` : identités avant/finale, `choix_par_champ`, `ids_deplaces` par table,
+`avertissements_acquittes`), auteur nullable. Lectures : `getContactDuWorkspace` rend un absorbé
+avec son marqueur ; `chargerContactDetail` rend `{ type: "actif" | "fusionne" }` (pour un absorbé : le contact
+puis la résolution de chaîne, jamais l'historique ; `fusionneDansContactId` stocké et
+`contactActifId` final distincts ; chaîne invalide = erreur contrôlée) ; `resoudreContactActif` suit la chaîne jusqu'au contact actif, bornée à
+`MAX_CHAINE_FUSION = 10`, `chaine_invalide` en cas de cycle ou de maillon manquant. Exclusions en
+SQL, avant pagination : `rechercherContacts`, `rechercherPersonnes` (source Contact),
+`trouverContactsSimilaires` (source et candidats), `rechercherContactsCandidats` ; `rattacher*`
+refuse un absorbé comme destination ; `modifierIdentiteContact` refuse un absorbé. **Aucun chemin
+de production ne pose le marqueur ni n'écrit le journal** : le moteur transactionnel est un lot à
+part, et aucun Contact métier n'est absorbé d'ici là.
 
 ## Rattachement assisté de l'historique (ADR-055 §H)
 
@@ -2370,6 +2389,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0040_nosy_morlocks.sql` | ADR-033 : colonne `ordre` (`bigint GENERATED ALWAYS AS IDENTITY`) sur `runs_scan_automatisation`. Donne au journal de scan l'ordre TOTAL que `demarre_le` seul n'a pas — `now()` est le `transaction_timestamp()`, et deux scans concurrents peuvent le partager. Strictement additive, aucune colonne retirée, **aucun backfill** |
 | `0041_fresh_black_queen.sql` | ADR-057 : colonne `modifie_le` (`timestamptz NOT NULL DEFAULT now()`) sur `contacts`, posée avec le premier chemin d'écriture d'un contact existant. Strictement additive — aucun index, aucune unicité sur email ou téléphone, **aucun backfill** |
 | `0042_last_proemial_gods.sql` | ADR-058 : index `contacts_workspace_idx` sur `contacts(workspace_id)`, posé avec le premier lecteur de production de cette table. Strictement additif — aucun index sur email ou téléphone, aucune unicité, **aucun backfill** |
+| `0043_contact_fusion_model.sql` | ADR-059 : colonnes `fusionne_dans_contact_id` (FK auto-référente) et `fusionne_le` sur `contacts`, deux CHECK (cohérence, pas soi-même), index partiel `contacts_fusionne_dans_idx` ; table `contact_fusions` (journal append-only, feuille de `contacts`, CHECK survivant ≠ absorbé, deux index). Strictement additive — aucun moteur de fusion, **aucun backfill**, aucune ligne absorbée |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

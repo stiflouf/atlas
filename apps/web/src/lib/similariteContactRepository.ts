@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { contacts as contactsTable } from "@/db/schema";
 import { assemblerResultatsContacts } from "@/lib/rechercheContactRepository";
@@ -36,8 +36,9 @@ function conditionCandidats(cles: ClesSource): SQL | undefined {
   return conditions.length > 0 ? or(...conditions) : undefined;
 }
 
-// `undefined` = source introuvable (id invalide, inconnu, ou d'un autre workspace — sans
+// `undefined` = source introuvable (id invalide, inconnu, d'un autre workspace, ou ABSORBÉE — sans
 // distinction, pour ne rien révéler hors périmètre) ; `[]` = source trouvée, aucun candidat.
+// ADR-059 — un contact absorbé n'est plus une personne active : ni source, ni candidat.
 export async function trouverContactsSimilaires(
   contactId: string,
   workspaceId: string,
@@ -54,7 +55,13 @@ export async function trouverContactsSimilaires(
       cleTelephone: cleTelephoneSql(contactsTable.telephone),
     })
     .from(contactsTable)
-    .where(and(eq(contactsTable.id, contactId), eq(contactsTable.workspaceId, workspaceId)))
+    .where(
+      and(
+        eq(contactsTable.id, contactId),
+        eq(contactsTable.workspaceId, workspaceId),
+        isNull(contactsTable.fusionneDansContactId)
+      )
+    )
     .limit(1);
   if (!source) return undefined;
 
@@ -78,7 +85,14 @@ export async function trouverContactsSimilaires(
       memeTelephone,
     })
     .from(contactsTable)
-    .where(and(eq(contactsTable.workspaceId, workspaceId), ne(contactsTable.id, contactId), condition))
+    .where(
+      and(
+        eq(contactsTable.workspaceId, workspaceId),
+        isNull(contactsTable.fusionneDansContactId),
+        ne(contactsTable.id, contactId),
+        condition
+      )
+    )
     .orderBy(desc(nbSignauxForts), asc(contactsTable.nom), asc(contactsTable.id))
     .limit(LIMITE_CANDIDATS);
   if (candidats.length === 0) return [];

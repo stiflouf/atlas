@@ -184,6 +184,21 @@ describe("modifierContactAction — périmètre", () => {
     expect((await getContactById(ailleurs.id))!.nom).toBe(ailleurs.nom);
   });
 
+  it("ADR-059 — un contact absorbé : notFound(), rien n'est écrit", async () => {
+    const survivant = await unContact({ nom: `${M} Survivant` });
+    const absorbe = await unContact({ nom: `${M} Absorbé` });
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: survivant.id, fusionneLe: new Date() })
+      .where(eq(contactsTable.id, absorbe.id));
+
+    const issue = await soumettre(formulaire(absorbe.id, { nom: `${M} Réécrit`, prenom: "X" }));
+
+    expect(issue).toMatch(/NEXT_HTTP_ERROR_FALLBACK;404|NEXT_NOT_FOUND/);
+    expect((await getContactById(absorbe.id))!.nom).toBe(`${M} Absorbé`);
+    await getDb().update(contactsTable).set({ fusionneDansContactId: null, fusionneLe: null }).where(eq(contactsTable.id, absorbe.id));
+  });
+
   it("I. id inconnu ou invalide : notFound()", async () => {
     expect(await soumettre(formulaire("00000000-0000-4000-8000-000000000000", { nom: "X" }))).toMatch(/404|NOT_FOUND/);
     expect(await soumettre(formulaire("pas-un-uuid", { nom: "X" }))).toMatch(/404|NOT_FOUND/);

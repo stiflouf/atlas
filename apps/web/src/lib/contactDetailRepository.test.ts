@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-058 — la fiche Contact : tout ce qu'une personne porte, par clés réelles uniquement. Les
@@ -25,7 +25,16 @@ const { creerProjetAcquereur } = await import("@/lib/projetAcquereurRepository")
 const { creerProjetVendeur } = await import("@/lib/projetVendeurRepository");
 const { ajouterPartieProjet } = await import("@/lib/partieProjetRepository");
 const { creerInteraction } = await import("@/lib/interactionRepository");
-const { chargerContactDetail, LIMITE_INTERACTIONS_RECENTES } = await import("@/lib/contactDetailRepository");
+const { chargerContactDetail: chargerResultat, LIMITE_INTERACTIONS_RECENTES } = await import("@/lib/contactDetailRepository");
+
+// ADR-059 — ces tests décrivent la fiche ACTIVE : le wrapper déballe l'union et rend `undefined`
+// pour un contact introuvable. L'état absorbé a ses propres tests plus bas.
+async function chargerContactDetail(contactId: string, workspaceId: string, executeur?: Parameters<typeof chargerResultat>[2]) {
+  const resultat = await chargerResultat(contactId, workspaceId, executeur);
+  if (!resultat) return undefined;
+  if (resultat.type !== "actif") throw new Error(`attendu un contact actif, reçu ${resultat.type}`);
+  return resultat.detail;
+}
 
 const M = `Zdetail${Date.now()}`;
 
@@ -297,6 +306,95 @@ describe("chargerContactDetail — interactions", () => {
     const detail = (await chargerContactDetail(a.id, WORKSPACE_TEST))!;
 
     expect(detail.interactionsRecentes).toEqual([]);
+  });
+});
+
+describe("chargerContactDetail — contact absorbé (ADR-059)", () => {
+  // Aucun moteur de fusion n'existe : l'état absorbé est posé directement en base, comme un futur
+  // moteur le laisserait.
+  async function absorber(absorbeId: string, survivantId: string) {
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: survivantId, fusionneLe: new Date("2026-09-01T10:00:00.000Z") })
+      .where(eq(contactsTable.id, absorbeId));
+  }
+
+  it("P. un contact absorbé rend son état, avec l'identité figée et le survivant, sans rien charger d'autre", async () => {
+    const survivant = await unContact({ nom: `${M} Survivant` });
+    const absorbe = await unContact({ nom: `${M} Absorbe`, prenom: "Ana", email: `${M}.absorbe@example.test` });
+    await unProjetAcquereur(absorbe.id);
+    await absorber(absorbe.id, survivant.id);
+
+    const db = getDb();
+    const espion = vi.spyOn(db, "select");
+    const resultat = await chargerResultat(absorbe.id, WORKSPACE_TEST, db);
+    const requetes = espion.mock.calls.length;
+    espion.mockRestore();
+
+    expect(resultat).toEqual({
+      type: "fusionne",
+      contact: expect.objectContaining({
+        id: absorbe.id,
+        nom: `${M} Absorbe`,
+        prenom: "Ana",
+        fusionneDansContactId: survivant.id,
+        fusionneLe: "2026-09-01T10:00:00.000Z",
+      }),
+      fusionneDansContactId: survivant.id,
+      // A → B : l'actif final est le maillon immédiat.
+      contactActifId: survivant.id,
+      fusionneLe: "2026-09-01T10:00:00.000Z",
+    });
+    // Le contact, puis la résolution de chaîne (l'absorbé relu + le survivant) : jamais l'historique.
+    expect(requetes).toBe(3);
+    // Le survivant reste une fiche active ordinaire.
+    expect((await chargerResultat(survivant.id, WORKSPACE_TEST))?.type).toBe("actif");
+  });
+
+  it("R. A → B → C : A et B pointent le contact actif FINAL C, la base garde les maillons immédiats", async () => {
+    const c = await unContact({ nom: `${M} Chaîne C` });
+    const b = await unContact({ nom: `${M} Chaîne B` });
+    const a = await unContact({ nom: `${M} Chaîne A` });
+    await absorber(b.id, c.id);
+    await absorber(a.id, b.id);
+
+    const depuisA = await chargerResultat(a.id, WORKSPACE_TEST);
+    expect(depuisA).toMatchObject({ type: "fusionne", fusionneDansContactId: b.id, contactActifId: c.id });
+    const depuisB = await chargerResultat(b.id, WORKSPACE_TEST);
+    expect(depuisB).toMatchObject({ type: "fusionne", fusionneDansContactId: c.id, contactActifId: c.id });
+    expect((await chargerResultat(c.id, WORKSPACE_TEST))?.type).toBe("actif");
+
+    // Aucune compaction : après lecture, A pointe toujours B et B toujours C.
+    const lignes = await getDb().select().from(contactsTable).where(inArray(contactsTable.id, [a.id, b.id]));
+    expect(lignes.find((l) => l.id === a.id)?.fusionneDansContactId).toBe(b.id);
+    expect(lignes.find((l) => l.id === b.id)?.fusionneDansContactId).toBe(c.id);
+  });
+
+  it("S. chaîne invalide (cycle) : erreur contrôlée, jamais un lien fabriqué ni un 404 qui la cache", async () => {
+    const a = await unContact({ nom: `${M} Cycle A` });
+    const b = await unContact({ nom: `${M} Cycle B` });
+    await absorber(a.id, b.id);
+    await absorber(b.id, a.id);
+    await expect(chargerResultat(a.id, WORKSPACE_TEST)).rejects.toThrow(/Chaîne de fusion invalide/);
+  });
+
+  it("T. un absorbé d'un autre workspace reste introuvable", async () => {
+    const autre = `test-detail-fusion-${Date.now()}`;
+    await getDb().insert(workspacesTable).values({ id: autre, nom: "[test réel] Autre detail fusion" });
+    idsWorkspaces.push(autre);
+    const survivant = await unContact({ nom: `${M} Ailleurs S` }, autre);
+    const absorbe = await unContact({ nom: `${M} Ailleurs A` }, autre);
+    await absorber(absorbe.id, survivant.id);
+    expect(await chargerResultat(absorbe.id, WORKSPACE_TEST)).toBeUndefined();
+    expect(await chargerResultat(absorbe.id, autre)).toMatchObject({ type: "fusionne", contactActifId: survivant.id });
+  });
+
+  it("Q. un contact actif ne porte aucun marqueur de fusion", async () => {
+    const contact = await unContact({ nom: `${M} Actif` });
+    const resultat = await chargerResultat(contact.id, WORKSPACE_TEST);
+    expect(resultat?.type).toBe("actif");
+    expect(resultat?.type === "actif" && resultat.detail.contact.fusionneDansContactId).toBeUndefined();
+    expect(resultat?.type === "actif" && resultat.detail.contact.fusionneLe).toBeUndefined();
   });
 });
 

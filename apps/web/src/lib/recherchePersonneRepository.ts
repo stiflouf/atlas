@@ -104,7 +104,14 @@ export async function rechercherPersonnes(
       rang: expressionRang(texte, COLONNES_CONTACT).as("rang"),
     })
     .from(contactsTable)
-    .where(and(eq(contactsTable.workspaceId, params.workspaceId), filtreTexte(texte, COLONNES_CONTACT)));
+    // ADR-059 — même exclusion que `rechercherContacts` : un contact absorbé n'est plus cherchable.
+    .where(
+      and(
+        eq(contactsTable.workspaceId, params.workspaceId),
+        isNull(contactsTable.fusionneDansContactId),
+        filtreTexte(texte, COLONNES_CONTACT)
+      )
+    );
 
   const sourceAcquereurs = executeur
     .select({

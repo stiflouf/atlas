@@ -57,6 +57,9 @@ const TABLES_RACINES = [
 // de son parent, exactement ce que le schéma refuse partout ailleurs (photo principale dérivée,
 // statut de tâche dérivé, statut commercial dérivé).
 const TABLES_FEUILLES = [
+  // ADR-059 — journal de fusion : feuille de `contacts` par ses deux FK NOT NULL (survivant,
+  // absorbé). L'appartenance est celle des deux contacts, que le moteur futur vérifiera identique.
+  "contact_fusions",
   // ADR-055 §B — relation contact <-> projet. Feuille de ses DEUX parents ; ne duplique pas
   // `workspace_id`, l'invariant inter-workspaces est tenu par `ajouterPartieProjet`.
   "parties_projet",

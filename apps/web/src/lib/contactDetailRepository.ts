@@ -11,10 +11,14 @@ import {
 } from "@/db/schema";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import type { StadeProjet } from "@/types/client";
+import type { Contact } from "@/types/contact";
 import type { SensInteraction, TypeInteraction } from "@/types/interaction";
+import { estContactFusionne } from "@/lib/contactFusion";
+import { resoudreContactActif } from "@/lib/contactRepository";
 import type { RoleContact } from "@/types/rechercheContact";
 import type {
   ContactDetail,
+  ResultatContactDetail,
   ContexteInteractionRecente,
   DossierAcquereurContactOnly,
   DossierVendeurContactOnly,
@@ -30,6 +34,12 @@ import type {
 // Ce module ne rapproche rien par nom, email ou téléphone : un dossier n'entre dans cette fiche que
 // par une clé réelle — `contact_id` posé par un humain (ADR-055 §H), ou `projet_*_id` vers un projet
 // auquel le contact participe. Une interaction n'y entre que par `contact_id` exact.
+//
+// ADR-059 — un contact ABSORBÉ ne charge aucun historique (il appartient au survivant) : son état
+// est rendu tel quel (`type: "fusionne"`) avec le contact actif FINAL, résolu par la seule primitive
+// de parcours du produit (`resoudreContactActif`, bornée, sans compaction). Une chaîne invalide
+// (cycle, profondeur, maillon manquant) est une corruption, pas une absence : erreur contrôlée,
+// jamais un 404 qui la cacherait ni un lien fabriqué.
 //
 // Lecture seule ; aucun chemin d'écriture n'est importé.
 
@@ -63,7 +73,7 @@ export async function chargerContactDetail(
   // doit permettre d'inférer son existence.
   workspaceId: string,
   executeur: Executeur = getDb()
-): Promise<ContactDetail | undefined> {
+): Promise<ResultatContactDetail | undefined> {
   if (!UUID_REGEX.test(contactId)) return undefined;
 
   // REQUÊTE 1 — le contact, dans son périmètre.
@@ -73,6 +83,31 @@ export async function chargerContactDetail(
     .where(and(eq(contactsTable.id, contactId), eq(contactsTable.workspaceId, workspaceId)))
     .limit(1);
   if (!contact) return undefined;
+
+  const identite: Contact = {
+    id: contact.id,
+    nom: contact.nom,
+    prenom: contact.prenom ?? undefined,
+    email: contact.email ?? undefined,
+    telephone: contact.telephone ?? undefined,
+    creeLe: contact.creeLe.toISOString(),
+    modifieLe: contact.modifieLe.toISOString(),
+    fusionneDansContactId: contact.fusionneDansContactId ?? undefined,
+    fusionneLe: contact.fusionneLe?.toISOString(),
+  };
+  if (estContactFusionne(identite)) {
+    const resolution = await resoudreContactActif(identite.id, workspaceId, executeur);
+    if (resolution.statut !== "actif") {
+      throw new Error(`Chaîne de fusion invalide pour le contact ${identite.id}`);
+    }
+    return {
+      type: "fusionne",
+      contact: identite,
+      fusionneDansContactId: identite.fusionneDansContactId,
+      contactActifId: resolution.contact.id,
+      fusionneLe: identite.fusionneLe,
+    };
+  }
 
   // REQUÊTE 2 — les participations et leurs projets, en une jointure.
   const participations = await executeur
@@ -251,15 +286,9 @@ export async function chargerContactDetail(
   if (projetsVendeur.size > 0) roles.push("vendeur");
 
   return {
-    contact: {
-      id: contact.id,
-      nom: contact.nom,
-      prenom: contact.prenom ?? undefined,
-      email: contact.email ?? undefined,
-      telephone: contact.telephone ?? undefined,
-      creeLe: contact.creeLe.toISOString(),
-      modifieLe: contact.modifieLe.toISOString(),
-    },
+    type: "actif",
+    detail: {
+    contact: identite,
     roles,
     projetsAcquereur: [...projetsAcquereur.values()],
     projetsVendeur: [...projetsVendeur.values()],
@@ -272,5 +301,6 @@ export async function chargerContactDetail(
       survenuLe: ligne.survenuLe.toISOString(),
       contexte: contexteInteraction(ligne),
     })),
+    },
   };
 }

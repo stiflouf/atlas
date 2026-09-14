@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { contacts as contactsTable } from "@/db/schema";
+import { estContactFusionne, MAX_CHAINE_FUSION } from "@/lib/contactFusion";
 import { verrouillerChamp } from "@/lib/provenance/champVerrouilleRepository";
 import type { Contact } from "@/types/contact";
 
@@ -22,10 +23,12 @@ function ligneVersContact(ligne: LigneContact): Contact {
     telephone: ligne.telephone ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
     modifieLe: ligne.modifieLe.toISOString(),
+    fusionneDansContactId: ligne.fusionneDansContactId ?? undefined,
+    fusionneLe: ligne.fusionneLe?.toISOString(),
   };
 }
 
-export type NouveauContact = Omit<Contact, "id" | "creeLe" | "modifieLe">;
+export type NouveauContact = Omit<Contact, "id" | "creeLe" | "modifieLe" | "fusionneDansContactId" | "fusionneLe">;
 
 // Crée TOUJOURS un nouveau contact — jamais de "trouver ou créer". C'est la décision centrale du
 // lot : rapprocher automatiquement sur un email ou un téléphone fusionnerait deux personnes
@@ -70,6 +73,10 @@ export async function getContactById(id: string): Promise<Contact | undefined> {
 // ADR-054 — lecture d'un contact DANS un périmètre : un contact d'un autre workspace est introuvable,
 // pas interdit — rien ne doit permettre d'inférer son existence. C'est la lecture qu'un écran
 // d'édition emploie avant d'appeler le writer, qui revérifie lui-même le périmètre.
+//
+// ADR-059 — lecture GÉNÉRIQUE : elle rend aussi un contact absorbé, avec son marqueur. Rendre
+// l'état fusionné invisible ici le rendrait invisible partout ; c'est à chaque appelant de décider
+// (un éditeur refuse, une fiche explique). Les recherches actives, elles, filtrent en SQL.
 export async function getContactDuWorkspace(
   id: string,
   workspaceId: string,
@@ -117,6 +124,12 @@ export async function modifierIdentiteContact(
   if (actuel.workspaceId !== workspaceId) {
     throw new Error("Un contact d'un autre workspace ne peut pas être modifié");
   }
+  // ADR-059 — un contact absorbé est FIGÉ : son identité est celle qu'il avait à la fusion, et la
+  // personne se corrige désormais sur le survivant. Vérifié ici, dans le writer, même si tout écran
+  // l'empêche en amont.
+  if (estContactFusionne(ligneVersContact(actuel))) {
+    throw new Error("Un contact fusionné ne peut plus être modifié");
+  }
 
   const [ligne] = await executeur
     .update(contactsTable)
@@ -138,4 +151,38 @@ export async function modifierIdentiteContact(
   }
 
   return ligneVersContact(ligne);
+}
+
+// ADR-059 — RÉSOUDRE le contact actif derrière un id, en suivant `fusionne_dans_contact_id` : A → B
+// → C rend C. Aucune compaction (A n'est jamais réécrit vers C) : la trace de chaque fusion vaut
+// plus que la vitesse d'une lecture. Bornée et protégée contre les cycles : un read model ne fait
+// pas confiance à des écrivains qui n'existent pas encore.
+//
+// `introuvable` = l'id de départ n'existe pas dans ce workspace (indistinguable d'un autre
+// workspace). `chaine_invalide` = cycle, profondeur > MAX_CHAINE_FUSION, ou maillon manquant hors
+// périmètre : un état que le moteur futur interdit, rendu explicite plutôt que bouclé.
+export type ResolutionContactActif =
+  | { statut: "actif"; contact: Contact; chaine: string[] }
+  | { statut: "introuvable" }
+  | { statut: "chaine_invalide" };
+
+export async function resoudreContactActif(
+  contactId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ResolutionContactActif> {
+  const chaine: string[] = [];
+  const vus = new Set<string>();
+  let courant = await getContactDuWorkspace(contactId, workspaceId, executeur);
+  if (!courant) return { statut: "introuvable" };
+
+  while (estContactFusionne(courant)) {
+    if (vus.has(courant.id) || chaine.length >= MAX_CHAINE_FUSION) return { statut: "chaine_invalide" };
+    vus.add(courant.id);
+    chaine.push(courant.id);
+    const suivant = await getContactDuWorkspace(courant.fusionneDansContactId, workspaceId, executeur);
+    if (!suivant) return { statut: "chaine_invalide" };
+    courant = suivant;
+  }
+  return { statut: "actif", contact: courant, chaine };
 }

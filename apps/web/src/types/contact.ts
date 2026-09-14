@@ -20,4 +20,9 @@ export type Contact = {
   // ADR-057 — posé avec le premier chemin d'écriture (`modifierIdentiteContact`). Égal à `creeLe`
   // pour un contact jamais corrigé : « jamais modifié » se lit, il ne se devine pas.
   modifieLe: string;
+  // ADR-059 — présents ENSEMBLE ou absents ensemble (CHECK en base). Présents = ce contact a été
+  // absorbé par un autre : il est figé, exclu des recherches actives, et sa fiche renvoie vers le
+  // survivant. `estContactFusionne` (lib/contactFusion.ts) est la seule façon de le lire.
+  fusionneDansContactId?: string;
+  fusionneLe?: string;
 };

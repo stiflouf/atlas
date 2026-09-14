@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import ButtonLink from "@/components/ui/ButtonLink";
 import Input from "@/components/ui/Input";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { estContactFusionne } from "@/lib/contactFusion";
 import { getContactDuWorkspace } from "@/lib/contactRepository";
 import { nomComplet } from "@/lib/identite/nomPersonne";
 
@@ -28,7 +29,8 @@ export default async function ModifierContactPage({ params }: PageProps) {
   // ADR-054 — même règle que la fiche : hors périmètre = introuvable.
   const workspaceId = await exigerWorkspaceCourant();
   const contact = await getContactDuWorkspace(id, workspaceId);
-  if (!contact) notFound();
+  // ADR-059 — un contact absorbé est figé : introuvable pour l'édition, comme hors périmètre.
+  if (!contact || estContactFusionne(contact)) notFound();
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
