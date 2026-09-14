@@ -593,6 +593,12 @@ les `LIMITE_INTERACTIONS_RECENTES` (10) dernières interactions par `contact_id`
   dossiers acquéreur, dossiers vendeur, interactions bornées. Vérifié par un test qui compte.
 - Le statut vendeur vient de `deriverStatutProspectVendeur` sur les jalons bruts, comme partout.
 
+**Correction depuis la fiche (`/contacts/[id]/modifier`, `modifierContactAction`).** L'action
+orchestre — session, workspace courant, contact lu dans ce workspace (`getContactDuWorkspace`),
+frontière de formulaire (`contactFormulaire.ts` : `nom` obligatoire, `""` → absence), puis
+`modifierIdentiteContact` dans une transaction — et n'écrit rien elle-même. Un seul `UPDATE contacts`
+existe dans le produit, verrouillé structurellement. Soumission à l'identique = aucun UPDATE.
+
 ## Rattachement assisté de l'historique (ADR-055 §H)
 
 **Suggérer n'est pas rattacher.** Un dossier historique (`contact_id = NULL`) peut être rattaché à

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { contacts as contactsTable } from "@/db/schema";
 import { verrouillerChamp } from "@/lib/provenance/champVerrouilleRepository";
@@ -64,6 +64,23 @@ export async function getContactById(id: string): Promise<Contact | undefined> {
   // Même garde que bienRepository : ne jamais tenter un cast Postgres sur un identifiant non-UUID.
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb().select().from(contactsTable).where(eq(contactsTable.id, id)).limit(1);
+  return ligne ? ligneVersContact(ligne) : undefined;
+}
+
+// ADR-054 — lecture d'un contact DANS un périmètre : un contact d'un autre workspace est introuvable,
+// pas interdit — rien ne doit permettre d'inférer son existence. C'est la lecture qu'un écran
+// d'édition emploie avant d'appeler le writer, qui revérifie lui-même le périmètre.
+export async function getContactDuWorkspace(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Contact | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await executeur
+    .select()
+    .from(contactsTable)
+    .where(and(eq(contactsTable.id, id), eq(contactsTable.workspaceId, workspaceId)))
+    .limit(1);
   return ligne ? ligneVersContact(ligne) : undefined;
 }
 

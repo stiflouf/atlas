@@ -1166,14 +1166,16 @@ ouvert :
   perdus non rattachés apparaissent aussi : la recherche porte sur la personne, pas sur l'état du
   dossier. À requête vide, seuls les Contacts récents sont listés — jamais l'inventaire des dossiers
   non rattachés.
-- **La fiche Contact (`/contacts/[id]`) est en lecture seule.** Elle affiche l'identité canonique,
-  les rôles dérivés, les projets acquéreur et vendeur (avec lien vers le dossier historique quand
-  `acquereurs.projet_acquereur_id` / `prospects_vendeurs.projet_vendeur_id` le pointe réellement),
-  les dossiers rattachés sans projet canonique, et les 10 dernières interactions du contact. Aucune
-  édition d'identité, aucune fusion, aucune suppression, aucun changement de contact d'un dossier
-  depuis cette fiche : ces gestes n'ont pas encore de chemin canonique dédié, et la fiche ne les
-  prétend pas. Un projet sans dossier historique n'a pas de lien : aucune fiche n'accepte un id de
-  projet, et rien n'est deviné par nom ou email.
+- **Depuis la fiche Contact (`/contacts/[id]`), seule l'identité est éditable.** `/contacts/[id]/modifier`
+  corrige nom, prénom, email et téléphone via l'unique writer `modifierIdentiteContact` (ADR-057) :
+  verrou humain sur les seuls champs changés, `modifie_le` déplacé, soumission à l'identique sans
+  écriture. Les instantanés `acquereurs`/`prospects_vendeurs` ne sont jamais réécrits — les
+  projections les lisent depuis le Contact. Rôles, projets, dossiers rattachés et interactions
+  restent en lecture depuis la fiche ; aucune fusion, suppression ni changement de contact d'un
+  dossier n'existe. Un email devenu identique à celui d'un autre Contact est accepté sans
+  avertissement (ADR-055 §H) ; aucune validation de forme d'email ou de téléphone au-delà du reste
+  du produit ; aucun verrouillage optimiste (dernier enregistrement gagnant, comme partout). Un
+  projet sans dossier historique n'a pas de lien : aucune fiche n'accepte un id de projet.
 - **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
   historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.

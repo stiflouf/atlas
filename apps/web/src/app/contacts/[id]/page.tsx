@@ -18,9 +18,9 @@ import type { ContexteInteractionRecente } from "@/types/contactDetail";
 // ADR-058 — LA FICHE d'une personne : la destination canonique d'un Contact. Lecture seule : elle
 // affiche ce que le read model livre et ne dérive rien (rôles, statuts, ponts vers les dossiers).
 //
-// Les seules actions sont des navigations vers des gestes qui existent déjà (fiche de dossier,
-// mailto:, tel:). Aucune édition, fusion ou suppression de Contact n'existe encore : aucun bouton
-// ne le prétend.
+// Les seules actions sont des navigations vers des gestes qui existent déjà : la correction de
+// l'identité canonique (`/contacts/[id]/modifier`, ADR-057), la fiche d'un dossier, mailto:, tel:.
+// Aucune fusion ni suppression de Contact n'existe : aucun bouton ne le prétend.
 //
 // Un lien vers un dossier n'est rendu que si le read model porte l'id de DOSSIER réel — jamais
 // construit depuis un id de projet, que `/clients/[id]` et `/prospects-vendeurs/[id]` ne
@@ -100,6 +100,9 @@ export default async function FicheContact({ params }: PageProps) {
             )}
             <p className="text-[12px] text-text-3 mt-0.5">Contact créé le {formatDate(contact.creeLe)}</p>
           </div>
+          <ButtonLink href={`/contacts/${contact.id}/modifier`} variant="secondary" size="sm" className="shrink-0">
+            Modifier
+          </ButtonLink>
         </div>
       </Card>
 
