@@ -1176,15 +1176,18 @@ ouvert :
   avertissement (ADR-055 §H) ; aucune validation de forme d'email ou de téléphone au-delà du reste
   du produit ; aucun verrouillage optimiste (dernier enregistrement gagnant, comme partout). Un
   projet sans dossier historique n'a pas de lien : aucune fiche n'accepte un id de projet.
-- **La détection de Contacts similaires existe, mais rien ne l'affiche ni ne fusionne.**
-  `trouverContactsSimilaires` signale les Contacts d'un workspace partageant un email ou un
-  téléphone normalisés ; un email ou un numéro commun n'est jamais une preuve d'identité (couple,
-  famille, standard), et le résultat n'est qu'une liste de faits (« même email »), sans score.
-  Nom + prénom seuls ne font jamais remonter un candidat ; ils corroborent seulement. Aucun effet
-  de bord, aucune suggestion stockée, aucun index dédié (`contacts_workspace_idx` seul — à
-  reconsidérer sur mesure réelle). Non détectés : ancien email ou numéro changé, fautes de
-  saisie, alias de messagerie. Aucune section sur la fiche, aucune fusion, aucun marqueur de
-  Contact absorbé : ce sont des lots distincts (ADR à venir).
+- **La fiche Contact signale les Contacts partageant un email ou un téléphone, et ne fait rien
+  d'autre.** `trouverContactsSimilaires` alimente une section read-only de `/contacts/[id]`
+  (composant `ContactsSimilairesSection`) : pour chaque candidat du workspace, les faits détectés
+  (« Même email », « Même téléphone », « Même nom et prénom » en corroboration seulement), ses
+  rôles, son nombre de projets et un lien vers sa fiche. Un email ou un numéro commun n'est jamais
+  une preuve d'identité (couple, famille, standard) : la section le dit, et n'emploie ni « doublon »
+  ni score. Nom + prénom seuls ne font jamais remonter un candidat. Section absente sans candidat —
+  jamais « aucun doublon détecté », que la détection ne peut pas affirmer (email ou numéro changé,
+  faute de saisie, alias de messagerie ne sont pas détectés). Calculée à chaque rendu, jamais
+  persistée (ni « vu », ni « ignoré »), aucun index dédié (`contacts_workspace_idx` seul — à
+  reconsidérer sur mesure réelle). Aucune fusion, aucun bouton, aucun marqueur de Contact absorbé :
+  ce sont des lots distincts (ADR à venir). `/contacts` (recherche) ne porte aucun badge.
 - **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
   historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.

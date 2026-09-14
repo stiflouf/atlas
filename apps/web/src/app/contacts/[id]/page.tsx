@@ -7,7 +7,9 @@ import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
 import SectionTitle from "@/components/ui/SectionTitle";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import ContactsSimilairesSection from "@/components/contact/ContactsSimilairesSection";
 import { chargerContactDetail } from "@/lib/contactDetailRepository";
+import { trouverContactsSimilaires } from "@/lib/similariteContactRepository";
 import { initialesPersonne, nomComplet } from "@/lib/identite/nomPersonne";
 import { LABEL_STADE_PROJET } from "@/types/client";
 import { LABEL_SENS_INTERACTION, LABEL_TYPE_INTERACTION } from "@/types/interaction";
@@ -25,6 +27,11 @@ import type { ContexteInteractionRecente } from "@/types/contactDetail";
 // Un lien vers un dossier n'est rendu que si le read model porte l'id de DOSSIER réel — jamais
 // construit depuis un id de projet, que `/clients/[id]` et `/prospects-vendeurs/[id]` ne
 // connaissent pas.
+//
+// Les Contacts partageant un email ou un téléphone (ADR-055 §H) viennent d'un second read model,
+// `trouverContactsSimilaires`, calculé à chaque rendu et jamais persisté : la page ne compare
+// aucune coordonnée elle-même. Son `undefined` (source introuvable) est déjà couvert par le 404
+// de la fiche, qui reste maître.
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +60,10 @@ export default async function FicheContact({ params }: PageProps) {
   const { id } = await params;
   // ADR-054 — le périmètre vient de la session ; un contact hors périmètre est introuvable.
   const workspaceId = await exigerWorkspaceCourant();
-  const detail = await chargerContactDetail(id, workspaceId);
+  const [detail, contactsSimilaires] = await Promise.all([
+    chargerContactDetail(id, workspaceId),
+    trouverContactsSimilaires(id, workspaceId),
+  ]);
   if (!detail) notFound();
 
   const { contact, roles, projetsAcquereur, projetsVendeur, dossiersAcquereurContactOnly, dossiersVendeurContactOnly } =
@@ -105,6 +115,8 @@ export default async function FicheContact({ params }: PageProps) {
           </ButtonLink>
         </div>
       </Card>
+
+      <ContactsSimilairesSection candidats={contactsSimilaires ?? []} />
 
       {projetsAcquereur.length > 0 && (
         <section className="mb-8">

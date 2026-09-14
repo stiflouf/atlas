@@ -19,11 +19,21 @@ const page = codeSeul(PAGE);
 const readModel = codeSeul(READ_MODEL);
 
 describe("/contacts/[id] — la page consomme le read model", () => {
-  it("appelle chargerContactDetail, et n'importe ni schéma, ni client de base, ni autre repository", () => {
+  it("appelle ses deux read models, et n'importe ni schéma, ni client de base, ni autre repository", () => {
     expect(page).toMatch(/import \{ chargerContactDetail \} from "@\/lib\/contactDetailRepository"/);
     expect(page).toContain("chargerContactDetail(id, workspaceId)");
-    expect(page.match(/Repository"/g)).toHaveLength(1);
+    // ADR-055 §H — les Contacts similaires viennent du read model dédié, avec le MÊME workspace.
+    expect(page).toMatch(/import \{ trouverContactsSimilaires \} from "@\/lib\/similariteContactRepository"/);
+    expect(page).toContain("trouverContactsSimilaires(id, workspaceId)");
+    expect(page.match(/Repository"/g)).toHaveLength(2);
     expect(page).not.toMatch(/@\/db\/|drizzle-orm|Table\b/);
+  });
+
+  it("la section similaires reçoit les candidats tels quels : ni tri, ni borne, ni filtre dans la page", () => {
+    expect(page).toContain("<ContactsSimilairesSection candidats={contactsSimilaires ?? []} />");
+    expect(page).not.toMatch(/contactsSimilaires\.(slice|sort|filter|map)\(/);
+    // Le 404 reste décidé par la fiche seule.
+    expect(page).not.toMatch(/contactsSimilaires\s*===\s*undefined|!contactsSimilaires\)/);
   });
 
   it("le workspace vient de la session et le contact hors périmètre est un 404", () => {

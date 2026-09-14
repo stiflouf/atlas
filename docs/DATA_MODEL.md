@@ -608,7 +608,8 @@ valeur stockée. Nom + prénom identiques (accents, casse, tirets neutralisés) 
 corroboration, jamais en déclencheur. Chaque candidat porte ses `signaux` (`email`, `telephone`,
 `nom_prenom`) : des faits, pas un score. Au plus 10 candidats, ordonnés par signaux forts
 décroissants, nom, id ; rôles et projets par l'assembleur de la recherche (nombre de requêtes
-fixe). Aucune UI ni fusion ne consomme encore ce read model.
+fixe). Consommé par la section « Contacts partageant un email ou un téléphone » de
+`/contacts/[id]` (rendu pur, aucun geste) ; aucune fusion n'existe.
 
 ## Rattachement assisté de l'historique (ADR-055 §H)
 
