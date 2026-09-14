@@ -1166,14 +1166,25 @@ ouvert :
   perdus non rattachés apparaissent aussi : la recherche porte sur la personne, pas sur l'état du
   dossier. À requête vide, seuls les Contacts récents sont listés — jamais l'inventaire des dossiers
   non rattachés.
-- **Aucune fiche Contact dédiée, aucun lien depuis une carte Contact.** Le read model expose les projets
-  canoniques (`projetId`), alors que les seules fiches existantes sont indexées par dossier
-  historique (`/clients/[id]`, `/prospects-vendeurs/[id]`). Plutôt qu'un lien deviné par nom ou un
-  `/contacts/[id]` cassé, la carte Contact reste informative (identité, rôles, résumé de projets,
-  dernière interaction) jusqu'à la fiche Contact. Seule la carte d'un dossier non rattaché pointe
-  vers une fiche, avec l'id de dossier qu'elle porte réellement. Pas d'autosuggest, pas de barre
-  globale, pas de filtre par rôle (le read model ne le supporte pas ; reporté), pas d'édition depuis
-  cette page.
+- **La fiche Contact (`/contacts/[id]`) est en lecture seule.** Elle affiche l'identité canonique,
+  les rôles dérivés, les projets acquéreur et vendeur (avec lien vers le dossier historique quand
+  `acquereurs.projet_acquereur_id` / `prospects_vendeurs.projet_vendeur_id` le pointe réellement),
+  les dossiers rattachés sans projet canonique, et les 10 dernières interactions du contact. Aucune
+  édition d'identité, aucune fusion, aucune suppression, aucun changement de contact d'un dossier
+  depuis cette fiche : ces gestes n'ont pas encore de chemin canonique dédié, et la fiche ne les
+  prétend pas. Un projet sans dossier historique n'a pas de lien : aucune fiche n'accepte un id de
+  projet, et rien n'est deviné par nom ou email.
+- **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
+  historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
+  jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.
+- **Les interactions historiques sans `contact_id` n'apparaissent pas sur la fiche.** Une
+  interaction n'entre dans la fiche que par `contact_id` exact ; aucune n'est rapprochée par email
+  ou téléphone (ADR-055 §H). Les notes de prospect vendeur et comptes rendus de visite, qui ne sont
+  pas des interactions canoniques, restent sur leur dossier.
+- **Le stade affiché pour un projet acquéreur est celui de `projets_acquereur`**, qui n'est plus mis
+  à jour après la création (voir plus bas) ; le parcours commercial à jour reste sur le dossier,
+  ouvrable depuis la fiche. Pas d'autosuggest, pas de barre globale, pas de filtre par rôle sur
+  `/contacts`.
 - **Le terme de recherche transite dans l'URL** (`?q=`), comme sur `/clients` et
   `/prospects-vendeurs` : un email ou un téléphone cherché figure dans l'historique du navigateur.
   Aucun terme n'est journalisé côté serveur ; passer en POST est une décision dédiée, hors de ce lot.

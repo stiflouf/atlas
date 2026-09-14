@@ -164,7 +164,12 @@ describe("ADR-055 §B — le tunnel vendeur historique reste sur prospects_vende
     // ADR-058 — même exception que côté acquéreur : la carte de résultat de `/contacts` affiche
     // `projetsVendeur`, un champ du read model, sans importer ni table ni repository (verrouillé par
     // src/app/contacts/page.structurel.test.ts).
-    const ecransReadModel = [join("src", "components", "contact", "ContactResultatCard.tsx")];
+    const ecransReadModel = [
+      join("src", "components", "contact", "ContactResultatCard.tsx"),
+      // La fiche Contact affiche `projetsVendeur`, un champ de `ContactDetail` (contactDetailRepository) ;
+      // verrouillée par src/app/contacts/[id]/page.structurel.test.ts.
+      join("src", "app", "contacts", "[id]", "page.tsx"),
+    ];
     const fautifs = FICHIERS.filter(
       (chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components"))
     )

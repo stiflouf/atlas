@@ -576,6 +576,23 @@ pas un Contact virtuel, c'est un dossier qu'un humain n'a pas encore rattaché.
 - **Coût** : une requête `UNION ALL`, puis les deux agrégats batchés du read model canonique sur les
   Contacts de la page — quatre requêtes au plus, quel que soit le nombre de résultats.
 
+### Fiche Contact (`chargerContactDetail()`, `contactDetailRepository.ts`)
+
+**Lecture seule, par clés réelles.** Le read model `ContactDetail` rend, pour un contact lu par
+`(id, workspace_id)` : l'identité canonique (jamais reprise du dossier), les rôles dérivés des
+participations, les projets acquéreur et vendeur du contact, les dossiers historiques rattachés, et
+les `LIMITE_INTERACTIONS_RECENTES` (10) dernières interactions par `contact_id` exact.
+
+- **Pont projet → dossier** : un dossier entre dans la fiche par `contact_id` ou parce que son
+  `projet_acquereur_id` / `projet_vendeur_id` désigne un projet du contact. S'il décrit un projet, il
+  est **porté par ce projet** (`acquereurId` / `prospectVendeurId`, seul id que `/clients/[id]` et
+  `/prospects-vendeurs/[id]` acceptent) ; sinon il est listé en **contact-only**. Jamais les deux.
+- **Aucune ressemblance** : ni nom, ni email, ni téléphone n'y font entrer un dossier ou une
+  interaction (verrouillé par `src/app/contacts/[id]/page.structurel.test.ts`).
+- **Cinq requêtes, quel que soit le volume** : contact, participations + projets (jointure),
+  dossiers acquéreur, dossiers vendeur, interactions bornées. Vérifié par un test qui compte.
+- Le statut vendeur vient de `deriverStatutProspectVendeur` sur les jalons bruts, comme partout.
+
 ## Rattachement assisté de l'historique (ADR-055 §H)
 
 **Suggérer n'est pas rattacher.** Un dossier historique (`contact_id = NULL`) peut être rattaché à

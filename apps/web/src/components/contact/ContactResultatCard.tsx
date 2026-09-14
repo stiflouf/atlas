@@ -1,8 +1,9 @@
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
+import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
 import { initialesPersonne, nomComplet } from "@/lib/identite/nomPersonne";
-import type { StadeProjet } from "@/types/client";
+import { LABEL_STADE_PROJET } from "@/types/client";
 import { LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
 import type { ResultatRechercheContact, RoleContact } from "@/types/rechercheContact";
 
@@ -10,21 +11,14 @@ import type { ResultatRechercheContact, RoleContact } from "@/types/rechercheCon
 // dérive rien : rôles, statuts, dernière interaction et ordre viennent de `rechercherContacts`.
 // Il ne regroupe jamais deux cartes, même à email ou téléphone identiques (ADR-055 §H).
 //
-// Aucun lien vers un dossier : le read model expose les projets canoniques, alors que les seules
-// fiches existantes sont indexées par dossier historique (`/clients/[id]`, `/prospects-vendeurs/[id]`).
-// Plutôt qu'un lien deviné par nom, la carte reste informative jusqu'à la fiche Contact.
+// Une seule destination, explicite : la fiche Contact (`/contacts/[contactId]`). Aucun lien vers un
+// dossier depuis la carte — le read model expose les projets canoniques, pas les ids de dossier ;
+// c'est la fiche qui porte les ponts réels. La carte entière n'est pas un lien, pour laisser
+// mailto:/tel: cliquables.
 
 const LABEL_ROLE: Record<RoleContact, string> = {
   acquereur: "Acquéreur",
   vendeur: "Vendeur",
-};
-
-const LABEL_STADE_PROJET: Record<StadeProjet, string> = {
-  decouverte: "Découverte",
-  recherche_active: "Recherche active",
-  offre: "En attente d'offre",
-  compromis: "Compromis",
-  acte: "Acte",
 };
 
 // Au-delà, la carte deviendrait une fiche : le surplus est compté, pas déroulé.
@@ -111,6 +105,9 @@ export default function ContactResultatCard({ contact }: { contact: ResultatRech
               : "Aucun échange enregistré"}
           </p>
         </div>
+        <ButtonLink href={`/contacts/${contact.contactId}`} variant="secondary" size="sm" className="shrink-0">
+          Voir le contact
+        </ButtonLink>
       </article>
     </Card>
   );

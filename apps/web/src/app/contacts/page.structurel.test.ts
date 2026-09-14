@@ -58,15 +58,16 @@ describe("/contacts — la page consomme le read model", () => {
     }
   });
 
-  it("aucun lien inventé vers une fiche Contact qui n'existe pas encore", () => {
-    for (const source of [page, ...composants]) {
-      expect(source).not.toMatch(/\/contacts\/\$\{|`\/contacts\//);
-    }
-    // La carte Contact ne pointe vers aucun dossier (ids non exposés) ; seule la carte legacy le
-    // fait, avec l'id du dossier qu'elle porte réellement.
+  it("chaque carte a sa seule destination : la fiche Contact pour un Contact, le dossier pour un legacy", () => {
+    // La carte Contact pointe vers `/contacts/[contactId]` et vers aucun dossier (ids non exposés) ;
+    // la carte legacy pointe vers son dossier, avec l'id réel qu'elle porte, et jamais vers une
+    // fiche Contact qu'elle n'a pas.
+    expect(carte).toContain("/contacts/${contact.contactId}");
     expect(carte).not.toMatch(/\/clients\/\$\{|\/prospects-vendeurs\/\$\{/);
     expect(carteLegacy).toContain("/clients/${resultat.acquereurId}");
     expect(carteLegacy).toContain("/prospects-vendeurs/${resultat.prospectVendeurId}");
+    expect(carteLegacy).not.toMatch(/\/contacts\//);
+    expect(page).not.toMatch(/\/contacts\/\$\{/);
   });
 
   it("la carte legacy ne fabrique aucun contact virtuel et ne rattache rien", () => {

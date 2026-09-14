@@ -30,3 +30,18 @@ export type Interaction = {
   bienId?: string;
   creeLe: string;
 };
+
+export const LABEL_TYPE_INTERACTION: Record<TypeInteraction, string> = {
+  appel: "Appel",
+  email: "Email",
+  sms: "SMS",
+  rendez_vous: "Rendez-vous",
+  message: "Message",
+  note: "Note",
+};
+
+export const LABEL_SENS_INTERACTION: Record<SensInteraction, string> = {
+  entrant: "entrant",
+  sortant: "sortant",
+  interne: "interne",
+};

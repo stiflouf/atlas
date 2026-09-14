@@ -172,10 +172,17 @@ describe("ADR-055 §G — rien ne lit encore les interactions", () => {
   const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
   const REFERENCES = /interactionRepository|interactions as |from "@\/types\/interaction"|interactionsTable/;
 
-  it("aucun écran ne lit interactions", () => {
+  it("aucun écran ne lit interactions directement", () => {
+    // ADR-058 — une seule exception : la fiche Contact affiche les `interactionsRecentes` de son
+    // read model (contactDetailRepository) et n'importe de `@/types/interaction` que des libellés.
+    // Qu'elle n'importe ni table, ni repository d'interactions est verrouillé par
+    // src/app/contacts/[id]/page.structurel.test.ts.
+    const ecransReadModel = [join("src", "app", "contacts", "[id]", "page.tsx")];
     const fautifs = FICHIERS.filter(
       (chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components"))
-    ).filter((chemin) => REFERENCES.test(readFileSync(chemin, "utf8")));
+    )
+      .filter((chemin) => !ecransReadModel.some((exception) => chemin.endsWith(exception)))
+      .filter((chemin) => REFERENCES.test(readFileSync(chemin, "utf8")));
     expect(fautifs, "l'interaction canonique est une fondation, pas une lecture").toEqual([]);
   });
 

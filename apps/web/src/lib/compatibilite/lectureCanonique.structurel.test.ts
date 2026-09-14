@@ -128,7 +128,11 @@ describe("ADR-055 §B — l'écriture humaine suit la même règle de source", (
     // La recherche de personnes (ADR-058) joint elle aussi le projet, mais pour en RÉSUMER le stade
     // et le budget dans un résultat — jamais pour arbitrer d'où viennent les critères d'un
     // acquéreur. C'est cette dernière question qui n'a le droit d'avoir qu'une seule réponse.
-    expect(porteurs.sort()).toEqual([REGLE, join("src", "lib", "rechercheContactRepository.ts")].sort());
+    // La fiche Contact (ADR-058) joint le projet pour la même raison : afficher le projet canonique
+    // tel quel, jamais arbitrer entre projet et dossier.
+    expect(porteurs.sort()).toEqual(
+      [REGLE, join("src", "lib", "rechercheContactRepository.ts"), join("src", "lib", "contactDetailRepository.ts")].sort()
+    );
 
     for (const projection of [
       join("src", "lib", "compatibilite", "profilCompatibiliteRepository.ts"),

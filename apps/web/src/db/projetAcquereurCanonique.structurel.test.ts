@@ -160,6 +160,9 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
         // ADR-058 — la recherche de personnes lit les projets pour en RÉSUMER le stade dans un
         // résultat, jamais pour arbitrer d'où viennent les critères d'un acquéreur.
         join("src", "lib", "rechercheContactRepository.ts"),
+        // ADR-058 — la fiche Contact lit les projets du contact pour les AFFICHER (stade, budget,
+        // critères canoniques), lecture seule, sans jamais reprendre un critère sur le dossier.
+        join("src", "lib", "contactDetailRepository.ts"),
         // `interactions` est une feuille de `contacts` qui peut CONTEXTUALISER un projet
         // (ADR-055 §G) : elle nomme la table pour sa FK, jamais pour lire un critère.
         join("src", "lib", "interactionRepository.ts"),
@@ -187,7 +190,12 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
     // de `/contacts` affiche `projetsAcquereur`, un champ du read model `ResultatRechercheContact`.
     // Qu'elle n'importe ni `@/db/` ni un repository est verrouillé par
     // src/app/contacts/page.structurel.test.ts. Tout le reste de l'UI reste sur le modèle historique.
-    const ecransReadModel = [join("src", "components", "contact", "ContactResultatCard.tsx")];
+    const ecransReadModel = [
+      join("src", "components", "contact", "ContactResultatCard.tsx"),
+      // La fiche Contact affiche `projetsAcquereur`, un champ de `ContactDetail` (contactDetailRepository) ;
+      // verrouillée par src/app/contacts/[id]/page.structurel.test.ts.
+      join("src", "app", "contacts", "[id]", "page.tsx"),
+    ];
     const fautifs = FICHIERS.filter((chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components")))
       .filter((chemin) => !ecransReadModel.some((exception) => chemin.endsWith(exception)))
       .filter((chemin) => /projetAcquereurRepository|projetsAcquereur|partiesProjet/.test(readFileSync(chemin, "utf8")));

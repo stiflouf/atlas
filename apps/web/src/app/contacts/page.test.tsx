@@ -280,10 +280,11 @@ describe("/contacts — une carte par personne", () => {
     expect(carte.match(/Recherche active/g)).toHaveLength(2);
   });
 
-  it("aucune carte ne porte de lien vers une fiche inexistante", async () => {
-    await unContact({ nom: `${M} Sanslien` });
-    const [carte] = cartesContenant(await rendre({ q: `${M} Sanslien` }), `${M} Sanslien`);
-    expect(carte).not.toMatch(/href="\/contacts\//);
+  it("une carte Contact mène à sa fiche par « Voir le contact », jamais vers un dossier", async () => {
+    const contact = await unContact({ nom: `${M} Aveclien` });
+    const [carte] = cartesContenant(await rendre({ q: `${M} Aveclien` }), `${M} Aveclien`);
+    expect(carte).toContain(`href="/contacts/${contact.id}"`);
+    expect(carte).toContain("Voir le contact");
     expect(carte).not.toMatch(/href="\/clients\//);
     expect(carte).not.toMatch(/href="\/prospects-vendeurs\//);
   });
@@ -329,6 +330,8 @@ describe("/contacts — dossiers historiques non rattachés", () => {
     expect(carte).toContain(">Vendeur<");
     expect(carte).toContain(`href="/prospects-vendeurs/${prospect.id}"`);
     expect(carte).not.toMatch(/undefined|null|mailto:|tel:/);
+    expect(carte).not.toContain('href="/contacts/');
+    expect(carte).not.toContain("Voir le contact");
   });
 
   it("un dossier déjà rattaché n'apparaît pas une seconde fois à côté de son Contact", async () => {

@@ -5,6 +5,14 @@ export type StadeProjet =
   | "compromis"
   | "acte";
 
+export const LABEL_STADE_PROJET: Record<StadeProjet, string> = {
+  decouverte: "Découverte",
+  recherche_active: "Recherche active",
+  offre: "En attente d'offre",
+  compromis: "Compromis",
+  acte: "Acte",
+};
+
 export type ProfilAcquereur = {
   id: string;
   // ADR-057 — OPTIONNEL depuis que le Contact fait foi pour un dossier rattaché. `acquereurs.prenom`
