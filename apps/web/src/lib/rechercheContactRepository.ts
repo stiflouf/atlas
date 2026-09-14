@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, ilike, inArray, max, or, sql, type SQL } from "drizzle-orm";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { getDb, type Executeur } from "@/db/client";
 import {
   contacts as contactsTable,
@@ -48,20 +49,37 @@ function borner(limite: number | undefined): number {
   return Math.max(1, Math.min(PAR_PAGE_MAX, Math.floor(limite)));
 }
 
+// Les quatre colonnes d'identité sur lesquelles portent le filtre et le ranking. Paramétrées plutôt
+// que figées sur `contacts` : la recherche mixte (recherchePersonneRepository) applique les MÊMES
+// paliers aux dossiers historiques, et deux copies de la règle finiraient par diverger.
+export type ColonnesIdentite = {
+  nom: AnyPgColumn;
+  prenom: AnyPgColumn;
+  email: AnyPgColumn;
+  telephone: AnyPgColumn;
+};
+
+const COLONNES_CONTACT: ColonnesIdentite = {
+  nom: contactsTable.nom,
+  prenom: contactsTable.prenom,
+  email: contactsTable.email,
+  telephone: contactsTable.telephone,
+};
+
 // RANKING DÉTERMINISTE, en paliers explicables : un conseiller doit pouvoir prédire ce que sa
 // recherche rend. Exact d'abord (email, téléphone, nom complet), puis préfixe, puis contient.
 // Aucun score composite : il ne s'explique pas, et se met à mentir dès qu'on lui ajoute un critère.
 //
 // Le rang est calculé en SQL pour que le TRI et la PAGINATION portent sur le même ordre — trier en
 // mémoire après un `LIMIT` rendrait la page 2 incohérente avec la page 1.
-function expressionRang(texte: string): SQL<number> {
+export function expressionRang(texte: string, colonnes: ColonnesIdentite): SQL<number> {
   const exact = texte.toLowerCase();
   const prefixe = `${texte}%`;
   return sql<number>`case
-    when lower(${contactsTable.email}) = ${exact} then 1
-    when lower(${contactsTable.telephone}) = ${exact} then 2
-    when lower(${nomCompletSql()}) = ${exact} then 3
-    when ${contactsTable.nom} ilike ${prefixe} or ${contactsTable.prenom} ilike ${prefixe} then 4
+    when lower(${colonnes.email}) = ${exact} then 1
+    when lower(${colonnes.telephone}) = ${exact} then 2
+    when lower(${nomCompletSql(colonnes)}) = ${exact} then 3
+    when ${colonnes.nom} ilike ${prefixe} or ${colonnes.prenom} ilike ${prefixe} then 4
     else 5
   end`;
 }
@@ -69,18 +87,18 @@ function expressionRang(texte: string): SQL<number> {
 // Le NOM COMPLET est un critère à part entière, et pas seulement un palier de ranking : « Jean
 // Dupont » est la façon la plus naturelle de chercher une personne, et aucune colonne prise seule ne
 // contient ces deux mots. Sans cette concaténation, la recherche la plus évidente ne rendait rien.
-function nomCompletSql(): SQL<string> {
-  return sql<string>`trim(coalesce(${contactsTable.prenom}, '') || ' ' || ${contactsTable.nom})`;
+function nomCompletSql(colonnes: ColonnesIdentite): SQL<string> {
+  return sql<string>`trim(coalesce(${colonnes.prenom}, '') || ' ' || ${colonnes.nom})`;
 }
 
-function filtreTexte(texte: string): SQL | undefined {
+export function filtreTexte(texte: string, colonnes: ColonnesIdentite): SQL | undefined {
   const motif = `%${texte}%`;
   return or(
-    ilike(contactsTable.nom, motif),
-    ilike(contactsTable.prenom, motif),
-    ilike(contactsTable.email, motif),
-    ilike(contactsTable.telephone, motif),
-    sql`${nomCompletSql()} ilike ${motif}`
+    ilike(colonnes.nom, motif),
+    ilike(colonnes.prenom, motif),
+    ilike(colonnes.email, motif),
+    ilike(colonnes.telephone, motif),
+    sql`${nomCompletSql(colonnes)} ilike ${motif}`
   );
 }
 
@@ -170,6 +188,49 @@ async function chargerDernieresInteractions(
   );
 }
 
+// La ligne d'identité telle que la requête de page la rend, avant enrichissement.
+export type LigneContactRecherche = {
+  id: string;
+  nom: string;
+  prenom: string | null;
+  email: string | null;
+  telephone: string | null;
+};
+
+// ENRICHIR une page de contacts déjà ordonnée : rôles, résumés de projets, dernière interaction.
+// Exporté pour que la recherche mixte, qui décide sa propre page, obtienne exactement le même
+// résultat canonique — sans qu'une seconde implémentation des agrégats n'apparaisse.
+export async function assemblerResultatsContacts(
+  page: LigneContactRecherche[],
+  executeur: Executeur = getDb()
+): Promise<ResultatRechercheContact[]> {
+  const contactIds = page.map((l) => l.id);
+
+  // REQUÊTES 2 et 3 — les agrégats, batchés sur les ids de la page. Leur nombre ne dépend pas du
+  // nombre de résultats.
+  const [projets, interactions] = await Promise.all([
+    chargerProjets(contactIds, executeur),
+    chargerDernieresInteractions(contactIds, executeur),
+  ]);
+
+  // L'assemblage préserve l'ORDRE reçu : le ranking est décidé une fois, en SQL, et
+  // l'enrichissement ne le rejoue pas.
+  return page.map((ligne) => {
+    const contexte = projets.get(ligne.id);
+    return {
+      contactId: ligne.id,
+      nom: ligne.nom,
+      prenom: ligne.prenom ?? undefined,
+      email: ligne.email ?? undefined,
+      telephone: ligne.telephone ?? undefined,
+      roles: contexte ? (["acquereur", "vendeur"] as const).filter((r) => contexte.roles.has(r)) : [],
+      projetsAcquereur: contexte?.acquereur ?? [],
+      projetsVendeur: contexte?.vendeur ?? [],
+      derniereInteractionLe: interactions.get(ligne.id),
+    };
+  });
+}
+
 export async function rechercherContacts(
   params: ParametresRechercheContact,
   executeur: Executeur = getDb()
@@ -181,11 +242,11 @@ export async function rechercherContacts(
   // Une ligne de plus que la page demandée : c'est ce qui dit « il y a une suite » sans payer un
   // second balayage pour un total que personne n'affiche.
   const aDemander = limite + 1;
-  const rang = texte.length > 0 ? expressionRang(texte) : undefined;
+  const rang = texte.length > 0 ? expressionRang(texte, COLONNES_CONTACT) : undefined;
 
   // REQUÊTE 1 — la page de contacts. Le filtre de workspace est toujours présent, la recherche
   // textuelle seulement si l'utilisateur a tapé quelque chose.
-  const conditionTexte = texte.length > 0 ? filtreTexte(texte) : undefined;
+  const conditionTexte = texte.length > 0 ? filtreTexte(texte, COLONNES_CONTACT) : undefined;
   const conditions = conditionTexte
     ? and(eq(contactsTable.workspaceId, params.workspaceId), conditionTexte)
     : eq(contactsTable.workspaceId, params.workspaceId);
@@ -212,31 +273,6 @@ export async function rechercherContacts(
 
   const hasMore = lignes.length > limite;
   const page = hasMore ? lignes.slice(0, limite) : lignes;
-  const contactIds = page.map((l) => l.id);
 
-  // REQUÊTES 2 et 3 — les agrégats, batchés sur les ids de la page. Leur nombre ne dépend pas du
-  // nombre de résultats.
-  const [projets, interactions] = await Promise.all([
-    chargerProjets(contactIds, executeur),
-    chargerDernieresInteractions(contactIds, executeur),
-  ]);
-
-  // L'assemblage préserve l'ORDRE de la requête 1 : le ranking est décidé une fois, en SQL, et
-  // l'enrichissement ne le rejoue pas.
-  const items: ResultatRechercheContact[] = page.map((ligne) => {
-    const contexte = projets.get(ligne.id);
-    return {
-      contactId: ligne.id,
-      nom: ligne.nom,
-      prenom: ligne.prenom ?? undefined,
-      email: ligne.email ?? undefined,
-      telephone: ligne.telephone ?? undefined,
-      roles: contexte ? (["acquereur", "vendeur"] as const).filter((r) => contexte.roles.has(r)) : [],
-      projetsAcquereur: contexte?.acquereur ?? [],
-      projetsVendeur: contexte?.vendeur ?? [],
-      derniereInteractionLe: interactions.get(ligne.id),
-    };
-  });
-
-  return { items, hasMore };
+  return { items: await assemblerResultatsContacts(page, executeur), hasMore };
 }

@@ -9,6 +9,7 @@ import { join } from "node:path";
 
 const PAGE = join(__dirname, "page.tsx");
 const CARTE = join(__dirname, "..", "..", "components", "contact", "ContactResultatCard.tsx");
+const CARTE_LEGACY = join(__dirname, "..", "..", "components", "contact", "LegacyContactResultatCard.tsx");
 
 // Le CODE seul : les commentaires expliquent l'interdiction et contiennent donc les mots surveillés.
 function codeSeul(chemin: string): string {
@@ -19,16 +20,18 @@ function codeSeul(chemin: string): string {
 
 const page = codeSeul(PAGE);
 const carte = codeSeul(CARTE);
+const carteLegacy = codeSeul(CARTE_LEGACY);
+const composants = [carte, carteLegacy];
 
 describe("/contacts — la page consomme le read model", () => {
-  it("appelle rechercherContacts, et rien d'autre côté données", () => {
-    expect(page).toMatch(/import \{ rechercherContacts \} from "@\/lib\/rechercheContactRepository"/);
-    expect(page).toContain("rechercherContacts({");
+  it("appelle rechercherPersonnes (qui orchestre rechercherContacts), et rien d'autre côté données", () => {
+    expect(page).toMatch(/import \{ rechercherPersonnes \} from "@\/lib\/recherchePersonneRepository"/);
+    expect(page).toContain("rechercherPersonnes({");
     expect(page.match(/Repository"/g)).toHaveLength(1);
   });
 
   it("n'importe ni schéma, ni client de base, ni drizzle", () => {
-    for (const source of [page, carte]) {
+    for (const source of [page, ...composants]) {
       expect(source).not.toMatch(/@\/db\//);
       expect(source).not.toMatch(/drizzle-orm/);
       expect(source).not.toMatch(/contactsTable|partiesProjetTable|interactionsTable|acquereursTable|prospectsVendeursTable/);
@@ -42,23 +45,34 @@ describe("/contacts — la page consomme le read model", () => {
   });
 
   it("aucune dérivation métier : rôle, statut vendeur et ranking restent dans le read model", () => {
-    for (const source of [page, carte]) {
+    for (const source of [page, ...composants]) {
       expect(source).not.toMatch(/deriverStatutProspectVendeur|\.sort\(|localeCompare/);
       expect(source).not.toMatch(/roles\s*=|roles\.push|roles\.add/);
     }
   });
 
   it("aucune fusion ni regroupement par email ou téléphone dans les composants", () => {
-    for (const source of [page, carte]) {
+    for (const source of [page, ...composants]) {
       expect(source).not.toMatch(/new Map\(|new Set\(|groupBy|\.reduce\(/);
       expect(source).not.toMatch(/\.email\s*===|\.telephone\s*===/);
     }
   });
 
   it("aucun lien inventé vers une fiche Contact qui n'existe pas encore", () => {
-    for (const source of [page, carte]) {
-      expect(source).not.toMatch(/\/contacts\/\$\{|`\/contacts\/|\/clients\/\$\{|\/prospects-vendeurs\/\$\{/);
+    for (const source of [page, ...composants]) {
+      expect(source).not.toMatch(/\/contacts\/\$\{|`\/contacts\//);
     }
+    // La carte Contact ne pointe vers aucun dossier (ids non exposés) ; seule la carte legacy le
+    // fait, avec l'id du dossier qu'elle porte réellement.
+    expect(carte).not.toMatch(/\/clients\/\$\{|\/prospects-vendeurs\/\$\{/);
+    expect(carteLegacy).toContain("/clients/${resultat.acquereurId}");
+    expect(carteLegacy).toContain("/prospects-vendeurs/${resultat.prospectVendeurId}");
+  });
+
+  it("la carte legacy ne fabrique aucun contact virtuel et ne rattache rien", () => {
+    expect(carteLegacy).not.toMatch(/contactId/);
+    expect(carteLegacy).not.toMatch(/rattacherAcquereurAuContact|rattacherProspectVendeurAuContact|creerContact|action=/);
+    expect(carteLegacy).toContain("Non rattaché");
   });
 
   it("aucun terme de recherche n'est journalisé", () => {

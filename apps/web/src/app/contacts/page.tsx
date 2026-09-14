@@ -5,16 +5,17 @@ import EmptyState from "@/components/ui/EmptyState";
 import PaginationSuite from "@/components/ui/PaginationSuite";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ContactResultatCard from "@/components/contact/ContactResultatCard";
+import LegacyContactResultatCard from "@/components/contact/LegacyContactResultatCard";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
-import { rechercherContacts } from "@/lib/rechercheContactRepository";
+import { rechercherPersonnes } from "@/lib/recherchePersonneRepository";
 
 // ADR-058 — le carnet humain du CRM : on cherche une PERSONNE, sans savoir si elle achète ou vend.
 // La page ne fait qu'UN appel métier ; ranking, rôles, statuts et dernière interaction sont décidés
 // par le read model, jamais recalculés ici.
 //
-// Seuls les Contacts canoniques apparaissent : un dossier historique non rattaché
-// (`acquereurs.contact_id IS NULL`, `prospects_vendeurs.contact_id IS NULL`) reste invisible ici
-// jusqu'au lot des résultats mixtes. Aucun UNION dans cette page.
+// Une recherche rend les Contacts canoniques ET les dossiers historiques non rattachés, chacun sous
+// sa propre carte : la page ne rapproche jamais deux résultats, même à identité identique. À
+// requête vide, seuls les Contacts récents sont montrés (décision du read model).
 //
 // Recherche en GET (patron ADR-048) : `q` peut contenir un email ou un téléphone, donc figurer
 // dans l'URL et l'historique du navigateur. Limite connue ; aucun terme n'est journalisé ici.
@@ -42,7 +43,7 @@ export default async function ContactsPage({ searchParams }: PageProps) {
   // ADR-054 — le périmètre vient de la session, jamais d'un paramètre d'URL.
   const workspaceId = await exigerWorkspaceCourant();
 
-  const { items: contacts, hasMore } = await rechercherContacts({
+  const { items: resultats, hasMore } = await rechercherPersonnes({
     workspaceId,
     q: texte,
     limite: PAR_PAGE,
@@ -51,7 +52,7 @@ export default async function ContactsPage({ searchParams }: PageProps) {
 
   // Page hors bornes : sans total, la dernière page valide est inconnue — retour explicite à la
   // première plutôt qu'une page vide silencieuse (même intention qu'ADR-048).
-  if (contacts.length === 0 && pageDemandee > 1) {
+  if (resultats.length === 0 && pageDemandee > 1) {
     redirect(construireHref({ q: texte }));
   }
 
@@ -71,7 +72,7 @@ export default async function ContactsPage({ searchParams }: PageProps) {
 
       <section>
         <SectionTitle>{texte ? `Résultats pour « ${texte} »` : "Contacts récents"}</SectionTitle>
-        {contacts.length === 0 ? (
+        {resultats.length === 0 ? (
           texte ? (
             <div className="text-[14px] text-text-3">
               <p>Aucun contact trouvé.</p>
@@ -86,9 +87,17 @@ export default async function ContactsPage({ searchParams }: PageProps) {
           )
         ) : (
           <div className="flex flex-col gap-2">
-            {contacts.map((contact) => (
-              <ContactResultatCard key={contact.contactId} contact={contact} />
-            ))}
+            {resultats.map((resultat) =>
+              resultat.type === "contact" ? (
+                <ContactResultatCard key={`contact-${resultat.contactId}`} contact={resultat} />
+              ) : (
+                <LegacyContactResultatCard
+                  key={`${resultat.type}-${resultat.type === "legacy_acquereur" ? resultat.acquereurId : resultat.prospectVendeurId}`}
+                  resultat={resultat}
+                  q={texte}
+                />
+              )
+            )}
           </div>
         )}
 

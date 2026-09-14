@@ -44,7 +44,10 @@ export default function RattachementContactSection({
   actionCreerContact,
 }: Props) {
   return (
-    <section className="border border-dashed border-border-md rounded-xl p-4 md:p-5 flex flex-col gap-3">
+    <section
+      id="rattachement"
+      className="border border-dashed border-border-md rounded-xl p-4 md:p-5 flex flex-col gap-3 scroll-mt-4"
+    >
       <div className="flex items-start gap-3">
         <span className="w-8 h-8 rounded-full bg-surface-muted text-text-3 flex items-center justify-center shrink-0">
           <UserPlus size={16} strokeWidth={1.8} />

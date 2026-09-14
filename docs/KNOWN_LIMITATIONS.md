@@ -1155,18 +1155,25 @@ ouvert :
   l'opération emporterait son historique relationnel et mérite ses propres garanties.
 - **Aucune déduplication, même assistée.** Le produit ne signale pas encore deux contacts
   probablement identiques ; la recherche de candidats sert uniquement au rattachement.
-- **`/contacts` ne montre que les Contacts canoniques** (ADR-058). La page existe (recherche GET par
-  nom, prénom, nom complet, email ou téléphone ; contacts récents à requête vide ; pagination
-  `hasMore` sans total) et consomme `rechercherContacts()` tel quel. Une personne qui n'existe que
-  dans `acquereurs.contact_id IS NULL` ou `prospects_vendeurs.contact_id IS NULL` n'y apparaît donc
-  pas encore : les dossiers historiques non rattachés seront intégrés comme résultats secondaires
-  explicitement non canoniques dans le lot suivant, jamais par un `UNION` dans la page.
-- **Aucune fiche Contact dédiée, aucun lien depuis une carte.** Le read model expose les projets
+- **`/contacts` mêle Contacts canoniques et dossiers historiques non rattachés, sans jamais les
+  rapprocher** (ADR-058, `rechercherPersonnes()`). Le Contact est le résultat canonique ; un dossier
+  `acquereurs.contact_id IS NULL` ou `prospects_vendeurs.contact_id IS NULL` est un résultat
+  secondaire, marqué « Non rattaché », avec un lien vers sa fiche et vers le bloc de rattachement.
+  Conséquences assumées : une même identité apparente (même nom, même email, même téléphone) peut
+  produire **plusieurs cartes** — un Contact et un dossier, deux dossiers, deux Contacts et un
+  dossier — et la page n'affiche aucun signal « probablement la même personne ». Seul l'humain
+  rattache, depuis la fiche du dossier ; la liste ne le fait jamais. Les dossiers **archivés** ou
+  perdus non rattachés apparaissent aussi : la recherche porte sur la personne, pas sur l'état du
+  dossier. À requête vide, seuls les Contacts récents sont listés — jamais l'inventaire des dossiers
+  non rattachés.
+- **Aucune fiche Contact dédiée, aucun lien depuis une carte Contact.** Le read model expose les projets
   canoniques (`projetId`), alors que les seules fiches existantes sont indexées par dossier
   historique (`/clients/[id]`, `/prospects-vendeurs/[id]`). Plutôt qu'un lien deviné par nom ou un
-  `/contacts/[id]` cassé, la carte reste informative (identité, rôles, résumé de projets, dernière
-  interaction) jusqu'à la fiche Contact. Pas d'autosuggest, pas de barre globale, pas de filtre par
-  rôle (le read model ne le supporte pas ; reporté), pas d'édition depuis cette page.
+  `/contacts/[id]` cassé, la carte Contact reste informative (identité, rôles, résumé de projets,
+  dernière interaction) jusqu'à la fiche Contact. Seule la carte d'un dossier non rattaché pointe
+  vers une fiche, avec l'id de dossier qu'elle porte réellement. Pas d'autosuggest, pas de barre
+  globale, pas de filtre par rôle (le read model ne le supporte pas ; reporté), pas d'édition depuis
+  cette page.
 - **Le terme de recherche transite dans l'URL** (`?q=`), comme sur `/clients` et
   `/prospects-vendeurs` : un email ou un téléphone cherché figure dans l'historique du navigateur.
   Aucun terme n'est journalisé côté serveur ; passer en POST est une décision dédiée, hors de ce lot.

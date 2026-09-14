@@ -14,14 +14,18 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas_test
 
 const { getDb } = await import("@/db/client");
 const {
+  acquereurs: acquereursTable,
   contacts: contactsTable,
   interactions: interactionsTable,
   partiesProjet: partiesProjetTable,
   projetsAcquereur: projetsAcquereurTable,
   projetsVendeur: projetsVendeurTable,
+  prospectsVendeurs: prospectsVendeursTable,
   workspaces: workspacesTable,
 } = await import("@/db/schema");
 const { creerContact } = await import("@/lib/contactRepository");
+const { creerAcquereur } = await import("@/lib/clientRepository");
+const { creerProspectVendeur } = await import("@/lib/prospectVendeurRepository");
 const { creerProjetAcquereur } = await import("@/lib/projetAcquereurRepository");
 const { creerProjetVendeur } = await import("@/lib/projetVendeurRepository");
 const { ajouterPartieProjet } = await import("@/lib/partieProjetRepository");
@@ -34,6 +38,8 @@ const ContactsPage = (await import("./page")).default;
 const M = `Zpage${Date.now()}`;
 
 const idsContacts: string[] = [];
+const idsAcquereurs: string[] = [];
+const idsProspects: string[] = [];
 const idsProjetsA: string[] = [];
 const idsProjetsV: string[] = [];
 const idsWorkspaces: string[] = [];
@@ -41,6 +47,9 @@ const idsWorkspaces: string[] = [];
 workspaceCourantMock.mockResolvedValue(WORKSPACE_TEST);
 
 afterAll(async () => {
+  if (idsAcquereurs.length > 0) await getDb().delete(acquereursTable).where(inArray(acquereursTable.id, idsAcquereurs));
+  if (idsProspects.length > 0)
+    await getDb().delete(prospectsVendeursTable).where(inArray(prospectsVendeursTable.id, idsProspects));
   if (idsContacts.length > 0) {
     await getDb().delete(interactionsTable).where(inArray(interactionsTable.contactId, idsContacts));
     await getDb().delete(partiesProjetTable).where(inArray(partiesProjetTable.contactId, idsContacts));
@@ -58,6 +67,47 @@ async function unContact(surcharge: Record<string, unknown>, workspace = WORKSPA
   const contact = await creerContact({ nom: `${M} Contact`, ...surcharge } as never, workspace);
   idsContacts.push(contact.id);
   return contact;
+}
+
+async function unAcquereurHistorique(surcharge: { nom: string; prenom?: string; email?: string; contactId?: string }) {
+  const dossier = await creerAcquereur(
+    {
+      prenom: "Ancien",
+      email: `${M}.acquereur@example.test`,
+      telephone: "0600000000",
+      budgetMin: 100_000,
+      budgetMax: 400_000,
+      criteres: [],
+      stadeProjet: "recherche_active",
+      notes: "",
+      datePremiereContact: "2026-01-01",
+      ...surcharge,
+    },
+    WORKSPACE_TEST
+  );
+  idsAcquereurs.push(dossier.id);
+  return dossier;
+}
+
+async function unProspectHistorique(surcharge: { nom: string; prenom?: string; email?: string; contactId?: string }) {
+  const prospect = await creerProspectVendeur(
+    {
+      prenom: undefined,
+      email: undefined,
+      telephone: undefined,
+      origineLead: undefined,
+      origineLeadDetail: undefined,
+      adresseBienPotentiel: undefined,
+      secteurBienPotentiel: undefined,
+      ville: undefined,
+      codePostal: undefined,
+      typeBien: undefined,
+      ...surcharge,
+    },
+    WORKSPACE_TEST
+  );
+  idsProspects.push(prospect.id);
+  return prospect;
 }
 
 async function unProjetAcquereur(contactId: string) {
@@ -236,6 +286,94 @@ describe("/contacts — une carte par personne", () => {
     expect(carte).not.toMatch(/href="\/contacts\//);
     expect(carte).not.toMatch(/href="\/clients\//);
     expect(carte).not.toMatch(/href="\/prospects-vendeurs\//);
+  });
+});
+
+describe("/contacts — dossiers historiques non rattachés", () => {
+  it("un Contact et un dossier historique à la même identité donnent DEUX cartes, l'une canonique, l'autre « Non rattaché »", async () => {
+    const email = `${M}.jean@example.test`;
+    await unContact({ nom: `${M} Dupont`, prenom: "Jean", email });
+    const dossier = await unAcquereurHistorique({ nom: `${M} Dupont`, prenom: "Jean", email });
+
+    const html = await rendre({ q: `Jean ${M} Dupont` });
+    const lesDeux = cartesContenant(html, `Jean ${M} Dupont`);
+
+    expect(lesDeux).toHaveLength(2);
+    const legacy = lesDeux.filter((c) => c.includes("Non rattaché"));
+    expect(legacy).toHaveLength(1);
+    expect(legacy[0]).toContain(`href="/clients/${dossier.id}"`);
+    expect(lesDeux.filter((c) => !c.includes("Non rattaché"))).toHaveLength(1);
+    expect(html).not.toMatch(/même personne|fusionn|probablement/i);
+  });
+
+  it("un acquéreur historique porte le badge Non rattaché, le rôle, et ses liens Ouvrir / Rattacher avec q", async () => {
+    const dossier = await unAcquereurHistorique({ nom: `${M} Legacyacq`, prenom: "Paul" });
+
+    const [carte] = cartesContenant(await rendre({ q: `${M} Legacyacq` }), `${M} Legacyacq`);
+
+    expect(carte).toContain("Paul " + `${M} Legacyacq`);
+    expect(carte).toContain(">Non rattaché<");
+    expect(carte).toContain(">Acquéreur<");
+    expect(carte).toContain(`href="/clients/${dossier.id}"`);
+    expect(carte).toContain(`href="/clients/${dossier.id}?q=${encodeURIComponent(`${M} Legacyacq`)}#rattachement"`);
+    expect(carte).toContain("Ouvrir le dossier");
+    expect(carte).toContain("Rattacher");
+  });
+
+  it("un prospect vendeur historique sans prénom ni coordonnées est rendu proprement, avec son lien de dossier", async () => {
+    const prospect = await unProspectHistorique({ nom: `${M} Legacyvend` });
+
+    const [carte] = cartesContenant(await rendre({ q: `${M} Legacyvend` }), `${M} Legacyvend`);
+
+    expect(carte).toContain(">Non rattaché<");
+    expect(carte).toContain(">Vendeur<");
+    expect(carte).toContain(`href="/prospects-vendeurs/${prospect.id}"`);
+    expect(carte).not.toMatch(/undefined|null|mailto:|tel:/);
+  });
+
+  it("un dossier déjà rattaché n'apparaît pas une seconde fois à côté de son Contact", async () => {
+    const email = `${M}.rattache@example.test`;
+    const contact = await unContact({ nom: `${M} Rattache`, email });
+    await unAcquereurHistorique({ nom: `${M} Rattache`, email, contactId: contact.id });
+    await unProspectHistorique({ nom: `${M} Rattache`, email, contactId: contact.id });
+
+    const html = await rendre({ q: email });
+
+    expect(cartesContenant(html, `${M} Rattache`)).toHaveLength(1);
+    expect(html).not.toContain("Non rattaché");
+  });
+
+  it("deux Contacts et un dossier historique au même email : trois cartes, aucune fusion", async () => {
+    const email = `${M}.shared3@example.test`;
+    await unContact({ nom: `${M} Trio A`, email });
+    await unContact({ nom: `${M} Trio B`, email });
+    await unProspectHistorique({ nom: `${M} Trio C`, email });
+
+    const html = await rendre({ q: email });
+
+    expect(cartesContenant(html, email)).toHaveLength(3);
+    expect(cartesContenant(html, "Non rattaché")).toHaveLength(1);
+  });
+
+  it("q vide : les dossiers historiques n'apparaissent pas parmi les Contacts récents", async () => {
+    await unAcquereurHistorique({ nom: `${M} Legacyrecent` });
+    const html = await rendre();
+    expect(html).not.toContain(`${M} Legacyrecent`);
+    expect(html).not.toContain("Non rattaché");
+  });
+
+  it("la pagination reste globale : une page de 25 mêle Contacts et dossiers sans en perdre", async () => {
+    const P = `${M}Mix`;
+    for (let i = 0; i < 14; i += 1) await unContact({ nom: `${P} ${String(i).padStart(2, "0")}` });
+    for (let i = 14; i < 27; i += 1) await unAcquereurHistorique({ nom: `${P} ${String(i).padStart(2, "0")}`, prenom: "" });
+
+    const page1 = await rendre({ q: P });
+    const page2 = await rendre({ q: P, page: "2" });
+
+    expect(cartes(page1)).toHaveLength(25);
+    expect(cartes(page2)).toHaveLength(2);
+    expect(page1).toContain("Suivant");
+    expect(cartesContenant(page1, "Non rattaché").length + cartesContenant(page2, "Non rattaché").length).toBe(13);
   });
 });
 

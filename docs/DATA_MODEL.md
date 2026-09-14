@@ -553,9 +553,28 @@ aucun `COUNT(*)` global, puisque aucun écran n'affiche encore de total.
 **Index** : `contacts(workspace_id)` (migration `0042`), le filtre le plus sélectif et le seul qui
 manquait. Aucun index trigram, aucune colonne normalisée, aucune unicité sur email ou téléphone.
 
-**Hors périmètre** : les dossiers legacy non rattachés n'apparaissent pas dans cette recherche — ils
-seront des résultats secondaires explicitement non canoniques, dans leur propre lot. Aucune page,
-aucun composant, aucune fiche Contact.
+**Résultats mixtes (`rechercherPersonnes()`, `recherchePersonneRepository.ts`).** La page
+`/contacts` consomme une orchestration au-dessus du read model canonique, qui rend une **union
+discriminée** `ResultatRecherchePersonne` : `{ type: "contact" }` (le résultat canonique, inchangé),
+`{ type: "legacy_acquereur", acquereurId }` ou `{ type: "legacy_vendeur", prospectVendeurId }` avec
+l'identité telle que le dossier la stocke. Un résultat legacy **n'a pas de `contactId`** : ce n'est
+pas un Contact virtuel, c'est un dossier qu'un humain n'a pas encore rattaché.
+
+- **Sources historiques** : `acquereurs.contact_id IS NULL` et `prospects_vendeurs.contact_id IS NULL`
+  uniquement. Un dossier déjà rattaché n'apparaît jamais une seconde fois à côté de son Contact.
+- **Une seule liste ordonnée, en SQL** : `UNION ALL` des trois sources (jamais `UNION`, qui
+  dédoublonnerait), **mêmes paliers de rang** calculés par la même fonction (`expressionRang`), puis
+  `ORDER BY rang, nom, type (contact < acquéreur < vendeur), id`, `LIMIT`/`OFFSET` globaux. La
+  pertinence textuelle prime toujours sur la nature du résultat ; à égalité seulement, le canonique
+  précède l'historique.
+- **Aucune fusion** : un Contact et un dossier à la même identité sont deux résultats ; deux dossiers
+  au même email sont deux résultats. Aucun `GROUP BY`, aucun `DISTINCT`, aucun score.
+- **Requête vide** : uniquement les Contacts récents (`rechercherContacts()` tel quel) — les dossiers
+  historiques n'apparaissent que lorsqu'un conseiller cherche réellement quelqu'un.
+- **Lecture seule** : le module n'importe aucun chemin d'écriture ni de rattachement (verrouillé par
+  `recherchePersonneRepository.structurel.test.ts`). Rattacher reste le geste de la fiche du dossier.
+- **Coût** : une requête `UNION ALL`, puis les deux agrégats batchés du read model canonique sur les
+  Contacts de la page — quatre requêtes au plus, quel que soit le nombre de résultats.
 
 ## Rattachement assisté de l'historique (ADR-055 §H)
 
