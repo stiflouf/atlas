@@ -34,14 +34,21 @@ describe("ContactsSimilairesSection — rendu pur de faits", () => {
     }
   });
 
-  it("aucun formulaire ni bouton d'action : uniquement une navigation vers la fiche du candidat", () => {
+  it("aucun formulaire ni bouton d'action : deux navigations, la fiche du candidat et la comparaison", () => {
     expect(composant).not.toMatch(/<form|action=|<button|type="submit"|onClick|"use client"/);
     expect(composant).toContain("href={`/contacts/${candidat.contactId}`}");
     expect(composant).toContain("Voir le contact");
+    // ADR-059 — « Comparer » ouvre la page de fusion, dont le premier segment est le contact courant
+    // (conservé par défaut). Aucun bouton « Fusionner » ici : la fusion se décide sur cette page.
+    expect(composant).toContain("href={`/contacts/${contactCourantId}/fusionner/${candidat.contactId}`}");
+    expect(composant).toContain("Comparer");
+    expect(composant).not.toMatch(/>\s*Fusionner/);
   });
 
-  it("aucun mot de fusion, de doublon ni de verdict d'identité", () => {
-    expect(composant).not.toMatch(/fusionn|doublon|dupli|merge|résoudre|comparer/i);
+  it("aucun mot de doublon ni de verdict d'identité", () => {
+    expect(composant).not.toMatch(/doublon|dupli|merge|résoudre/i);
+    // Le seul « fusionner » est le segment d'URL de la page de comparaison, jamais un libellé.
+    expect(composant.match(/fusionn/gi)?.length).toBe(1);
     // « même personne » n'apparaît que nié : le texte dit ce que la détection ne prouve pas.
     expect(composant.match(/même personne/g)).toHaveLength(1);
     expect(composant).toContain("ne signifie pas nécessairement qu’il\n        s’agit de la même personne");

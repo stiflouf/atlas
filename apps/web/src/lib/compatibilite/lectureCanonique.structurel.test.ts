@@ -130,8 +130,15 @@ describe("ADR-055 §B — l'écriture humaine suit la même règle de source", (
     // acquéreur. C'est cette dernière question qui n'a le droit d'avoir qu'une seule réponse.
     // La fiche Contact (ADR-058) joint le projet pour la même raison : afficher le projet canonique
     // tel quel, jamais arbitrer entre projet et dossier.
+    // La préparation de fusion (ADR-059) joint le projet pour lire `archive_le` — rôle dérivé et
+    // compte de projets actifs, même sémantique que la recherche — jamais un critère.
     expect(porteurs.sort()).toEqual(
-      [REGLE, join("src", "lib", "rechercheContactRepository.ts"), join("src", "lib", "contactDetailRepository.ts")].sort()
+      [
+        REGLE,
+        join("src", "lib", "rechercheContactRepository.ts"),
+        join("src", "lib", "contactDetailRepository.ts"),
+        join("src", "lib", "preparationFusionContactRepository.ts"),
+      ].sort()
     );
 
     for (const projection of [

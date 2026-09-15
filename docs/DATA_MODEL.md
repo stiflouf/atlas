@@ -640,7 +640,16 @@ rôle principal préservé sur la partie conservée) AVANT repoint → UPDATE `c
 exacts) → `modifierIdentiteContact` si l'identité finale change (verrous sur les seuls champs
 changés) → `marquerContactFusionne` (second et dernier writer de `contacts`) → INSERT
 `contact_fusions`. Toute erreur = rollback intégral. `champs_verrouilles` de l'absorbé jamais
-repointés. Aucun écran, route ni Server Action n'appelle le moteur (garde structurelle).
+repointés. La seule porte vers le moteur est la Server Action `fusionnerContactsAction` (page
+`/contacts/[id]/fusionner/[absorbeId]`), qui l'appelle une fois par soumission (garde structurelle).
+
+**Préparation d'une fusion (`preparerFusionContacts`, `lib/preparationFusionContactRepository.ts`).**
+Read model de l'écran de comparaison, 7 requêtes fixes : les deux Contacts du workspace (sinon
+`contact_introuvable`, `meme_contact`, `deja_fusionne`), identités attendues avec `modifie_le`,
+nature de chaque champ (`identique` / `absence_comblee` / `conflit`), rôles et projets non archivés,
+verrous humains par champ, impact (union/intersection des projets, interactions, dossiers acquéreur
+et vendeur, références externes de l'absorbé) et avertissements calculés par la même fonction pure
+que le moteur (`lib/fusionContactAnalyse.ts`). La similarité n'est pas une condition.
 
 ## Rattachement assisté de l'historique (ADR-055 §H)
 

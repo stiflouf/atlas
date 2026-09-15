@@ -100,20 +100,27 @@ describe("fusionContactRepository — frontières", () => {
     expect(moteur).not.toMatch(/plusRecent|plusComplet|Math\.max\(.*modifieLe/);
   });
 
-  it("les acquittements sont recalculés sous verrou avec des clés déterministes", () => {
-    expect(moteur).toContain('cle: `reference_externe_contradictoire:${cle}`');
+  it("les acquittements sont recalculés sous verrou avec des clés déterministes, par l'analyse partagée", () => {
+    // La définition de « contradiction » vit dans fusionContactAnalyse.ts, pure, partagée avec le
+    // read model de préparation : ce que l'écran annonce est ce que le moteur exige.
+    expect(moteur).toContain('import { avertissementsReferencesExternes } from "@/lib/fusionContactAnalyse"');
+    const analyse = codeSeul(join(SRC, "lib", "fusionContactAnalyse.ts"));
+    expect(analyse).toContain('cle: `reference_externe_contradictoire:${cle}`');
+    expect(analyse).not.toMatch(/@\/db\/|drizzle-orm|\.(insert|update|delete|select)\(/);
     expect(moteur).toContain('statut: "avertissement_reference_externe_requis"');
     expect(moteur).toContain('statut: "acquittement_inconnu"');
     expect(moteur.indexOf("avertissementsReferencesExternes(refs")).toBeGreaterThan(moteur.indexOf('.for("update")'));
   });
 
-  it("aucune UI, aucune route, aucune Server Action n'appelle le moteur", () => {
+  it("une seule porte vers le moteur : la Server Action fusionnerContactsAction — aucune page ni composant", () => {
     const appelants = listerFichiersSource(SRC)
       .filter((chemin) => chemin !== MOTEUR)
-      .filter((chemin) => /fusionContactRepository|fusionnerContacts/.test(codeSeul(chemin)));
-    expect(appelants).toEqual([]);
-    for (const dossier of ["app", "actions", "components"]) {
-      const fautifs = listerFichiersSource(join(SRC, dossier)).filter((chemin) => /fusionner|\/fusionner/i.test(codeSeul(chemin)));
+      .filter((chemin) => /fusionContactRepository|fusionnerContacts\(/.test(codeSeul(chemin)));
+    expect(appelants).toEqual([join(SRC, "actions", "fusionnerContacts.ts")]);
+    for (const dossier of ["app", "components"]) {
+      const fautifs = listerFichiersSource(join(SRC, dossier)).filter((chemin) =>
+        /fusionContactRepository|fusionnerContacts\(/.test(codeSeul(chemin))
+      );
       expect(fautifs, dossier).toEqual([]);
     }
   });

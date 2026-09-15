@@ -30,7 +30,7 @@ describe("/contacts/[id] — la page consomme le read model", () => {
   });
 
   it("la section similaires reçoit les candidats tels quels : ni tri, ni borne, ni filtre dans la page", () => {
-    expect(page).toContain("<ContactsSimilairesSection candidats={contactsSimilaires ?? []} />");
+    expect(page).toContain("<ContactsSimilairesSection contactCourantId={contact.id} candidats={contactsSimilaires ?? []} />");
     expect(page).not.toMatch(/contactsSimilaires\.(slice|sort|filter|map)\(/);
     // Le 404 reste décidé par la fiche seule.
     expect(page).not.toMatch(/contactsSimilaires\s*===\s*undefined|!contactsSimilaires\)/);

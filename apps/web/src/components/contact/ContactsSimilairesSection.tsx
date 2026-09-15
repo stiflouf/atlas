@@ -12,9 +12,10 @@ import type { ContactSimilaire, SignalSimilariteContact } from "@/types/similari
 // sans score, sans niveau, sans verdict. Il ne dérive rien : ni signal, ni rôle, ni ordre, ni
 // borne — tout cela est décidé dans le repository, une seule fois.
 //
-// Une seule destination par candidat : sa fiche Contact. Aucun geste de fusion, de rattachement
-// ni d'écriture n'existe ici — le produit ne fusionne jamais deux humains sans qu'un humain l'ait
-// décidé, et ce geste n'a pas encore de chemin.
+// Deux navigations par candidat, aucune écriture : sa fiche Contact, et la page de COMPARAISON
+// (`/contacts/[courant]/fusionner/[candidat]`, ADR-059) où un humain tranchera. Aucun bouton
+// « Fusionner » ici : le produit ne fusionne jamais deux humains sans qu'un humain ait comparé,
+// choisi et confirmé.
 //
 // Rien n'est rendu sans candidat : « aucun doublon détecté » serait une affirmation que la
 // détection ne peut pas faire (elle ignore un email ou un numéro qui a changé).
@@ -35,7 +36,13 @@ function libelleProjets(nombre: number): string {
   return `${nombre} projet${nombre > 1 ? "s" : ""}`;
 }
 
-export default function ContactsSimilairesSection({ candidats }: { candidats: ContactSimilaire[] }) {
+export default function ContactsSimilairesSection({
+  contactCourantId,
+  candidats,
+}: {
+  contactCourantId: string;
+  candidats: ContactSimilaire[];
+}) {
   if (candidats.length === 0) return null;
 
   return (
@@ -76,14 +83,14 @@ export default function ContactsSimilairesSection({ candidats }: { candidats: Co
                   </div>
                 )}
               </div>
-              <ButtonLink
-                href={`/contacts/${candidat.contactId}`}
-                variant="secondary"
-                size="sm"
-                className="shrink-0 self-start"
-              >
-                Voir le contact
-              </ButtonLink>
+              <div className="flex flex-wrap gap-2 shrink-0 self-start">
+                <ButtonLink href={`/contacts/${candidat.contactId}`} variant="secondary" size="sm">
+                  Voir le contact
+                </ButtonLink>
+                <ButtonLink href={`/contacts/${contactCourantId}/fusionner/${candidat.contactId}`} variant="ghost" size="sm">
+                  Comparer
+                </ButtonLink>
+              </div>
             </article>
           </Card>
         ))}

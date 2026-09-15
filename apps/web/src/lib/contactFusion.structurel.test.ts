@@ -86,7 +86,7 @@ describe("ADR-059 — journal append-only, un seul moteur", () => {
   });
 
   it("un seul moteur de fusion, dans lib, et aucun alias (absorberContact, repointerContact, mergeContacts)", () => {
-    const moteur = FICHIERS_PRODUCTION.filter((chemin) => /export async function fusionnerContacts/.test(codeSeul(chemin)));
+    const moteur = FICHIERS_PRODUCTION.filter((chemin) => /export async function fusionnerContacts\(/.test(codeSeul(chemin)));
     expect(moteur).toEqual([join(SRC, "lib", "fusionContactRepository.ts")]);
     const alias = FICHIERS_PRODUCTION.filter((chemin) => /absorberContact|repointerContact|mergeContacts/.test(codeSeul(chemin)));
     expect(alias).toEqual([]);

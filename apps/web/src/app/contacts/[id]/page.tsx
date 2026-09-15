@@ -130,7 +130,7 @@ export default async function FicheContact({ params }: PageProps) {
         </div>
       </Card>
 
-      <ContactsSimilairesSection candidats={contactsSimilaires ?? []} />
+      <ContactsSimilairesSection contactCourantId={contact.id} candidats={contactsSimilaires ?? []} />
 
       {projetsAcquereur.length > 0 && (
         <section className="mb-8">

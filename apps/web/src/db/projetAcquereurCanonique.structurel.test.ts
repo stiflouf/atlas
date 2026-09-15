@@ -170,6 +170,9 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
         // et dédouble celles d'un projet commun : il nomme la table pour sa FK `contact_id`, jamais
         // pour lire ou arbitrer un critère.
         join("src", "lib", "fusionContactRepository.ts"),
+        // ADR-059 — la préparation de fusion lit les participations et `archive_le` du projet pour
+        // dériver rôles, compte de projets et projets communs — jamais un critère.
+        join("src", "lib", "preparationFusionContactRepository.ts"),
         join("src", "lib", "provenance", "champVerrouilleRepository.ts"),
         join("src", "lib", "provenance", "referenceExterneRepository.ts"),
       ].sort()

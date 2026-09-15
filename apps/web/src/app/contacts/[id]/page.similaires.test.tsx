@@ -251,7 +251,10 @@ describe("/contacts/[id] — périmètre et absence de geste", () => {
     await unContact({ nom: `${M} Geste bis`, email });
     const html = await rendre(a.id);
     expect(section(html)).toBeDefined();
-    expect(html).not.toMatch(/fusionn|rattacher|<form|<button|doublon/i);
+    expect(html).not.toMatch(/rattacher|<form|<button|doublon/i);
+    // Le seul « fusionner » est le segment d'URL du lien « Comparer » : jamais un libellé de bouton.
+    expect(html).not.toMatch(/>\s*Fusionner/);
+    expect(html).toMatch(new RegExp(`<a[^>]*href="/contacts/${a.id}/fusionner/[0-9a-f-]+"[^>]*>[^<]*Comparer`));
     // Le seul « même personne » de la page est nié.
     expect(html.match(/même personne/g)).toHaveLength(1);
     expect(html).toContain("ne signifie pas nécessairement");

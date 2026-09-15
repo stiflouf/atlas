@@ -1,6 +1,6 @@
 # ADR-059 — Fusion humaine et traçable des Contacts
 
-**Statut :** Accepté — modèle implémenté (migration `0043`), moteur repository implémenté (`fusionnerContacts`, sans UI ni Server Action)
+**Statut :** Accepté — modèle (migration `0043`), moteur repository (`fusionnerContacts`) et UI humaine (`/contacts/[id]/fusionner/[absorbeId]`, `fusionnerContactsAction`) implémentés
 **Date :** 2026-09-14
 **Décideurs :** Steven Gausset (CEO), CTO
 
@@ -31,9 +31,9 @@ ne se défait pas. Le produit doit donc pouvoir fusionner sans jamais perdre la 
 été fusionné, par qui, et à partir de quoi — et refuser structurellement toute fusion que personne
 n'a décidée.
 
-Cette ADR pose le MODÈLE, les règles de lecture, et le MOTEUR repository (`fusionnerContacts`,
-`lib/fusionContactRepository.ts`). L'écran de comparaison et la Server Action qui l'appelleront
-sont un lot à part : aucun chemin utilisateur ne déclenche encore une fusion.
+Cette ADR pose le MODÈLE, les règles de lecture, le MOTEUR repository (`fusionnerContacts`,
+`lib/fusionContactRepository.ts`) et l'ÉCRAN humain qui l'appelle (page de comparaison + Server
+Action `fusionnerContactsAction`).
 
 ## Décision
 
@@ -92,6 +92,33 @@ l'absorbé restent sur sa ligne. Résultat : union discriminée (`fusionne`, `me
 `contact_introuvable`, `deja_fusionne`, `identite_modifiee_entre_temps`,
 `choix_identite_invalide`, `avertissement_reference_externe_requis`, `acquittement_inconnu`).
 L'acteur (`sub`, `email`) est un paramètre : aucune session dans le repository.
+
+### UI humaine : `/contacts/[id]/fusionner/[absorbeId]`
+
+- Entrée : bouton « Comparer » sur chaque candidat de la section « Contacts partageant un email ou
+  un téléphone » de la fiche — jamais un bouton « Fusionner » depuis la fiche. La similarité est
+  une aide de découverte, pas une autorisation : la page s'ouvre par URL pour n'importe quels deux
+  Contacts actifs du workspace (coordonnées changées, homonyme reconnu par l'humain).
+- L'URL encode la direction : premier segment = CONSERVÉ, second = ABSORBÉ ; « Inverser » navigue
+  vers l'URL symétrique, sans écriture.
+- Read model `preparerFusionContacts` (`lib/preparationFusionContactRepository.ts`, requêtes fixes) :
+  les deux Contacts, leurs identités attendues (`modifie_le` compris), la nature de chaque champ
+  (`identique` / `absence_comblee` / `conflit`), rôles et nombre de projets, verrous humains,
+  impact (projets concernés = union, participations en double = intersection, interactions,
+  dossiers acquéreur et vendeur, références externes de l'absorbé), avertissements par la MÊME
+  analyse pure que le moteur (`lib/fusionContactAnalyse.ts`).
+- Formulaire natif, sans JavaScript : un conflit = radio obligatoire sans présélection (valeur du
+  conservé ou de l'absorbé) ; identique et absence comblée = champ caché typé ; aucune saisie
+  libre ; badge « Modifié manuellement » sur un champ verrouillé, sans bloquer ; une checkbox
+  d'acquittement par avertissement, portant la clé exacte ; confirmation finale obligatoire ;
+  bouton « Fusionner les contacts ».
+- Server Action : session + workspace du contexte ; confirmation exigée ; RELECTURE serveur de la
+  préparation — les identités attendues transmises au moteur en viennent, jamais du navigateur ;
+  la date de modification vue par la page est comparée à la relecture avant d'appeler le moteur
+  (un champ caché altéré ne peut produire qu'un refus) ; identité finale DÉDUITE du choix et des
+  identités relues ; UN appel au moteur, jamais de seconde tentative ; succès → fiche du
+  survivant ; refus → retour sur la page de comparaison avec un code (`fusion=…`), patron des
+  actions de rattachement.
 
 ### Lecture d'un Contact absorbé
 
@@ -161,8 +188,8 @@ referencesExternes), `ContactFusion`. `lib/contactFusion.ts` : `estContactFusion
    survivant absorbé, autre workspace ; exige un exécuteur transactionnel).
 5. Les lecteurs de Contacts actifs excluent les absorbés EN SQL, avant toute pagination.
 6. Le journal n'est inséré que par le moteur, le marqueur n'est posé que par
-   `marquerContactFusionne` ; aucun écran, route ni Server Action n'appelle le moteur (structurel) :
-   aucun Contact métier ne devient absorbé avant l'UI de fusion.
+   `marquerContactFusionne` ; la seule porte vers le moteur est `fusionnerContactsAction`, appelé
+   une fois par soumission (structurel) ; aucune page ni composant ne l'importe.
 7. La résolution de chaîne est bornée et ne boucle jamais.
 
 ## Conséquences
@@ -185,8 +212,9 @@ referencesExternes), `ContactFusion`. `lib/contactFusion.ts` : `estContactFusion
 
 ## Hors périmètre
 
-Server Action de fusion · UI de comparaison champ par champ et confirmation · repoint des
-`champs_verrouilles` (jamais) · défusion · revue de masse des similaires · personne morale.
+Repoint des `champs_verrouilles` (jamais) · défusion · revue de masse des similaires · fusion de
+plus de deux Contacts à la fois · saisie d'une troisième valeur pendant la fusion (passer par
+`/contacts/[id]/modifier` après) · personne morale.
 
 ## Questions ouvertes
 

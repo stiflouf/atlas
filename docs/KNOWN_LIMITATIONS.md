@@ -1188,21 +1188,22 @@ ouvert :
   persistée (ni « vu », ni « ignoré »), aucun index dédié (`contacts_workspace_idx` seul — à
   reconsidérer sur mesure réelle). Aucune fusion, aucun bouton : le moteur de fusion est un lot
   distinct. `/contacts` (recherche) ne porte aucun badge.
-- **Le moteur de fusion existe (ADR-059, `fusionnerContacts`), aucun écran ne l'appelle.** Le
-  modèle (`contacts.fusionne_dans_contact_id` / `fusionne_le`, journal `contact_fusions`), les
-  lecteurs actifs (absorbés exclus), l'éditeur et le writer d'identité (absorbés refusés), la page
-  « Ce contact a été fusionné » (HTTP 200, lien vers le contact actif FINAL, aucune redirection) et
-  le moteur transactionnel repository sont en place. Mais **aucun chemin utilisateur ne peut
-  absorber un Contact** : ni Server Action, ni UI de comparaison champ par champ, ni confirmation.
-  Tant que cet écran n'existe pas, aucun Contact métier n'est absorbé. Limites du moteur, assumées :
-  fusion **irréversible** (pas de défusion ; le journal — identités avant, choix, ids exacts
-  déplacés, parties supprimées, rôles corrigés — permet une restauration manuelle) ; les verrous
+- **La fusion de deux Contacts est humaine, explicite et irréversible (ADR-059).** Depuis la fiche,
+  « Comparer » ouvre `/contacts/[conservé]/fusionner/[absorbé]` (aussi accessible par URL pour deux
+  Contacts sans coordonnée commune) : comparaison côte à côte, « Inverser », un choix par champ en
+  conflit parmi les valeurs existantes, impact annoncé, acquittement par avertissement,
+  confirmation finale, puis `fusionnerContactsAction` appelle le moteur une fois. Limites
+  assumées : **pas de défusion** (le journal `contact_fusions` — identités avant, choix, ids exacts
+  déplacés, parties supprimées, rôles corrigés — permet une restauration manuelle) ; comparaison de
+  deux Contacts à la fois seulement, aucune revue de masse ; **aucune saisie libre pendant la
+  fusion** (une troisième valeur se saisit après, sur `/contacts/[id]/modifier`) ; les verrous
   humains de l'absorbé restent sur sa ligne et ne sont pas relus ; deux références externes du même
   fournisseur et type sont conservées toutes deux sur le survivant après acquittement (un
   connecteur futur devra choisir) ; sur un projet commun, la partie de l'absorbé est supprimée
-  physiquement (seule suppression du produit, tracée) ; un rôle « principal » l'emporte
-  mécaniquement (`acquereur` > `co_acquereur`, `vendeur` > `co_vendeur`) sans question posée. Une
-  chaîne invalide en lecture lève une erreur contrôlée.
+  physiquement (seule suppression du produit, tracée) et un rôle principal l'emporte mécaniquement
+  (`acquereur` > `co_acquereur`, `vendeur` > `co_vendeur`) sans question posée ; un refus renvoie
+  sur la page de comparaison avec un message, l'humain recommence (aucune relance automatique) ;
+  une chaîne invalide en lecture lève une erreur contrôlée.
 - **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
   historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.
