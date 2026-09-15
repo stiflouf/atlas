@@ -76,11 +76,26 @@ describe("ADR-059 §10 — gardes d'écriture sur contact_id", () => {
   });
 
   it("aucun writer ne réécrit une cible absorbée vers son survivant", () => {
+    // Les repositories de dossier portent aussi une LECTURE de navigation (`getNavigationContact*`,
+    // ADR-059) qui résout le contact actif : elle est autorisée, hors des writers.
+    const LECTURE_NAVIGATION: Record<string, RegExp> = {
+      [join(SRC, "lib", "clientRepository.ts")]: /export async function creerAcquereur[\s\S]*?\n}/,
+      [join(SRC, "lib", "prospectVendeurRepository.ts")]: /export async function creerProspectVendeur[\s\S]*?\n}/,
+    };
     for (const chemin of writers) {
       if (ALLOWLIST_MOTEUR.includes(chemin)) continue;
       const code = codeSeul(chemin);
       expect(code, chemin).not.toMatch(/contactId\s*=\s*[^;]*fusionneDansContactId|\.fusionneDansContactId\s*\?\?/);
-      expect(code, chemin).not.toContain("resoudreContactActif");
+      const perimetre = LECTURE_NAVIGATION[chemin];
+      if (perimetre) {
+        const writer = code.match(perimetre)?.[0] ?? "";
+        expect(writer.length, chemin).toBeGreaterThan(0);
+        expect(writer, chemin).not.toContain("resoudreContactActif");
+        expect(code.match(/resoudreContactActif\(/g)?.length, chemin).toBe(1);
+        expect(code, chemin).toMatch(/export async function getNavigationContact\w+\([\s\S]*?resoudreContactActif\(/);
+      } else {
+        expect(code, chemin).not.toContain("resoudreContactActif");
+      }
     }
   });
 

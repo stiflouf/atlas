@@ -5,7 +5,7 @@ import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
 import AcquereurHero from "@/components/client/AcquereurHero";
 import RattachementContactSection from "@/components/contact/RattachementContactSection";
-import { getContactCanoniqueDeLAcquereur } from "@/lib/clientRepository";
+import { getNavigationContactDeLAcquereur } from "@/lib/clientRepository";
 import { rechercherContactsCandidats } from "@/lib/rattachementContact";
 import {
   creerContactDepuisAcquereurAction,
@@ -78,7 +78,9 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   // ADR-055 §H — le pont, lu pour savoir s'il reste un geste de rattachement à proposer. Les
   // candidats ne sont cherchés que si l'humain a tapé quelque chose : rien n'est suggéré d'office,
   // et surtout rien n'est rapproché tout seul.
-  const contactCanonique = await getContactCanoniqueDeLAcquereur(client.id);
+  // ADR-059 — et, s'il existe, le Contact ACTIF final vers lequel « Voir le contact » navigue :
+  // résolu par le repository, jamais ici.
+  const { contactId: contactCanonique, contactActifId } = await getNavigationContactDeLAcquereur(client.id);
   const candidatsContact =
     contactCanonique === undefined && q ? await rechercherContactsCandidats(q, await exigerWorkspaceCourant()) : [];
 
@@ -190,7 +192,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
       </Link>
 
       <div className="mb-4">
-        <AcquereurHero client={client} />
+        <AcquereurHero client={client} contactActifId={contactActifId} />
       </div>
 
       {/* ADR-055 §H — proposé UNIQUEMENT tant que le dossier n'est rattaché à personne. Une fois

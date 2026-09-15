@@ -8,6 +8,15 @@
 // `workspaceId` n'apparaît volontairement pas ici : l'appartenance est une propriété
 // d'infrastructure (ADR-054), pas une donnée métier affichable — même choix que `Bien` et
 // `ProfilAcquereur`, qui ne l'exposent pas non plus.
+// ADR-059 — ce qu'un DOSSIER historique sait de sa personne, pour naviguer : le pont tel qu'il est
+// stocké (`contactId`, lu pour savoir s'il reste un rattachement à proposer) et le Contact ACTIF
+// final résolu en suivant la chaîne de fusion (`contactActifId`, la seule destination d'un lien
+// « Voir le contact »). Absents ensemble pour un dossier non rattaché.
+export type NavigationContactDossier = {
+  contactId?: string;
+  contactActifId?: string;
+};
+
 export type Contact = {
   id: string;
   // Seul champ obligatoire : c'est le seul que les deux modèles historiques garantissent (voir le

@@ -654,6 +654,15 @@ réécriture vers le survivant : un writer qui vise un absorbé est refusé. Seu
 repointe un absorbé (garde structurelle `contactActif.structurel.test.ts`, inventaire des writers).
 Mapping ligne → `Contact` partagé : `contactDepuisLigne` (`lib/contactFusion.ts`).
 
+**Navigation dossier → Contact actif (`getNavigationContactDeLAcquereur` / `getNavigationContactDuProspectVendeur`).**
+Lecture pure des repositories de dossier : `{ contactId, contactActifId }` — le pont stocké (sert à
+décider si un rattachement reste à proposer) et le Contact ACTIF final résolu par
+`resoudreContactActif` dans le workspace du dossier (2 requêtes pour un contact actif, + 1 par
+maillon de chaîne). Les fiches `/clients/[id]` et `/prospects-vendeurs/[id]` en tirent le bouton
+« Voir le contact » → `/contacts/{contactActifId}` ; aucun bouton sans rattachement ; un pont
+incohérent (contact introuvable, chaîne invalide) lève une erreur contrôlée, jamais un lien
+fabriqué. Aucune correction du dossier : un dossier qui pointerait un absorbé n'est pas réécrit.
+
 **Préparation d'une fusion (`preparerFusionContacts`, `lib/preparationFusionContactRepository.ts`).**
 Read model de l'écran de comparaison, 7 requêtes fixes : les deux Contacts du workspace (sinon
 `contact_introuvable`, `meme_contact`, `deja_fusionne`), identités attendues avec `modifie_le`,

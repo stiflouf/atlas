@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import ProspectVendeurHero from "@/components/prospectVendeur/ProspectVendeurHero";
 import RattachementContactSection from "@/components/contact/RattachementContactSection";
-import { getContactCanoniqueDuProspectVendeur } from "@/lib/prospectVendeurRepository";
+import { getNavigationContactDuProspectVendeur } from "@/lib/prospectVendeurRepository";
 import { rechercherContactsCandidats } from "@/lib/rattachementContact";
 import {
   creerContactDepuisProspectVendeurAction,
@@ -67,7 +67,9 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
 
   // ADR-055 §H — même geste que côté acquéreur, mêmes primitives : une personne n'a pas deux
   // manières d'être rattachée selon le rôle sous lequel on la regarde.
-  const contactCanonique = await getContactCanoniqueDuProspectVendeur(prospect.id);
+  // ADR-059 — et le Contact ACTIF final vers lequel « Voir le contact » navigue, résolu par le
+  // repository.
+  const { contactId: contactCanonique, contactActifId } = await getNavigationContactDuProspectVendeur(prospect.id);
   const candidatsContact =
     contactCanonique === undefined && q ? await rechercherContactsCandidats(q, await exigerWorkspaceCourant()) : [];
 
@@ -112,7 +114,7 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
 
       <div className="mb-4">
         <div className="bg-surface border border-border rounded-xl shadow-[0_2px_8px_rgba(18,32,56,0.06)] overflow-hidden">
-          <ProspectVendeurHero prospect={prospect} />
+          <ProspectVendeurHero prospect={prospect} contactActifId={contactActifId} />
           <ProspectVendeurProgression jalons={parcours} />
         </div>
       </div>

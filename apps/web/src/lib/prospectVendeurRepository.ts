@@ -1,6 +1,8 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { exigerContactActif } from "@/lib/contactActif";
+import { resoudreContactActif } from "@/lib/contactRepository";
+import type { NavigationContactDossier } from "@/types/contact";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
 import { creerMandat } from "@/lib/mandatRepository";
@@ -159,6 +161,27 @@ export async function rechercherProspectsVendeurs(params: { q?: string; vue: Vue
 // ADR-055 — pendant vendeur de `getContactCanoniqueDeLAcquereur`, même rationale : le pont vers
 // l'identité canonique n'a pas à voyager sur le type que lisent les écrans. `undefined` = ligne
 // inexistante OU non rattachée ; dans les deux cas, rien de canonique n'est écrit.
+// ADR-059 — même règle que `getNavigationContactDeLAcquereur` : Contact ACTIF final résolu par
+// `resoudreContactActif` dans le workspace du dossier, lecture pure, erreur contrôlée sur un pont
+// incohérent.
+export async function getNavigationContactDuProspectVendeur(
+  prospectVendeurId: string,
+  executeur: Executeur = getDb()
+): Promise<NavigationContactDossier> {
+  if (!UUID_REGEX.test(prospectVendeurId)) return {};
+  const [ligne] = await executeur
+    .select({ contactId: prospectsVendeursTable.contactId, workspaceId: prospectsVendeursTable.workspaceId })
+    .from(prospectsVendeursTable)
+    .where(eq(prospectsVendeursTable.id, prospectVendeurId))
+    .limit(1);
+  if (!ligne?.contactId) return {};
+  const resolution = await resoudreContactActif(ligne.contactId, ligne.workspaceId, executeur);
+  if (resolution.statut !== "actif") {
+    throw new Error(`Contact canonique incohérent pour le dossier vendeur ${prospectVendeurId} (${resolution.statut})`);
+  }
+  return { contactId: ligne.contactId, contactActifId: resolution.contact.id };
+}
+
 export async function getContactCanoniqueDuProspectVendeur(
   prospectVendeurId: string,
   executeur: Executeur = getDb()

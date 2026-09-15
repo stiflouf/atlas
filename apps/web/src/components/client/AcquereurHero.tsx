@@ -29,7 +29,9 @@ function formatDate(iso: string): string {
 // déjà fonctionnelles (inchangées, reprises telles qu'elles existaient avant ce chantier). Aucune
 // maturité commerciale/score/priorité/urgence inventée : stadeProjet est le seul statut réel
 // disponible sur ProfilAcquereur.
-export default function AcquereurHero({ client }: { client: ProfilAcquereur }) {
+// ADR-059 — `contactActifId` : le Contact ACTIF final de ce dossier, résolu par le read model. Absent
+// pour un dossier non rattaché : aucun bouton, ni lien muet, ni mention technique.
+export default function AcquereurHero({ client, contactActifId }: { client: ProfilAcquereur; contactActifId?: string }) {
   const clientReel = UUID_REGEX.test(client.id);
   const actif = !client.archiveLe;
 
@@ -72,6 +74,11 @@ export default function AcquereurHero({ client }: { client: ProfilAcquereur }) {
             <ButtonLink href={`/clients/${client.id}/modifier`} variant="secondary" size="md">
               Modifier
             </ButtonLink>
+            {contactActifId && (
+              <ButtonLink href={`/contacts/${contactActifId}`} variant="secondary" size="md">
+                Voir le contact
+              </ButtonLink>
+            )}
             <form action={client.archiveLe ? desarchiverAcquereurAction : archiverAcquereurAction}>
               <input type="hidden" name="id" value={client.id} />
               <Button type="submit" variant="ghost" size="md">

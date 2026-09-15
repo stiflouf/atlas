@@ -1,6 +1,8 @@
 import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { exigerContactActif } from "@/lib/contactActif";
+import { resoudreContactActif } from "@/lib/contactRepository";
+import type { NavigationContactDossier } from "@/types/contact";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
 import { resoudreSourcesCriteres } from "@/lib/criteresAcquereurEffectifs";
@@ -183,6 +185,29 @@ export async function rechercherAcquereursPage(params: {
 // `undefined` couvre DEUX cas volontairement indistincts ici — acquéreur inexistant, et acquéreur
 // existant mais non rattaché (toutes les lignes antérieures à ADR-055). L'appelant n'en fait qu'une
 // chose : ne rien écrire de canonique. Aucun repli mock : ce chemin ne sert pas l'affichage.
+// ADR-059 — la destination de « Voir le contact » depuis un dossier : le Contact ACTIF final,
+// résolu par la seule primitive de parcours du produit (`resoudreContactActif`), dans le workspace
+// du dossier. Lecture pure : un dossier qui pointerait encore un absorbé n'est pas corrigé ici.
+// Un pont vers un contact introuvable ou une chaîne invalide est une corruption de l'identité
+// canonique du dossier : erreur contrôlée, jamais un lien fabriqué ni un bouton muet.
+export async function getNavigationContactDeLAcquereur(
+  acquereurId: string,
+  executeur: Executeur = getDb()
+): Promise<NavigationContactDossier> {
+  if (!UUID_REGEX.test(acquereurId)) return {};
+  const [ligne] = await executeur
+    .select({ contactId: acquereursTable.contactId, workspaceId: acquereursTable.workspaceId })
+    .from(acquereursTable)
+    .where(eq(acquereursTable.id, acquereurId))
+    .limit(1);
+  if (!ligne?.contactId) return {};
+  const resolution = await resoudreContactActif(ligne.contactId, ligne.workspaceId, executeur);
+  if (resolution.statut !== "actif") {
+    throw new Error(`Contact canonique incohérent pour le dossier acquéreur ${acquereurId} (${resolution.statut})`);
+  }
+  return { contactId: ligne.contactId, contactActifId: resolution.contact.id };
+}
+
 export async function getContactCanoniqueDeLAcquereur(
   acquereurId: string,
   executeur: Executeur = getDb()

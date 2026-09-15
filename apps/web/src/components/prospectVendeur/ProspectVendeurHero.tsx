@@ -26,7 +26,9 @@ function initiales(prospect: ProspectVendeur): string {
 //
 // Pas de carte ici : la page englobe hero + rail de progression dans un seul conteneur, pour qu'ils
 // se lisent comme un bloc unique.
-export default function ProspectVendeurHero({ prospect }: { prospect: ProspectVendeur }) {
+// ADR-059 — `contactActifId` : le Contact ACTIF final de ce dossier, résolu par le read model. Absent
+// pour un dossier non rattaché : aucun bouton.
+export default function ProspectVendeurHero({ prospect, contactActifId }: { prospect: ProspectVendeur; contactActifId?: string }) {
   const statut = deriverStatutProspectVendeur(prospect);
   const prospectReel = UUID_REGEX.test(prospect.id);
   const actif = !prospect.archiveLe && statut !== "perdu" && statut !== "mandat_signe";
@@ -107,6 +109,11 @@ export default function ProspectVendeurHero({ prospect }: { prospect: ProspectVe
           <ButtonLink href={`/prospects-vendeurs/${prospect.id}/modifier`} variant="secondary" size="md">
             Modifier
           </ButtonLink>
+          {contactActifId && (
+            <ButtonLink href={`/contacts/${contactActifId}`} variant="secondary" size="md">
+              Voir le contact
+            </ButtonLink>
+          )}
         </div>
       </div>
 
