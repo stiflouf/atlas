@@ -89,6 +89,16 @@ justifieront qu'avec la recherche par personne et le rapprochement assisté.
 La règle de source vit dans un module unique, consommé par la projection d'affichage et par
 l'écriture — jamais réimplémentée.
 
+### Addendum — la recherche des listes lit la même source (2026-09-15)
+
+Les listes `/clients` et `/prospects-vendeurs` projetaient l'identité effective mais filtraient `q`
+sur l'instantané du dossier : une ligne affichée « Alice » ne se retrouvait qu'en tapant « Bob ».
+Le prédicat de recherche applique désormais les points 1 à 3 en SQL —
+`CASE WHEN contact_id IS NOT NULL THEN contact.x ELSE dossier.x END`, jamais `COALESCE` — sur
+`nom`, `prenom`, `email`, `telephone`. **Identité affichée = identité recherchée.** Conséquence
+assumée : un dossier rattaché n'est plus trouvable par son ancien nom ni son ancien email, même si
+le Contact n'a pas d'email.
+
 ## Invariants
 
 1. Un dossier rattaché ne voit jamais son identité lue ailleurs que sur son Contact.

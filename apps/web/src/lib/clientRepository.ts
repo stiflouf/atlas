@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { exigerContactActif } from "@/lib/contactActif";
 import { resoudreContactActif } from "@/lib/contactRepository";
@@ -6,7 +6,12 @@ import type { NavigationContactDossier } from "@/types/contact";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
 import { resoudreSourcesCriteres } from "@/lib/criteresAcquereurEffectifs";
-import { resoudreSourcesIdentiteAcquereur } from "@/lib/identiteContactEffective";
+import {
+  filtreIdentiteEffective,
+  identiteEffectiveSql,
+  joindreContactCanonique,
+  resoudreSourcesIdentiteAcquereur,
+} from "@/lib/identiteContactEffective";
 import type { ProfilAcquereur, StadeProjet } from "@/types/client";
 import type { PageResultat } from "@/types/pagination";
 
@@ -146,6 +151,10 @@ export async function listerClientsArchives(): Promise<ProfilAcquereur[]> {
 // premier, cohérent avec la lecture habituelle d'une liste), `id DESC` en tie-breaker pour deux
 // lignes insérées à la même transaction/même timestamp — jamais un ordre implicite non déterministe
 // qui déplacerait silencieusement des lignes d'une page à l'autre.
+//
+// ADR-057 — le filtre `q` porte sur l'identité EFFECTIVE (Contact pour un dossier rattaché,
+// instantané sinon), c'est-à-dire sur ce que la liste affiche : chercher « Bob » ne remonte plus une
+// ligne rendue « Alice ». Filtre en SQL, avant LIMIT/OFFSET et dans le COUNT — jamais en mémoire.
 export async function rechercherAcquereursPage(params: {
   q?: string;
   archives: boolean;
@@ -155,7 +164,7 @@ export async function rechercherAcquereursPage(params: {
   const texte = params.q?.trim();
   const conditionArchive = params.archives ? isNotNull(acquereursTable.archiveLe) : isNull(acquereursTable.archiveLe);
   const conditionTexte: SQL | undefined = texte
-    ? or(ilike(acquereursTable.nom, `%${texte}%`), ilike(acquereursTable.prenom, `%${texte}%`))
+    ? filtreIdentiteEffective(texte, identiteEffectiveSql(acquereursTable.contactId, acquereursTable))
     : undefined;
   const conditions = conditionTexte ? and(conditionArchive, conditionTexte) : conditionArchive;
 
@@ -163,14 +172,12 @@ export async function rechercherAcquereursPage(params: {
   const offset = (page - 1) * params.parPage;
 
   const [lignes, [{ total }]] = await Promise.all([
-    getDb()
-      .select()
-      .from(acquereursTable)
+    joindreContactCanonique(getDb().select(getTableColumns(acquereursTable)).from(acquereursTable).$dynamic(), acquereursTable.contactId)
       .where(conditions)
       .orderBy(desc(acquereursTable.creeLe), desc(acquereursTable.id))
       .limit(params.parPage)
       .offset(offset),
-    getDb().select({ total: count() }).from(acquereursTable).where(conditions),
+    joindreContactCanonique(getDb().select({ total: count() }).from(acquereursTable).$dynamic(), acquereursTable.contactId).where(conditions),
   ]);
 
   return { lignes: await appliquerCriteresEffectifs(lignes.map(ligneVersAcquereur)), total };

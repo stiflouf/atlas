@@ -986,7 +986,10 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   — testée fiable en usage réel mais sans garantie de disponibilité annoncée par le fournisseur.
 - **Recherche + pagination serveur résolues sur `/biens`, `/clients`, `/prospects-vendeurs`
   (ADR-048)** — `q`/`page` en plus des filtres `archives`/`vue` existants, ordre déterministe
-  `creeLe DESC, id DESC`. **Toujours sans pagination** : tâches (aucune page de liste n'existe),
+  `creeLe DESC, id DESC`. Sur `/clients` et `/prospects-vendeurs`, `q` cherche l'identité
+  **effective** (Contact pour un dossier rattaché — ADR-057, addendum), sur nom, prénom, email et
+  téléphone ; toujours pas de nom complet concaténé ni de normalisation (contrairement à `/contacts`,
+  ADR-058). **Toujours sans pagination** : tâches (aucune page de liste n'existe),
   notes, comptes rendus (listes toujours scopées à un bien/acquéreur, volume naturellement borné),
   et les `<select>` de contexte sur `/offres/nouveau`/`/compromis/nouveau`/`/taches/nouveau`
   (friction réelle déjà observée — pollution par des lignes de test dans le sélecteur — mais un

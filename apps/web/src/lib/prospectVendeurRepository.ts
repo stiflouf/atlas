@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, getTableColumns } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { exigerContactActif } from "@/lib/contactActif";
 import { resoudreContactActif } from "@/lib/contactRepository";
@@ -7,7 +7,12 @@ import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
 import { creerMandat } from "@/lib/mandatRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
-import { resoudreSourcesIdentiteProspectVendeur } from "@/lib/identiteContactEffective";
+import {
+  filtreIdentiteEffective,
+  identiteEffectiveSql,
+  joindreContactCanonique,
+  resoudreSourcesIdentiteProspectVendeur,
+} from "@/lib/identiteContactEffective";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import type { NouveauProspectVendeur, ProspectVendeur } from "@/types/prospectVendeur";
 import type { TypeBien } from "@/types/bien";
@@ -143,15 +148,20 @@ export async function listerProspectsVendeursArchives(): Promise<ProspectVendeur
 // déjà filtrée/recherchée/ordonnée permet à la page d'appliquer ce tri métier existant sur
 // l'ensemble des résultats avant de découper la page demandée, sans le dupliquer ni le déplacer.
 // Volume réaliste mono-conseiller (quelques centaines de lignes) : sans coût mesurable.
+//
+// ADR-057 — le filtre `q` porte sur l'identité EFFECTIVE (Contact pour un prospect rattaché,
+// instantané sinon), même règle SQL que `rechercherAcquereursPage` : la liste se cherche par ce
+// qu'elle affiche. Le filtre par vue, lui, reste en mémoire (statut jamais stocké, voir ci-dessus).
 export async function rechercherProspectsVendeurs(params: { q?: string; vue: VueProspectVendeur }): Promise<ProspectVendeur[]> {
   const texte = params.q?.trim();
   const conditionTexte = texte
-    ? or(ilike(prospectsVendeursTable.nom, `%${texte}%`), ilike(prospectsVendeursTable.prenom, `%${texte}%`))
+    ? filtreIdentiteEffective(texte, identiteEffectiveSql(prospectsVendeursTable.contactId, prospectsVendeursTable))
     : undefined;
 
-  const lignes = await getDb()
-    .select()
-    .from(prospectsVendeursTable)
+  const lignes = await joindreContactCanonique(
+    getDb().select(getTableColumns(prospectsVendeursTable)).from(prospectsVendeursTable).$dynamic(),
+    prospectsVendeursTable.contactId
+  )
     .where(conditionTexte)
     .orderBy(desc(prospectsVendeursTable.creeLe), desc(prospectsVendeursTable.id));
 

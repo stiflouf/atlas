@@ -757,6 +757,19 @@ est transverse et ignore les rôles — il n'existe qu'un seul `UPDATE contacts`
 numéro depuis la fiche vendeur le corrige aussi pour le parcours acquéreur, sans qu'aucun des deux
 dossiers legacy ne soit réécrit. C'est la promesse d'ADR-055 §A, rendue observable par un test.
 
+**La recherche `q` des listes cherche l'identité EFFECTIVE** (`rechercherAcquereursPage()`,
+`rechercherProspectsVendeurs()`). La même règle, exprimée en SQL dans `lib/identiteContactEffective.ts`
+(`identiteEffectiveSql`, `joindreContactCanonique`, `filtreIdentiteEffective`) :
+`CASE WHEN contact_id IS NOT NULL THEN contact.x ELSE dossier.x END` sur `nom`, `prenom`, `email`,
+`telephone`, en `ILIKE '%q%'` — jamais un `COALESCE`, qui serait le repli champ par champ interdit
+ci-dessus. Un dossier rattaché se retrouve donc par ce que la liste affiche, plus jamais par son
+instantané legacy ; un Contact sans email ne se retrouve pas par l'ancienne adresse du dossier.
+Le filtre s'applique avant `LIMIT`/`OFFSET` et dans le `COUNT`, l'unité de résultat reste le
+dossier (deux dossiers d'un même Contact = deux lignes), et le Contact lu est celui que la FK
+référence — aucune résolution de chaîne de fusion par ligne (le moteur repointe les dossiers vers le
+survivant). `LEFT JOIN` sur la PK de `contacts`, aucun index ajouté : `ILIKE '%q%'` reste un
+parcours séquentiel avec ou sans jointure (ADR-048).
+
 **Deux trous préexistants fermés au passage** : `modifierProspectVendeurAction` n'exigeait aucun
 workspace, et `modifierProspectVendeur` n'était ni transactionnel ni filtré par périmètre. Les deux
 le sont désormais, comme leurs pendants acquéreur.

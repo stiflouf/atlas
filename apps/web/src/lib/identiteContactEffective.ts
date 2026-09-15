@@ -1,5 +1,5 @@
-import { eq, inArray } from "drizzle-orm";
-import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
+import { eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
+import type { AnyPgColumn, PgSelect, PgTable } from "drizzle-orm/pg-core";
 import { getDb, type Executeur } from "@/db/client";
 import {
   acquereurs as acquereursTable,
@@ -111,6 +111,67 @@ async function resoudreSources(
       return [ligne.dossierId, source];
     })
   );
+}
+
+// ADR-057, LA MÊME RÈGLE, EN SQL — pour qu'un WHERE cherche ce que l'écran affiche. Une liste qui
+// projette l'identité du Contact mais filtre sur l'instantané du dossier montre « Alice » et exige
+// qu'on tape « Bob » pour la retrouver. Le prédicat doit lire la même source que la projection.
+//
+// `CASE WHEN contact_id IS NOT NULL THEN contact.x ELSE dossier.x END`, jamais
+// `COALESCE(contact.x, dossier.x)` : un COALESCE serait le repli champ par champ qu'ADR-057 interdit.
+// Un Contact sans email ne se retrouve PAS par l'ancienne adresse du dossier — c'est voulu.
+//
+// Le Contact lu est celui que la FK référence, sans résolution de chaîne de fusion : le moteur
+// repointe les dossiers vers le survivant, et une résolution par ligne ferait un N+1 dans une liste.
+export type ColonnesIdentiteDossier = {
+  nom: AnyPgColumn;
+  prenom: AnyPgColumn;
+  email: AnyPgColumn;
+  telephone: AnyPgColumn;
+};
+
+export type IdentiteEffectiveSql = {
+  nom: SQL<string>;
+  prenom: SQL<string | null>;
+  email: SQL<string | null>;
+  telephone: SQL<string | null>;
+};
+
+// Ne vaut qu'après `joindreContactCanonique` sur la même requête : sans la jointure, `contacts.x`
+// n'existe pas dans le FROM et Postgres refuse la requête — jamais un résultat silencieusement faux.
+export function identiteEffectiveSql(colonneContactId: AnyPgColumn, dossier: ColonnesIdentiteDossier): IdentiteEffectiveSql {
+  const effective = <T>(contact: AnyPgColumn, legacy: AnyPgColumn) =>
+    sql<T>`case when ${colonneContactId} is not null then ${contact} else ${legacy} end`;
+  return {
+    nom: effective<string>(contactsTable.nom, dossier.nom),
+    prenom: effective<string | null>(contactsTable.prenom, dossier.prenom),
+    email: effective<string | null>(contactsTable.email, dossier.email),
+    telephone: effective<string | null>(contactsTable.telephone, dossier.telephone),
+  };
+}
+
+// LEFT JOIN sur la PK de `contacts` : jamais de multiplication de lignes, l'unité de résultat
+// reste le dossier. Posé ici, avec l'autre jointure dossier → contact, pour que la règle de source
+// reste écrite en un seul module.
+//
+// Le type de ligne ne change pas : l'appelant sélectionne explicitement ses colonnes de dossier (et
+// non `select()` nu, qui imbriquerait `{ acquereurs, contacts }`). Drizzle ne sait pas l'exprimer
+// pour un `T` générique, d'où la conversion.
+export function joindreContactCanonique<T extends PgSelect>(requete: T, colonneContactId: AnyPgColumn): T {
+  return requete.leftJoin(contactsTable, eq(colonneContactId, contactsTable.id)) as unknown as T;
+}
+
+// Recherche « contient », insensible à la casse, sur les quatre champs effectifs — même forme que la
+// recherche ADR-048 (ILIKE, sans concaténation ni normalisation), simplement rebranchée sur la bonne
+// source. Aucun rapprochement : c'est un filtre d'affichage, pas une déduplication.
+export function filtreIdentiteEffective(texte: string, identite: IdentiteEffectiveSql): SQL {
+  const motif = `%${texte}%`;
+  return or(
+    ilike(identite.nom, motif),
+    ilike(identite.prenom, motif),
+    ilike(identite.email, motif),
+    ilike(identite.telephone, motif)
+  )!;
 }
 
 // Absence de ligne pour un id : dossier non persisté (jeu de démonstration servi avant toute
