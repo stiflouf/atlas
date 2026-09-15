@@ -117,9 +117,10 @@ describe("ADR-059 — lecteurs de contacts actifs", () => {
     expect(lire("lib", "similariteContactRepository.ts").match(/isNull\(contactsTable\.fusionneDansContactId\)/g)?.length).toBe(2);
   });
 
-  it("le rattachement refuse un contact absorbé comme destination", () => {
+  it("le rattachement refuse un contact absorbé comme destination, par la garde partagée sous verrou", () => {
     const code = lire("lib", "rattachementContact.ts");
-    expect(code).toMatch(/contact\.fusionneDansContactId !== null\) return \{ statut: "contact_introuvable" \}/);
+    expect(code).toContain("const contact = await verrouillerContactActif(contactId, executeur);");
+    expect(code).toContain('if (contact.statut !== "actif") return { statut: "contact_introuvable" };');
   });
 });
 

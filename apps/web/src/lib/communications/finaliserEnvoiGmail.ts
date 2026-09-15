@@ -1,6 +1,7 @@
 import { getDb } from "@/db/client";
 import { getContactCanoniqueDeLAcquereur } from "@/lib/clientRepository";
 import { getContactCanoniqueDuProspectVendeur } from "@/lib/prospectVendeurRepository";
+import { ErreurContactFusionne } from "@/lib/contactActif";
 import { creerInteraction } from "@/lib/interactionRepository";
 import {
   enregistrerReferenceExterne,
@@ -39,7 +40,12 @@ export type ResultatFinalisationCanonique =
   | { statut: "deja_ingere"; interactionId: string }
   // Aucun contact canonique : le destinataire n'est pas rattaché, ou n'est pas un type supporté.
   // Ce n'est PAS une erreur — c'est l'état de toutes les lignes antérieures à ADR-055.
-  | { statut: "aucun_contact_canonique" };
+  | { statut: "aucun_contact_canonique" }
+  // ADR-059 §10 — l'email est PARTI (Google l'a confirmé, l'audit `envois_email` est déjà réussi),
+  // mais le contact que le dossier désignait a été absorbé entre la construction de l'envoi et sa
+  // finalisation. Aucune interaction n'est écrite — ni sur l'absorbé (figé), ni sur le survivant
+  // (l'envoi a été décidé dans un contexte devenu périmé ; réécrire la cible masquerait la course).
+  | { statut: "email_envoye_contact_fusionne"; contactId: string };
 
 // Le pont vers l'identité canonique, lu en COLONNE et jamais déduit. Aucun repli par email,
 // téléphone ou nom : deux personnes peuvent partager une adresse, une adresse peut changer de
@@ -106,10 +112,16 @@ export async function finaliserEnvoiGmailReussi(input: {
     // `interactions` n'a pas de champ `sujet`. Recopier l'objet dans `contenu` le ferait passer
     // pour le message. L'interaction affirme ce qui est durablement vrai : qui, quoi, quand, dans
     // quel sens.
-    const interaction = await creerInteraction(
-      { contactId, type: "email", sens: "sortant", survenuLe: input.survenuLe },
-      tx
-    );
+    // `creerInteraction` lit le contact SOUS VERROU : une fusion concurrente est soit déjà commise
+    // (contact absorbé → refus explicite ci-dessous), soit en attente de notre verrou (elle
+    // repointera cette interaction vers le survivant). Jamais un échange orphelin sur un absorbé.
+    let interaction;
+    try {
+      interaction = await creerInteraction({ contactId, type: "email", sens: "sortant", survenuLe: input.survenuLe }, tx);
+    } catch (erreur) {
+      if (erreur instanceof ErreurContactFusionne) return { statut: "email_envoye_contact_fusionne", contactId } as const;
+      throw erreur;
+    }
 
     // La contrainte UNIQUE (workspace, fournisseur, type, id externe) est ce qui tient l'invariant
     // « un message Gmail, une interaction » face à deux finalisations concurrentes : la seconde

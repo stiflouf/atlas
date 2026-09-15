@@ -643,6 +643,17 @@ changés) → `marquerContactFusionne` (second et dernier writer de `contacts`) 
 repointés. La seule porte vers le moteur est la Server Action `fusionnerContactsAction` (page
 `/contacts/[id]/fusionner/[absorbeId]`), qui l'appelle une fois par soumission (garde structurelle).
 
+**Gardes d'écriture post-fusion (`lib/contactActif.ts`, ADR-059 §10).** `verrouillerContactActif(contactId,
+executeur, workspaceId?)` lit la ligne `contacts` en `SELECT … FOR UPDATE` et rend `actif` (contact +
+workspace) / `introuvable` (inconnu, id invalide, ou autre workspace si un workspace est demandé) /
+`fusionne` ; `exigerContactActif` lève `Error("Contact introuvable …")` ou `ErreurContactFusionne`.
+Appelée dans une transaction (savepoint si l'appelant en a une) par `creerInteraction`,
+`ajouterPartieProjet`, `enregistrerReferenceExterne` et `verrouillerChamp` (cible contact seulement),
+`creerAcquereur` / `creerProspectVendeur` (si `contactId` fourni) et `rattacher*`. Jamais de
+réécriture vers le survivant : un writer qui vise un absorbé est refusé. Seul `fusionnerContacts`
+repointe un absorbé (garde structurelle `contactActif.structurel.test.ts`, inventaire des writers).
+Mapping ligne → `Contact` partagé : `contactDepuisLigne` (`lib/contactFusion.ts`).
+
 **Préparation d'une fusion (`preparerFusionContacts`, `lib/preparationFusionContactRepository.ts`).**
 Read model de l'écran de comparaison, 7 requêtes fixes : les deux Contacts du workspace (sinon
 `contact_introuvable`, `meme_contact`, `deja_fusionne`), identités attendues avec `modifie_le`,

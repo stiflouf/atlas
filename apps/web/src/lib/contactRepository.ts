@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { contacts as contactsTable } from "@/db/schema";
-import { estContactFusionne, MAX_CHAINE_FUSION } from "@/lib/contactFusion";
+import { contactDepuisLigne, estContactFusionne, MAX_CHAINE_FUSION } from "@/lib/contactFusion";
 import { verrouillerChamp } from "@/lib/provenance/champVerrouilleRepository";
 import type { Contact } from "@/types/contact";
 
@@ -15,17 +15,7 @@ type LigneContact = typeof contactsTable.$inferSelect;
 // NULL Postgres -> undefined métier, jamais une chaîne vide : un contact sans email n'a pas
 // d'email, il n'en a pas un qui serait "" (même traduction que ligneVersBien).
 function ligneVersContact(ligne: LigneContact): Contact {
-  return {
-    id: ligne.id,
-    nom: ligne.nom,
-    prenom: ligne.prenom ?? undefined,
-    email: ligne.email ?? undefined,
-    telephone: ligne.telephone ?? undefined,
-    creeLe: ligne.creeLe.toISOString(),
-    modifieLe: ligne.modifieLe.toISOString(),
-    fusionneDansContactId: ligne.fusionneDansContactId ?? undefined,
-    fusionneLe: ligne.fusionneLe?.toISOString(),
-  };
+  return contactDepuisLigne(ligne);
 }
 
 export type NouveauContact = Omit<Contact, "id" | "creeLe" | "modifieLe" | "fusionneDansContactId" | "fusionneLe">;

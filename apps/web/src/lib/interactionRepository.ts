@@ -1,8 +1,8 @@
 import { asc, desc, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
+import { exigerContactActif } from "@/lib/contactActif";
 import {
   biens as biensTable,
-  contacts as contactsTable,
   interactions as interactionsTable,
   projetsAcquereur as projetsAcquereurTable,
   projetsVendeur as projetsVendeurTable,
@@ -92,28 +92,28 @@ async function workspaceDuContexte(
 // Quand un contexte est fourni, les deux périmètres doivent coïncider : la base ne peut pas le
 // vérifier (aucune des deux tables ne porte le workspace côté interaction), donc ce chemin le fait
 // et échoue bruyamment. Même garde et même raison que `ajouterPartieProjet` et `creerMandat`.
+// ADR-059 §10 — le contact est lu SOUS VERROU dans une transaction (savepoint si l'appelant en a
+// déjà une) : un contact absorbé refuse l'échange (`ErreurContactFusionne`), et une fusion
+// concurrente ne peut pas laisser un échange orphelin sur l'absorbé — soit il est repointé par le
+// moteur, soit il est refusé. Jamais réécrit vers le survivant.
 export async function creerInteraction(
   input: NouvelleInteraction,
   executeur: Executeur = getDb()
 ): Promise<Interaction> {
-  const [contact] = await executeur
-    .select({ workspaceId: contactsTable.workspaceId })
-    .from(contactsTable)
-    .where(eq(contactsTable.id, input.contactId))
-    .limit(1);
-  if (!contact) throw new Error(`Contact introuvable : ${input.contactId}`);
+  return executeur.transaction(async (tx) => {
+  const { workspaceId: workspaceContact } = await exigerContactActif(input.contactId, tx);
 
-  const contexte = await workspaceDuContexte(input, executeur);
+  const contexte = await workspaceDuContexte(input, tx);
   if (!contexte.trouve) {
     throw new Error(
       `Contexte introuvable : ${input.projetAcquereurId ?? input.projetVendeurId ?? input.bienId}`
     );
   }
-  if (contexte.workspaceId !== undefined && contexte.workspaceId !== contact.workspaceId) {
+  if (contexte.workspaceId !== undefined && contexte.workspaceId !== workspaceContact) {
     throw new Error("Une interaction ne peut pas relier un contact et un contexte de workspaces différents");
   }
 
-  const [ligne] = await executeur
+  const [ligne] = await tx
     .insert(interactionsTable)
     .values({
       contactId: input.contactId,
@@ -127,6 +127,7 @@ export async function creerInteraction(
     })
     .returning();
   return ligneVersInteraction(ligne);
+  });
 }
 
 export async function getInteractionById(id: string): Promise<Interaction | undefined> {

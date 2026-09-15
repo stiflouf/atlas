@@ -1203,7 +1203,15 @@ ouvert :
   physiquement (seule suppression du produit, tracée) et un rôle principal l'emporte mécaniquement
   (`acquereur` > `co_acquereur`, `vendeur` > `co_vendeur`) sans question posée ; un refus renvoie
   sur la page de comparaison avec un message, l'humain recommence (aucune relance automatique) ;
-  une chaîne invalide en lecture lève une erreur contrôlée.
+  une chaîne invalide en lecture lève une erreur contrôlée. Un Contact absorbé est **figé** : tout
+  writer métier recevant son id est refusé (`ErreurContactFusionne`), sans réécriture vers le
+  survivant — un appelant qui travaille sur un état périmé doit relire. **Envoi Gmail concurrent
+  d'une fusion** : l'email part, l'audit `envois_email` est réussi, mais si le contact du dossier a
+  été absorbé entre-temps la finalisation rend `email_envoye_contact_fusionne` et n'écrit aucune
+  interaction (ni sur l'absorbé, ni sur le survivant) ; l'échange n'apparaît alors sur aucune fiche
+  tant que le message n'est pas finalisé à nouveau. Identité de l'absorbé conservée sur sa ligne et
+  dupliquée dans le journal `contact_fusions` (données personnelles en double, sans mécanisme
+  d'effacement).
 - **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
   historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.

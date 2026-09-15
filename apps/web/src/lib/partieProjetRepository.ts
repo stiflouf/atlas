@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
+import { exigerContactActif } from "@/lib/contactActif";
 import {
-  contacts as contactsTable,
   partiesProjet as partiesProjetTable,
   projetsAcquereur as projetsAcquereurTable,
   projetsVendeur as projetsVendeurTable,
@@ -61,27 +61,26 @@ async function workspaceDuProjet(
 //
 // Les deux lectures se font dans l'`executeur` reçu : dans une transaction, elles voient le contact
 // et le projet qui viennent d'y être créés, et le refus annule tout le reste avec elle.
+// ADR-059 §10 — contact lu SOUS VERROU (transaction ou savepoint) : un absorbé ne participe plus à
+// rien (`ErreurContactFusionne`), et une fusion concurrente ne laisse jamais une participation
+// orpheline sur lui. Jamais réécrit vers le survivant.
 export async function ajouterPartieProjet(
   input: NouvellePartieProjet,
   executeur: Executeur = getDb()
 ): Promise<PartieProjet> {
-  const [contact] = await executeur
-    .select({ workspaceId: contactsTable.workspaceId })
-    .from(contactsTable)
-    .where(eq(contactsTable.id, input.contactId))
-    .limit(1);
-  if (!contact) throw new Error(`Contact introuvable : ${input.contactId}`);
+  return executeur.transaction(async (tx) => {
+  const { workspaceId: workspaceContact } = await exigerContactActif(input.contactId, tx);
 
-  const workspaceProjet = await workspaceDuProjet(input, executeur);
+  const workspaceProjet = await workspaceDuProjet(input, tx);
   if (!workspaceProjet) {
     throw new Error(`Projet introuvable : ${input.projetAcquereurId ?? input.projetVendeurId}`);
   }
 
-  if (contact.workspaceId !== workspaceProjet) {
+  if (workspaceContact !== workspaceProjet) {
     throw new Error("Une partie de projet ne peut pas relier un contact et un projet de workspaces différents");
   }
 
-  const [ligne] = await executeur
+  const [ligne] = await tx
     .insert(partiesProjetTable)
     .values({
       contactId: input.contactId,
@@ -91,6 +90,7 @@ export async function ajouterPartieProjet(
     })
     .returning();
   return ligneVersPartie(ligne);
+  });
 }
 
 // Les deux sens de la relation. Un projet peut avoir plusieurs contacts (couple, coacquéreurs,

@@ -1,5 +1,6 @@
 import { and, eq, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
+import { ErreurContactFusionne, verrouillerContactActif } from "@/lib/contactActif";
 import {
   biens as biensTable,
   champsVerrouilles as champsVerrouillesTable,
@@ -146,24 +147,35 @@ export async function verrouillerChamp(
     throw new Error(`Champ non verrouillable pour ${cible.type} : ${champ}`);
   }
 
-  const workspaceCible = await workspaceDeLaCible(cible, executeur);
-  if (!workspaceCible) throw new Error(`Entité canonique introuvable : ${cible.type} ${cible.id}`);
-  if (workspaceCible !== workspaceId) {
-    throw new Error("Un verrou ne peut pas viser une entité d'un autre workspace");
-  }
+  return executeur.transaction(async (tx) => {
+    // ADR-059 §10 — un contact absorbé est figé : ses verrous historiques restent, aucun nouveau ne
+    // s'y ajoute. La cible contact est lue SOUS VERROU ; les autres cibles ne portent pas cet état.
+    if (cible.type === "contact") {
+      const etat = await verrouillerContactActif(cible.id, tx);
+      if (etat.statut === "introuvable") throw new Error(`Entité canonique introuvable : contact ${cible.id}`);
+      if (etat.statut === "fusionne") throw new ErreurContactFusionne(cible.id);
+      if (etat.workspaceId !== workspaceId) throw new Error("Un verrou ne peut pas viser une entité d'un autre workspace");
+    } else {
+      const workspaceCible = await workspaceDeLaCible(cible, tx);
+      if (!workspaceCible) throw new Error(`Entité canonique introuvable : ${cible.type} ${cible.id}`);
+      if (workspaceCible !== workspaceId) {
+        throw new Error("Un verrou ne peut pas viser une entité d'un autre workspace");
+      }
+    }
 
-  const [existant] = await executeur
-    .select()
-    .from(champsVerrouillesTable)
-    .where(and(filtreCible(cible), eq(champsVerrouillesTable.champ, champ)))
-    .limit(1);
-  if (existant) return ligneVersVerrou(existant);
+    const [existant] = await tx
+      .select()
+      .from(champsVerrouillesTable)
+      .where(and(filtreCible(cible), eq(champsVerrouillesTable.champ, champ)))
+      .limit(1);
+    if (existant) return ligneVersVerrou(existant);
 
-  const [ligne] = await executeur
-    .insert(champsVerrouillesTable)
-    .values({ workspaceId, ...colonnesCible(cible), champ })
-    .returning();
-  return ligneVersVerrou(ligne);
+    const [ligne] = await tx
+      .insert(champsVerrouillesTable)
+      .values({ workspaceId, ...colonnesCible(cible), champ })
+      .returning();
+    return ligneVersVerrou(ligne);
+  });
 }
 
 // Le déverrouillage est un GESTE HUMAIN EXPLICITE (ADR-056 §5, « un override n'est jamais levé

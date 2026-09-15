@@ -55,10 +55,18 @@ Action `fusionnerContactsAction`).
    colonnes d'identité.
 8. **Fusion inter-workspace interdite.** Survivant et absorbé appartiennent au workspace courant.
 9. **Self-merge interdit** (CHECK en base, sur `contacts` et sur `contact_fusions`).
-10. **Un Contact absorbé n'est plus un Contact actif.** Il est exclu des recherches actives
-    (`rechercherContacts`, `rechercherPersonnes`), de la similarité (ni source ni candidat), des
-    candidats de rattachement et des destinations de rattachement ; l'éditeur d'identité le traite
-    comme introuvable et le writer `modifierIdentiteContact` le refuse lui-même.
+10. **Un Contact absorbé n'est plus un Contact actif, et il est FIGÉ.** Il est exclu des recherches
+    actives (`rechercherContacts`, `rechercherPersonnes`), de la similarité (ni source ni candidat),
+    des candidats de rattachement et des destinations de rattachement ; l'éditeur d'identité le
+    traite comme introuvable et le writer `modifierIdentiteContact` le refuse lui-même. **Tout
+    writer métier recevant un `contact_id`** (interaction, partie de projet, référence externe et
+    verrou ciblant un contact, dossier acquéreur ou vendeur créé avec un `contactId`, rattachement)
+    passe par la garde partagée `verrouillerContactActif` / `exigerContactActif`
+    (`lib/contactActif.ts`) : lecture `SELECT … FOR UPDATE` dans la transaction du writer, refus
+    explicite d'un absorbé (`ErreurContactFusionne`), introuvable pour un inconnu ou un autre
+    workspace, **jamais de réécriture silencieuse vers le survivant**. Le verrou de ligne sérialise
+    le writer avec le moteur : soit l'écriture précède la fusion et le moteur la repointe, soit elle
+    la suit et voit l'absorbé. Seul le moteur repointe un absorbé (garde structurelle).
 11. **Le moteur est transactionnel, avec `SELECT … FOR UPDATE`** sur les deux Contacts en une
     instruction, par id croissant (l'ordre de verrou ne dit rien de la direction de fusion) ; refus
     si l'un des deux est déjà absorbé ; refus si l'identité de l'un des deux a changé depuis son
@@ -119,6 +127,16 @@ L'acteur (`sub`, `email`) est un paramètre : aucune session dans le repository.
   identités relues ; UN appel au moteur, jamais de seconde tentative ; succès → fiche du
   survivant ; refus → retour sur la page de comparaison avec un code (`fusion=…`), patron des
   actions de rattachement.
+
+### Finalisation Gmail et fusion concurrente
+
+`finaliserEnvoiGmailReussi` résout le contact depuis `dossier.contact_id` puis crée l'interaction
+sous verrou. Si le contact a été absorbé entre la construction de l'envoi et sa finalisation, le
+résultat est `email_envoye_contact_fusionne` : l'email est bien parti (audit `envois_email` déjà
+réussi), aucune interaction n'est écrite — ni sur l'absorbé (figé), ni sur le survivant (l'envoi a
+été décidé dans un contexte devenu périmé ; le réécrire masquerait la course). Aucune référence
+Gmail n'est créée sans interaction ; une finalisation ultérieure du même message sur le dossier
+repointé produit l'interaction sur le survivant.
 
 ### Lecture d'un Contact absorbé
 

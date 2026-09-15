@@ -1,5 +1,6 @@
 import { and, count, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
+import { exigerContactActif } from "@/lib/contactActif";
 import { acquereurs as acquereursTable } from "@/db/schema";
 import { clients as clientsDemo, getClientById as getClientDemoById } from "@/data/clients";
 import { resoudreSourcesCriteres } from "@/lib/criteresAcquereurEffectifs";
@@ -241,12 +242,17 @@ export type NouvelAcquereur = Omit<ProfilAcquereur, "id" | "prenom" | "email" | 
 // d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
 // la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
 // lieu d'être silencieusement rangé dans le workspace historique.
+// ADR-059 §10 — un dossier ne naît jamais rattaché à un contact absorbé : si un `contactId` est
+// fourni, le contact est lu SOUS VERROU (actif, dans ce workspace) AVANT l'insertion. Sans
+// `contactId`, comportement inchangé.
 export async function creerAcquereur(
   input: NouvelAcquereur,
   workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ProfilAcquereur> {
-  const [ligne] = await executeur
+  return executeur.transaction(async (tx) => {
+  if (input.contactId) await exigerContactActif(input.contactId, tx, workspaceId);
+  const [ligne] = await tx
     .insert(acquereursTable)
     .values({
       workspaceId,
@@ -270,6 +276,7 @@ export async function creerAcquereur(
     })
     .returning();
   return ligneVersAcquereur(ligne);
+  });
 }
 
 // ADR-055 §B — OÙ vont les CRITÈRES de cette modification (l'identité a sa propre cible, voir

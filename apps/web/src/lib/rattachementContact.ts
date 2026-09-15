@@ -1,4 +1,5 @@
 import { and, eq, isNull, or, ilike, type SQL } from "drizzle-orm";
+import { verrouillerContactActif } from "@/lib/contactActif";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { getDb, type Executeur } from "@/db/client";
 import {
@@ -72,14 +73,12 @@ async function rattacher(
 ): Promise<ResultatRattachement> {
   if (!UUID_REGEX.test(dossierId) || !UUID_REGEX.test(contactId)) return { statut: "dossier_introuvable" };
 
-  const [contact] = await executeur
-    .select({ workspaceId: contactsTable.workspaceId, fusionneDansContactId: contactsTable.fusionneDansContactId })
-    .from(contactsTable)
-    .where(eq(contactsTable.id, contactId))
-    .limit(1);
-  // ADR-059 — un contact absorbé n'est plus une destination : on ne rattache jamais un dossier à
-  // une personne dont l'historique continue ailleurs.
-  if (!contact || contact.fusionneDansContactId !== null) return { statut: "contact_introuvable" };
+  // ADR-059 §10 — un contact absorbé n'est plus une destination : on ne rattache jamais un dossier
+  // à une personne dont l'historique continue ailleurs. Lu SOUS VERROU par la garde partagée, dans
+  // la transaction de l'appelant : une fusion concurrente ne peut pas glisser entre la lecture et
+  // l'UPDATE du dossier.
+  const contact = await verrouillerContactActif(contactId, executeur);
+  if (contact.statut !== "actif") return { statut: "contact_introuvable" };
   // ADR-054 — aucune relation ne traverse deux périmètres. Vérifié avant l'écriture, et à nouveau
   // par `ajouterPartieProjet` pour la partie : deux gardes, aucune ne suffit seule.
   if (contact.workspaceId !== workspaceId) return { statut: "workspaces_differents" };

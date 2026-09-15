@@ -1,5 +1,6 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
+import { exigerContactActif } from "@/lib/contactActif";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
 import { creerMandat } from "@/lib/mandatRepository";
@@ -209,7 +210,11 @@ export async function creerProspectVendeur(
   // prospect dans la même transaction que l'identité canonique qu'il référence (ADR-055).
   executeur: Executeur = getDb()
 ): Promise<ProspectVendeur> {
-  const [ligne] = await executeur
+  // ADR-059 §10 — même garde que `creerAcquereur` : un `contactId` fourni doit désigner un contact
+  // actif de ce workspace, lu SOUS VERROU avant l'insertion. Sans `contactId`, comportement inchangé.
+  return executeur.transaction(async (tx) => {
+  if (input.contactId) await exigerContactActif(input.contactId, tx, workspaceId);
+  const [ligne] = await tx
     .insert(prospectsVendeursTable)
     .values({
       workspaceId,
@@ -229,6 +234,7 @@ export async function creerProspectVendeur(
     })
     .returning();
   return ligneVersProspectVendeur(ligne);
+  });
 }
 
 // ADR-057 — OÙ va l'identité de cette modification. Paramètre OBLIGATOIRE, jamais une valeur par

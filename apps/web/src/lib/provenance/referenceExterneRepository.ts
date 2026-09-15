@@ -1,5 +1,6 @@
 import { and, eq, type SQL } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
+import { ErreurContactFusionne, verrouillerContactActif } from "@/lib/contactActif";
 import {
   biens as biensTable,
   contacts as contactsTable,
@@ -157,13 +158,25 @@ export async function enregistrerReferenceExterne(
   workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ReferenceExterne> {
-  const workspaceCible = await workspaceDeLaCible(input.cible, executeur);
-  if (!workspaceCible) throw new Error(`Entité canonique introuvable : ${input.cible.type} ${input.cible.id}`);
-  if (workspaceCible !== workspaceId) {
-    throw new Error("Une référence externe ne peut pas viser une entité d'un autre workspace");
+  return executeur.transaction(async (tx) => {
+  // ADR-059 §10 — une identité externe ne se rattache plus à un contact absorbé : la cible contact
+  // est lue SOUS VERROU (les autres cibles ne portent pas cet état). Jamais réécrit vers le survivant.
+  if (input.cible.type === "contact") {
+    const etat = await verrouillerContactActif(input.cible.id, tx);
+    if (etat.statut === "introuvable") throw new Error(`Entité canonique introuvable : contact ${input.cible.id}`);
+    if (etat.statut === "fusionne") throw new ErreurContactFusionne(input.cible.id);
+    if (etat.workspaceId !== workspaceId) {
+      throw new Error("Une référence externe ne peut pas viser une entité d'un autre workspace");
+    }
+  } else {
+    const workspaceCible = await workspaceDeLaCible(input.cible, tx);
+    if (!workspaceCible) throw new Error(`Entité canonique introuvable : ${input.cible.type} ${input.cible.id}`);
+    if (workspaceCible !== workspaceId) {
+      throw new Error("Une référence externe ne peut pas viser une entité d'un autre workspace");
+    }
   }
 
-  const [ligne] = await executeur
+  const [ligne] = await tx
     .insert(referencesExternesTable)
     .values({
       workspaceId,
@@ -195,6 +208,7 @@ export async function enregistrerReferenceExterne(
     );
   }
   return ligneVersReference(ligne);
+  });
 }
 
 // La question que pose un connecteur à chaque pull : « cet objet, je le connais déjà ? »
