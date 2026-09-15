@@ -1188,19 +1188,21 @@ ouvert :
   persistée (ni « vu », ni « ignoré »), aucun index dédié (`contacts_workspace_idx` seul — à
   reconsidérer sur mesure réelle). Aucune fusion, aucun bouton : le moteur de fusion est un lot
   distinct. `/contacts` (recherche) ne porte aucun badge.
-- **Le modèle de fusion existe (ADR-059), le moteur n'existe pas.** `contacts.fusionne_dans_contact_id`
-  / `fusionne_le` et le journal `contact_fusions` sont en place, les lecteurs actifs excluent les
-  absorbés, l'éditeur et le writer d'identité les refusent, `/contacts/[id]` d'un absorbé rend une
-  page « Ce contact a été fusionné » (HTTP 200, lien « Voir le contact actif », aucune redirection).
-  Mais **aucun chemin de production ne peut absorber un Contact** : ni Server Action, ni transaction,
-  ni UI de comparaison. Tant que ce moteur n'existe pas, aucun Contact métier n'est absorbé — le
-  modèle n'a d'effet que sur des données de test. Prévu et non implémenté : repoint de
-  `parties_projet` (avec dédoublage sur projet commun), `interactions`, `acquereurs`,
-  `prospects_vendeurs`, `references_externes` vers le survivant ; verrous recalculés depuis le choix
-  humain ; `FOR UPDATE` sur les deux Contacts ; refus d'un absorbé comme survivant. Une fusion sera
-  **irréversible en V1** : pas de défusion, seulement le journal (identités avant, ids déplacés)
-  pour une restauration manuelle. La page d'un absorbé pointe le contact actif FINAL d'une chaîne
-  (`resoudreContactActif`, bornée à 10 maillons) ; une chaîne invalide lève une erreur contrôlée.
+- **Le moteur de fusion existe (ADR-059, `fusionnerContacts`), aucun écran ne l'appelle.** Le
+  modèle (`contacts.fusionne_dans_contact_id` / `fusionne_le`, journal `contact_fusions`), les
+  lecteurs actifs (absorbés exclus), l'éditeur et le writer d'identité (absorbés refusés), la page
+  « Ce contact a été fusionné » (HTTP 200, lien vers le contact actif FINAL, aucune redirection) et
+  le moteur transactionnel repository sont en place. Mais **aucun chemin utilisateur ne peut
+  absorber un Contact** : ni Server Action, ni UI de comparaison champ par champ, ni confirmation.
+  Tant que cet écran n'existe pas, aucun Contact métier n'est absorbé. Limites du moteur, assumées :
+  fusion **irréversible** (pas de défusion ; le journal — identités avant, choix, ids exacts
+  déplacés, parties supprimées, rôles corrigés — permet une restauration manuelle) ; les verrous
+  humains de l'absorbé restent sur sa ligne et ne sont pas relus ; deux références externes du même
+  fournisseur et type sont conservées toutes deux sur le survivant après acquittement (un
+  connecteur futur devra choisir) ; sur un projet commun, la partie de l'absorbé est supprimée
+  physiquement (seule suppression du produit, tracée) ; un rôle « principal » l'emporte
+  mécaniquement (`acquereur` > `co_acquereur`, `vendeur` > `co_vendeur`) sans question posée. Une
+  chaîne invalide en lecture lève une erreur contrôlée.
 - **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
   historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.

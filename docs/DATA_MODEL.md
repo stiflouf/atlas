@@ -626,9 +626,21 @@ puis la résolution de chaîne, jamais l'historique ; `fusionneDansContactId` st
 `MAX_CHAINE_FUSION = 10`, `chaine_invalide` en cas de cycle ou de maillon manquant. Exclusions en
 SQL, avant pagination : `rechercherContacts`, `rechercherPersonnes` (source Contact),
 `trouverContactsSimilaires` (source et candidats), `rechercherContactsCandidats` ; `rattacher*`
-refuse un absorbé comme destination ; `modifierIdentiteContact` refuse un absorbé. **Aucun chemin
-de production ne pose le marqueur ni n'écrit le journal** : le moteur transactionnel est un lot à
-part, et aucun Contact métier n'est absorbé d'ici là.
+refuse un absorbé comme destination ; `modifierIdentiteContact` refuse un absorbé.
+
+**Moteur `fusionnerContacts` (`lib/fusionContactRepository.ts`, sans UI).** Une transaction :
+`SELECT … FOR UPDATE` des deux Contacts en une instruction par id croissant → invariants (même
+workspace sinon introuvable, aucun des deux absorbé sinon `deja_fusionne`, identités inchangées
+depuis leur affichage — `modifie_le` compris — sinon `identite_modifiee_entre_temps`, choix
+champ par champ cohérent avec l'identité finale sinon `choix_identite_invalide`, contradictions de
+références externes acquittées par clé déterministe sinon `avertissement_reference_externe_requis`
+/ `acquittement_inconnu`) → parties des projets communs dédoublées (DELETE de la partie absorbée,
+rôle principal préservé sur la partie conservée) AVANT repoint → UPDATE `contact_id` de
+`parties_projet`, `interactions`, `acquereurs`, `prospects_vendeurs`, `references_externes` (ids
+exacts) → `modifierIdentiteContact` si l'identité finale change (verrous sur les seuls champs
+changés) → `marquerContactFusionne` (second et dernier writer de `contacts`) → INSERT
+`contact_fusions`. Toute erreur = rollback intégral. `champs_verrouilles` de l'absorbé jamais
+repointés. Aucun écran, route ni Server Action n'appelle le moteur (garde structurelle).
 
 ## Rattachement assisté de l'historique (ADR-055 §H)
 

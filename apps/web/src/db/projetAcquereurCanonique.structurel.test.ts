@@ -166,6 +166,10 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
         // `interactions` est une feuille de `contacts` qui peut CONTEXTUALISER un projet
         // (ADR-055 §G) : elle nomme la table pour sa FK, jamais pour lire un critère.
         join("src", "lib", "interactionRepository.ts"),
+        // ADR-059 — le moteur de fusion REPOINTE les participations de l'absorbé vers le survivant
+        // et dédouble celles d'un projet commun : il nomme la table pour sa FK `contact_id`, jamais
+        // pour lire ou arbitrer un critère.
+        join("src", "lib", "fusionContactRepository.ts"),
         join("src", "lib", "provenance", "champVerrouilleRepository.ts"),
         join("src", "lib", "provenance", "referenceExterneRepository.ts"),
       ].sort()

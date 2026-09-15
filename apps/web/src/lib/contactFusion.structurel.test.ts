@@ -70,30 +70,37 @@ describe("ADR-059 — schéma", () => {
   });
 });
 
-describe("ADR-059 — journal append-only, aucun moteur", () => {
+describe("ADR-059 — journal append-only, un seul moteur", () => {
   it("aucun UPDATE ni DELETE de contact_fusions dans src", () => {
     const fautifs = FICHIERS_PRODUCTION.filter((chemin) => /\.(update|delete)\(\s*contactFusions/.test(codeSeul(chemin)));
     expect(fautifs).toEqual([]);
   });
 
-  it("aucun écrivain de fusion dans src : ni insert du journal, ni pose du marqueur", () => {
-    const fautifs = FICHIERS_PRODUCTION.filter((chemin) => {
-      const code = codeSeul(chemin);
-      return /insert\(\s*contactFusions/.test(code) || /\.set\(\s*\{[^}]*fusionne(DansContactId|Le)\s*:/.test(code);
-    });
-    expect(fautifs).toEqual([]);
-  });
-
-  it("aucun moteur de fusion : fusionnerContacts, absorberContact, repointerContact, mergeContacts n'existent pas", () => {
-    const fautifs = FICHIERS_PRODUCTION.filter((chemin) =>
-      /fusionnerContacts|absorberContact|repointerContact|mergeContacts/.test(codeSeul(chemin))
+  it("le journal n'est écrit que par le moteur, le marqueur n'est posé que par contactRepository", () => {
+    const journal = FICHIERS_PRODUCTION.filter((chemin) => /insert\(\s*contactFusions/.test(codeSeul(chemin)));
+    expect(journal).toEqual([join(SRC, "lib", "fusionContactRepository.ts")]);
+    const marqueur = FICHIERS_PRODUCTION.filter((chemin) =>
+      /\.set\(\s*\{[^}]*fusionne(DansContactId|Le)\s*:/.test(codeSeul(chemin))
     );
-    expect(fautifs).toEqual([]);
+    expect(marqueur).toEqual([join(SRC, "lib", "contactRepository.ts")]);
   });
 
-  it("toujours un seul UPDATE de contacts dans src, dans contactRepository", () => {
+  it("un seul moteur de fusion, dans lib, et aucun alias (absorberContact, repointerContact, mergeContacts)", () => {
+    const moteur = FICHIERS_PRODUCTION.filter((chemin) => /export async function fusionnerContacts/.test(codeSeul(chemin)));
+    expect(moteur).toEqual([join(SRC, "lib", "fusionContactRepository.ts")]);
+    const alias = FICHIERS_PRODUCTION.filter((chemin) => /absorberContact|repointerContact|mergeContacts/.test(codeSeul(chemin)));
+    expect(alias).toEqual([]);
+  });
+
+  it("exactement DEUX writers de contacts dans src, tous deux dans contactRepository", () => {
     const porteurs = FICHIERS_PRODUCTION.filter((chemin) => /update\(\s*contactsTable/.test(codeSeul(chemin)));
     expect(porteurs).toEqual([join(SRC, "lib", "contactRepository.ts")]);
+    const code = lire("lib", "contactRepository.ts");
+    expect(code.match(/\.update\(contactsTable\)/g)?.length).toBe(2);
+    const identite = code.match(/export async function modifierIdentiteContact[\s\S]*?\n}/)?.[0] ?? "";
+    const marqueur = code.match(/export async function marquerContactFusionne[\s\S]*?\n}/)?.[0] ?? "";
+    expect(identite).toContain(".update(contactsTable)");
+    expect(marqueur).toContain(".update(contactsTable)");
   });
 });
 

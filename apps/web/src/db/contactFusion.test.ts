@@ -46,7 +46,7 @@ const journalValide = (survivantId: string, absorbeId: string) => ({
   identiteAvantAbsorbe: identite,
   identiteFinale: identite,
   choixParChamp: { nom: "survivant" as const, prenom: "identique" as const, email: "absence_comblee" as const, telephone: "absorbe" as const },
-  idsDeplaces: { interactions: [], partiesProjet: [], partiesProjetSupprimees: [], acquereurs: [], prospectsVendeurs: [], referencesExternes: [] },
+  idsDeplaces: { interactions: [], partiesProjet: [], partiesProjetSupprimees: [], partiesProjetRoleCorrige: [], acquereurs: [], prospectsVendeurs: [], referencesExternes: [] },
   avertissementsAcquittes: [],
 });
 

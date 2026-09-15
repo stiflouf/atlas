@@ -26,9 +26,30 @@ export type IdsDeplacesFusionContact = {
   interactions: string[];
   partiesProjet: string[];
   partiesProjetSupprimees: string[];
+  // Participations du survivant dont le rôle a été relevé au rôle principal que portait l'absorbé
+  // sur le même projet (acquereur > co_acquereur, vendeur > co_vendeur).
+  partiesProjetRoleCorrige: { partieId: string; roleAvant: string; roleFinal: string }[];
   acquereurs: string[];
   prospectsVendeurs: string[];
   referencesExternes: string[];
+};
+
+// L'identité telle que l'UI l'a MONTRÉE à l'humain, `modifieLe` compris : le moteur la recompare
+// sous verrou, et refuse de fusionner si l'un des deux Contacts a changé entre-temps.
+export type IdentiteContactAttendue = IdentiteContactSnapshot & { modifieLe: string };
+
+export type ActeurFusion = { sub?: string; email?: string };
+
+// Un avertissement que le moteur exige de voir acquitté, identifié par une clé DÉTERMINISTE
+// recalculée sous verrou : deux références du même fournisseur et du même type, d'ids différents,
+// portées l'une par le survivant, l'autre par l'absorbé.
+export type AvertissementFusionContact = {
+  cle: string;
+  type: "reference_externe_contradictoire";
+  fournisseur: string;
+  typeEntiteExterne: string;
+  idsExternesSurvivant: string[];
+  idsExternesAbsorbe: string[];
 };
 
 export type ContactFusion = {

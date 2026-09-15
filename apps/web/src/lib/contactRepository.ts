@@ -153,6 +153,49 @@ export async function modifierIdentiteContact(
   return ligneVersContact(ligne);
 }
 
+// ADR-059 — MARQUER un contact comme absorbé : le SECOND et dernier writer de `contacts` (avec
+// `modifierIdentiteContact`). Il ne pose que le marqueur ; tout ce qui entoure une fusion —
+// verrous de lignes, repoint des dépendances, identité finale, journal — est orchestré par le
+// moteur (`fusionContactRepository.ts`) dans la transaction qu'il passe ici. Appelé hors de cette
+// transaction, il poserait un pointeur sans trace : c'est pourquoi `executeur` est OBLIGATOIRE.
+//
+// Les gardes sont refaites ici même si le moteur les a déjà vérifiées : un writer ne fait pas
+// confiance à son appelant. `undefined` = absorbé introuvable dans ce workspace.
+export async function marquerContactFusionne(
+  contactAbsorbeId: string,
+  contactSurvivantId: string,
+  workspaceId: string,
+  executeur: Executeur
+): Promise<Contact | undefined> {
+  if (!UUID_REGEX.test(contactAbsorbeId) || !UUID_REGEX.test(contactSurvivantId)) return undefined;
+  if (contactAbsorbeId === contactSurvivantId) {
+    throw new Error("Un contact ne peut pas être absorbé par lui-même");
+  }
+  const [absorbe] = await executeur.select().from(contactsTable).where(eq(contactsTable.id, contactAbsorbeId)).limit(1);
+  if (!absorbe || absorbe.workspaceId !== workspaceId) return undefined;
+  if (absorbe.fusionneDansContactId !== null) {
+    throw new Error("Un contact déjà fusionné ne peut pas être absorbé une seconde fois");
+  }
+  const [survivant] = await executeur
+    .select({ workspaceId: contactsTable.workspaceId, fusionneDansContactId: contactsTable.fusionneDansContactId })
+    .from(contactsTable)
+    .where(eq(contactsTable.id, contactSurvivantId))
+    .limit(1);
+  if (!survivant || survivant.workspaceId !== workspaceId) {
+    throw new Error("Le contact survivant est introuvable dans ce workspace");
+  }
+  if (survivant.fusionneDansContactId !== null) {
+    throw new Error("Un contact déjà fusionné ne peut pas être survivant");
+  }
+
+  const [ligne] = await executeur
+    .update(contactsTable)
+    .set({ fusionneDansContactId: contactSurvivantId, fusionneLe: new Date() })
+    .where(eq(contactsTable.id, contactAbsorbeId))
+    .returning();
+  return ligne ? ligneVersContact(ligne) : undefined;
+}
+
 // ADR-059 — RÉSOUDRE le contact actif derrière un id, en suivant `fusionne_dans_contact_id` : A → B
 // → C rend C. Aucune compaction (A n'est jamais réécrit vers C) : la trace de chaque fusion vaut
 // plus que la vitesse d'une lecture. Bornée et protégée contre les cycles : un read model ne fait

@@ -1,6 +1,6 @@
 # ADR-059 — Fusion humaine et traçable des Contacts
 
-**Statut :** Accepté — modèle implémenté (migration `0043`), moteur de fusion NON implémenté
+**Statut :** Accepté — modèle implémenté (migration `0043`), moteur repository implémenté (`fusionnerContacts`, sans UI ni Server Action)
 **Date :** 2026-09-14
 **Décideurs :** Steven Gausset (CEO), CTO
 
@@ -31,8 +31,9 @@ ne se défait pas. Le produit doit donc pouvoir fusionner sans jamais perdre la 
 été fusionné, par qui, et à partir de quoi — et refuser structurellement toute fusion que personne
 n'a décidée.
 
-Cette ADR pose le MODÈLE et les règles de lecture. Le moteur qui écrit la fusion est un lot à part,
-qui devra se conformer aux invariants énoncés ici.
+Cette ADR pose le MODÈLE, les règles de lecture, et le MOTEUR repository (`fusionnerContacts`,
+`lib/fusionContactRepository.ts`). L'écran de comparaison et la Server Action qui l'appelleront
+sont un lot à part : aucun chemin utilisateur ne déclenche encore une fusion.
 
 ## Décision
 
@@ -58,13 +59,15 @@ qui devra se conformer aux invariants énoncés ici.
     (`rechercherContacts`, `rechercherPersonnes`), de la similarité (ni source ni candidat), des
     candidats de rattachement et des destinations de rattachement ; l'éditeur d'identité le traite
     comme introuvable et le writer `modifierIdentiteContact` le refuse lui-même.
-11. **Le moteur futur sera transactionnel, avec `SELECT … FOR UPDATE`** sur les deux Contacts,
-    refus si l'un des deux est déjà absorbé, et détection d'une identité modifiée entre affichage et
-    soumission. C'est le seul endroit du produit où « dernier enregistrement gagnant » est
-    inacceptable.
-12. **La résolution d'identité finale sera un choix humain champ par champ** (nom, prénom, email,
-    téléphone). Un conflit réel (deux valeurs non absentes différentes) n'a pas de valeur par défaut ;
-    une absence d'un côté est comblée par défaut et reste modifiable.
+11. **Le moteur est transactionnel, avec `SELECT … FOR UPDATE`** sur les deux Contacts en une
+    instruction, par id croissant (l'ordre de verrou ne dit rien de la direction de fusion) ; refus
+    si l'un des deux est déjà absorbé ; refus si l'identité de l'un des deux a changé depuis son
+    affichage (`identiteAttendue*`, `modifie_le` compris). C'est le seul endroit du produit où
+    « dernier enregistrement gagnant » est inacceptable.
+12. **La résolution d'identité finale est un choix humain champ par champ** (nom, prénom, email,
+    téléphone), reçu par le moteur et VÉRIFIÉ contre les deux identités réelles
+    (`survivant | absorbe | identique | absence_comblee`) : un choix qui ne produit pas la valeur
+    finale est refusé (`choix_identite_invalide`). Le moteur ne choisit jamais.
 13. **Aucune fusion automatique** par email, téléphone ou nom, jamais — ni à l'import, ni à la
     saisie, ni par un connecteur.
 14. **Rattachement legacy et fusion Contact restent deux gestes distincts** : l'un relie un dossier
@@ -72,6 +75,23 @@ qui devra se conformer aux invariants énoncés ici.
     partagent ni écran ni liste.
 15. **Irréversible en V1.** Aucune défusion ; le journal (ids déplacés, identités avant) rend une
     restauration manuelle possible et une défusion V2 envisageable.
+
+### Moteur `fusionnerContacts` (repository, sans UI)
+
+Une transaction, dans l'ordre : verrous → invariants (périmètre, actifs, identités inchangées,
+choix cohérents, avertissements acquittés) → parties de projet des projets COMMUNS dédoublées
+(partie de l'absorbé supprimée ; rôle principal `acquereur`/`vendeur` préservé sur la partie
+conservée, corrigé si l'absorbé le portait) → repoint de `parties_projet`, `interactions`,
+`acquereurs`, `prospects_vendeurs`, `references_externes` (ids exacts retournés) → identité
+finale par `modifierIdentiteContact` (no-op si identique) → `marquerContactFusionne` → journal.
+Toute erreur annule tout. Avertissement obligatoire, clé déterministe recalculée sous verrou :
+deux références du même (fournisseur, type) d'ids différents portées par les deux Contacts
+(`reference_externe_contradictoire:<fournisseur>/<type>`) ; sans acquittement exact, aucune
+écriture ; avec, les deux références sont conservées sur le survivant. Les verrous humains de
+l'absorbé restent sur sa ligne. Résultat : union discriminée (`fusionne`, `meme_contact`,
+`contact_introuvable`, `deja_fusionne`, `identite_modifiee_entre_temps`,
+`choix_identite_invalide`, `avertissement_reference_externe_requis`, `acquittement_inconnu`).
+L'acteur (`sub`, `email`) est un paramètre : aucune session dans le repository.
 
 ### Lecture d'un Contact absorbé
 
@@ -136,10 +156,13 @@ referencesExternes), `ContactFusion`. `lib/contactFusion.ts` : `estContactFusion
 1. Un Contact est actif ⇔ `fusionne_dans_contact_id IS NULL` ; absorbé ⇔ les deux colonnes non NULL.
 2. Aucun état partiel, aucune auto-absorption (base).
 3. `contact_fusions` est append-only (structurel).
-4. Un seul `UPDATE contacts` dans le produit (`contactRepository`), et il refuse un absorbé.
+4. Exactement deux `UPDATE contacts` dans le produit, tous deux dans `contactRepository` :
+   `modifierIdentiteContact` (refuse un absorbé) et `marquerContactFusionne` (refuse self, absorbé,
+   survivant absorbé, autre workspace ; exige un exécuteur transactionnel).
 5. Les lecteurs de Contacts actifs excluent les absorbés EN SQL, avant toute pagination.
-6. Aucun chemin de production ne pose le marqueur ni n'écrit le journal dans ce lot (structurel) :
-   aucun Contact métier ne devient absorbé avant le moteur.
+6. Le journal n'est inséré que par le moteur, le marqueur n'est posé que par
+   `marquerContactFusionne` ; aucun écran, route ni Server Action n'appelle le moteur (structurel) :
+   aucun Contact métier ne devient absorbé avant l'UI de fusion.
 7. La résolution de chaîne est bornée et ne boucle jamais.
 
 ## Conséquences
@@ -149,8 +172,8 @@ referencesExternes), `ContactFusion`. `lib/contactFusion.ts` : `estContactFusion
   la garde structurelle liste les lecteurs actuels.
 - Le test « contacts se limite à l'identité » intègre les deux colonnes ; le test d'appartenance
   classe `contact_fusions` en feuille.
-- Un second writer de `contacts` (pose du marqueur) devra vivre dans `contactRepository` et le test
-  structurel « un seul UPDATE » sera révisé en conséquence dans le lot du moteur.
+- Le second writer de `contacts` (`marquerContactFusionne`) vit dans `contactRepository` ; la garde
+  structurelle compte désormais exactement deux `UPDATE contacts`, tous deux là.
 
 ## Risques
 
@@ -162,10 +185,8 @@ referencesExternes), `ContactFusion`. `lib/contactFusion.ts` : `estContactFusion
 
 ## Hors périmètre
 
-Moteur transactionnel de fusion · Server Action de fusion · UI de comparaison champ par champ ·
-repoint de `parties_projet`, `interactions`, `acquereurs`, `prospects_vendeurs`,
-`references_externes`, `champs_verrouilles` · dédoublage des parties sur projet commun · défusion ·
-revue de masse des similaires · personne morale.
+Server Action de fusion · UI de comparaison champ par champ et confirmation · repoint des
+`champs_verrouilles` (jamais) · défusion · revue de masse des similaires · personne morale.
 
 ## Questions ouvertes
 
