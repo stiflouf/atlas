@@ -83,6 +83,35 @@ describe("modifierIdentiteContact — contact absorbé", () => {
     const modifie = await modifierIdentiteContact(survivant.id, { nom: `${M} Survivant corrigé` }, WORKSPACE_TEST);
     expect(modifie?.nom).toBe(`${M} Survivant corrigé`);
   });
+
+  // Réaudit canonique — le writer lit la ligne FOR UPDATE : pendant qu'une fusion tient le verrou,
+  // il attend, puis voit l'absorbé et refuse. Sans verrou, une identité IDENTIQUE (aucun champ à
+  // verrouiller, donc aucune garde de `verrouillerChamp`) réécrivait `modifie_le` sur un contact figé.
+  it("attend une fusion concurrente puis refuse : rien n'est écrit sur l'absorbé, même à identité identique", async () => {
+    const survivant = await unContact("Writer S3");
+    const absorbe = await unContact("Writer A3");
+    const attendre = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    const fusion = getDb().transaction(async (tx) => {
+      await tx.select().from(contactsTable).where(eq(contactsTable.id, absorbe.id)).for("update");
+      await attendre(400);
+      await tx
+        .update(contactsTable)
+        .set({ fusionneDansContactId: survivant.id, fusionneLe: new Date() })
+        .where(eq(contactsTable.id, absorbe.id));
+    });
+    await attendre(100);
+    const writer = getDb()
+      .transaction((tx) => modifierIdentiteContact(absorbe.id, { nom: absorbe.nom }, WORKSPACE_TEST, tx))
+      .then(() => "ecrit" as const)
+      .catch((erreur: Error) => (/fusionné/.test(erreur.message) ? ("refuse" as const) : Promise.reject(erreur)));
+    const [, issue] = await Promise.all([fusion, writer]);
+
+    expect(issue).toBe("refuse");
+    const [apres] = await getDb().select().from(contactsTable).where(eq(contactsTable.id, absorbe.id));
+    expect(apres.modifieLe.toISOString()).toBe(absorbe.modifieLe);
+    expect(apres.fusionneDansContactId).toBe(survivant.id);
+  });
 });
 
 describe("resoudreContactActif", () => {

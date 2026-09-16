@@ -109,7 +109,10 @@ export async function modifierIdentiteContact(
 ): Promise<Contact | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
 
-  const [actuel] = await executeur.select().from(contactsTable).where(eq(contactsTable.id, id)).limit(1);
+  // ADR-059 §10 — lu SOUS VERROU : une fusion concurrente tient la ligne `FOR UPDATE` ; sans ce
+  // verrou, la lecture voit un contact encore actif et l'UPDATE, une fois la fusion commise,
+  // réécrit un contact absorbé (au minimum `modifie_le`). Le writer se protège lui-même.
+  const [actuel] = await executeur.select().from(contactsTable).where(eq(contactsTable.id, id)).for("update");
   if (!actuel) return undefined;
   if (actuel.workspaceId !== workspaceId) {
     throw new Error("Un contact d'un autre workspace ne peut pas être modifié");
