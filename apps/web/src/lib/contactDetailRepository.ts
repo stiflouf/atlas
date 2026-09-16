@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import {
   acquereurs as acquereursTable,
+  contactFusions as contactFusionsTable,
   contacts as contactsTable,
   interactions as interactionsTable,
   partiesProjet as partiesProjetTable,
@@ -22,14 +23,15 @@ import type {
   ContexteInteractionRecente,
   DossierAcquereurContactOnly,
   DossierVendeurContactOnly,
+  FusionAbsorbeeContact,
   ProjetAcquereurDetail,
   ProjetVendeurDetail,
 } from "@/types/contactDetail";
 
-// ADR-058 — LE READ MODEL DE LA FICHE CONTACT. Cinq requêtes, quel que soit le nombre de projets,
-// de dossiers ou d'interactions : le contact, les participations avec leurs projets, les dossiers
-// historiques rattachés (acquéreurs, prospects), les dernières interactions. Jamais une requête
-// par projet.
+// ADR-058 — LE READ MODEL DE LA FICHE CONTACT. Six requêtes, quel que soit le nombre de projets,
+// de dossiers, d'interactions ou de fusions : le contact, les participations avec leurs projets,
+// les dossiers historiques rattachés (acquéreurs, prospects), les dernières interactions, les
+// anciennes fiches absorbées. Jamais une requête par projet.
 //
 // Ce module ne rapproche rien par nom, email ou téléphone : un dossier n'entre dans cette fiche que
 // par une clé réelle — `contact_id` posé par un humain (ADR-055 §H), ou `projet_*_id` vers un projet
@@ -40,6 +42,11 @@ import type {
 // de parcours du produit (`resoudreContactActif`, bornée, sans compaction). Une chaîne invalide
 // (cycle, profondeur, maillon manquant) est une corruption, pas une absence : erreur contrôlée,
 // jamais un 404 qui la cacherait ni un lien fabriqué.
+//
+// ADR-059 — les fiches ABSORBÉES dans ce contact viennent du JOURNAL `contact_fusions` (quoi, quand,
+// qui, identité avant), jamais de `contacts.fusionne_dans_contact_id`, qui ne dit que l'état courant
+// et sert la navigation. Fusions DIRECTES seulement, sans suivre la chaîne ; l'identité est celle du
+// journal, sans joindre la ligne de l'absorbé. Un absorbé sans ligne journal n'est pas inventé.
 //
 // Lecture seule ; aucun chemin d'écriture n'est importé.
 
@@ -65,6 +72,39 @@ function contexteInteraction(ligne: {
   if (ligne.projetVendeurId) return "projet_vendeur";
   if (ligne.bienId) return "bien";
   return undefined;
+}
+
+// Le journal n'a pas de `workspace_id` (feuille de `contacts`, ADR-054 §7) : le périmètre est celui
+// du survivant, vérifié DANS la requête par la jointure — pas seulement par l'appelant. Ordre
+// déterministe : la fusion la plus récente d'abord, `id` en départage.
+export async function listerFusionsAbsorbees(
+  contactSurvivantId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<FusionAbsorbeeContact[]> {
+  if (!UUID_REGEX.test(contactSurvivantId)) return [];
+  const lignes = await executeur
+    .select({
+      fusionId: contactFusionsTable.id,
+      contactAbsorbeId: contactFusionsTable.contactAbsorbeId,
+      identiteAvantAbsorbe: contactFusionsTable.identiteAvantAbsorbe,
+      fusionneLe: contactFusionsTable.fusionneLe,
+      fusionneParEmail: contactFusionsTable.fusionneParEmail,
+    })
+    .from(contactFusionsTable)
+    .innerJoin(
+      contactsTable,
+      and(eq(contactsTable.id, contactFusionsTable.contactSurvivantId), eq(contactsTable.workspaceId, workspaceId))
+    )
+    .where(eq(contactFusionsTable.contactSurvivantId, contactSurvivantId))
+    .orderBy(desc(contactFusionsTable.fusionneLe), desc(contactFusionsTable.id));
+  return lignes.map((ligne) => ({
+    fusionId: ligne.fusionId,
+    contactAbsorbeId: ligne.contactAbsorbeId,
+    identiteAbsorbee: ligne.identiteAvantAbsorbe,
+    fusionneLe: ligne.fusionneLe.toISOString(),
+    fusionneParEmail: ligne.fusionneParEmail ?? undefined,
+  }));
 }
 
 export async function chargerContactDetail(
@@ -167,12 +207,12 @@ export async function chargerContactDetail(
     }
   }
 
-  // REQUÊTES 3, 4 et 5 — dossiers historiques rattachés et dernières interactions, en parallèle.
-  // Un dossier est retenu par `contact_id`, ou parce qu'il décrit un projet du contact : dans les
-  // deux cas une clé réelle, jamais une ressemblance.
+  // REQUÊTES 3, 4, 5 et 6 — dossiers historiques rattachés, dernières interactions et fiches
+  // absorbées, en parallèle. Un dossier est retenu par `contact_id`, ou parce qu'il décrit un projet
+  // du contact : dans les deux cas une clé réelle, jamais une ressemblance.
   const idsProjetsAcquereur = [...projetsAcquereur.keys()];
   const idsProjetsVendeur = [...projetsVendeur.keys()];
-  const [dossiersAcquereur, dossiersVendeur, interactions] = await Promise.all([
+  const [dossiersAcquereur, dossiersVendeur, interactions, fusionsAbsorbees] = await Promise.all([
     executeur
       .select({
         id: acquereursTable.id,
@@ -236,6 +276,7 @@ export async function chargerContactDetail(
       // dernier, puis l'id.
       .orderBy(desc(interactionsTable.survenuLe), desc(interactionsTable.creeLe), asc(interactionsTable.id))
       .limit(LIMITE_INTERACTIONS_RECENTES),
+    listerFusionsAbsorbees(contactId, workspaceId, executeur),
   ]);
 
   // PONT ou CONTACT-ONLY, jamais les deux : un dossier qui décrit un projet du contact est porté
@@ -301,6 +342,7 @@ export async function chargerContactDetail(
       survenuLe: ligne.survenuLe.toISOString(),
       contexte: contexteInteraction(ligne),
     })),
+    fusionsAbsorbees,
     },
   };
 }

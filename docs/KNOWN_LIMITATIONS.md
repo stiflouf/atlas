@@ -1214,7 +1214,12 @@ ouvert :
   interaction (ni sur l'absorbé, ni sur le survivant) ; l'échange n'apparaît alors sur aucune fiche
   tant que le message n'est pas finalisé à nouveau. Identité de l'absorbé conservée sur sa ligne et
   dupliquée dans le journal `contact_fusions` (données personnelles en double, sans mécanisme
-  d'effacement).
+  d'effacement). **Sur la fiche du survivant, « Contacts fusionnés » n'affiche que les fusions
+  DIRECTES** (A → B → C : la fiche de C liste B, pas A — A se lit depuis la fiche de B) ; **l'audit
+  détaillé n'est pas exposé** (choix par champ, ids déplacés, avertissements acquittés, identité
+  finale, `sub` : en base seulement, lecture SQL) ; **aucune défusion**, ni bouton ni procédure
+  outillée. `contact_fusions` n'a pas d'unicité sur `contact_absorbe_id` : le moteur garantit une
+  ligne par absorbé (verrou + `deja_fusionne`), un doublon posé hors moteur serait affiché deux fois.
 - **Les tâches ne sont pas agrégées sur la fiche Contact.** `taches` pointe vers les dossiers
   historiques (acquéreur, prospect, bien), jamais vers un contact ; les remonter exigerait une
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.

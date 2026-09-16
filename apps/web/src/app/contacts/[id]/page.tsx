@@ -37,6 +37,11 @@ import type { ContexteInteractionRecente } from "@/types/contactDetail";
 // ADR-059 — un Contact ABSORBÉ a sa propre page (ContactFusionneFiche), rendue en HTTP 200 sans
 // redirection : l'utilisateur doit comprendre où il est arrivé. Pour lui, aucun second read model
 // n'est appelé — ni projets, ni similarité : tout cela appartient au survivant.
+//
+// Sur le survivant, « Contacts fusionnés » liste les anciennes fiches DIRECTEMENT absorbées, telles
+// que le read model les lit dans le journal : nom d'alors, date, conseiller (email de session, jamais
+// un identifiant technique), et un seul geste — ouvrir la fiche historique. Section absente sans
+// fusion. Les coordonnées d'alors restent sur cette fiche historique, pas ici.
 
 export const dynamic = "force-dynamic";
 
@@ -80,8 +85,15 @@ export default async function FicheContact({ params }: PageProps) {
   const { detail } = resultat;
   const contactsSimilaires = await trouverContactsSimilaires(id, workspaceId);
 
-  const { contact, roles, projetsAcquereur, projetsVendeur, dossiersAcquereurContactOnly, dossiersVendeurContactOnly } =
-    detail;
+  const {
+    contact,
+    roles,
+    projetsAcquereur,
+    projetsVendeur,
+    dossiersAcquereurContactOnly,
+    dossiersVendeurContactOnly,
+    fusionsAbsorbees,
+  } = detail;
   const aDesDossiersContactOnly = dossiersAcquereurContactOnly.length > 0 || dossiersVendeurContactOnly.length > 0;
 
   return (
@@ -131,6 +143,39 @@ export default async function FicheContact({ params }: PageProps) {
       </Card>
 
       <ContactsSimilairesSection contactCourantId={contact.id} candidats={contactsSimilaires ?? []} />
+
+      {fusionsAbsorbees.length > 0 && (
+        <section className="mb-8">
+          <SectionTitle>Contacts fusionnés</SectionTitle>
+          <p className="text-[12px] text-text-3 mb-3">Ces anciennes fiches ont été regroupées avec ce contact.</p>
+          <Card>
+            <ul className="divide-y divide-border-subtle">
+              {fusionsAbsorbees.map((fusion) => (
+                <li
+                  key={fusion.fusionId}
+                  className="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-1 px-4 py-2.5"
+                >
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[13px] font-medium text-text-1">{nomComplet(fusion.identiteAbsorbee)}</span>
+                    <p className="text-[12px] text-text-3">
+                      Fusionné le <time dateTime={fusion.fusionneLe}>{formatDate(fusion.fusionneLe)}</time>
+                      {fusion.fusionneParEmail && <> par {fusion.fusionneParEmail}</>}
+                    </p>
+                  </div>
+                  <ButtonLink
+                    href={`/contacts/${fusion.contactAbsorbeId}`}
+                    variant="secondary"
+                    size="sm"
+                    className="shrink-0"
+                  >
+                    Voir le contact fusionné
+                  </ButtonLink>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </section>
+      )}
 
       {projetsAcquereur.length > 0 && (
         <section className="mb-8">

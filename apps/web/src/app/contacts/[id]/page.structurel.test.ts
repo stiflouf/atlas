@@ -68,6 +68,59 @@ describe("/contacts/[id] — la page consomme le read model", () => {
   });
 });
 
+// ADR-059 — « Contacts fusionnés » : lu dans le JOURNAL par le read model, rendu par la page sans
+// lecture technique, uniquement sur une fiche active.
+describe("/contacts/[id] — contacts fusionnés (ADR-059)", () => {
+  const FICHE_ABSORBEE = codeSeul(join(__dirname, "..", "..", "..", "components", "contact", "ContactFusionneFiche.tsx"));
+
+  it("le read model lit le journal contact_fusions, scoped par le survivant du workspace, ordonné, sans joindre l'absorbé", () => {
+    const debut = readModel.indexOf("export async function listerFusionsAbsorbees(");
+    expect(debut).toBeGreaterThanOrEqual(0);
+    const corps = readModel.slice(debut, readModel.indexOf("\nexport ", debut + 1));
+    expect(corps).toContain(".from(contactFusionsTable)");
+    expect(corps).toContain("eq(contactsTable.id, contactFusionsTable.contactSurvivantId), eq(contactsTable.workspaceId, workspaceId)");
+    expect(corps).toContain("eq(contactFusionsTable.contactSurvivantId, contactSurvivantId)");
+    expect(corps).toContain("desc(contactFusionsTable.fusionneLe), desc(contactFusionsTable.id)");
+    expect(corps).toContain("identiteAbsorbee: ligne.identiteAvantAbsorbe");
+    // Identité du journal, jamais de la ligne `contacts` de l'absorbé ; aucun champ technique exposé.
+    expect(corps).not.toMatch(/contactFusionsTable\.contactAbsorbeId\s*,\s*contactsTable\.id|contactsTable\.(nom|prenom|email|telephone)/);
+    expect(corps).not.toMatch(/fusionneParSub|idsDeplaces|choixParChamp|avertissementsAcquittes|identiteFinale|identiteAvantSurvivant/);
+    expect(corps).not.toMatch(/\.limit\(|resoudreContactActif|fusionneDansContactId/);
+    // Jamais reconstitué depuis le marqueur de `contacts`.
+    expect(readModel).not.toMatch(/eq\(contactsTable\.fusionneDansContactId/);
+  });
+
+  it("la fiche active charge les fusions dans le Promise.all des lectures indépendantes ; la fiche absorbée ne les charge pas", () => {
+    expect(readModel).toContain("listerFusionsAbsorbees(contactId, workspaceId, executeur),");
+    expect(readModel.indexOf('type: "fusionne"')).toBeLessThan(readModel.indexOf("listerFusionsAbsorbees(contactId"));
+    expect(readModel).toContain("fusionsAbsorbees,");
+  });
+
+  it("la page rend la section depuis le read model, conditionnellement, avec le vocabulaire produit et sans donnée technique", () => {
+    expect(page).toContain("{fusionsAbsorbees.length > 0 && (");
+    expect(page).toContain("<SectionTitle>Contacts fusionnés</SectionTitle>");
+    expect(page).toContain("Ces anciennes fiches ont été regroupées avec ce contact.");
+    expect(page).toContain("Voir le contact fusionné");
+    expect(page).toContain("href={`/contacts/${fusion.contactAbsorbeId}`}");
+    expect(page).toContain("nomComplet(fusion.identiteAbsorbee)");
+    expect(page).toContain("{fusion.fusionneParEmail && <> par {fusion.fusionneParEmail}</>}");
+    expect(page).not.toMatch(/identiteAbsorbee\.(email|telephone)|fusionneParSub|idsDeplaces|choixParChamp|avertissements|identiteFinale|JSON\.stringify/);
+    expect(page).not.toMatch(/Aucun contact fusionné|listerFusionsAbsorbees|contactFusions/);
+    // Placement : après la similarité, avant les projets acquéreur.
+    expect(page.indexOf("<ContactsSimilairesSection")).toBeLessThan(page.indexOf("Contacts fusionnés"));
+    expect(page.indexOf("Contacts fusionnés")).toBeLessThan(page.indexOf("Projets acquéreur"));
+  });
+
+  it("la fiche absorbée reste inchangée : aucun historique descendant", () => {
+    expect(FICHE_ABSORBEE).not.toMatch(/fusionsAbsorbees|Contacts fusionnés|contactFusions/);
+  });
+
+  it("aucune route nouvelle", () => {
+    expect(() => readFileSync(join(__dirname, "fusions", "page.tsx"))).toThrow();
+    expect(() => readFileSync(join(__dirname, "historique", "page.tsx"))).toThrow();
+  });
+});
+
 describe("contactDetailRepository — lecture seule, par clés réelles", () => {
   it("n'écrit jamais et n'importe aucun chemin d'écriture", () => {
     expect(readModel).not.toMatch(/\.(insert|update|delete)\(/);

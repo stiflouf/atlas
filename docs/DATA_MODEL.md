@@ -589,8 +589,9 @@ les `LIMITE_INTERACTIONS_RECENTES` (10) dernières interactions par `contact_id`
   `/prospects-vendeurs/[id]` acceptent) ; sinon il est listé en **contact-only**. Jamais les deux.
 - **Aucune ressemblance** : ni nom, ni email, ni téléphone n'y font entrer un dossier ou une
   interaction (verrouillé par `src/app/contacts/[id]/page.structurel.test.ts`).
-- **Cinq requêtes, quel que soit le volume** : contact, participations + projets (jointure),
-  dossiers acquéreur, dossiers vendeur, interactions bornées. Vérifié par un test qui compte.
+- **Six requêtes, quel que soit le volume** : contact, participations + projets (jointure),
+  dossiers acquéreur, dossiers vendeur, interactions bornées, fiches absorbées (journal
+  `contact_fusions`, ADR-059). Vérifié par un test qui compte.
 - Le statut vendeur vient de `deriverStatutProspectVendeur` sur les jalons bruts, comme partout.
 
 **Correction depuis la fiche (`/contacts/[id]/modifier`, `modifierContactAction`).** L'action
@@ -627,6 +628,23 @@ puis la résolution de chaîne, jamais l'historique ; `fusionneDansContactId` st
 SQL, avant pagination : `rechercherContacts`, `rechercherPersonnes` (source Contact),
 `trouverContactsSimilaires` (source et candidats), `rechercherContactsCandidats` ; `rattacher*`
 refuse un absorbé comme destination ; `modifierIdentiteContact` refuse un absorbé.
+
+**Contacts fusionnés sur le survivant (`listerFusionsAbsorbees`, `ContactDetail.fusionsAbsorbees`).**
+La fiche d'un Contact ACTIF liste les fiches DIRECTEMENT absorbées dans lui, lues dans le JOURNAL
+`contact_fusions` — jamais reconstituées depuis `contacts.fusionne_dans_contact_id`, qui ne décrit
+que l'état courant et sert la navigation. Sélection : `contact_absorbe_id`, `identite_avant_absorbe`
+(l'identité d'alors, sans joindre la ligne de l'absorbé), `fusionne_le`, `fusionne_par_email` ;
+`INNER JOIN contacts survivant ON id = contact_survivant_id AND workspace_id = $ws` — le périmètre
+est vérifié dans la requête, sans dupliquer `workspace_id` dans le journal ; ordre `fusionne_le DESC,
+id DESC` ; ni limite ni pagination ; index `contact_fusions_survivant_idx`. Sixième requête fixe de
+`chargerContactDetail`, dans le `Promise.all` des lectures indépendantes ; la branche `fusionne` ne la
+lance pas. Un absorbé marqué sans ligne journal n'apparaît pas (rien n'est inventé) ; deux lignes pour
+le même absorbé donnent deux entrées (rien n'est dédoublonné). UI (`/contacts/[id]`, section
+« Contacts fusionnés » entre la similarité et les projets, absente sans fusion) : nom d'alors, « Fusionné
+le … » + « par {email} » si présent, lien « Voir le contact fusionné » → `/contacts/{absorbé}` (la fiche
+absorbée existante, avec ses coordonnées d'alors). Jamais rendus : `fusionne_par_sub`, `ids_deplaces`,
+`choix_par_champ`, `avertissements_acquittes`, `identite_finale`, email/téléphone d'alors. Historique
+DIRECT seulement : A → B → C se lit de proche en proche.
 
 **Moteur `fusionnerContacts` (`lib/fusionContactRepository.ts`, sans UI).** Une transaction :
 `SELECT … FOR UPDATE` des deux Contacts en une instruction par id croissant → invariants (même

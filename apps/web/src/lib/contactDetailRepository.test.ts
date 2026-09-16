@@ -399,7 +399,8 @@ describe("chargerContactDetail — contact absorbé (ADR-059)", () => {
 });
 
 describe("chargerContactDetail — nombre de requêtes fixe", () => {
-  it("O. cinq requêtes, que le contact ait un projet ou six", async () => {
+  // ADR-059 — six depuis la lecture des fiches absorbées (journal `contact_fusions`), toujours fixe.
+  it("O. six requêtes, que le contact ait un projet ou six", async () => {
     const peu = await unContact({ nom: `${M} Peu` });
     await unProjetAcquereur(peu.id);
 
@@ -423,7 +424,7 @@ describe("chargerContactDetail — nombre de requêtes fixe", () => {
       return n;
     };
 
-    expect(await compter(peu.id)).toBe(5);
-    expect(await compter(beaucoup.id)).toBe(5);
+    expect(await compter(peu.id)).toBe(6);
+    expect(await compter(beaucoup.id)).toBe(6);
   });
 });

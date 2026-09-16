@@ -152,6 +152,13 @@ repointé produit l'interaction sur le survivant.
   `contactActifId` (résolu). Une chaîne invalide est une erreur contrôlée, pas un 404 ni un lien
   fabriqué. Jamais de redirection silencieuse : un conseiller arrivé par un vieux lien doit
   comprendre où il est.
+- (2026-09-15) La fiche du SURVIVANT liste « Contacts fusionnés » : les fiches DIRECTEMENT absorbées,
+  lues dans le journal `contact_fusions` (`listerFusionsAbsorbees`, sixième requête fixe de
+  `chargerContactDetail`, périmètre vérifié par jointure sur le survivant du workspace) — jamais
+  reconstituées depuis `fusionne_dans_contact_id`. Par entrée : nom d'alors
+  (`identite_avant_absorbe`), date, email du conseiller s'il existe (jamais le `sub`), lien vers
+  `/contacts/{absorbé}`. Section absente sans fusion ; rien sur une fiche absorbée ; historique
+  direct seulement (V1) ; aucun champ d'audit technique rendu.
 - `resoudreContactActif(contactId, workspaceId)` suit la chaîne A → B → C jusqu'au Contact actif,
   bornée à `MAX_CHAINE_FUSION = 10` maillons et protégée contre les cycles ; au-delà, ou en cas
   de maillon manquant, elle rend `chaine_invalide` plutôt que de boucler. Aucune compaction en base.
@@ -238,8 +245,9 @@ plus de deux Contacts à la fois · saisie d'une troisième valeur pendant la fu
 
 - (Tranchée le 2026-09-14) La page d'un absorbé suit la chaîne jusqu'au survivant FINAL via
   `resoudreContactActif` ; les maillons stockés ne sont jamais compactés.
-- Faut-il un rappel discret sur la fiche du survivant (« N contacts fusionnés dans celui-ci ») ?
-  Lecture inverse rendue possible par l'index partiel ; aucun consommateur encore.
+- (Tranchée le 2026-09-15) Le rappel côté survivant existe : section « Contacts fusionnés », lue
+  dans le journal `contact_fusions` (source des fusions), historique direct V1. L'historique
+  transitif et une vue d'audit détaillée (choix par champ, ids déplacés) restent à décider.
 
 ## Scalabilité
 

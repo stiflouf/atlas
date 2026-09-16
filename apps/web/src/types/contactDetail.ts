@@ -3,6 +3,7 @@ import type { StadeProjet } from "./client";
 import type { StatutProspectVendeur } from "./prospectVendeur";
 import type { RoleContact } from "./rechercheContact";
 import type { SensInteraction, TypeInteraction } from "./interaction";
+import type { IdentiteContactSnapshot } from "./contactFusion";
 
 // ADR-058 — la FICHE d'une personne : ce que la recherche résume, développé pour un seul Contact.
 // Lecture seule. Ce type expose ce qu'un écran affiche, jamais toutes les colonnes.
@@ -63,6 +64,21 @@ export type InteractionRecente = {
   contexte?: ContexteInteractionRecente;
 };
 
+// ADR-059 — une ancienne fiche DIRECTEMENT absorbée dans ce Contact, lue dans le journal
+// `contact_fusions` (jamais reconstituée depuis `contacts.fusionne_dans_contact_id`). L'identité est
+// celle que l'absorbé avait AU MOMENT de la fusion (`identite_avant_absorbe`) : c'est ce qui a été
+// regroupé, pas ce qu'une ligne dirait aujourd'hui. Rien de technique n'en sort : ni sub, ni ids
+// déplacés, ni choix par champ — l'écran nomme, date, et renvoie vers la fiche historique.
+export type FusionAbsorbeeContact = {
+  // Id de la ligne de journal : clé de rendu stable même si deux lignes visent le même absorbé
+  // (le read model ne dédoublonne rien). Jamais affiché.
+  fusionId: string;
+  contactAbsorbeId: string;
+  identiteAbsorbee: IdentiteContactSnapshot;
+  fusionneLe: string;
+  fusionneParEmail?: string;
+};
+
 // ADR-059 — la fiche d'un Contact ABSORBÉ n'est pas une fiche avec des listes vides : c'est un
 // autre état, dit explicitement. Union discriminée plutôt que des optionnels sur `ContactDetail` :
 // une fiche active ne porte aucune nullable « au cas où », et une fiche absorbée ne charge ni
@@ -91,4 +107,7 @@ export type ContactDetail = {
   dossiersAcquereurContactOnly: DossierAcquereurContactOnly[];
   dossiersVendeurContactOnly: DossierVendeurContactOnly[];
   interactionsRecentes: InteractionRecente[];
+  // Fusions DIRECTES seulement (B → A) : une chaîne A → B → C se lit de proche en proche, par la
+  // fiche de chaque absorbé. Vide pour un Contact qui n'a rien absorbé — aucune section rendue.
+  fusionsAbsorbees: FusionAbsorbeeContact[];
 };
