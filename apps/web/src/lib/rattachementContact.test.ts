@@ -249,11 +249,7 @@ describe("rattachement — création depuis l'historique", () => {
   it("crée UN contact à l'image du dossier, et le rattache, sans toucher le legacy", async () => {
     const dossier = await unAcquereurHistorique("creation");
 
-    const resultat = await creerContactEtRattacherAcquereur(
-      dossier.id,
-      { nom: dossier.nom, prenom: dossier.prenom, email: dossier.email, telephone: dossier.telephone },
-      WORKSPACE_TEST
-    );
+    const resultat = await creerContactEtRattacherAcquereur(dossier.id, WORKSPACE_TEST);
 
     expect(resultat.statut).toBe("rattache");
     if (resultat.statut !== "rattache") return;
@@ -267,11 +263,7 @@ describe("rattachement — création depuis l'historique", () => {
 
   it("vendeur : même geste, même primitive", async () => {
     const prospect = await unProspectHistorique("creation");
-    const resultat = await creerContactEtRattacherProspectVendeur(
-      prospect.id,
-      { nom: prospect.nom, prenom: prospect.prenom, email: prospect.email, telephone: prospect.telephone },
-      WORKSPACE_TEST
-    );
+    const resultat = await creerContactEtRattacherProspectVendeur(prospect.id, WORKSPACE_TEST);
     expect(resultat.statut).toBe("rattache");
     if (resultat.statut === "rattache") idsContacts.push(resultat.contact.id);
   });
@@ -286,11 +278,7 @@ describe("rattachement — création depuis l'historique", () => {
       .set({ email: "partage@example.test" })
       .where(eq(acquereursTable.id, dossier.id));
 
-    const resultat = await creerContactEtRattacherAcquereur(
-      dossier.id,
-      { nom: "Autre personne", email: "partage@example.test" },
-      WORKSPACE_TEST
-    );
+    const resultat = await creerContactEtRattacherAcquereur(dossier.id, WORKSPACE_TEST);
 
     expect(resultat.statut).toBe("rattache");
     if (resultat.statut !== "rattache") return;

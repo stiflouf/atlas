@@ -2,8 +2,6 @@
 
 import { notFound, redirect } from "next/navigation";
 import { getDb } from "@/db/client";
-import { getClientById } from "@/lib/clientRepository";
-import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import {
   creerContactEtRattacherAcquereur,
   creerContactEtRattacherProspectVendeur,
@@ -58,32 +56,16 @@ export async function rattacherAcquereurContactExistantAction(formData: FormData
   redirect(`/clients/${acquereurId}`);
 }
 
+// « Créer un contact depuis ce dossier » : l'action ne lit pas le dossier elle-même — l'identité
+// est relue SOUS VERROU par la primitive, dans le workspace de session, et la création + le
+// rattachement forment une seule transaction : sur refus, aucun contact n'est créé.
 export async function creerContactDepuisAcquereurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
   const workspaceId = await exigerWorkspaceCourant();
   const acquereurId = String(formData.get("acquereurId") ?? "");
   if (!acquereurId) notFound();
 
-  // L'identité du nouveau contact est l'INSTANTANÉ du dossier tel qu'il est aujourd'hui. Le dossier
-  // n'étant pas rattaché, cette lecture rend bien ses propres colonnes.
-  const acquereur = await getClientById(acquereurId);
-  if (!acquereur) notFound();
-
-  const resultat = await getDb().transaction((tx) =>
-    creerContactEtRattacherAcquereur(
-      acquereurId,
-      {
-        nom: acquereur.nom,
-        // Les colonnes du dossier sont NOT NULL mais peuvent porter une chaîne vide historique :
-        // une absence côté Contact est plus juste qu'un champ vide (ADR-057).
-        prenom: acquereur.prenom || undefined,
-        email: acquereur.email || undefined,
-        telephone: acquereur.telephone || undefined,
-      },
-      workspaceId,
-      tx
-    )
-  );
+  const resultat = await creerContactEtRattacherAcquereur(acquereurId, workspaceId);
   if (resultat.statut !== "rattache") {
     redirect(`/clients/${acquereurId}?rattachement=${messageRefus(resultat)}`);
   }
@@ -112,22 +94,7 @@ export async function creerContactDepuisProspectVendeurAction(formData: FormData
   const prospectId = String(formData.get("prospectId") ?? "");
   if (!prospectId) notFound();
 
-  const prospect = await getProspectVendeurById(prospectId);
-  if (!prospect) notFound();
-
-  const resultat = await getDb().transaction((tx) =>
-    creerContactEtRattacherProspectVendeur(
-      prospectId,
-      {
-        nom: prospect.nom,
-        prenom: prospect.prenom || undefined,
-        email: prospect.email || undefined,
-        telephone: prospect.telephone || undefined,
-      },
-      workspaceId,
-      tx
-    )
-  );
+  const resultat = await creerContactEtRattacherProspectVendeur(prospectId, workspaceId);
   if (resultat.statut !== "rattache") {
     redirect(`/prospects-vendeurs/${prospectId}?rattachement=${messageRefus(resultat)}`);
   }

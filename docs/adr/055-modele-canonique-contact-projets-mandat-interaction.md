@@ -219,6 +219,10 @@ Pour le reste, la règle est celle qui gouverne déjà tout le produit :
   d'archivage d'ADR-012, jamais un `DELETE`.
 - La détection de doublon candidat s'appuie sur des champs structurés (email, téléphone normalisé),
   jamais sur une similarité de nom en texte libre.
+- (2026-09-16) **« Créer un contact depuis ce dossier » est atomique** : dossier relu `FOR UPDATE`
+  dans le workspace de session avant toute écriture, contact créé à l'image de la ligne relue,
+  rattachement, ou rollback — un refus après l'INSERT est levé, jamais retourné. Aucun contact
+  orphelin, y compris sur double soumission ; un dossier d'un autre workspace est introuvable.
 
 ### I. Historique temporel
 

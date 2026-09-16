@@ -699,6 +699,19 @@ une identité canonique par **deux gestes humains explicitement distincts**, jam
 | Rattacher à un contact **existant** | `contact_id` renseigné ; partie de projet créée si un projet canonique existe |
 | **Créer** un contact depuis ce dossier | contact créé à l'image de l'instantané legacy, puis rattaché — dans la même transaction |
 
+**Création + rattachement = une transaction, ou rien (`creerContactEtRattacherAcquereur` /
+`creerContactEtRattacherProspectVendeur`).** La primitive ouvre sa propre transaction (savepoint si
+l'appelant en tient une) : le dossier est relu **`FOR UPDATE`, dans le workspace de l'appelant**,
+avant toute écriture — absent ou d'un autre workspace → `dossier_introuvable` (indistinguables),
+déjà rattaché → `deja_rattache`, sans qu'aucun contact n'ait été créé ; puis le contact est créé
+**à l'image de la ligne relue** (jamais d'une valeur venue du navigateur) et le dossier rattaché.
+Tout refus ou échec survenu après l'INSERT est **levé**, donc annulé : **aucun contact orphelin ne
+subsiste**. Deux soumissions concurrentes pour le même dossier se sérialisent sur sa ligne : un
+seul contact, l'autre tentative voit `deja_rattache`. Les Server Actions n'appellent que cette
+primitive (ni lecture legacy non scopée, ni transaction propre) — verrouillé par
+`rattachementContact.structurel.test.ts`, couvert par `rattachementContact.atomicite.test.ts` et
+`actions/rattacherContact.test.ts`.
+
 **Aucun rapprochement automatique.** Ni email, ni téléphone, ni nom, ni score ne déclenchent quoi que
 ce soit. `rechercherContactsCandidats()` sert à ce qu'un humain **reconnaisse** quelqu'un ; elle
 n'est jamais appelée par un chemin d'écriture, et « créer un nouveau contact » reste offert même

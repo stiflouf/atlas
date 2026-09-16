@@ -40,6 +40,8 @@ type Dossier = {
   contactId: AnyPgColumn;
   workspaceId: AnyPgColumn;
   projetId: AnyPgColumn;
+  // L'INSTANTANÉ d'identité du dossier, source du Contact créé « depuis ce dossier ».
+  identite: { nom: AnyPgColumn; prenom: AnyPgColumn; email: AnyPgColumn; telephone: AnyPgColumn };
   role: "acquereur" | "vendeur";
   cleProjet: "projetAcquereurId" | "projetVendeurId";
 };
@@ -50,6 +52,12 @@ const ACQUEREUR: Dossier = {
   contactId: acquereursTable.contactId,
   workspaceId: acquereursTable.workspaceId,
   projetId: acquereursTable.projetAcquereurId,
+  identite: {
+    nom: acquereursTable.nom,
+    prenom: acquereursTable.prenom,
+    email: acquereursTable.email,
+    telephone: acquereursTable.telephone,
+  },
   role: "acquereur",
   cleProjet: "projetAcquereurId",
 };
@@ -60,6 +68,12 @@ const PROSPECT_VENDEUR: Dossier = {
   contactId: prospectsVendeursTable.contactId,
   workspaceId: prospectsVendeursTable.workspaceId,
   projetId: prospectsVendeursTable.projetVendeurId,
+  identite: {
+    nom: prospectsVendeursTable.nom,
+    prenom: prospectsVendeursTable.prenom,
+    email: prospectsVendeursTable.email,
+    telephone: prospectsVendeursTable.telephone,
+  },
   role: "vendeur",
   cleProjet: "projetVendeurId",
 };
@@ -152,46 +166,105 @@ export async function rattacherProspectVendeurAuContact(
   return rattacher(PROSPECT_VENDEUR, prospectId, contactId, workspaceId, executeur);
 }
 
-// CRÉER puis rattacher, dans la transaction de l'appelant. L'identité du nouveau contact est
-// l'INSTANTANÉ du dossier tel qu'il est aujourd'hui — jamais un rapprochement avec un contact
-// existant, même à email identique.
+// CRÉER un Contact À L'IMAGE du dossier, puis rattacher : UNE transaction, ou rien.
 //
-// Si le rattachement échoue (dossier déjà rattaché entre-temps, workspace incohérent), la
-// transaction de l'appelant est abandonnée et aucun contact orphelin ne subsiste : c'est pour cela
-// que cette fonction n'ouvre pas sa propre transaction.
+// L'identité du nouveau contact est l'INSTANTANÉ du dossier tel qu'il est RELU ICI, sous verrou —
+// jamais une valeur venue du navigateur, jamais un rapprochement avec un contact existant, même à
+// email identique. Le dossier est lu `FOR UPDATE`, dans le workspace de l'appelant, AVANT toute
+// écriture : deux créations concurrentes pour le même dossier se sérialisent sur sa ligne, la
+// seconde le trouve rattaché et ne crée rien. Un dossier d'un autre workspace est INTROUVABLE —
+// jamais lu, donc jamais copié.
+//
+// Un refus survenu après l'INSERT du contact est LEVÉ, pas retourné : la transaction est annulée et
+// aucun contact orphelin ne subsiste. C'est pour cela que cette fonction ouvre sa propre
+// transaction (un savepoint si l'appelant en tient déjà une) et traduit le refus en résultat
+// métier seulement une fois sortie.
 export type ResultatCreationEtRattachement =
   | { statut: "rattache"; contact: Contact; partieCreee: boolean }
-  | Exclude<ResultatRattachement, { statut: "rattache" }>;
+  | { statut: "deja_rattache"; contactId: string }
+  | { statut: "dossier_introuvable" };
+
+type RefusCreationEtRattachement = Exclude<ResultatCreationEtRattachement, { statut: "rattache" }>;
+
+// Porte un refus MÉTIER à travers `transaction()` pour obtenir le rollback ; jamais exposée.
+class RefusRattachement extends Error {
+  constructor(readonly refus: RefusCreationEtRattachement) {
+    super(`rattachement refusé : ${refus.statut}`);
+  }
+}
+
+// Les colonnes d'identité du dossier arrivent par le descripteur : drizzle ne peut plus en inférer
+// le type. Les colonnes acquéreur sont NOT NULL mais peuvent porter une chaîne vide historique :
+// une absence côté Contact est plus juste qu'un champ vide (ADR-057).
+type LigneDossierVerrouillee = {
+  contactId: string | null;
+  nom: string;
+  prenom: string | null;
+  email: string | null;
+  telephone: string | null;
+};
 
 async function creerEtRattacher(
   dossier: Dossier,
   dossierId: string,
-  identite: { nom: string; prenom?: string; email?: string; telephone?: string },
   workspaceId: string,
   executeur: Executeur
 ): Promise<ResultatCreationEtRattachement> {
-  const contact = await creerContact(identite, workspaceId, executeur);
-  const resultat = await rattacher(dossier, dossierId, contact.id, workspaceId, executeur);
-  if (resultat.statut !== "rattache") return resultat;
-  return { statut: "rattache", contact, partieCreee: resultat.partieCreee };
+  if (!UUID_REGEX.test(dossierId)) return { statut: "dossier_introuvable" };
+  try {
+    return await executeur.transaction(async (tx) => {
+      const [ligne] = (await tx
+        .select({
+          contactId: dossier.contactId,
+          nom: dossier.identite.nom,
+          prenom: dossier.identite.prenom,
+          email: dossier.identite.email,
+          telephone: dossier.identite.telephone,
+        })
+        .from(dossier.table)
+        .where(and(eq(dossier.id, dossierId), eq(dossier.workspaceId, workspaceId)))
+        .for("update")) as LigneDossierVerrouillee[];
+      if (!ligne) throw new RefusRattachement({ statut: "dossier_introuvable" });
+      if (ligne.contactId !== null) throw new RefusRattachement({ statut: "deja_rattache", contactId: ligne.contactId });
+
+      const contact = await creerContact(
+        {
+          nom: ligne.nom,
+          prenom: ligne.prenom || undefined,
+          email: ligne.email || undefined,
+          telephone: ligne.telephone || undefined,
+        },
+        workspaceId,
+        tx
+      );
+      const resultat = await rattacher(dossier, dossierId, contact.id, workspaceId, tx);
+      if (resultat.statut === "rattache") return { statut: "rattache", contact, partieCreee: resultat.partieCreee };
+      if (resultat.statut === "deja_rattache" || resultat.statut === "dossier_introuvable") {
+        throw new RefusRattachement(resultat);
+      }
+      // Le contact vient d'être créé, actif, dans ce workspace : ces refus sont impossibles ici.
+      throw new Error(`Rattachement incohérent après création du contact : ${resultat.statut}`);
+    });
+  } catch (erreur) {
+    if (erreur instanceof RefusRattachement) return erreur.refus;
+    throw erreur;
+  }
 }
 
 export async function creerContactEtRattacherAcquereur(
   acquereurId: string,
-  identite: { nom: string; prenom?: string; email?: string; telephone?: string },
   workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ResultatCreationEtRattachement> {
-  return creerEtRattacher(ACQUEREUR, acquereurId, identite, workspaceId, executeur);
+  return creerEtRattacher(ACQUEREUR, acquereurId, workspaceId, executeur);
 }
 
 export async function creerContactEtRattacherProspectVendeur(
   prospectId: string,
-  identite: { nom: string; prenom?: string; email?: string; telephone?: string },
   workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ResultatCreationEtRattachement> {
-  return creerEtRattacher(PROSPECT_VENDEUR, prospectId, identite, workspaceId, executeur);
+  return creerEtRattacher(PROSPECT_VENDEUR, prospectId, workspaceId, executeur);
 }
 
 // CANDIDATS, jamais une décision. Cette recherche existe pour qu'un humain reconnaisse une personne
