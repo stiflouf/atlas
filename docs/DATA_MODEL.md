@@ -1005,6 +1005,16 @@ mandat qui référence celui qu'il remplace ; le précédent n'est **pas** modif
 fin ne lui est posée d'autorité — clore l'ancien est un geste distinct, qui n'existe pas encore.
 Un `CHECK` interdit qu'un mandat se remplace lui-même.
 
+**Cible décidée, non implémentée (ADR-060, 2026-09-16 — DECIDED / NOT YET IMPLEMENTED).** ADR-060
+tranche le cycle de vie mature : précédence du mandat canonique sur `biens.date_mandat` /
+`statut_mandat` dès qu'il existe (fallback legacy par entité, jamais champ par champ), fin du
+dual-write legacy, colonnes à ajouter par une migration additive (`type` nullable sans default,
+`numero`, `exclusivite_jusqu_au`, `motif_resiliation`), statut dérivé à quatre états (`a_venir`,
+`actif`, `expire`, `resilie`), résiliation sans modification de `date_fin`, renouvellement sans
+mutation de l'ancien (la relation suffit), définition déterministe du mandat courant, standard
+workspace des writers, relation dédiée `parties_mandat` au lot suivant. Le paragraphe ci-dessous
+décrit l'état **actuel** du schéma, qui reste vrai jusqu'au lot `MANDATE_LIFECYCLE_FOUNDATION_V1`.
+
 **Champs volontairement absents**, tous pour la même raison — aucun écrivain **et** aucun lecteur,
 donc une colonne que rien ne remplirait :
 

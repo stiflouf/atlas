@@ -1060,7 +1060,13 @@ Limites qui en découlent, toutes assumées le temps de la transition :
   projet, non dérivés.
 - **La date de signature et la prise d'effet sont confondues** : une seule date est saisie.
 - **Les mandants ne sont pas modélisés** : aucun lien `mandats ↔ contacts`, la qualité juridique de
-  signataire n'étant pas la participation à un projet de vente.
+  signataire n'étant pas la participation à un projet de vente. **Décidé par ADR-060, non
+  implémenté** : relation dédiée `parties_mandat` (rôles `mandant` / `representant`), lot
+  `MANDATE_PARTIES_V1`.
+- **Les points ci-dessus (type, exclusivité, numéro, durée, résiliation, double vérité
+  legacy/canonique) sont tranchés par ADR-060** (2026-09-16), qui fixe le périmètre exact du lot
+  `MANDATE_LIFECYCLE_FOUNDATION_V1` — DECIDED / NOT YET IMPLEMENTED : rien de ce qui suit n'est
+  encore en base ni à l'écran.
 - **Aucun mandat pour l'historique** : les biens antérieurs à la migration `0037` n'en ont aucun.
 - **`interactions` existe mais n'a aucun écrivain.** Aucun flux du produit n'en crée : une note
   vendeur a déjà son foyer (`notes_prospect_vendeur`, dont le `type` pilote `dernier_contact_le`),
