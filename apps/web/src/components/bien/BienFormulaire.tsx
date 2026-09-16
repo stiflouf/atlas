@@ -1,4 +1,5 @@
 import type { Bien } from "@/types/bien";
+import MandatFaitsChamps from "@/components/mandat/MandatFaitsChamps";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -148,6 +149,11 @@ export default function BienFormulaire({
           />
         </div>
       </div>
+
+      {/* ADR-060 §14 — en CRÉATION seulement : un bien créé « Actif » naît avec son mandat canonique,
+          dont le type est exigé côté serveur. En édition, le mandat se corrige par ses propres
+          writers, jamais par ce formulaire. */}
+      {!bien && <MandatFaitsChamps typeObligatoire={false} />}
 
       <div className="border-t border-border pt-4 mt-2">
         <p className="text-[12px] text-text-3 mb-3">

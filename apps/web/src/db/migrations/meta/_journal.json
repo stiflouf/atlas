@@ -309,6 +309,13 @@
       "when": 1789397457276,
       "tag": "0043_contact_fusion_model",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789566286250,
+      "tag": "0044_mandate_lifecycle",
+      "breakpoints": true
     }
   ]
 }

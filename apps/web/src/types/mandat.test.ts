@@ -32,3 +32,32 @@ describe("deriverStatutMandat", () => {
     expect(deriverStatutMandat({ ...BASE, resilieLe: "2026-09-01" }, "2026-06-01")).toBe("actif");
   });
 });
+
+// ADR-060 §7 — quatre états, bornes INCLUSIVES, ordre fixé.
+describe("deriverStatutMandat — ADR-060", () => {
+  it("A. prise d'effet demain → a_venir", () => {
+    expect(deriverStatutMandat({ ...BASE, dateDebut: "2026-06-02" }, "2026-06-01")).toBe("a_venir");
+  });
+  it("B. prise d'effet aujourd'hui → actif", () => {
+    expect(deriverStatutMandat({ ...BASE, dateDebut: "2026-06-01" }, "2026-06-01")).toBe("actif");
+  });
+  it("C. terme aujourd'hui → actif (dernier jour couvert)", () => {
+    expect(deriverStatutMandat({ ...BASE, dateFin: "2026-06-01" }, "2026-06-01")).toBe("actif");
+  });
+  it("D. terme hier → expire", () => {
+    expect(deriverStatutMandat({ ...BASE, dateFin: "2026-05-31" }, "2026-06-01")).toBe("expire");
+  });
+  it("E. résilié aujourd'hui → resilie", () => {
+    expect(deriverStatutMandat({ ...BASE, resilieLe: "2026-06-01" }, "2026-06-01")).toBe("resilie");
+  });
+  it("F. la résiliation l'emporte sur un terme déjà passé", () => {
+    expect(deriverStatutMandat({ ...BASE, dateFin: "2026-03-01", resilieLe: "2026-02-01" }, "2026-06-01")).toBe("resilie");
+  });
+  it("G. prise d'effet future ET résiliation passée → resilie (la résiliation est lue en premier)", () => {
+    expect(deriverStatutMandat({ ...BASE, dateDebut: "2026-09-01", resilieLe: "2026-05-01" }, "2026-06-01")).toBe("resilie");
+  });
+  it("les champs hors dates n'entrent pas dans le statut", () => {
+    const complet: Mandat = { ...BASE, type: "exclusif", numero: "X", remplaceMandatId: "m0" };
+    expect(deriverStatutMandat(complet, "2026-06-01")).toBe("actif");
+  });
+});

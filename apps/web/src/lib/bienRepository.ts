@@ -5,6 +5,7 @@ import { biens as biensDemo, getBienById as getBienDemoById } from "@/data/biens
 import type { Bien, TypeBien, StatutMandat, Exterieur, ChargeHonoraires } from "@/types/bien";
 import type { PageResultat } from "@/types/pagination";
 import { photoPrincipaleIdSubquery } from "./photoBienRepository";
+import { existeMandatCanonique } from "./mandatRepository";
 
 type LigneBien = typeof biensTable.$inferSelect;
 
@@ -217,12 +218,18 @@ export async function creerBien(
 // mise à jour ne le rafraîchit jamais automatiquement. Retourne undefined si id ne correspond à
 // aucune ligne réelle (id mocké ou déjà supprimé) plutôt que de supposer qu'une ligne a été
 // modifiée — l'appelant (Server Action) doit gérer ce cas explicitement, jamais un faux succès.
+//
+// ADR-060 §2 — LEGACY WRITE POLICY : dès qu'un mandat canonique existe pour ce bien, `date_mandat`
+// et `statut_mandat` ne sont plus écrits, même si le payload les porte — le canonique fait foi (§1)
+// et toute correction contractuelle passe par les writers Mandat. Jamais de dual-write. Un bien sans
+// mandat canonique reste éditable comme avant.
 export async function modifierBien(
   id: string,
   input: NouveauBien,
   executeur: Executeur = getDb()
 ): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
+  const mandatLegacyFige = await existeMandatCanonique(id, executeur);
   const [ligne] = await executeur
     .update(biensTable)
     .set({
@@ -235,8 +242,7 @@ export async function modifierBien(
       surface: input.surface,
       pieces: input.pieces,
       prix: input.prix,
-      statutMandat: input.statutMandat,
-      dateMandat: input.dateMandat,
+      ...(mandatLegacyFige ? {} : { statutMandat: input.statutMandat, dateMandat: input.dateMandat }),
       caracteristiques: input.caracteristiques,
       description: input.description,
       etage: input.etage ?? null,

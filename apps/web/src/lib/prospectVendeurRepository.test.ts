@@ -154,9 +154,9 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
       dateMandat: "2026-09-10",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
-    expect(resultat).toBeDefined();
-    idsBiensCrees.push(resultat!.bien.id);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultat.statut !== "signe") throw new Error(resultat.statut);
+        idsBiensCrees.push(resultat!.bien.id);
 
     expect(resultat!.prospect.bienId).toBe(resultat!.bien.id);
     expect(resultat!.prospect.mandatSigneLe).toBeDefined();
@@ -184,7 +184,8 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
       dateMandat: "2026-09-10",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultatA.statut !== "signe") throw new Error(resultatA.statut);
     idsBiensCrees.push(resultatA!.bien.id);
 
     // Tentative de faire pointer un second prospect vers le même bien directement en base

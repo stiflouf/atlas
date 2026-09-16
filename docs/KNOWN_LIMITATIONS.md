@@ -1051,22 +1051,26 @@ Limites qui en découlent, toutes assumées le temps de la transition :
 - **Aucune relation projet ↔ bien.** `projets_vendeur` ne pointe vers aucun bien : la frontière
   (un projet, plusieurs biens ? un bien, plusieurs projets successifs ?) est renvoyée au lot
   Property/Mandat. `prospects_vendeurs.bien_id` reste `UNIQUE` et posé uniquement à la signature.
-- **`mandats` existe, mais reste creux.** La table est alimentée par chaque signature réelle
-  depuis la migration `0037` ; elle ne porte cependant que le bien, le projet éventuel et la prise
-  d'effet. Le **type de mandat, l'exclusivité et le numéro ne sont saisis nulle part** dans le
-  produit : ils sont donc absents du schéma plutôt que toujours nuls. La **durée** n'est pas non
-  plus saisie, donc `date_fin` reste vide et tout mandat canonique est « actif » indéfiniment ; la
-  **résiliation** n'a aucun geste. `mandat_propose_le` et `mandat_signe_le` restent des jalons du
-  projet, non dérivés.
-- **La date de signature et la prise d'effet sont confondues** : une seule date est saisie.
+- **`mandats` a un cycle de vie canonique (ADR-060, lot `MANDATE_LIFECYCLE_FOUNDATION_V1`)** : type,
+  numéro, terme, exclusivité, résiliation, mandat courant, writers scoped workspace, signature
+  sérialisée. Ce qui reste **non livré** : les **écrans** (fiche bien, prospect, points d'attention
+  et dashboard lisent toujours `biens.statut_mandat` / `date_mandat` ; le masquage des champs legacy
+  dans le formulaire d'édition attend le lot UI — la défense serveur, elle, est active), le
+  **renouvellement humain** (seul le primitif `creerMandatSuccesseur` existe, sans clôture de
+  l'ancien : la relation `remplace_mandat_id` suffit au mandat courant), le geste « Enregistrer le
+  mandat existant » à l'écran (le writer `enregistrerMandatExistant` existe), et toute
+  **automatisation** d'échéance (`mandat_expire_bientot`, `mandat_expire`, `mandat_resilie`) — les
+  calculs sont possibles via `date_fin` et le statut dérivé, rien ne les consomme encore.
+- **La date de signature et la prise d'effet sont confondues** : une seule date est saisie
+  (`date_debut`, ADR-060 §5) ; `signe_le` viendra par décision dédiée si une prise d'effet
+  différée est constatée.
 - **Les mandants ne sont pas modélisés** : aucun lien `mandats ↔ contacts`, la qualité juridique de
   signataire n'étant pas la participation à un projet de vente. **Décidé par ADR-060, non
   implémenté** : relation dédiée `parties_mandat` (rôles `mandant` / `representant`), lot
-  `MANDATE_PARTIES_V1`.
-- **Les points ci-dessus (type, exclusivité, numéro, durée, résiliation, double vérité
-  legacy/canonique) sont tranchés par ADR-060** (2026-09-16), qui fixe le périmètre exact du lot
-  `MANDATE_LIFECYCLE_FOUNDATION_V1` — DECIDED / NOT YET IMPLEMENTED : rien de ce qui suit n'est
-  encore en base ni à l'écran.
+  `MANDATE_PARTIES_V1`. Mandate maturity reste **OPEN** jusqu'à ce lot.
+- **`mandat_signe` cible toujours le prospect** (idempotence « une signature par prospect à vie ») :
+  un renouvellement ne pourra pas ré-émettre l'événement avant que la cible `mandat_id` existe (lot
+  automatisations).
 - **Aucun mandat pour l'historique** : les biens antérieurs à la migration `0037` n'en ont aucun.
 - **`interactions` existe mais n'a aucun écrivain.** Aucun flux du produit n'en crée : une note
   vendeur a déjà son foyer (`notes_prospect_vendeur`, dont le `type` pilote `dernier_contact_le`),

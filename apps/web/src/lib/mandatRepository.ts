@@ -1,41 +1,86 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, exists, notExists, isNull, or, gt, gte, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { getDb, type Executeur } from "@/db/client";
 import { biens as biensTable, mandats as mandatsTable, projetsVendeur as projetsVendeurTable } from "@/db/schema";
-import type { Mandat } from "@/types/mandat";
+import { deriverStatutMandat, type Mandat, type MandatHistorique, type TypeMandat } from "@/types/mandat";
 
-// ADR-055 §F — accès au mandat canonique. Volontairement réduit à ce dont le lot a besoin : créer
-// un mandat, le relire, lister ceux d'un bien ou d'un projet, et créer un successeur. Aucun geste de
-// résiliation ni de pose de terme : ils n'existent nulle part dans le produit, et les écrire ici
-// donnerait des chemins d'écriture que rien n'appelle.
+// ADR-055 §F, ADR-060 — accès au mandat canonique. Le lot lifecycle (ADR-060 §16) rend la table
+// VIVANTE : création à l'image des faits saisis, modification, résiliation, mandat courant. Le
+// renouvellement humain (verrou double, clôture, écran) reste hors de ce module : seul le primitif
+// `creerMandatSuccesseur` existe, sans mutation de l'ancien (§9).
+//
+// WORKSPACE (ADR-054 §7, ADR-060 §13) : `mandats` n'en porte pas, son périmètre est celui du bien.
+// Chaque writer reçoit le workspace de SESSION, relit sa racine sous verrou en le filtrant, et rend
+// un objet d'un autre workspace INTROUVABLE — publiquement indistinguable d'un id inconnu.
 
 type LigneMandat = typeof mandatsTable.$inferSelect;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function dateDuJour(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 // NULL Postgres -> undefined métier : un mandat en cours n'a pas une date de résiliation nulle, il
-// n'en a pas.
+// n'en a pas. `type` NULL (ligne antérieure au lot lifecycle) reste NULL en base et absent ici —
+// jamais traduit en `simple`.
 function ligneVersMandat(ligne: LigneMandat): Mandat {
   return {
     id: ligne.id,
     bienId: ligne.bienId,
     projetVendeurId: ligne.projetVendeurId ?? undefined,
+    type: (ligne.type as TypeMandat | null) ?? undefined,
+    numero: ligne.numero ?? undefined,
     dateDebut: ligne.dateDebut,
     dateFin: ligne.dateFin ?? undefined,
+    exclusiviteJusquAu: ligne.exclusiviteJusquAu ?? undefined,
     resilieLe: ligne.resilieLe ?? undefined,
+    motifResiliation: ligne.motifResiliation ?? undefined,
     remplaceMandatId: ligne.remplaceMandatId ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
   };
 }
 
-export type NouveauMandat = {
+// ADR-060 §12 — un numéro vide n'est pas un numéro.
+function normaliserNumero(numero: string | undefined): string | null {
+  const propre = numero?.trim() ?? "";
+  return propre === "" ? null : propre;
+}
+
+function normaliserMotif(motif: string | undefined): string | null {
+  const propre = motif?.trim() ?? "";
+  return propre === "" ? null : propre;
+}
+
+// Les faits contractuels que tout writer humain saisit (ADR-060 §16). `type` est OBLIGATOIRE dans
+// le contrat : la nullabilité de la colonne n'existe que pour les lignes antérieures au lot, elle
+// n'est pas une option offerte à la saisie.
+export type FaitsMandat = {
+  type: TypeMandat;
+  numero?: string;
+  dateFin?: string;
+  exclusiviteJusquAu?: string;
+};
+
+export type NouveauMandat = FaitsMandat & {
   bienId: string;
   // Optionnel : un mandat signé depuis une opportunité antérieure au modèle canonique n'a pas de
   // projet à référencer. Le mandat reste un fait ; son projet n'a jamais existé en base.
   projetVendeurId?: string;
   dateDebut: string;
-  dateFin?: string;
   remplaceMandatId?: string;
 };
+
+// Cohérence des dates vérifiée AVANT l'écriture, en plus des CHECK SQL qui restent le dernier
+// filet : un writer rend un refus typé, jamais une violation de contrainte à interpréter.
+function datesIncoherentes(mandat: { dateDebut: string; dateFin?: string; exclusiviteJusquAu?: string }): boolean {
+  if (mandat.dateFin !== undefined && mandat.dateFin < mandat.dateDebut) return true;
+  if (mandat.exclusiviteJusquAu !== undefined) {
+    if (mandat.exclusiviteJusquAu < mandat.dateDebut) return true;
+    if (mandat.dateFin !== undefined && mandat.exclusiviteJusquAu > mandat.dateFin) return true;
+  }
+  return false;
+}
 
 // ADR-054 — `mandats` est une FEUILLE de `biens` : son périmètre est celui du bien, jamais un
 // paramètre. Aucun `workspaceId` n'est donc reçu ici — le dupliquer permettrait d'en choisir un qui
@@ -44,6 +89,11 @@ export type NouveauMandat = {
 // En revanche, quand un projet est rattaché, les DEUX périmètres doivent coïncider : la base ne peut
 // pas le vérifier (aucune des deux colonnes ne porte le workspace), donc ce chemin le fait, et il
 // échoue bruyamment. Même garde et même raison que `ajouterPartieProjet`.
+//
+// Primitive BASSE : elle ne vérifie pas l'invariant « un seul mandat courant » (ADR-060 §11) — c'est
+// le rôle des writers qui partent d'un bien EXISTANT (`enregistrerMandatExistant`), sous verrou.
+// Les flux qui créent le bien dans la même transaction (signature, création directe) n'ont rien à
+// vérifier : le bien n'a encore aucun mandat, et personne d'autre ne le voit.
 export async function creerMandat(input: NouveauMandat, executeur: Executeur = getDb()): Promise<Mandat> {
   const [bien] = await executeur
     .select({ workspaceId: biensTable.workspaceId })
@@ -63,24 +113,29 @@ export async function creerMandat(input: NouveauMandat, executeur: Executeur = g
       throw new Error("Un mandat ne peut pas relier un bien et un projet vendeur de workspaces différents");
     }
   }
+  if (datesIncoherentes(input)) {
+    throw new Error("Dates de mandat incohérentes : terme avant la prise d'effet, ou exclusivité hors période");
+  }
 
   const [ligne] = await executeur
     .insert(mandatsTable)
     .values({
       bienId: input.bienId,
       projetVendeurId: input.projetVendeurId ?? null,
+      type: input.type,
+      numero: normaliserNumero(input.numero),
       dateDebut: input.dateDebut,
       dateFin: input.dateFin ?? null,
+      exclusiviteJusquAu: input.exclusiviteJusquAu ?? null,
       remplaceMandatId: input.remplaceMandatId ?? null,
     })
     .returning();
   return ligneVersMandat(ligne);
 }
 
-// CAS 7 d'ADR-055 — un renouvellement CRÉE une ligne. Le mandat remplacé n'est jamais modifié :
-// aucun UPDATE ici, aucune date de fin posée d'autorité sur lui. Clore l'ancien est un geste
-// distinct, qui n'existe pas encore ; le supposer inventerait une fin de contrat que personne n'a
-// constatée.
+// CAS 7 d'ADR-055, ADR-060 §9 — un renouvellement CRÉE une ligne. Le mandat remplacé n'est jamais
+// modifié : aucun UPDATE ici, aucune date de fin posée d'autorité sur lui — la relation suffit à le
+// retirer de la notion de mandat courant. Le geste humain (verrou double, écran) est un lot ultérieur.
 //
 // Le successeur hérite du bien du mandat remplacé — un renouvellement porte par définition sur le
 // même actif. Le laisser choisir au caller permettrait de « renouveler » un mandat sur un autre
@@ -108,16 +163,38 @@ export async function getMandatById(id: string): Promise<Mandat | undefined> {
   return ligne ? ligneVersMandat(ligne) : undefined;
 }
 
+// « Remplacé » = un successeur référence cette ligne (ADR-060 §9-10). Sous-requête corrélée, jamais
+// une colonne : un booléen stocké deviendrait faux au premier renouvellement oublié.
+const successeurs = alias(mandatsTable, "successeurs");
+function successeurDe(executeur: Executeur) {
+  return executeur.select({ un: sql`1` }).from(successeurs).where(eq(successeurs.remplaceMandatId, mandatsTable.id));
+}
+
 // Ordre chronologique de prise d'effet : l'historique contractuel se lit dans le sens où il s'est
-// produit. Les mandats expirés ou résiliés ne sont jamais exclus — ce sont eux, l'historique.
-export async function listerMandatsDuBien(bienId: string): Promise<Mandat[]> {
+// produit. Les mandats expirés, résiliés ou remplacés ne sont jamais exclus — ce sont eux,
+// l'historique. Chaque ligne porte son statut dérivé et l'id de son successeur éventuel, obtenu par
+// une jointure — jamais une requête par ligne.
+export async function listerMandatsDuBien(
+  bienId: string,
+  aujourdhui: string = dateDuJour(),
+  executeur: Executeur = getDb()
+): Promise<MandatHistorique[]> {
   if (!UUID_REGEX.test(bienId)) return [];
-  const lignes = await getDb()
-    .select()
+  const lignes = await executeur
+    .select({ mandat: mandatsTable, remplaceParId: successeurs.id })
     .from(mandatsTable)
+    .leftJoin(successeurs, eq(successeurs.remplaceMandatId, mandatsTable.id))
     .where(eq(mandatsTable.bienId, bienId))
-    .orderBy(asc(mandatsTable.dateDebut), asc(mandatsTable.creeLe));
-  return lignes.map(ligneVersMandat);
+    .orderBy(asc(mandatsTable.dateDebut), asc(mandatsTable.creeLe), asc(mandatsTable.id));
+  // Un mandat remplacé deux fois (cas incohérent, lisible) apparaîtrait deux fois : on garde la
+  // première ligne par id, le successeur retenu étant déterministe par l'ordre de la jointure.
+  const parId = new Map<string, MandatHistorique>();
+  for (const { mandat, remplaceParId } of lignes) {
+    if (parId.has(mandat.id)) continue;
+    const metier = ligneVersMandat(mandat);
+    parId.set(mandat.id, { ...metier, statut: deriverStatutMandat(metier, aujourdhui), remplaceParId: remplaceParId ?? undefined });
+  }
+  return [...parId.values()];
 }
 
 export async function listerMandatsDuProjetVendeur(projetVendeurId: string): Promise<Mandat[]> {
@@ -128,4 +205,196 @@ export async function listerMandatsDuProjetVendeur(projetVendeurId: string): Pro
     .where(eq(mandatsTable.projetVendeurId, projetVendeurId))
     .orderBy(asc(mandatsTable.dateDebut), asc(mandatsTable.creeLe));
   return lignes.map(ligneVersMandat);
+}
+
+// ADR-060 §1 — la PRÉCÉDENCE se décide par entité : dès qu'un mandat canonique existe pour le bien,
+// les colonnes legacy `biens.date_mandat` / `statut_mandat` cessent de faire foi. Lu par le writer
+// legacy (`modifierBien`) pour ne plus les écrire (§2).
+export async function existeMandatCanonique(bienId: string, executeur: Executeur = getDb()): Promise<boolean> {
+  if (!UUID_REGEX.test(bienId)) return false;
+  const [ligne] = await executeur
+    .select({ id: mandatsTable.id })
+    .from(mandatsTable)
+    .where(eq(mandatsTable.bienId, bienId))
+    .limit(1);
+  return ligne !== undefined;
+}
+
+// ADR-060 §10 — LE mandat courant d'un bien, en UNE requête : candidats sans successeur dont le
+// statut dérivé est `actif` ou `a_venir` (aucun filtre sur la prise d'effet : un mandat signé qui
+// prend effet demain est le courant), ordre déterministe, première ligne. Un jeu incohérent (deux
+// mandats vivants importés) reste lisible et donne toujours la même réponse ; rien n'est réparé.
+//
+// Le workspace passe par le bien (ADR-054 §7) : un bien d'un autre workspace n'a pas de mandat
+// courant, comme s'il n'existait pas.
+export async function mandatCourantDuBien(
+  bienId: string,
+  workspaceId: string,
+  aujourdhui: string = dateDuJour(),
+  executeur: Executeur = getDb()
+): Promise<Mandat | undefined> {
+  if (!UUID_REGEX.test(bienId)) return undefined;
+  const [ligne] = await executeur
+    .select({ mandat: mandatsTable })
+    .from(mandatsTable)
+    .innerJoin(biensTable, eq(mandatsTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(mandatsTable.bienId, bienId),
+        eq(biensTable.workspaceId, workspaceId),
+        notExists(successeurDe(executeur)),
+        or(isNull(mandatsTable.resilieLe), gt(mandatsTable.resilieLe, aujourdhui)),
+        or(isNull(mandatsTable.dateFin), gte(mandatsTable.dateFin, aujourdhui))
+      )
+    )
+    .orderBy(desc(mandatsTable.dateDebut), desc(mandatsTable.creeLe), desc(mandatsTable.id))
+    .limit(1);
+  return ligne ? ligneVersMandat(ligne.mandat) : undefined;
+}
+
+// ADR-060 §11 et §13 — verrouille le BIEN (scoped) avant qu'un writer standard ne crée un mandat
+// sur un bien existant, et rend le mandat courant éventuel. Même définition du courant partout :
+// c'est `mandatCourantDuBien` qui répond, sous le verrou du bien.
+export type BienVerrouillePourMandat =
+  | { statut: "verrouille"; mandatCourant: Mandat | undefined }
+  | { statut: "bien_introuvable" };
+
+export async function verrouillerBienPourMandat(
+  bienId: string,
+  workspaceId: string,
+  tx: Executeur,
+  aujourdhui: string = dateDuJour()
+): Promise<BienVerrouillePourMandat> {
+  if (!UUID_REGEX.test(bienId)) return { statut: "bien_introuvable" };
+  const [bien] = await tx
+    .select({ id: biensTable.id })
+    .from(biensTable)
+    .where(and(eq(biensTable.id, bienId), eq(biensTable.workspaceId, workspaceId)))
+    .for("update");
+  if (!bien) return { statut: "bien_introuvable" };
+  return { statut: "verrouille", mandatCourant: await mandatCourantDuBien(bienId, workspaceId, aujourdhui, tx) };
+}
+
+// ADR-060 §15 — « Enregistrer le mandat existant » : un bien legacy sans mandat canonique en reçoit
+// un, à partir de ce que l'HUMAIN saisit. Jamais un backfill : `dateDebut` est un paramètre, pas
+// une copie de `biens.date_mandat`. Refusé dès qu'un mandat canonique existe (§11) — le geste sert à
+// amorcer, pas à doubler.
+export type ResultatEnregistrementMandat =
+  | { statut: "enregistre"; mandat: Mandat }
+  | { statut: "bien_introuvable" }
+  | { statut: "mandat_canonique_existant" }
+  | { statut: "dates_incoherentes" };
+
+export async function enregistrerMandatExistant(
+  bienId: string,
+  input: FaitsMandat & { dateDebut: string },
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ResultatEnregistrementMandat> {
+  if (datesIncoherentes(input)) return { statut: "dates_incoherentes" };
+  return executeur.transaction(async (tx) => {
+    const verrou = await verrouillerBienPourMandat(bienId, workspaceId, tx);
+    if (verrou.statut !== "verrouille") return { statut: "bien_introuvable" };
+    if (verrou.mandatCourant !== undefined || (await existeMandatCanonique(bienId, tx))) {
+      return { statut: "mandat_canonique_existant" };
+    }
+    const mandat = await creerMandat({ ...input, bienId }, tx);
+    return { statut: "enregistre", mandat };
+  });
+}
+
+// Relit un mandat SOUS VERROU, dans le workspace de session via son bien (ADR-060 §13). Le verrou
+// ne porte que sur `mandats` : le bien n'est pas modifié par ces writers, et verrouiller les deux
+// dans un ordre différent du renouvellement futur (bien puis mandat) créerait un interblocage.
+type MandatVerrouille =
+  | { statut: "verrouille"; ligne: LigneMandat; remplace: boolean }
+  | { statut: "introuvable" };
+
+async function verrouillerMandat(mandatId: string, workspaceId: string, tx: Executeur): Promise<MandatVerrouille> {
+  if (!UUID_REGEX.test(mandatId)) return { statut: "introuvable" };
+  const [trouve] = await tx
+    .select({ mandat: mandatsTable, remplace: sql<boolean>`${exists(successeurDe(tx))}` })
+    .from(mandatsTable)
+    .innerJoin(biensTable, eq(mandatsTable.bienId, biensTable.id))
+    .where(and(eq(mandatsTable.id, mandatId), eq(biensTable.workspaceId, workspaceId)))
+    .for("update", { of: mandatsTable });
+  if (!trouve) return { statut: "introuvable" };
+  return { statut: "verrouille", ligne: trouve.mandat, remplace: trouve.remplace };
+}
+
+// ADR-060 §16 — modification des faits contractuels d'un mandat VIVANT : type, numéro, terme,
+// exclusivité. Jamais la prise d'effet, jamais la résiliation, jamais la relation de remplacement,
+// jamais le bien ni le projet. Un mandat résilié ou remplacé est de l'histoire : un writer standard
+// ne la réécrit pas.
+export type ModificationMandat = {
+  type: TypeMandat;
+  numero?: string;
+  dateFin?: string;
+  exclusiviteJusquAu?: string;
+};
+
+export type ResultatModificationMandat =
+  | { statut: "modifie"; mandat: Mandat }
+  | { statut: "introuvable" }
+  | { statut: "resilie" }
+  | { statut: "remplace" }
+  | { statut: "dates_incoherentes" };
+
+export async function modifierMandat(
+  mandatId: string,
+  input: ModificationMandat,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ResultatModificationMandat> {
+  return executeur.transaction(async (tx) => {
+    const verrou = await verrouillerMandat(mandatId, workspaceId, tx);
+    if (verrou.statut !== "verrouille") return { statut: "introuvable" };
+    if (verrou.ligne.resilieLe !== null) return { statut: "resilie" };
+    if (verrou.remplace) return { statut: "remplace" };
+    if (datesIncoherentes({ dateDebut: verrou.ligne.dateDebut, ...input })) return { statut: "dates_incoherentes" };
+
+    const [ligne] = await tx
+      .update(mandatsTable)
+      .set({
+        type: input.type,
+        numero: normaliserNumero(input.numero),
+        dateFin: input.dateFin ?? null,
+        exclusiviteJusquAu: input.exclusiviteJusquAu ?? null,
+      })
+      .where(eq(mandatsTable.id, mandatId))
+      .returning();
+    return { statut: "modifie", mandat: ligneVersMandat(ligne) };
+  });
+}
+
+// ADR-060 §8 — résiliation : un fait unique (refusée si déjà posée), daté au plus tôt de la prise
+// d'effet, qui ne touche à RIEN d'autre — `date_fin` reste le terme prévu. Un mandat remplacé
+// n'est plus résiliable par ce chemin : son histoire est close par la relation.
+export type ResultatResiliationMandat =
+  | { statut: "resilie"; mandat: Mandat }
+  | { statut: "introuvable" }
+  | { statut: "deja_resilie" }
+  | { statut: "remplace" }
+  | { statut: "date_incoherente" };
+
+export async function resilierMandat(
+  mandatId: string,
+  input: { resilieLe: string; motifResiliation?: string },
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ResultatResiliationMandat> {
+  return executeur.transaction(async (tx) => {
+    const verrou = await verrouillerMandat(mandatId, workspaceId, tx);
+    if (verrou.statut !== "verrouille") return { statut: "introuvable" };
+    if (verrou.ligne.resilieLe !== null) return { statut: "deja_resilie" };
+    if (verrou.remplace) return { statut: "remplace" };
+    if (input.resilieLe < verrou.ligne.dateDebut) return { statut: "date_incoherente" };
+
+    const [ligne] = await tx
+      .update(mandatsTable)
+      .set({ resilieLe: input.resilieLe, motifResiliation: normaliserMotif(input.motifResiliation) })
+      .where(eq(mandatsTable.id, mandatId))
+      .returning();
+    return { statut: "resilie", mandat: ligneVersMandat(ligne) };
+  });
 }

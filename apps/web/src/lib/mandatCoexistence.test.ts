@@ -86,16 +86,16 @@ describe("ADR-055 §F — signer un mandat crée le mandat canonique, sans rien 
     );
     idsProspects.push(prospect.id);
 
-    const resultat = await signerMandatProspectVendeur(prospect.id, donneesBien("CANONIQUE"), WORKSPACE_TEST);
-    expect(resultat).toBeDefined();
-    idsBiens.push(resultat!.bien.id);
+    const resultat = await signerMandatProspectVendeur(prospect.id, donneesBien("CANONIQUE"), WORKSPACE_TEST, { type: "exclusif", numero: " M-2026-001 " });
+    if (resultat.statut !== "signe") throw new Error(resultat.statut);
+    idsBiens.push(resultat.bien.id);
 
     // Comportement historique STRICTEMENT inchangé : le bien est créé avec son statut de mandat, le
     // jalon est posé, et l'événement mandat_signe est émis comme avant.
-    expect(resultat!.bien.statutMandat).toBe("actif");
-    expect(resultat!.bien.dateMandat).toBe("2026-05-04");
-    expect(resultat!.prospect.bienId).toBe(resultat!.bien.id);
-    expect(resultat!.prospect.mandatSigneLe).toBeDefined();
+    expect(resultat.bien.statutMandat).toBe("actif");
+    expect(resultat.bien.dateMandat).toBe("2026-05-04");
+    expect(resultat.prospect.bienId).toBe(resultat.bien.id);
+    expect(resultat.prospect.mandatSigneLe).toBeDefined();
     const evenements = await getDb()
       .select()
       .from(evenementsMetierTable)
@@ -103,14 +103,18 @@ describe("ADR-055 §F — signer un mandat crée le mandat canonique, sans rien 
     expect(evenements.map((evenement) => evenement.typeEvenement)).toContain("mandat_signe");
 
     // Et le mandat canonique existe, rattaché des deux côtés.
-    const mandats = await listerMandatsDuBien(resultat!.bien.id);
+    const mandats = await listerMandatsDuBien(resultat.bien.id);
     expect(mandats).toHaveLength(1);
     expect(mandats[0].projetVendeurId).toBe(projet.id);
     // La prise d'effet vient de la seule date que la signature saisisse.
     expect(mandats[0].dateDebut).toBe("2026-05-04");
-    // Ni durée, ni résiliation : le formulaire ne les demande pas, rien n'est inventé.
+    // ADR-060 : les faits saisis, et rien de plus — ni terme ni résiliation inventés.
+    expect(mandats[0].type).toBe("exclusif");
+    expect(mandats[0].numero, "numéro normalisé (trim)").toBe("M-2026-001");
     expect(mandats[0].dateFin).toBeUndefined();
     expect(mandats[0].resilieLe).toBeUndefined();
+    expect(mandats[0].statut).toBe("actif");
+    expect(resultat.mandat.id).toBe(mandats[0].id);
   });
 
   it("depuis une opportunité HISTORIQUE sans projet canonique : le mandat existe quand même", async () => {
@@ -120,15 +124,15 @@ describe("ADR-055 §F — signer un mandat crée le mandat canonique, sans rien 
     idsProspects.push(prospect.id);
     expect(prospect.bienId).toBeUndefined();
 
-    const resultat = await signerMandatProspectVendeur(prospect.id, donneesBien("HISTORIQUE"), WORKSPACE_TEST);
-    expect(resultat).toBeDefined();
-    idsBiens.push(resultat!.bien.id);
+    const resultat = await signerMandatProspectVendeur(prospect.id, donneesBien("HISTORIQUE"), WORKSPACE_TEST, { type: "simple" });
+    if (resultat.statut !== "signe") throw new Error(resultat.statut);
+    idsBiens.push(resultat.bien.id);
 
-    const mandats = await listerMandatsDuBien(resultat!.bien.id);
+    const mandats = await listerMandatsDuBien(resultat.bien.id);
     expect(mandats).toHaveLength(1);
     expect(mandats[0].projetVendeurId, "aucun projet n'est deviné").toBeUndefined();
     // Le workflow historique fonctionne exactement comme avant.
-    expect(resultat!.prospect.mandatSigneLe).toBeDefined();
+    expect(resultat.prospect.mandatSigneLe).toBeDefined();
   });
 
   it("aucun backfill : les biens antérieurs n'ont pas de mandat canonique", async () => {
@@ -160,7 +164,7 @@ describe("ADR-055 §F — rien ne survit à un échec de la transaction de signa
     idsProspects.push(prospect.id);
 
     await expect(
-      signerMandatProspectVendeur(prospect.id, donneesBien("ROLLBACK"), WORKSPACE_TEST)
+      signerMandatProspectVendeur(prospect.id, donneesBien("ROLLBACK"), WORKSPACE_TEST, { type: "simple" })
     ).rejects.toThrow(/workspaces différents/);
 
     expect(
@@ -181,7 +185,7 @@ describe("ADR-055 §F — rien ne survit à un échec de la transaction de signa
     await expect(
       getDb().transaction(async (tx) => {
         const bien = await creerBien({ ...donneesBien("ROLLBACK-APRES"), reference }, WORKSPACE_TEST, tx);
-        await creerMandat({ bienId: bien.id, dateDebut: "2026-05-04" }, tx);
+        await creerMandat({ bienId: bien.id, dateDebut: "2026-05-04", type: "simple" }, tx);
         return tx
           .insert(evenementsMetierTable)
           .values({ typeEvenement: "mandat_signe", workspaceId: "workspace-inexistant" })

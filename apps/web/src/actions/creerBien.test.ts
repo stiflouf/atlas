@@ -25,7 +25,7 @@ import { eq } from "drizzle-orm";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, compatibilitesARessynchroniser, compatibilitesBienAcquereurEtat, evenementsMetier } =
+const { biens: biensTable, compatibilitesARessynchroniser, compatibilitesBienAcquereurEtat, evenementsMetier, mandats } =
   await import("@/db/schema");
 const { inArray } = await import("drizzle-orm");
 const { creerBienAction } = await import("./creerBien");
@@ -43,6 +43,7 @@ afterAll(async () => {
     await getDb().delete(compatibilitesBienAcquereurEtat).where(inArray(compatibilitesBienAcquereurEtat.bienId, idsCrees));
     await getDb().delete(compatibilitesARessynchroniser).where(inArray(compatibilitesARessynchroniser.bienId, idsCrees));
   }
+  if (idsCrees.length > 0) await getDb().delete(mandats).where(inArray(mandats.bienId, idsCrees));
   for (const id of idsCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
 });
 
@@ -79,6 +80,8 @@ const CHAMPS_BASE = {
   prix: "300000",
   statutMandat: "actif",
   dateMandat: "2026-01-01",
+  // ADR-060 §14 — un bien créé « actif » naît avec son mandat canonique : le type est exigé.
+  typeMandat: "simple",
 };
 
 describe("creerBienAction — résolution IGN non bloquante (ADR-035, section 5)", () => {

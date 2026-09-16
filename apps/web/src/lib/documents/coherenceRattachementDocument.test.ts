@@ -172,7 +172,8 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
       dateMandat: bienConverti.dateMandat,
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (conversion.statut !== "signe") throw new Error(conversion.statut);
     if (conversion) idsBiens.push(conversion.bien.id);
 
     await expect(
@@ -197,7 +198,8 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (conversion.statut !== "signe") throw new Error(conversion.statut);
     expect(conversion).toBeDefined();
     if (!conversion) return;
     idsBiens.push(conversion.bien.id);

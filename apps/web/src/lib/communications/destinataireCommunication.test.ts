@@ -115,7 +115,8 @@ describe("resoudreDestinatairesDepuisBien", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (conversion.statut !== "signe") throw new Error(conversion.statut);
     expect(conversion).toBeDefined();
     if (!conversion) return;
     idsBiens.push(conversion.bien.id);
@@ -142,7 +143,8 @@ describe("resoudreDestinatairesDepuisBien", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (conversion.statut !== "signe") throw new Error(conversion.statut);
     expect(conversion).toBeDefined();
     if (!conversion) return;
     idsBiens.push(conversion.bien.id);

@@ -296,7 +296,8 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultatMandat.statut !== "signe") throw new Error(resultatMandat.statut);
     const bien = resultatMandat!.bien;
     idsBiens.push(bien.id);
 
@@ -347,7 +348,8 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultatMandat.statut !== "signe") throw new Error(resultatMandat.statut);
     const bien = resultatMandat!.bien;
     idsBiens.push(bien.id);
     await definirActivationAutomatisation("retour_vendeur_apres_visite", true, WORKSPACE_TEST);
@@ -423,7 +425,8 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultatMandat.statut !== "signe") throw new Error(resultatMandat.statut);
     const bien = resultatMandat!.bien;
     idsBiens.push(bien.id);
     await definirActivationAutomatisation("retour_vendeur_apres_visite", true, WORKSPACE_TEST);
@@ -471,7 +474,8 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       dateMandat: "2026-01-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultatMandat2.statut !== "signe") throw new Error(resultatMandat2.statut);
     const bien = resultatMandat2!.bien;
     idsBiens.push(bien.id);
     const acquereur = await creerAcquereurTest("resol7@test.local");

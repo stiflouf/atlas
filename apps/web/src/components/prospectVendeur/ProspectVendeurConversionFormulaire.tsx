@@ -1,4 +1,5 @@
 import type { ProspectVendeur } from "@/types/prospectVendeur";
+import MandatFaitsChamps from "@/components/mandat/MandatFaitsChamps";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -105,7 +106,11 @@ export default function ProspectVendeurConversionFormulaire({
       <div>
         <label className={labelCls}>Date du mandat *</label>
         <input name="dateMandat" type="date" required className={inputCls} />
+        <p className={helpCls}>Prise d&apos;effet du mandat (ADR-060 : confondue avec la signature).</p>
       </div>
+
+      {/* ADR-060 §16 — les faits du mandat canonique créé par la signature : type obligatoire. */}
+      <MandatFaitsChamps />
 
       <button
         type="submit"

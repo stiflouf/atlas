@@ -1,10 +1,20 @@
 # ADR-060 — Maturité du Mandat : cycle de vie canonique, précédence legacy et frontières V1
 
-**Statut :** Accepté — **DECIDED / NOT YET IMPLEMENTED**. Aucune migration, aucun writer, aucun
-écran de cette ADR n'existe à la date de rédaction ; le lot `MANDATE_LIFECYCLE_FOUNDATION_V1` est
-le premier à l'implémenter, avec le périmètre exact fixé en §16.
+**Statut :** Accepté — **PARTIELLEMENT IMPLÉMENTÉ** (2026-09-16, lot `MANDATE_LIFECYCLE_FOUNDATION_V1`).
 **Date :** 2026-09-16
 **Décideurs :** Steven Gausset (CEO), CTO
+
+| Section | État |
+|---|---|
+| §1 précédence (writers), §2 legacy write policy (défense serveur `modifierBien`), §3 type, §4 exclusivité, §5–§8 dates / statut / résiliation, §9 renouvellement primitif sans mutation, §10 `mandatCourantDuBien`, §11 invariant applicatif (`enregistrerMandatExistant`), §12 numéro, §13 workspace + verrous (signature corrigée, `modifierMandat`, `resilierMandat`), §14 création directe, §15 `enregistrerMandatExistant` (writer), §16 migration `0044`, champs verrouillables, matrice A–T | **IMPLÉMENTÉ** |
+| §2 retrait des champs legacy du formulaire d'édition (masquage UI) ; §16 bascule des lecteurs UI (`LEGACY_UI_SWITCH_TIMING`), écran « Enregistrer le mandat existant », écrans modification / résiliation | **DÉCIDÉ, lot UI** |
+| §16 `parties_mandat` (M-3), repointage par la fusion | **DÉCIDÉ, lot `MANDATE_PARTIES_V1`** |
+| renouvellement humain (verrou double, écran), automatisations, cible `mandat_id` sur les événements, connecteurs | **DÉCIDÉ, lots ultérieurs** |
+
+Écart assumé au lot lifecycle : le masquage des champs `date_mandat` / `statut_mandat` dans
+`BienFormulaire` en édition n'est pas livré (il exigerait qu'une page lise `mandats`, ce que le test
+structurel « aucun écran ne lit mandats » interdit jusqu'au lot UI) ; la **défense serveur** (§2)
+est, elle, livrée et testée — une édition legacy sur un bien à mandat canonique est ignorée.
 
 > Rubriques : Contexte · Problème · Décision · Alternatives écartées · Modèle de données /
 > contrats · Invariants · Conséquences · Risques · Hors périmètre · Questions ouvertes ·
@@ -373,7 +383,7 @@ connecteur réel l'exigera.
 | `exclusivite_jusqu_au` | date | oui | aucun | `IS NULL OR (>= date_debut AND (date_fin IS NULL OR <= date_fin))` | borne d'exclusivité d'un semi-exclusif ; non imposée |
 | `motif_resiliation` | text | oui | aucun | aucun | texte court, posé par `resilierMandat` uniquement |
 
-**`PLANNED_LIFECYCLE_MIGRATION`** (conceptuelle, non écrite) — strictement additive :
+**`PLANNED_LIFECYCLE_MIGRATION`** (réalisée : `src/db/migrations/0044_mandate_lifecycle.sql`) — strictement additive :
 `ALTER TABLE mandats ADD COLUMN` × 4 ; deux `CHECK` (type, exclusivité) ; index
 (`MANDATE_INDEX_DECISION`, confirmé absent du schéma actuel : aucun `index()` déclaré dans le bloc
 `mandats`) : `mandats_bien_idx (bien_id)`, `mandats_projet_vendeur_idx (projet_vendeur_id)`,

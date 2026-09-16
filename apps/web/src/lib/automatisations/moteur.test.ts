@@ -299,7 +299,8 @@ describe("moteur — double-submit bout en bout, par règle", () => {
       dateMandat: "2026-09-01",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultat.statut !== "signe") throw new Error(resultat.statut);
     idsBiensCrees.push(resultat!.bien.id);
     await traiterExecutionsEnAttente(resultat!.idsExecutionsATraiter);
 

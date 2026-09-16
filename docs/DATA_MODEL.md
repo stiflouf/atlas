@@ -1005,26 +1005,46 @@ mandat qui référence celui qu'il remplace ; le précédent n'est **pas** modif
 fin ne lui est posée d'autorité — clore l'ancien est un geste distinct, qui n'existe pas encore.
 Un `CHECK` interdit qu'un mandat se remplace lui-même.
 
-**Cible décidée, non implémentée (ADR-060, 2026-09-16 — DECIDED / NOT YET IMPLEMENTED).** ADR-060
-tranche le cycle de vie mature : précédence du mandat canonique sur `biens.date_mandat` /
-`statut_mandat` dès qu'il existe (fallback legacy par entité, jamais champ par champ), fin du
-dual-write legacy, colonnes à ajouter par une migration additive (`type` nullable sans default,
-`numero`, `exclusivite_jusqu_au`, `motif_resiliation`), statut dérivé à quatre états (`a_venir`,
-`actif`, `expire`, `resilie`), résiliation sans modification de `date_fin`, renouvellement sans
-mutation de l'ancien (la relation suffit), définition déterministe du mandat courant, standard
-workspace des writers, relation dédiée `parties_mandat` au lot suivant. Le paragraphe ci-dessous
-décrit l'état **actuel** du schéma, qui reste vrai jusqu'au lot `MANDATE_LIFECYCLE_FOUNDATION_V1`.
+**Cycle de vie mature (ADR-060, lot `MANDATE_LIFECYCLE_FOUNDATION_V1`, migration `0044`).** Quatre
+colonnes additives, toutes nullables **sans default** (aucun fait inventé sur les lignes antérieures) :
 
-**Champs volontairement absents**, tous pour la même raison — aucun écrivain **et** aucun lecteur,
-donc une colonne que rien ne remplirait :
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `type` | text | oui | `CHECK IN ('simple','exclusif','semi_exclusif')`. NULL = ligne antérieure au lot ; **exigé par tout writer humain** |
+| `numero` | text | oui | saisi par l'humain, trim, jamais unique, jamais un id fournisseur (ADR-056) |
+| `exclusivite_jusqu_au` | date | oui | `CHECK` dans `[date_debut, date_fin]` ; jamais conditionnée au type |
+| `motif_resiliation` | text | oui | texte court, posé par `resilierMandat` uniquement |
 
-- `type` (`simple` / `exclusif` / `semi_exclusif`, vocabulaire fixé par ADR-055 §F) : **aucun écran,
-  aucun formulaire, aucun import ne saisit le type d'un mandat**. Toujours NULL, il n'exprimerait pas
-  « mandat simple » mais « personne n'a rempli cette colonne ». L'exclusivité arrivera avec lui.
-- `numero` : il vient des registres de réseau, donc d'un connecteur, donc d'ADR-056 — non
-  implémenté. Aucune unicité ne serait honnête : deux réseaux numérotent indépendamment.
-- `motif_resiliation` : le geste de résiliation n'existe pas. `resilie_le` reste, lui, parce que la
-  dérivation du statut le lit.
+Index : `mandats_bien_idx`, `mandats_projet_vendeur_idx`, `mandats_remplace_idx`. Toujours **aucun
+`workspace_id`**, aucun statut stocké, aucune unicité.
+
+- **Statut dérivé à quatre états** (`deriverStatutMandat`, ADR-060 §7) : `resilie` (resilie_le ≤
+  aujourd'hui) → `a_venir` (date_debut > aujourd'hui) → `expire` (date_fin < aujourd'hui) → `actif`.
+  Bornes inclusives. `suspendu` n'existe pas côté canonique.
+- **Mandat courant** (`mandatCourantDuBien(bienId, workspaceId)`, §10) : une requête — lignes du bien
+  **sans successeur**, statut `actif` ou `a_venir`, ordre `date_debut DESC, cree_le DESC, id DESC`.
+  `listerMandatsDuBien` rend l'historique complet avec `statut` et `remplaceParId` (jointure, pas
+  de N+1).
+- **Writers** (`mandatRepository.ts`), tous scoped par le workspace de **session** via le bien, sous
+  `FOR UPDATE`, autre workspace = introuvable : `creerMandat` (type obligatoire dans le contrat),
+  `modifierMandat` (type, numéro, terme, exclusivité — refusé sur un mandat résilié ou remplacé),
+  `resilierMandat` (fait unique, `date_fin` intacte), `enregistrerMandatExistant` (amorçage humain
+  d'un bien legacy, refusé si un mandat canonique existe déjà — **jamais un backfill**).
+- **Signature** (`signerMandatProspectVendeur`, §13) : prospect relu `FOR UPDATE WHERE id AND
+  workspace_id`, refus `introuvable` / `deja_signe` / `perdu` avant toute écriture, puis bien +
+  jalon + mandat (faits saisis : type obligatoire) + événement dans une transaction. Double submit :
+  un seul bien, un seul mandat.
+- **Création directe d'un bien** (§14) : statut `actif` → mandat canonique créé avec le bien
+  (`creerBienAction`) ; `suspendu` / `expire` → aucun mandat fabriqué.
+- **Précédence et legacy write policy** (§1–§2) : dès qu'un mandat canonique existe pour un bien,
+  `modifierBien` **n'écrit plus** `date_mandat` / `statut_mandat` (défense serveur). Les lecteurs
+  UI et moteurs restent sur le legacy jusqu'au lot UI, qui basculera tous les écrans ensemble.
+- Non livré par ce lot (décidé) : `parties_mandat` (M-3, lot 2), renouvellement humain, écrans,
+  automatisations, cible `mandat_id` sur les événements, connecteurs.
+
+**Champs encore absents, volontairement** : `signe_le` distinct de la prise d'effet (ADR-060 §5),
+`duree_mois` / tacite reconduction (règles réseau, jamais persistées), tout statut stocké, tout
+identifiant fournisseur.
 
 **Limite de sémantique des dates, assumée** : le produit ne distingue pas encore la date de
 **signature** de la date de **prise d'effet**. Le formulaire de signature ne saisit qu'une date

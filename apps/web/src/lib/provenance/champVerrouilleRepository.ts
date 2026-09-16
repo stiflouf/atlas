@@ -38,7 +38,9 @@ const CHAMPS_VERROUILLABLES: Record<CibleVerrouillable["type"], readonly string[
   ],
   projet_vendeur: ["origineLead", "origineLeadDetail", "estimationProposeeCentimes", "estimationProposeeLe"],
   bien: ["titre", "type", "adresse", "ville", "codePostal", "surface", "pieces", "prix", "description"],
-  mandat: ["dateDebut", "dateFin"],
+  // ADR-060 §16 — les faits contractuels CORE. Ni `resilieLe` ni `motifResiliation` : la
+  // résiliation est une commande métier (writer dédié), pas la projection d'un champ.
+  mandat: ["type", "numero", "dateDebut", "dateFin", "exclusiviteJusquAu"],
 };
 
 export function estChampVerrouillable(typeEntite: CibleVerrouillable["type"], champ: string): boolean {

@@ -314,9 +314,9 @@ describe("Fiche prospect vendeur — mandat signé", () => {
       caracteristiques: [],
       description: "",
       chargeHonoraires: "vendeur",
-    }, WORKSPACE_TEST);
-    expect(resultat).toBeDefined();
-    if (resultat) idsBiens.push(resultat.bien.id);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultat.statut !== "signe") throw new Error(resultat.statut);
+        if (resultat) idsBiens.push(resultat.bien.id);
 
     const html = await rendre(prospect.id);
 
@@ -393,7 +393,8 @@ describe("Fiche prospect vendeur — sémantique contact / échange", () => {
       dateMandat: "2026-08-11",
       caracteristiques: [],
       description: "",
-    }, WORKSPACE_TEST);
+    }, WORKSPACE_TEST, { type: "simple" });
+    if (resultat.statut !== "signe") throw new Error(resultat.statut);
     if (resultat) idsBiens.push(resultat.bien.id);
     const html = await rendre(prospect.id);
 

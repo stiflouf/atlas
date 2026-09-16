@@ -1,11 +1,12 @@
 import { and, desc, eq, getTableColumns } from "drizzle-orm";
+import type { Mandat } from "@/types/mandat";
 import { getDb, type Executeur } from "@/db/client";
 import { exigerContactActif } from "@/lib/contactActif";
 import { resoudreContactActif } from "@/lib/contactRepository";
 import type { NavigationContactDossier } from "@/types/contact";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
-import { creerMandat } from "@/lib/mandatRepository";
+import { creerMandat, type FaitsMandat } from "@/lib/mandatRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import {
   filtreIdentiteEffective,
@@ -395,34 +396,53 @@ export async function proposerMandatProspectVendeur(id: string): Promise<Prospec
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
 
-// Conversion en bien (ADR-027, correction n° 6) : une seule transaction — crée le bien (aucun
-// champ obligatoire de `biens` n'est jamais fabriqué ici, `donneesBien` doit déjà porter tout ce
-// que la Server Action a validé comme explicitement fourni par l'utilisateur) et pose
-// mandatSigneLe + bienId dans le même geste. bienId porte une contrainte UNIQUE (schema.ts) : une
-// opportunité par bien, et un bien ne peut être le résultat que d'une seule conversion — une
-// violation de cette contrainte fait échouer la transaction dans son ensemble (rollback complet,
-// aucun bien orphelin créé).
-// `idsExecutionsATraiter` (ADR-032) : l'événement métier `mandat_signe` est émis dans CETTE MÊME
-// transaction (jamais après coup) — le statut "déjà signé" est déjà exclu en amont par
-// `chargerProspectPourJalon` (Server Action), pas besoin d'une garde de transition supplémentaire
-// ici, contrairement à `marquerRdvEstimationRealiseProspectVendeur` qui autorise une correction.
+// Conversion en bien (ADR-027, correction n° 6 ; ADR-060 §13 et §16) : UNE seule transaction, le
+// prospect relu SOUS VERROU dans le workspace de SESSION avant toute écriture.
+//
+// Pourquoi relire ici plutôt que se fier à un prospect chargé par l'appelant : un objet lu avant la
+// transaction peut être périmé (signé entre-temps) et n'a pas été filtré par workspace — même
+// doctrine que `creerEtRattacher` (ADR-055 §H). `SELECT ... FOR UPDATE WHERE id AND workspace_id` :
+// un prospect d'un autre workspace est INTROUVABLE, indistinguable d'un id inconnu ; deux
+// signatures concurrentes se sérialisent sur sa ligne, la seconde le trouve signé et ne crée rien.
+// Tous les refus surviennent AVANT la première écriture : aucun rollback à provoquer, aucun bien ni
+// mandat orphelin possible. `prospects_vendeurs.bien_id UNIQUE` reste le dernier filet.
+//
+// Le bien créé, le jalon, le mandat canonique et l'événement `mandat_signe` (ADR-032) existent tous
+// ou aucun. Le mandat reçoit les FAITS saisis par l'humain (`FaitsMandat`, type obligatoire) et la
+// prise d'effet `donneesBien.dateMandat` ; rien n'est inventé.
+export type ResultatSignatureMandat =
+  | { statut: "signe"; prospect: ProspectVendeur; bien: Bien; mandat: Mandat; idsExecutionsATraiter: string[] }
+  | { statut: "introuvable" }
+  | { statut: "deja_signe" }
+  | { statut: "perdu" };
+
 export async function signerMandatProspectVendeur(
   id: string,
   donneesBien: NouveauBien,
   // ADR-054 — le bien créé par la conversion et l'événement `mandat_signe` sont deux écritures de
   // tables racines : leur périmètre vient de l'appelant (Server Action), jamais de ce repository.
-  workspaceId: string
-): Promise<{ prospect: ProspectVendeur; bien: Bien; idsExecutionsATraiter: string[] } | undefined> {
-  if (!UUID_REGEX.test(id)) return undefined;
-  const existant = await getProspectVendeurById(id);
-  if (!existant) return undefined;
+  workspaceId: string,
+  faitsMandat: FaitsMandat,
+  executeur: Executeur = getDb()
+): Promise<ResultatSignatureMandat> {
+  if (!UUID_REGEX.test(id)) return { statut: "introuvable" };
 
-  return getDb().transaction(async (tx) => {
+  return executeur.transaction(async (tx) => {
+    const [verrouille] = await tx
+      .select()
+      .from(prospectsVendeursTable)
+      .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
+      .for("update");
+    if (!verrouille) return { statut: "introuvable" };
+    const statut = deriverStatutProspectVendeur(ligneVersProspectVendeur(verrouille));
+    if (statut === "perdu") return { statut: "perdu" };
+    if (statut === "mandat_signe" || verrouille.bienId !== null) return { statut: "deja_signe" };
+
     const bien = await creerBien(donneesBien, workspaceId, tx);
     const [ligne] = await tx
       .update(prospectsVendeursTable)
       .set({ mandatSigneLe: new Date(), bienId: bien.id, modifieLe: new Date() })
-      .where(eq(prospectsVendeursTable.id, id))
+      .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
       .returning();
 
     // ADR-055 §F — le MANDAT canonique, dans la MÊME transaction que le bien et le jalon : un
@@ -431,12 +451,9 @@ export async function signerMandatProspectVendeur(
     // Créé pour TOUTE signature, y compris depuis une opportunité antérieure au modèle canonique :
     // qu'un mandat ait été signé sur ce bien à cette date est un fait, que le projet vendeur existe
     // ou non. Dans ce cas `projetVendeurId` reste simplement absent — jamais deviné.
-    //
-    // `dateDebut` vient de `donneesBien.dateMandat`, la seule date que la signature saisisse. Ni
-    // durée, ni type, ni numéro ne sont posés : le formulaire ne les demande pas, et les inventer
-    // fabriquerait des clauses contractuelles que personne n'a signées.
-    await creerMandat(
+    const mandat = await creerMandat(
       {
+        ...faitsMandat,
         bienId: bien.id,
         // Lu sur la ligne renvoyée par l'UPDATE, pas sur le type métier : le pont canonique est
         // une donnée d'infrastructure, que `ProspectVendeur` n'expose volontairement pas.
@@ -451,7 +468,8 @@ export async function signerMandatProspectVendeur(
       workspaceId,
       tx
     );
-    return { prospect: ligneVersProspectVendeur(ligne), bien, idsExecutionsATraiter };
+    const [prospect] = await appliquerIdentiteEffective([ligneVersProspectVendeur(ligne)], tx);
+    return { statut: "signe", prospect, bien, mandat, idsExecutionsATraiter };
   });
 }
 

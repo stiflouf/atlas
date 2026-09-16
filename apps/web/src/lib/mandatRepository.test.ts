@@ -83,6 +83,7 @@ describe("mandatRepository — le mandat (intégration Postgres)", () => {
       projetVendeurId: projet.id,
       dateDebut: "2026-03-01",
       dateFin: "2026-06-01",
+      type: "simple",
     });
 
     const relu = await getMandatById(mandat.id);
@@ -99,7 +100,7 @@ describe("mandatRepository — le mandat (intégration Postgres)", () => {
   it("crée un mandat SANS projet vendeur — le fait contractuel existe quand même", async () => {
     // C'est le cas de toute signature venant d'une opportunité antérieure au modèle canonique.
     const bien = await unBien();
-    const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-03-01" });
+    const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-03-01", type: "simple" });
     expect(mandat.projetVendeurId).toBeUndefined();
   });
 
@@ -111,9 +112,9 @@ describe("mandatRepository — le mandat (intégration Postgres)", () => {
   it("refuse un bien ou un projet inexistant plutôt qu'un mandat orphelin", async () => {
     const bien = await unBien();
     const inexistant = "00000000-0000-0000-0000-000000000000";
-    await expect(creerMandat({ bienId: inexistant, dateDebut: "2026-03-01" })).rejects.toThrow(/Bien introuvable/);
+    await expect(creerMandat({ bienId: inexistant, dateDebut: "2026-03-01", type: "simple" })).rejects.toThrow(/Bien introuvable/);
     await expect(
-      creerMandat({ bienId: bien.id, projetVendeurId: inexistant, dateDebut: "2026-03-01" })
+      creerMandat({ bienId: bien.id, projetVendeurId: inexistant, dateDebut: "2026-03-01", type: "simple" })
     ).rejects.toThrow(/Projet vendeur introuvable/);
   });
 
@@ -130,7 +131,7 @@ describe("mandatRepository — le mandat (intégration Postgres)", () => {
     const projetAilleurs = await unProjetVendeur(autreWorkspace.id);
 
     await expect(
-      creerMandat({ bienId: bienIci.id, projetVendeurId: projetAilleurs.id, dateDebut: "2026-03-01" })
+      creerMandat({ bienId: bienIci.id, projetVendeurId: projetAilleurs.id, dateDebut: "2026-03-01", type: "simple" })
     ).rejects.toThrow(/workspaces différents/);
     expect(await listerMandatsDuBien(bienIci.id)).toEqual([]);
   });
@@ -150,8 +151,8 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
   it("un même bien porte PLUSIEURS mandats successifs", async () => {
     // Un bien remandaté deux ans plus tard a deux mandats. Le premier reste, tel quel.
     const bien = await unBien();
-    const premier = await creerMandat({ bienId: bien.id, dateDebut: "2024-01-01", dateFin: "2024-04-01" });
-    const second = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01" });
+    const premier = await creerMandat({ bienId: bien.id, dateDebut: "2024-01-01", type: "simple", dateFin: "2024-04-01" });
+    const second = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type: "simple" });
 
     const mandats = await listerMandatsDuBien(bien.id);
     expect(mandats).toHaveLength(2);
@@ -164,8 +165,8 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
   it("un même projet vendeur porte PLUSIEURS mandats successifs", async () => {
     const bien = await unBien();
     const projet = await unProjetVendeur();
-    await creerMandat({ bienId: bien.id, projetVendeurId: projet.id, dateDebut: "2026-01-01", dateFin: "2026-04-01" });
-    await creerMandat({ bienId: bien.id, projetVendeurId: projet.id, dateDebut: "2026-04-02" });
+    await creerMandat({ bienId: bien.id, projetVendeurId: projet.id, dateDebut: "2026-01-01", type: "simple", dateFin: "2026-04-01" });
+    await creerMandat({ bienId: bien.id, projetVendeurId: projet.id, dateDebut: "2026-04-02", type: "simple" });
 
     expect(await listerMandatsDuProjetVendeur(projet.id)).toHaveLength(2);
   });
@@ -178,12 +179,14 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
       projetVendeurId: projet.id,
       dateDebut: "2026-01-01",
       dateFin: "2026-04-01",
+      type: "simple",
     });
 
     const successeur = await creerMandatSuccesseur(initial.id, {
       projetVendeurId: projet.id,
       dateDebut: "2026-04-02",
       dateFin: "2026-07-02",
+      type: "simple",
     });
 
     expect(successeur.remplaceMandatId).toBe(initial.id);
@@ -197,9 +200,9 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
 
   it("refuse de renouveler un mandat inexistant", async () => {
     await expect(
-      creerMandatSuccesseur("00000000-0000-0000-0000-000000000000", { dateDebut: "2026-04-02" })
+      creerMandatSuccesseur("00000000-0000-0000-0000-000000000000", { dateDebut: "2026-04-02", type: "simple" })
     ).rejects.toThrow(/Mandat introuvable/);
-    await expect(creerMandatSuccesseur("pas-un-uuid", { dateDebut: "2026-04-02" })).rejects.toThrow(
+    await expect(creerMandatSuccesseur("pas-un-uuid", { dateDebut: "2026-04-02", type: "simple" })).rejects.toThrow(
       /Mandat introuvable/
     );
   });
@@ -208,7 +211,7 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
     // Écriture directe : le repository ne peut pas produire ce cas (l'id n'existe pas encore au
     // moment de l'insertion), mais un UPDATE futur le pourrait — le CHECK le refuse.
     const bien = await unBien();
-    const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01" });
+    const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type: "simple" });
     await expect(
       getDb().update(mandatsTable).set({ remplaceMandatId: mandat.id }).where(inArray(mandatsTable.id, [mandat.id]))
     ).rejects.toThrow();

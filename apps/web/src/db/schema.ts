@@ -560,9 +560,35 @@ export const mandats = pgTable(
     // les faits) : l'ancien mandat a réellement existé sur sa période, l'écraser effacerait une
     // partie de l'histoire du bien.
     remplaceMandatId: uuid("remplace_mandat_id").references((): AnyPgColumn => mandats.id),
+    // ADR-060 §3 — nature contractuelle. NULLABLE SANS DEFAULT : un mandat antérieur au lot
+    // lifecycle n'a pas de type parce que personne ne l'a saisi ; y poser `simple` affirmerait
+    // une nature que personne n'a constatée. Tout writer humain postérieur l'exige.
+    type: text("type"),
+    // ADR-060 §12 — numéro saisi par l'humain, jamais un identifiant fournisseur (celui-ci vit dans
+    // `references_externes`, ADR-056). Aucune unicité : deux réseaux numérotent indépendamment.
+    numero: text("numero"),
+    // ADR-060 §4 — borne d'exclusivité d'un mandat semi-exclusif. Jamais conditionnée au type par
+    // un CHECK : le repo ne prouve aucune règle générale, et la figer recoderait une convention
+    // réseau.
+    exclusiviteJusquAu: date("exclusivite_jusqu_au"),
+    // ADR-060 §8 — texte court, posé par le seul geste de résiliation. Aucune énumération : aucun
+    // vocabulaire de motifs n'est constaté dans le produit.
+    motifResiliation: text("motif_resiliation"),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // ADR-060 — index FK : le mandat courant d'un bien (anti-jointure sur le successeur) et
+    // l'historique d'un projet se lisent par ces colonnes.
+    index("mandats_bien_idx").on(table.bienId),
+    index("mandats_projet_vendeur_idx").on(table.projetVendeurId),
+    index("mandats_remplace_idx").on(table.remplaceMandatId),
+    // ADR-060 §3 — vocabulaire d'ADR-055 §F, NULL admis pour les lignes antérieures.
+    check("mandats_type_check", sql`${table.type} IS NULL OR ${table.type} IN ('simple','exclusif','semi_exclusif')`),
+    // ADR-060 §4 — une exclusivité ne déborde ni avant la prise d'effet ni après le terme.
+    check(
+      "mandats_exclusivite_coherente_check",
+      sql`${table.exclusiviteJusquAu} IS NULL OR (${table.exclusiviteJusquAu} >= ${table.dateDebut} AND (${table.dateFin} IS NULL OR ${table.exclusiviteJusquAu} <= ${table.dateFin}))`
+    ),
     // Un mandat ne peut pas se remplacer lui-même. Protection à UN niveau volontairement : les
     // cycles plus longs sont impossibles en pratique (un successeur référence toujours un mandat
     // déjà écrit) et les détecter exigerait un trigger récursif sans besoin démontré.

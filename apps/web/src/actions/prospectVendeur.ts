@@ -31,6 +31,7 @@ import { TYPES_NOTE_PROSPECT_VENDEUR, type TypeNoteProspectVendeur } from "@/typ
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { parseFaitsMandatFormData } from "@/lib/mandatFormulaire";
 
 function parseDateOptionnelle(valeur: FormDataEntryValue | null): string | undefined {
   const date = String(valeur ?? "").trim();
@@ -232,19 +233,23 @@ export async function proposerMandatProspectVendeurAction(formData: FormData): P
 
 // ADR-027, correction n° 6 : aucune valeur fictive — parseSignatureMandatFormData rejette
 // explicitement toute soumission dont un champ obligatoire de `biens` serait vide, pré-rempli ou
-// non. Transaction atomique portée par le repository (signerMandatProspectVendeur) : bien créé et
-// mandatSigneLe/bienId posés ensemble, ou aucun des deux.
+// non. ADR-060 §13/§16 : l'action n'est qu'une orchestration — session, workspace de session, id du
+// formulaire, faits du bien et du mandat validés, UN appel au repository qui relit le prospect SOUS
+// VERROU dans ce workspace. Un prospect d'un autre workspace est introuvable ; un prospect déjà
+// signé ou perdu est refusé par le repository lui-même, jamais sur la foi d'une lecture antérieure.
 export async function signerMandatProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
   // ADR-054 — appartenance explicite du bien créé et de l'événement `mandat_signe`.
   const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
-  await chargerProspectPourJalon(id);
 
   const donneesBien = parseSignatureMandatFormData(formData);
-  const resultat = await signerMandatProspectVendeur(id, donneesBien, workspaceId);
-  if (!resultat) notFound();
+  const faitsMandat = parseFaitsMandatFormData(formData);
+  const resultat = await signerMandatProspectVendeur(id, donneesBien, workspaceId, faitsMandat);
+  if (resultat.statut === "introuvable") notFound();
+  if (resultat.statut === "perdu") throw new Error("Ce prospect est marqué perdu — aucun jalon ne peut plus être posé.");
+  if (resultat.statut === "deja_signe") throw new Error("Le mandat est déjà signé — aucun jalon ne peut plus être posé.");
 
   // Traitement synchrone après le COMMIT (déjà acté à l'intérieur de signerMandatProspectVendeur,
   // ADR-032) — jamais avant, jamais susceptible de faire échouer la conversion elle-même.

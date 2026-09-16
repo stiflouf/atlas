@@ -109,7 +109,8 @@ async function creerProspectSigneDeTest(suffixe: string) {
     dateMandat: "2026-09-01",
     caracteristiques: [],
     description: "",
-  }, WORKSPACE_TEST);
+  }, WORKSPACE_TEST, { type: "simple" });
+  if (resultat.statut !== "signe") throw new Error(resultat.statut);
   idsBiensCrees.push(resultat!.bien.id);
   return prospect;
 }
@@ -248,6 +249,7 @@ describe("prospectVendeur Server Actions — gardes de transition", () => {
           prix: "100000",
           statutMandat: "actif",
           dateMandat: "2026-09-01",
+          typeMandat: "simple",
         })
       )
     ).rejects.toThrow(/perdu/);
