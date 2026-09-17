@@ -29,6 +29,13 @@ export type IdsDeplacesFusionContact = {
   // Participations du survivant dont le rôle a été relevé au rôle principal que portait l'absorbé
   // sur le même projet (acquereur > co_acquereur, vendeur > co_vendeur).
   partiesProjetRoleCorrige: { partieId: string; roleAvant: string; roleFinal: string }[];
+  // ADR-060 §16 (lot MANDATE_PARTIES_V1) — même convention pour `parties_mandat` : repointées,
+  // supprimées (le survivant était déjà partie du même mandat), rôle relevé (mandant > representant).
+  // OPTIONNELLES à la lecture : les journaux écrits avant ce lot ne les portent pas, et un journal ne
+  // se réécrit jamais. Le moteur les écrit toujours, vides ou non.
+  partiesMandat?: string[];
+  partiesMandatSupprimees?: string[];
+  partiesMandatRoleCorrige?: { partieId: string; roleAvant: string; roleFinal: string }[];
   acquereurs: string[];
   prospectsVendeurs: string[];
   referencesExternes: string[];

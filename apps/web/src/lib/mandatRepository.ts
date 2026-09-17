@@ -306,11 +306,13 @@ export async function enregistrerMandatExistant(
 // Relit un mandat SOUS VERROU, dans le workspace de session via son bien (ADR-060 §13). Le verrou
 // ne porte que sur `mandats` : le bien n'est pas modifié par ces writers, et verrouiller les deux
 // dans un ordre différent du renouvellement futur (bien puis mandat) créerait un interblocage.
-type MandatVerrouille =
+// Exporté pour le writer des parties de mandat (ADR-060 §16) : même verrou, même définition du
+// périmètre — un second chemin de lecture scoped divergerait un jour.
+export type MandatVerrouille =
   | { statut: "verrouille"; ligne: LigneMandat; remplace: boolean }
   | { statut: "introuvable" };
 
-async function verrouillerMandat(mandatId: string, workspaceId: string, tx: Executeur): Promise<MandatVerrouille> {
+export async function verrouillerMandat(mandatId: string, workspaceId: string, tx: Executeur): Promise<MandatVerrouille> {
   if (!UUID_REGEX.test(mandatId)) return { statut: "introuvable" };
   const [trouve] = await tx
     .select({ mandat: mandatsTable, remplace: sql<boolean>`${exists(successeurDe(tx))}` })

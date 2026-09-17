@@ -81,18 +81,30 @@ describe("fusionContactRepository — frontières", () => {
       expect(sets.length, table).toBe(1);
       expect(sets[0].replace(/\s/g, ""), table).toBe("{contactId:contactSurvivantId}");
     }
-    // Le seul autre UPDATE est le rôle d'une partie conservée ; la seule suppression, une partie dédoublée.
+    // Les seuls autres UPDATE sont le rôle d'une partie conservée (projet, mandat) ; les seules
+    // suppressions, une partie dédoublée (projet, mandat).
     expect(moteur.match(/\.update\(partiesProjetTable\)\.set\(\{ role: principal \}\)/g)?.length).toBe(1);
-    expect(moteur.match(/tx\.delete\(/g)?.length).toBe(1);
+    expect(moteur.match(/\.update\(partiesMandatTable\)\.set\(\{ role: roleRetenu \}\)/g)?.length).toBe(1);
+    expect(moteur.match(/tx\.delete\(/g)?.length).toBe(2);
     expect(moteur).toContain("tx.delete(partiesProjetTable)");
+    expect(moteur).toContain("tx.delete(partiesMandatTable)");
   });
 
   it("les verrous humains ne sont ni repointés, ni supprimés, ni posés directement", () => {
     expect(moteur).not.toMatch(/champsVerrouilles|champVerrouilleRepository|verrouillerChamp/);
   });
 
-  it("les parties des projets communs sont dédoublées AVANT le repoint global", () => {
+  it("les parties des projets et des mandats communs sont dédoublées AVANT le repoint global", () => {
     expect(moteur.indexOf("tx.delete(partiesProjetTable)")).toBeLessThan(moteur.indexOf(".set({ contactId: contactSurvivantId })"));
+    expect(moteur.indexOf("tx.delete(partiesMandatTable)")).toBeLessThan(moteur.indexOf(".set({ contactId: contactSurvivantId })"));
+  });
+
+  it("parties de mandat (ADR-060 §16) : rôle retenu par la priorité pure du domaine, jamais celle de parties_projet", () => {
+    expect(moteur).toContain('import { roleRetenuPartieMandat, type RolePartieMandat } from "@/types/partieMandat"');
+    expect(moteur).toContain("roleRetenuPartieMandat(partieSurvivant.role as RolePartieMandat, partieAbsorbe.role as RolePartieMandat)");
+    expect(moteur).not.toMatch(/ROLE_PRINCIPAL\[[^\]]*mandat/i);
+    // Le journal porte les trois listes, exactement comme pour parties_projet.
+    for (const cle of ["partiesMandat,", "partiesMandatSupprimees,", "partiesMandatRoleCorrige,"]) expect(moteur).toContain(cle);
   });
 
   it("le moteur ne choisit jamais une identité : il vérifie le choix humain contre les deux identités réelles", () => {

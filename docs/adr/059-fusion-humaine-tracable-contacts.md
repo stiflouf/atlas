@@ -89,7 +89,10 @@ Action `fusionnerContactsAction`).
 Une transaction, dans l'ordre : verrous → invariants (périmètre, actifs, identités inchangées,
 choix cohérents, avertissements acquittés) → parties de projet des projets COMMUNS dédoublées
 (partie de l'absorbé supprimée ; rôle principal `acquereur`/`vendeur` préservé sur la partie
-conservée, corrigé si l'absorbé le portait) → repoint de `parties_projet`, `interactions`,
+conservée, corrigé si l'absorbé le portait) → parties de mandat des mandats COMMUNS dédoublées de
+la même façon (ADR-060 §16, lot `MANDATE_PARTIES_V1`, 2026-09-17 : partie de l'absorbé supprimée,
+rôle retenu par priorité déterministe `mandant` > `representant` sur la partie conservée) → repoint
+de `parties_projet`, `parties_mandat`, `interactions`,
 `acquereurs`, `prospects_vendeurs`, `references_externes` (ids exacts retournés) → identité
 finale par `modifierIdentiteContact` (no-op si identique) → `marquerContactFusionne` → journal.
 Toute erreur annule tout. Avertissement obligatoire, clé déterministe recalculée sous verrou :
@@ -199,8 +202,10 @@ contact_fusions (feuille de contacts, ADR-054 §7)
 
 Types (`types/contactFusion.ts`) : `IdentiteContactSnapshot`, `ChoixFusionParChamp`
 (`survivant | absorbe | identique | absence_comblee` par champ), `IdsDeplacesFusionContact`
-(interactions, partiesProjet, partiesProjetSupprimees, acquereurs, prospectsVendeurs,
-referencesExternes), `ContactFusion`. `lib/contactFusion.ts` : `estContactFusionne`,
+(interactions, partiesProjet, partiesProjetSupprimees, partiesProjetRoleCorrige, acquereurs,
+prospectsVendeurs, referencesExternes ; depuis `MANDATE_PARTIES_V1` : partiesMandat,
+partiesMandatSupprimees, partiesMandatRoleCorrige — optionnels à la lecture, absents des journaux
+antérieurs qui ne sont jamais réécrits), `ContactFusion`. `lib/contactFusion.ts` : `estContactFusionne`,
 `MAX_CHAINE_FUSION`.
 
 ## Invariants

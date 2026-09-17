@@ -95,12 +95,13 @@ describe("ADR-055 §F — le mandat est une entité, pas une colonne du bien", (
     expect(colonnes("mandats").filter((colonne) => interdits.includes(colonne))).toEqual([]);
   });
 
-  it("aucun contact n'est embarqué sur le mandat", () => {
-    // Les mandants ne sont pas modélisés dans ce lot : la qualité juridique de mandant n'est pas la
-    // participation à un projet, et l'affirmer inventerait un fait juridique.
+  it("aucun contact n'est embarqué sur le mandat : les mandants sont une relation (parties_mandat)", () => {
+    // ADR-060 §16 — la qualité de mandant est portée par la relation `parties_mandat` (lot
+    // MANDATE_PARTIES_V1, garanties dans partieMandat.structurel.test.ts), jamais par une colonne du
+    // mandat : un mandat à un seul Contact serait une erreur structurelle (couple, indivision).
     const interdits = ["contact_id", "mandant_id", "nom", "prenom", "email", "telephone", "signataire_id"];
     expect(colonnes("mandats").filter((colonne) => interdits.includes(colonne))).toEqual([]);
-    expect([...tables.keys()], "aucune table parties_mandat n'est créée").not.toContain("parties_mandat");
+    expect([...tables.keys()]).toContain("parties_mandat");
   });
 });
 

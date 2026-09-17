@@ -673,6 +673,57 @@ export const partiesProjet = pgTable(
   ]
 );
 
+// ADR-060 §16 — PARTIE DE MANDAT (lot MANDATE_PARTIES_V1, M-3) : la relation « cette personne est
+// partie à ce mandat », en qualité de `mandant` (celui qui confie le mandat — plusieurs pour un
+// couple ou une indivision) ou de `representant` (la personne humaine qui agit pour une SCI, une
+// indivision ou un mandant absent). C'est ELLE qui porte la qualité contractuelle, jamais
+// `parties_projet` : un mandat peut exister sans projet vendeur (bien créé directement), et la
+// participation à un projet de vente n'est pas la signature d'un contrat.
+//
+// Vraiment N:N : un mandat a N parties (deux mandants et un représentant), un contact peut être
+// partie de plusieurs mandats (biens successifs, renouvellements — le successeur ne copie rien).
+//
+// FEUILLE (ADR-054 §7) : aucun `workspace_id`. Périmètre = partie → mandat → bien → workspace ;
+// l'invariant « contact du même workspace que le bien » est tenu par le seul writer
+// (`ajouterPartieMandat`), sous verrou, et prouvé par un test.
+//
+// Vocabulaire fermé à DEUX valeurs : `apporteur`, `notaire`, `proprietaire`, `usufruitier`,
+// `nue_proprietaire`, `conjoint`, `personne_morale`, `dirigeant` ne sont soutenus par aucun usage
+// (ADR-060 §16). Aucune entité Organisation : une personne morale est représentée par un Contact
+// humain `representant` (`LEGAL_ENTITY_REQUIRED_V1 = NO`).
+//
+// `UNIQUE(mandat_id, contact_id)` : une personne est partie UNE fois à un mandat donné, avec un
+// seul rôle — changer de rôle est une mise à jour (`modifierRolePartieMandat`), jamais une seconde
+// ligne. Le moteur de fusion Contact dédouble sur cette clé (mandant > representant) avant de
+// repointer, exactement comme `parties_projet`.
+//
+// Pas de CASCADE, ni côté mandat ni côté contact : aucun des deux n'est jamais supprimé (ADR-012),
+// et une partie contractuelle qui disparaîtrait en silence serait une perte de fait juridique.
+// Aucune contrainte « au moins un mandant » : un mandat importé, legacy ou en cours de saisie reste
+// valide sans partie ; l'exigence, si elle vient, sera celle d'un workflow, jamais de la base.
+export const partiesMandat = pgTable(
+  "parties_mandat",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mandatId: uuid("mandat_id")
+      .notNull()
+      .references(() => mandats.id),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id),
+    role: text("role").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("parties_mandat_role_check", sql`${table.role} IN ('mandant','representant')`),
+    unique("parties_mandat_mandat_contact_unique").on(table.mandatId, table.contactId),
+    // Les deux sens de la relation : les parties d'un mandat, les mandats d'un contact (repoint
+    // par le moteur de fusion).
+    index("parties_mandat_mandat_idx").on(table.mandatId),
+    index("parties_mandat_contact_idx").on(table.contactId),
+  ]
+);
+
 // Premier acquéreur réel persisté (hors mocks data/clients.ts). Mêmes principes que `biens` :
 // colonnes nullable sans défaut pour les champs structurés optionnels.
 export const acquereurs = pgTable(

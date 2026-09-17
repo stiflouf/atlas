@@ -36,6 +36,7 @@ describe("ADR-059 §10 — gardes d'écriture sur contact_id", () => {
         "lib/clientRepository.ts",
         "lib/fusionContactRepository.ts",
         "lib/interactionRepository.ts",
+        "lib/partieMandatRepository.ts",
         "lib/partieProjetRepository.ts",
         "lib/prospectVendeurRepository.ts",
         "lib/provenance/champVerrouilleRepository.ts",
@@ -66,6 +67,13 @@ describe("ADR-059 §10 — gardes d'écriture sur contact_id", () => {
       const code = codeSeul(join(SRC, "lib", fichier));
       expect(code, fichier).toContain("executeur.transaction(async (tx) =>");
       expect(code, fichier).toMatch(/exigerContactActif\([^)]*,\s*tx/);
+    }
+    // ADR-060 §16 — writer à résultat typé : la garde rend `contact_introuvable` / `contact_fusionne`,
+    // après le verrou du mandat (ordre mandat → contact, sans cycle avec le moteur).
+    {
+      const code = codeSeul(join(SRC, "lib", "partieMandatRepository.ts"));
+      expect(code).toContain("executeur.transaction(async (tx) =>");
+      expect(code).toMatch(/verrouillerContactActif\(input\.contactId, tx, workspaceId\)/);
     }
     for (const fichier of ["champVerrouilleRepository.ts", "referenceExterneRepository.ts"]) {
       const code = codeSeul(join(SRC, "lib", "provenance", fichier));

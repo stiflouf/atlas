@@ -1,10 +1,9 @@
 // ADR-055 §F — le MANDAT : le contrat confié au professionnel pour une période donnée.
 //
-// Ce type ne porte aucune identité humaine. Les mandants ne sont PAS modélisés dans ce lot : la
-// qualité juridique de mandant (qui signe, qui engage l'indivision, qui est représenté) n'est pas
-// la même chose que la participation à un projet de vente, et réutiliser `parties_projet` pour
-// l'affirmer inventerait un fait juridique. Aucun écran, aucune règle et aucun document ne
-// consomme cette information aujourd'hui — la frontière est documentée, pas devinée.
+// Ce type ne porte aucune identité humaine. La qualité juridique de mandant (qui signe, qui engage
+// l'indivision, qui est représenté) est une RELATION, `parties_mandat` (types/partieMandat.ts,
+// ADR-060 §16) — jamais une colonne du mandat, jamais `parties_projet` (la participation à un
+// projet de vente n'est pas la signature d'un contrat).
 //
 // `workspaceId` n'apparaît pas : le mandat est une feuille de `biens`, son périmètre est celui du
 // bien (ADR-054 §7).

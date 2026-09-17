@@ -7,7 +7,8 @@ import * as schema from "@/db/schema";
 
 // ADR-060 — garanties STRUCTURELLES de MANDATE_LIFECYCLE_FOUNDATION_V1 : le schéma additif, le
 // standard workspace des writers, l'absence de dual-write legacy/canonique, et tout ce que ce lot
-// ne fait volontairement PAS (parties_mandat, événement ciblant un mandat, connecteur, écran).
+// ne fait volontairement PAS (événement ciblant un mandat, connecteur, écran). `parties_mandat`,
+// livrée par le lot suivant (MANDATE_PARTIES_V1), a ses propres gardes.
 
 const SRC = join(__dirname, "..");
 const valeursExportees: unknown[] = Object.values(schema);
@@ -70,10 +71,12 @@ describe("ADR-060 — migration lifecycle : additive, nullable, sans default", (
     expect(colonne("date_signature")).toBeUndefined();
   });
 
-  it("aucun workspace_id, aucun statut stocké, aucune table parties_mandat, aucun événement ciblant un mandat", () => {
+  it("aucun workspace_id, aucun statut stocké, aucun événement ciblant un mandat", () => {
     expect(colonne("workspace_id")).toBeUndefined();
     for (const interdit of ["statut", "etat", "remplace_le", "cloture_le"]) expect(colonne(interdit), interdit).toBeUndefined();
-    expect([...tables.keys()]).not.toContain("parties_mandat");
+    // `parties_mandat` existe depuis le lot MANDATE_PARTIES_V1 (garanties dans
+    // partieMandat.structurel.test.ts) ; le mandat lui-même n'embarque toujours aucun contact.
+    expect(colonne("contact_id")).toBeUndefined();
     expect(tables.get("evenements_metier")!.columns.map((c) => c.name)).not.toContain("mandat_id");
     expect(tables.get("taches")!.columns.map((c) => c.name)).not.toContain("mandat_id");
     expect(tables.get("documents_bien")!.columns.map((c) => c.name)).not.toContain("mandat_id");

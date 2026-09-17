@@ -1,6 +1,6 @@
 # ADR-060 — Maturité du Mandat : cycle de vie canonique, précédence legacy et frontières V1
 
-**Statut :** Accepté — **PARTIELLEMENT IMPLÉMENTÉ** (2026-09-16, lot `MANDATE_LIFECYCLE_FOUNDATION_V1`).
+**Statut :** Accepté — **PARTIELLEMENT IMPLÉMENTÉ** (2026-09-16, lot `MANDATE_LIFECYCLE_FOUNDATION_V1` ; 2026-09-17, lot `MANDATE_PARTIES_V1` : M-3 fermé).
 **Date :** 2026-09-16
 **Décideurs :** Steven Gausset (CEO), CTO
 
@@ -8,7 +8,7 @@
 |---|---|
 | §1 précédence (writers), §2 legacy write policy (défense serveur `modifierBien`), §3 type, §4 exclusivité, §5–§8 dates / statut / résiliation, §9 renouvellement primitif sans mutation, §10 `mandatCourantDuBien`, §11 invariant applicatif (`enregistrerMandatExistant`), §12 numéro, §13 workspace + verrous (signature corrigée, `modifierMandat`, `resilierMandat`), §14 création directe, §15 `enregistrerMandatExistant` (writer), §16 migration `0044`, champs verrouillables, matrice A–T | **IMPLÉMENTÉ** |
 | §2 retrait des champs legacy du formulaire d'édition (masquage UI) ; §16 bascule des lecteurs UI (`LEGACY_UI_SWITCH_TIMING`), écran « Enregistrer le mandat existant », écrans modification / résiliation | **DÉCIDÉ, lot UI** |
-| §16 `parties_mandat` (M-3), repointage par la fusion | **DÉCIDÉ, lot `MANDATE_PARTIES_V1`** |
+| §16 `parties_mandat` (M-3) : table (migration `0045`), rôles `mandant` / `representant`, writers scoped (`ajouterPartieMandat`, `retirerPartieMandat`, `modifierRolePartieMandat`), lecture jointe `listerPartiesMandat`, repointage et dédoublonnage par le moteur de fusion Contact | **IMPLÉMENTÉ** (lot `MANDATE_PARTIES_V1`, 2026-09-17) |
 | renouvellement humain (verrou double, écran), automatisations, cible `mandat_id` sur les événements, connecteurs | **DÉCIDÉ, lots ultérieurs** |
 
 Écart assumé au lot lifecycle : le masquage des champs `date_mandat` / `statut_mandat` dans
@@ -296,6 +296,30 @@ workspace du contact = workspace du bien, vérifié applicativement. Le **moteur
 devra repointer `parties_mandat` avec dédoublonnage sur `(mandat_id, contact_id)`, exactement comme
 `parties_projet` — cette extension appartient à `MANDATE_PARTIES_V1`.
 
+**Réalisé par `MANDATE_PARTIES_V1` (2026-09-17).** Table `parties_mandat` exactement comme décidée
+(migration `0045`, additive, index `parties_mandat_mandat_idx` / `parties_mandat_contact_idx`,
+FK NO ACTION des deux côtés, aucun `workspace_id`, aucune contrainte « au moins un mandant »).
+Writers dans `lib/partieMandatRepository.ts`, tous transactionnels et scoped par le workspace de
+session (partie → mandat → bien) : `ajouterPartieMandat` (verrou du mandat PUIS
+`verrouillerContactActif` — même ordre partout, aucun cycle avec le moteur de fusion qui ne
+verrouille que des contacts ; refus typés `mandat_introuvable`, `contact_introuvable`,
+`contact_fusionne`, `deja_partie` — un contact n'a qu'un rôle par mandat, un second rôle n'est
+jamais une seconde ligne), `modifierRolePartieMandat` (mandant ↔ representant, mise à jour de la
+même ligne : sans lui, corriger une erreur humaine exigerait retirer puis réajouter) et
+`retirerPartieMandat` (la relation seule disparaît, jamais le contact ni le mandat). Lecture
+`listerPartiesMandat(mandatId, workspaceId)` : une requête jointe `contacts`, identité canonique
+incluse, aucun N+1 ; un mandat legacy sans partie rend `[]`. **Aucune partie créée
+automatiquement** : ni à la signature, ni à la création directe, ni par `enregistrerMandatExistant`,
+ni par le successeur ; `parties_projet` n'est jamais copiée (proposition future + décision humaine,
+jamais silencieuse) ; aucun backfill. **Fusion Contact** (ADR-059) : `parties_mandat` dédoublée sur
+`(mandat_id, contact_id)` AVANT le repoint — même rôle : partie de l'absorbé supprimée ; rôles
+différents : priorité déterministe **`mandant` > `representant`** (`roleRetenuPartieMandat`,
+`types/partieMandat.ts`, propre à ce vocabulaire) appliquée à la ligne conservée ; journal
+`ids_deplaces` étendu de `partiesMandat`, `partiesMandatSupprimees`, `partiesMandatRoleCorrige`
+(clés absentes des journaux antérieurs, jamais réécrits). Concurrence writer × fusion testée dans
+les deux ordres : aucune partie ne reste sur un absorbé. Aucune UI, aucune Server Action, aucune
+automatisation, aucune personne morale, aucune provenance dédiée, aucun `champs_verrouilles`.
+
 **`LEGAL_ENTITY_REQUIRED_V1`** = **NO.** Une SCI ou une indivision est représentée par un Contact
 humain de rôle `representant`. Aucune entité Organisation.
 
@@ -419,7 +443,9 @@ jamais une exception pour un refus normal ; tous lèvent pour une incohérence i
 ## Conséquences
 
 - M-1, M-2 et M-4 sont fermés par `MANDATE_LIFECYCLE_FOUNDATION_V1` ; M-3 par
-  `MANDATE_PARTIES_V1`. Mandate maturity `CLOSED` au plus tôt après le lot 2.
+  `MANDATE_PARTIES_V1` (livré le 2026-09-17). Les deux lots sont livrés ; la déclaration
+  `MANDATE_MATURITY = CLOSED` reste une décision de certification distincte (audit des P2 Mandat
+  restants avant UI / automatisation).
 - `date_fin` et le statut dérivé rendent calculables « expire dans N jours » et « expiré » : le lot
   automatisations pourra s'y brancher sans nouvelle décision de modèle.
 - Le formulaire de signature et la création directe demandent le type de mandat : un fait de plus
@@ -460,7 +486,8 @@ jamais une exception pour un refus normal ; tous lèvent pour une incohérence i
 
 ## Hors périmètre, volontairement
 
-Personnes morales ; `parties_mandat` (décidé, lot 2) ; renouvellement humain et son écran (lot UI) ;
+Personnes morales ; renouvellement humain et son écran (lot UI) ; écran de sélection des parties
+de mandat (proposition depuis `parties_projet` + décision humaine) ;
 `date_signature` ; `documents_bien.mandat_id` et type de document `resiliation` (le type `mandat`
 rattaché au bien suffit) ; automatisations temporelles (`mandat_expire_bientot`, `mandat_expire`,
 `mandat_resilie`), cible `mandat_id` sur `evenements_metier`, Today, cible de tâche `mandat` ;

@@ -653,9 +653,10 @@ depuis leur affichage — `modifie_le` compris — sinon `identite_modifiee_entr
 champ par champ cohérent avec l'identité finale sinon `choix_identite_invalide`, contradictions de
 références externes acquittées par clé déterministe sinon `avertissement_reference_externe_requis`
 / `acquittement_inconnu`) → parties des projets communs dédoublées (DELETE de la partie absorbée,
-rôle principal préservé sur la partie conservée) AVANT repoint → UPDATE `contact_id` de
-`parties_projet`, `interactions`, `acquereurs`, `prospects_vendeurs`, `references_externes` (ids
-exacts) → `modifierIdentiteContact` si l'identité finale change (verrous sur les seuls champs
+rôle principal préservé sur la partie conservée) et parties des mandats communs dédoublées de la
+même façon (`mandant` > `representant`, ADR-060 §16) AVANT repoint → UPDATE `contact_id` de
+`parties_projet`, `parties_mandat`, `interactions`, `acquereurs`, `prospects_vendeurs`,
+`references_externes` (ids exacts) → `modifierIdentiteContact` si l'identité finale change (verrous sur les seuls champs
 changés) → `marquerContactFusionne` (second et dernier writer de `contacts`) → INSERT
 `contact_fusions`. Toute erreur = rollback intégral. `champs_verrouilles` de l'absorbé jamais
 repointés. La seule porte vers le moteur est la Server Action `fusionnerContactsAction` (page
@@ -1039,8 +1040,9 @@ Index : `mandats_bien_idx`, `mandats_projet_vendeur_idx`, `mandats_remplace_idx`
 - **Précédence et legacy write policy** (§1–§2) : dès qu'un mandat canonique existe pour un bien,
   `modifierBien` **n'écrit plus** `date_mandat` / `statut_mandat` (défense serveur). Les lecteurs
   UI et moteurs restent sur le legacy jusqu'au lot UI, qui basculera tous les écrans ensemble.
-- Non livré par ce lot (décidé) : `parties_mandat` (M-3, lot 2), renouvellement humain, écrans,
-  automatisations, cible `mandat_id` sur les événements, connecteurs.
+- Non livré par le lot lifecycle (décidé) : renouvellement humain, écrans, automatisations, cible
+  `mandat_id` sur les événements, connecteurs. `parties_mandat` (M-3) est livrée par le lot
+  `MANDATE_PARTIES_V1` — voir la section suivante.
 
 **Champs encore absents, volontairement** : `signe_le` distinct de la prise d'effet (ADR-060 §5),
 `duree_mois` / tacite reconduction (règles réseau, jamais persistées), tout statut stocké, tout
@@ -1051,22 +1053,21 @@ identifiant fournisseur.
 (`biens.date_mandat`), qui alimente `date_debut`. Créer une seconde colonne toujours égale à la
 première ne les distinguerait pas davantage.
 
-**Mandants non modélisés.** Aucun lien direct `mandats ↔ contacts`, et aucune table `parties_mandat` :
-la qualité juridique de mandant (qui signe, qui engage une indivision, qui est représenté) n'est
-**pas** la participation à un projet de vente, et réutiliser `parties_projet` pour l'affirmer
-inventerait un fait juridique. Aucun écran, aucune règle et aucun document ne consomme cette
-information aujourd'hui.
+**Mandants : une relation, `parties_mandat` (voir ci-dessous).** La qualité juridique de mandant
+(qui signe, qui engage une indivision, qui est représenté) n'est **pas** la participation à un
+projet de vente : `parties_projet` ne la porte jamais, et aucune colonne du mandat n'embarque un
+contact.
 
 **Alimentation et coexistence :**
 
 ```
-        Contact
-           │
-     parties_projet
-           │
-     projets_vendeur ──────┐
+        Contact ──────────────────┐
+           │                      │
+     parties_projet         parties_mandat (mandant | representant)
+           │                      │
+     projets_vendeur ──────┐      │
                            │ (projet_vendeur_id, nullable)
-     biens ── mandats ─────┘
+     biens ── mandats ─────┘──────┘
                 │
                 └── mandats (successeur, remplace_mandat_id)
 ```
@@ -1086,6 +1087,57 @@ information aujourd'hui.
 
 **Source de vérité pendant la coexistence : `biens` et `prospects_vendeurs`.** Un test structurel
 vérifie qu'aucun écran ni aucun moteur pur ne référence `mandats`.
+
+## `parties_mandat` (ADR-060 §16, lot `MANDATE_PARTIES_V1`, migration `0045`)
+
+**Rôle** : la relation « cette personne est partie à ce mandat », en qualité de **mandant** (celui
+qui confie le mandat — plusieurs pour un couple ou une indivision) ou de **représentant** (la
+personne humaine qui agit pour une SCI, une indivision ou un mandant absent). C'est elle, et elle
+seule, qui porte la qualité contractuelle — vraiment N:N : un mandat a N parties, un contact peut
+être partie de plusieurs mandats. Ferme M-3.
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `mandat_id` | uuid | **non** | FK → `mandats.id`, NO ACTION |
+| `contact_id` | uuid | **non** | FK → `contacts.id`, NO ACTION |
+| `role` | text | non | `CHECK IN ('mandant','representant')` — rien d'autre (pas d'`apporteur`, `notaire`, `proprietaire`, `usufruitier`, `personne_morale`…) |
+| `cree_le` | timestamptz | non | default `now()` |
+
+`UNIQUE (mandat_id, contact_id)` : une personne est partie **une fois** par mandat, avec un seul
+rôle — changer de rôle est une mise à jour, jamais une seconde ligne. Index
+`parties_mandat_mandat_idx`, `parties_mandat_contact_idx`. **Aucun `workspace_id`** (feuille,
+ADR-054 §7) : périmètre = partie → mandat → bien → workspace, tenu par les writers. **Aucune
+contrainte « au moins un mandant »** : un mandat importé, legacy ou en cours de saisie reste valide
+sans partie ; l'exigence, si elle vient, sera celle d'un workflow. Aucune personne morale, aucune
+table Organisation (`LEGAL_ENTITY_REQUIRED_V1 = NO`).
+
+- **Writers** (`lib/partieMandatRepository.ts`, seul module à écrire la table hors moteur de
+  fusion), tous transactionnels, scoped par le workspace de **session**, autre workspace =
+  introuvable : `ajouterPartieMandat(mandatId, { contactId, role }, workspaceId)` — verrou du
+  mandat via son bien (`verrouillerMandat`) PUIS `verrouillerContactActif` (ADR-059 §10 : un
+  absorbé n'est pas une destination, jamais réécrit vers son survivant) ; résultats
+  `ajoutee` / `mandat_introuvable` / `contact_introuvable` / `contact_fusionne` / `deja_partie`
+  (même rôle ou autre rôle : la partie existante est rendue, aucune seconde ligne).
+  `modifierRolePartieMandat(partieId, role, workspaceId)` (mandant ↔ representant, même ligne,
+  `cree_le` intact) et `retirerPartieMandat(partieId, workspaceId)` (suppression physique de la
+  relation seule — jamais le contact ni le mandat), tous deux sous `FOR UPDATE` de la partie jointe
+  mandat → bien. Ordre de verrous constant (mandat puis contact) : aucun cycle avec le moteur de
+  fusion, qui ne verrouille que des contacts.
+- **Lecture** `listerPartiesMandat(mandatId, workspaceId)` : **une** requête jointe
+  `contacts` + `mandats` + `biens`, identité canonique du contact incluse (`PartieMandatDetail`),
+  ordre d'ajout ; mandat legacy sans partie, inconnu ou d'un autre workspace → `[]`.
+- **Aucune partie créée automatiquement** : ni à la signature, ni à la création directe, ni par
+  `enregistrerMandatExistant`, ni par `creerMandatSuccesseur`. `parties_projet` n'est **jamais
+  copiée** (elle pourra servir de proposition à une sélection humaine future) ; **aucun backfill**.
+- **Fusion Contact** (ADR-059) : le moteur dédouble sur `(mandat_id, contact_id)` AVANT le repoint
+  — même rôle : partie de l'absorbé supprimée ; rôles différents : priorité déterministe
+  **`mandant` > `representant`** (`roleRetenuPartieMandat`, `types/partieMandat.ts`) appliquée à
+  la partie conservée du survivant ; puis `contact_id` repointé. Journal `ids_deplaces` étendu :
+  `partiesMandat`, `partiesMandatSupprimees`, `partiesMandatRoleCorrige` (absents des journaux
+  antérieurs, jamais réécrits).
+- Hors périmètre : écran de sélection, Server Action, automatisation, `references_externes` /
+  `champs_verrouilles` ciblant une partie, rôle au-delà des deux valeurs.
 
 ## `interactions` (ADR-055 §G)
 
@@ -2505,6 +2557,8 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0041_fresh_black_queen.sql` | ADR-057 : colonne `modifie_le` (`timestamptz NOT NULL DEFAULT now()`) sur `contacts`, posée avec le premier chemin d'écriture d'un contact existant. Strictement additive — aucun index, aucune unicité sur email ou téléphone, **aucun backfill** |
 | `0042_last_proemial_gods.sql` | ADR-058 : index `contacts_workspace_idx` sur `contacts(workspace_id)`, posé avec le premier lecteur de production de cette table. Strictement additif — aucun index sur email ou téléphone, aucune unicité, **aucun backfill** |
 | `0043_contact_fusion_model.sql` | ADR-059 : colonnes `fusionne_dans_contact_id` (FK auto-référente) et `fusionne_le` sur `contacts`, deux CHECK (cohérence, pas soi-même), index partiel `contacts_fusionne_dans_idx` ; table `contact_fusions` (journal append-only, feuille de `contacts`, CHECK survivant ≠ absorbé, deux index). Strictement additive — aucun moteur de fusion, **aucun backfill**, aucune ligne absorbée |
+| `0044_mandate_lifecycle.sql` | ADR-060 : colonnes nullables sans default `type` (CHECK), `numero`, `exclusivite_jusqu_au` (CHECK dans la période), `motif_resiliation` sur `mandats` ; index `mandats_bien_idx`, `mandats_projet_vendeur_idx`, `mandats_remplace_idx`. Strictement additive, **aucun backfill** |
+| `0045_mandate_parties.sql` | ADR-060 §16 : table `parties_mandat` (feuille de `mandats` et `contacts`, FK NO ACTION, `CHECK` rôle `mandant`/`representant`, `UNIQUE(mandat_id, contact_id)`, deux index). Strictement additive — aucune partie inventée depuis `parties_projet` ni depuis un propriétaire legacy, **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

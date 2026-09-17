@@ -1064,10 +1064,15 @@ Limites qui en découlent, toutes assumées le temps de la transition :
 - **La date de signature et la prise d'effet sont confondues** : une seule date est saisie
   (`date_debut`, ADR-060 §5) ; `signe_le` viendra par décision dédiée si une prise d'effet
   différée est constatée.
-- **Les mandants ne sont pas modélisés** : aucun lien `mandats ↔ contacts`, la qualité juridique de
-  signataire n'étant pas la participation à un projet de vente. **Décidé par ADR-060, non
-  implémenté** : relation dédiée `parties_mandat` (rôles `mandant` / `representant`), lot
-  `MANDATE_PARTIES_V1`. Mandate maturity reste **OPEN** jusqu'à ce lot.
+- **Les parties de mandat existent (`parties_mandat`, lot `MANDATE_PARTIES_V1`, ADR-060 §16)
+  mais restent une fondation sans écran** : rôles `mandant` / `representant` seulement, writers et
+  lecture jointe livrés, repoint par la fusion Contact livré. Ce qui reste non livré : l'écran de
+  sélection des parties (proposition depuis `parties_projet` + décision humaine — **rien n'est copié
+  automatiquement**, un mandat signé aujourd'hui n'a aucune partie tant qu'un humain n'en ajoute
+  pas), toute **personne morale** (une SCI ou une indivision est représentée par un Contact humain
+  `representant`, aucune entité Organisation), tout rôle au-delà des deux valeurs, et toute règle
+  « au moins un mandant » (workflow futur, jamais une contrainte de base). Aucun backfill : les
+  mandats antérieurs n'ont aucune partie.
 - **`mandat_signe` cible toujours le prospect** (idempotence « une signature par prospect à vie ») :
   un renouvellement ne pourra pas ré-émettre l'événement avant que la cible `mandat_id` existe (lot
   automatisations).

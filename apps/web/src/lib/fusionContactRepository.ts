@@ -5,6 +5,7 @@ import {
   contactFusions as contactFusionsTable,
   contacts as contactsTable,
   interactions as interactionsTable,
+  partiesMandat as partiesMandatTable,
   partiesProjet as partiesProjetTable,
   prospectsVendeurs as prospectsVendeursTable,
   referencesExternes as referencesExternesTable,
@@ -23,6 +24,7 @@ import {
   type IdsDeplacesFusionContact,
 } from "@/types/contactFusion";
 import type { RolePartieProjet } from "@/types/partieProjet";
+import { roleRetenuPartieMandat, type RolePartieMandat } from "@/types/partieMandat";
 
 // ADR-059 — LE MOTEUR de fusion : absorbé → survivant, en UNE transaction, ou rien. Il ne décide
 // rien : l'identité finale et le choix champ par champ lui sont donnés par un humain, et il
@@ -36,7 +38,8 @@ import type { RolePartieProjet } from "@/types/partieProjet";
 //      croisées) ;
 //   2. invariants et concurrence ;
 //   3. parties de projet : supprimer celles de l'absorbé sur les projets COMMUNS avant tout
-//      repoint — sinon UNIQUE(projet, contact) ;
+//      repoint — sinon UNIQUE(projet, contact) ; parties de mandat (ADR-060 §16) : même
+//      dédoublonnage sur les mandats COMMUNS, rôle retenu déterministe (mandant > representant) ;
 //   4. repoint des dépendances (parties restantes, interactions, dossiers historiques, références
 //      externes) — jamais un instantané d'identité legacy, jamais un verrou ;
 //   5. identité finale du survivant par le writer unique `modifierIdentiteContact` (no-op si
@@ -224,6 +227,32 @@ export async function fusionnerContacts(
       partiesProjetSupprimees.push(partieAbsorbe.id);
     }
 
+    // 3 bis. PARTIES DE MANDAT — même règle : dédoubler les mandats communs AVANT de repointer, sinon
+    // UNIQUE(mandat, contact). Une seule ligne finale par mandat, portant le rôle le plus fort des
+    // deux (`roleRetenuPartieMandat`, mandant > representant) : la ligne du survivant est conservée
+    // et relevée si l'absorbé portait le rôle principal ; celle de l'absorbé est supprimée.
+    const partiesMandatLues = await tx
+      .select()
+      .from(partiesMandatTable)
+      .where(inArray(partiesMandatTable.contactId, [contactSurvivantId, contactAbsorbeId]))
+      .orderBy(asc(partiesMandatTable.creeLe), asc(partiesMandatTable.id));
+    const partiesMandatSurvivant = new Map(
+      partiesMandatLues.filter((p) => p.contactId === contactSurvivantId).map((p) => [p.mandatId, p])
+    );
+    const partiesMandatSupprimees: string[] = [];
+    const partiesMandatRoleCorrige: NonNullable<IdsDeplacesFusionContact["partiesMandatRoleCorrige"]> = [];
+    for (const partieAbsorbe of partiesMandatLues.filter((p) => p.contactId === contactAbsorbeId)) {
+      const partieSurvivant = partiesMandatSurvivant.get(partieAbsorbe.mandatId);
+      if (!partieSurvivant) continue;
+      const roleRetenu = roleRetenuPartieMandat(partieSurvivant.role as RolePartieMandat, partieAbsorbe.role as RolePartieMandat);
+      if (roleRetenu !== partieSurvivant.role) {
+        await tx.update(partiesMandatTable).set({ role: roleRetenu }).where(eq(partiesMandatTable.id, partieSurvivant.id));
+        partiesMandatRoleCorrige.push({ partieId: partieSurvivant.id, roleAvant: partieSurvivant.role, roleFinal: roleRetenu });
+      }
+      await tx.delete(partiesMandatTable).where(eq(partiesMandatTable.id, partieAbsorbe.id));
+      partiesMandatSupprimees.push(partieAbsorbe.id);
+    }
+
     // 4. REPOINT — ids exacts, jamais un simple compte.
     const partiesProjet = (
       await tx
@@ -231,6 +260,13 @@ export async function fusionnerContacts(
         .set({ contactId: contactSurvivantId })
         .where(eq(partiesProjetTable.contactId, contactAbsorbeId))
         .returning({ id: partiesProjetTable.id })
+    ).map((l) => l.id);
+    const partiesMandat = (
+      await tx
+        .update(partiesMandatTable)
+        .set({ contactId: contactSurvivantId })
+        .where(eq(partiesMandatTable.contactId, contactAbsorbeId))
+        .returning({ id: partiesMandatTable.id })
     ).map((l) => l.id);
     const interactions = (
       await tx
@@ -277,6 +313,9 @@ export async function fusionnerContacts(
       partiesProjet,
       partiesProjetSupprimees,
       partiesProjetRoleCorrige,
+      partiesMandat,
+      partiesMandatSupprimees,
+      partiesMandatRoleCorrige,
       acquereurs,
       prospectsVendeurs,
       referencesExternes,
