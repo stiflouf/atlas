@@ -13,6 +13,20 @@ function parseDateOptionnelle(valeur: FormDataEntryValue | null): string | undef
   return brut;
 }
 
+// Une date exigée par un geste humain (prise d'effet à l'enregistrement, date de résiliation) :
+// absente ou mal formée, c'est un refus nommé — jamais la date du jour posée d'autorité.
+export function parseDateObligatoire(valeur: FormDataEntryValue | null, libelle: string): string {
+  const date = parseDateOptionnelle(valeur);
+  if (date === undefined) throw new Error(`${libelle} : la date est obligatoire (AAAA-MM-JJ).`);
+  return date;
+}
+
+// ADR-060 §8 — motif facultatif : vide = absent, jamais "".
+export function parseMotifResiliation(valeur: FormDataEntryValue | null): string | undefined {
+  const motif = String(valeur ?? "").trim();
+  return motif === "" ? undefined : motif;
+}
+
 export function parseFaitsMandatFormData(formData: FormData): FaitsMandat {
   const type = String(formData.get("typeMandat") ?? "").trim();
   if (!estTypeMandat(type)) {

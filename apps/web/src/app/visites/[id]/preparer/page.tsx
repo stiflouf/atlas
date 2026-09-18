@@ -35,6 +35,8 @@ import { rechercherPatrimoineProche } from "@/lib/patrimoine/merimeeClient";
 import { selectionnerElementsARaconter } from "@/lib/araconter/selectionMerimee";
 import { rechercherTransactionsComparables } from "@/lib/marche/dvfClient";
 import { produirePointsAttention } from "@/lib/pointsAttention/moteur";
+import { chargerPresentationMandatBien, statutMandatEffectif } from "@/lib/presentationMandatBien";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { produirePointsForts } from "@/lib/pointsForts/moteur";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
@@ -240,7 +242,11 @@ export default async function PreparerVisite({ params }: PageProps) {
 
   const { acquereur: aq } = prep;
 
-  const pointsAttention = produirePointsAttention({ bien, acquereur, transports, velib });
+  // ADR-060 §1 — le point d'attention « mandat non actif » lit le statut EFFECTIF du mandat
+  // (canonique dès qu'il existe : un canonique résilié ou expiré est « non actif » même si le
+  // legacy du bien dit encore « actif »), tranché par le read model dans le workspace de session.
+  const mandat = statutMandatEffectif(await chargerPresentationMandatBien(bien, await exigerWorkspaceCourant()));
+  const pointsAttention = produirePointsAttention({ bien, acquereur, transports, velib, mandat });
   const pointsForts = produirePointsForts({ bien, acquereur });
 
   return (

@@ -103,7 +103,7 @@ describe("ADR-055 §F — signer un mandat crée le mandat canonique, sans rien 
     expect(evenements.map((evenement) => evenement.typeEvenement)).toContain("mandat_signe");
 
     // Et le mandat canonique existe, rattaché des deux côtés.
-    const mandats = await listerMandatsDuBien(resultat.bien.id);
+    const mandats = await listerMandatsDuBien(resultat.bien.id, WORKSPACE_TEST);
     expect(mandats).toHaveLength(1);
     expect(mandats[0].projetVendeurId).toBe(projet.id);
     // La prise d'effet vient de la seule date que la signature saisisse.
@@ -128,7 +128,7 @@ describe("ADR-055 §F — signer un mandat crée le mandat canonique, sans rien 
     if (resultat.statut !== "signe") throw new Error(resultat.statut);
     idsBiens.push(resultat.bien.id);
 
-    const mandats = await listerMandatsDuBien(resultat.bien.id);
+    const mandats = await listerMandatsDuBien(resultat.bien.id, WORKSPACE_TEST);
     expect(mandats).toHaveLength(1);
     expect(mandats[0].projetVendeurId, "aucun projet n'est deviné").toBeUndefined();
     // Le workflow historique fonctionne exactement comme avant.
@@ -140,7 +140,7 @@ describe("ADR-055 §F — signer un mandat crée le mandat canonique, sans rien 
     // fabriquer un mandat par bien inventerait une prise d'effet et une durée.
     const bien = await creerBien(donneesBien("SANS-SIGNATURE"), WORKSPACE_TEST);
     idsBiens.push(bien.id);
-    expect(await listerMandatsDuBien(bien.id)).toEqual([]);
+    expect(await listerMandatsDuBien(bien.id, WORKSPACE_TEST)).toEqual([]);
   });
 });
 

@@ -1,13 +1,8 @@
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
-import { LABEL_CHARGE_HONORAIRES, LABEL_STATUT_MANDAT, type Bien } from "@/types/bien";
+import { LABEL_CHARGE_HONORAIRES, type Bien } from "@/types/bien";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
-
-const VARIANT_STATUT_MANDAT: Record<Bien["statutMandat"], "success" | "warning" | "danger"> = {
-  actif: "success",
-  suspendu: "warning",
-  expire: "danger",
-};
+import type { StatutMandatEffectif } from "@/lib/presentationMandatBien";
 
 // Bloc "Vendeur & mandat" (design validé Claude Design, artifact 7615625f) — nouveau composant
 // présentationnel pur, aucune nouvelle donnée : bien.statutMandat/chargeHonoraires/nomCopropriete
@@ -16,12 +11,18 @@ const VARIANT_STATUT_MANDAT: Record<Bien["statutMandat"], "success" | "warning" 
 // (getProspectVendeurParBien) — jamais recalculé ici. Aucun champ vendeur non confirmé (téléphone/
 // email) n'est affiché : uniquement le nom + lien vers sa fiche, pour ne rien présumer de la forme
 // exacte de ProspectVendeur au-delà de ce que ce composant a vérifié.
+//
+// ADR-060 §1 (lot MANDATE_CANONICAL_UI_V1) — le statut du mandat est le statut EFFECTIF tranché par
+// `statutMandatEffectif` (canonique dès qu'un mandat canonique existe, legacy sinon) : ce composant
+// ne lit plus `bien.statutMandat`.
 export default function BienVendeurMandat({
   bien,
   prospectVendeurOrigine,
+  mandatEffectif,
 }: {
   bien: Bien;
   prospectVendeurOrigine?: ProspectVendeur;
+  mandatEffectif: StatutMandatEffectif;
 }) {
   return (
     <div className="bg-surface border border-border-subtle rounded-xl shadow-[0_1px_2px_rgba(18,32,56,0.04)] p-4 md:p-5">
@@ -50,7 +51,7 @@ export default function BienVendeurMandat({
         </div>
         <div className="min-w-[120px]">
           <p className="text-[11px] text-text-muted mb-1">Statut du mandat</p>
-          <Badge variant={VARIANT_STATUT_MANDAT[bien.statutMandat]}>{LABEL_STATUT_MANDAT[bien.statutMandat]}</Badge>
+          <Badge variant={mandatEffectif.variante}>{mandatEffectif.libelle}</Badge>
         </div>
         <div className="min-w-[120px]">
           <p className="text-[11px] text-text-muted mb-1">Honoraires à la charge</p>

@@ -7,6 +7,7 @@ import BienHero from "@/components/bien/BienHero";
 import BienGaleriePhotos from "@/components/bien/BienGaleriePhotos";
 import BienStatutAction from "@/components/bien/BienStatutAction";
 import BienVendeurMandat from "@/components/bien/BienVendeurMandat";
+import MandatBienPanel from "@/components/mandat/MandatBienPanel";
 import BienAcquereursCompatibles from "@/components/bien/BienAcquereursCompatibles";
 import BienTabs from "@/components/bien/BienTabs";
 import { ongletBienValide } from "@/types/ongletBien";
@@ -25,6 +26,9 @@ import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerRemunerationsPourBien } from "@/lib/remunerationRepository";
 import { listerTransmissionsPourCompromis } from "@/lib/transmissionDossierNotaireRepository";
 import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
+import { chargerPresentationMandatBien, dateMandatEffective, statutMandatEffectif } from "@/lib/presentationMandatBien";
+import { rechercherContactsCandidats } from "@/lib/rattachementContact";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { evaluerCompatibiliteBien } from "@/lib/compatibilite/orchestration";
 import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegles";
 import { calculerChecklistDossier } from "@/lib/documents/checklistDossier";
@@ -52,13 +56,30 @@ const variantStatutCommercial: Record<StatutCommercial, "default" | "accent" | "
 // `onglet` (DEMO-DOCS-UX-01) : onglet d'ouverture de la fiche. Permet à une mutation faite
 // depuis un onglet d'y ramener l'utilisateur, et à un lien direct/rechargement de rouvrir le bon
 // onglet. Absent ou invalide -> "contexte", le défaut historique.
-type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ onglet?: string }> };
+// `mandat` : refus rapporté par une action Mandat (actions/mandat.ts), affiché dans le bloc Mandat.
+// `qMandat` : recherche de contact pour « Ajouter une personne au mandat » (formulaire GET).
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ onglet?: string; mandat?: string; qMandat?: string }>;
+};
 
 export default async function FicheBien({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const ongletInitial = ongletBienValide((await searchParams).onglet);
+  const { onglet, mandat: refusMandat, qMandat } = await searchParams;
+  const ongletInitial = ongletBienValide(onglet);
   const bien = await getBienById(id);
   if (!bien) notFound();
+
+  // ADR-054 / ADR-060 §1 — le mandat canonique se lit dans le workspace de SESSION, et la
+  // précédence canonique > legacy est tranchée une seule fois ici (read model), jamais par les
+  // composants. Un bien mocké (id non-UUID) n'a aucun mandat canonique : mode legacy.
+  const workspaceId = await exigerWorkspaceCourant();
+  const presentationMandat = await chargerPresentationMandatBien(bien, workspaceId);
+  const mandatEffectif = statutMandatEffectif(presentationMandat);
+  const candidatsContactMandat =
+    presentationMandat.mode === "canonique" && presentationMandat.mandatCourant && qMandat
+      ? await rechercherContactsCandidats(qMandat, workspaceId)
+      : [];
 
   const photoPrincipale = await getPhotoPrincipaleBien(bien.id);
   // Compteur affiché dans le hero + filmstrip galerie (design validé Claude Design, artifact
@@ -106,11 +127,10 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
   );
 
-  const dateMandat = new Date(bien.dateMandat).toLocaleDateString("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  const dateEffetMandat = dateMandatEffective(presentationMandat);
+  const mandatTexte = dateEffetMandat
+    ? `Mandat depuis le ${new Date(`${dateEffetMandat}T00:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })}`
+    : mandatEffectif.libelle;
 
   // Statut affiché dans le hero et le bandeau statut/action — mock (dossier) si présent, sinon
   // dérivé des jalons réels (statutCommercial, ADR-014), exactement comme avant ce chantier.
@@ -219,13 +239,23 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
           bien={bien}
           statutLabel={statutLabelNode}
           raisonTacheTexte={raisonTacheTexte}
-          dateMandatFormatee={dateMandat}
+          mandatTexte={mandatTexte}
           prochaineVisiteHref={prochaineVisiteHref}
         />
       </div>
 
       <div className="mb-4">
-        <BienVendeurMandat bien={bien} prospectVendeurOrigine={prospectVendeurOrigine} />
+        <BienVendeurMandat bien={bien} prospectVendeurOrigine={prospectVendeurOrigine} mandatEffectif={mandatEffectif} />
+      </div>
+
+      <div className="mb-4">
+        <MandatBienPanel
+          bienId={bien.id}
+          presentation={presentationMandat}
+          refus={refusMandat}
+          qContact={qMandat}
+          candidatsContact={candidatsContactMandat}
+        />
       </div>
 
       <div className="mb-8">

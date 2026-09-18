@@ -7,13 +7,21 @@ const inputCls =
 const labelCls = "text-[12px] font-medium text-text-2 mb-1 block";
 const helpCls = "text-[12px] text-text-3 mt-1";
 
-export default function MandatFaitsChamps({ typeObligatoire = true }: { typeObligatoire?: boolean }) {
+// `valeurs` : préremplissage en MODIFICATION (les faits actuels du mandat courant) — absent à la
+// création, où rien n'est présumé.
+export default function MandatFaitsChamps({
+  typeObligatoire = true,
+  valeurs,
+}: {
+  typeObligatoire?: boolean;
+  valeurs?: { type?: string; numero?: string; dateFin?: string; exclusiviteJusquAu?: string };
+}) {
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Type de mandat {typeObligatoire ? "*" : ""}</label>
-          <select name="typeMandat" required={typeObligatoire} defaultValue="" className={inputCls}>
+          <select name="typeMandat" required={typeObligatoire} defaultValue={valeurs?.type ?? ""} className={inputCls}>
             <option value="">— Choisir —</option>
             <option value="simple">Simple</option>
             <option value="exclusif">Exclusif</option>
@@ -25,18 +33,18 @@ export default function MandatFaitsChamps({ typeObligatoire = true }: { typeObli
         </div>
         <div>
           <label className={labelCls}>Numéro de mandat</label>
-          <input name="numeroMandat" className={inputCls} placeholder="Registre des mandats" />
+          <input name="numeroMandat" defaultValue={valeurs?.numero ?? ""} className={inputCls} placeholder="Registre des mandats" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Terme du mandat</label>
-          <input name="dateFinMandat" type="date" className={inputCls} />
+          <input name="dateFinMandat" type="date" defaultValue={valeurs?.dateFin ?? ""} className={inputCls} />
           <p className={helpCls}>Dernier jour couvert. Laissez vide si la durée n&apos;est pas connue.</p>
         </div>
         <div>
           <label className={labelCls}>Exclusivité jusqu&apos;au</label>
-          <input name="exclusiviteJusquAu" type="date" className={inputCls} />
+          <input name="exclusiviteJusquAu" type="date" defaultValue={valeurs?.exclusiviteJusquAu ?? ""} className={inputCls} />
           <p className={helpCls}>Pour un mandat semi-exclusif, la fin de la période d&apos;exclusivité.</p>
         </div>
       </div>

@@ -78,7 +78,7 @@ describe("creerBienAction — ADR-060 §14", () => {
     const champs = champsBien({ typeMandat: "exclusif", numeroMandat: " X-9 ", dateFinMandat: "2027-01-14" });
     expect(await soumettre(creerBienAction, formulaire(champs))).toMatch(/NEXT_REDIRECT/);
     const bien = await bienParReference(champs.reference);
-    const mandats = await listerMandatsDuBien(bien.id);
+    const mandats = await listerMandatsDuBien(bien.id, WORKSPACE_TEST);
     expect(mandats).toHaveLength(1);
     expect(mandats[0]).toMatchObject({ type: "exclusif", numero: "X-9", dateDebut: "2026-01-15", dateFin: "2027-01-14", projetVendeurId: undefined });
   });
@@ -89,7 +89,7 @@ describe("creerBienAction — ADR-060 §14", () => {
       expect(await soumettre(creerBienAction, formulaire(champs))).toMatch(/NEXT_REDIRECT/);
       const bien = await bienParReference(champs.reference);
       expect(bien.statutMandat).toBe(statutMandat);
-      expect(await listerMandatsDuBien(bien.id)).toEqual([]);
+      expect(await listerMandatsDuBien(bien.id, WORKSPACE_TEST)).toEqual([]);
     }
   });
 
@@ -105,7 +105,7 @@ describe("modifierBien — ADR-060 §2 LEGACY_WRITE_POLICY", () => {
     const champs = champsBien({ typeMandat: "simple" });
     await soumettre(creerBienAction, formulaire(champs));
     const bien = await bienParReference(champs.reference);
-    const mandatsAvant = await listerMandatsDuBien(bien.id);
+    const mandatsAvant = await listerMandatsDuBien(bien.id, WORKSPACE_TEST);
 
     const issue = await soumettre(
       modifierBienAction,
@@ -116,20 +116,20 @@ describe("modifierBien — ADR-060 §2 LEGACY_WRITE_POLICY", () => {
     expect(relu.prix).toBe(999000);
     expect(relu.statutMandat).toBe("actif");
     expect(relu.dateMandat).toBe("2026-01-15");
-    expect(await listerMandatsDuBien(bien.id)).toEqual(mandatsAvant);
+    expect(await listerMandatsDuBien(bien.id, WORKSPACE_TEST)).toEqual(mandatsAvant);
   });
 
   it("canonique absent → legacy éditable comme avant", async () => {
     const champs = champsBien({ statutMandat: "suspendu" });
     await soumettre(creerBienAction, formulaire(champs));
     const bien = await bienParReference(champs.reference);
-    expect(await listerMandatsDuBien(bien.id)).toEqual([]);
+    expect(await listerMandatsDuBien(bien.id, WORKSPACE_TEST)).toEqual([]);
 
     await soumettre(modifierBienAction, formulaire({ ...champs, id: bien.id, statutMandat: "expire", dateMandat: "2025-06-01" }));
     const relu = (await getBienById(bien.id))!;
     expect(relu.statutMandat).toBe("expire");
     expect(relu.dateMandat).toBe("2025-06-01");
-    expect(await listerMandatsDuBien(bien.id), "aucun mandat créé par une édition legacy").toEqual([]);
+    expect(await listerMandatsDuBien(bien.id, WORKSPACE_TEST), "aucun mandat créé par une édition legacy").toEqual([]);
   });
 
   it("le repository lui-même applique la politique, sans passer par l'action", async () => {

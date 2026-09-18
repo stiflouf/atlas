@@ -25,13 +25,15 @@ export default function BienStatutAction({
   bien,
   statutLabel,
   raisonTacheTexte,
-  dateMandatFormatee,
+  mandatTexte,
   prochaineVisiteHref,
 }: {
   bien: Bien;
   statutLabel: React.ReactNode;
   raisonTacheTexte?: string;
-  dateMandatFormatee: string;
+  // Phrase déjà tranchée par la présentation Mandat (ADR-060 §1) : « Mandat depuis le … » ou
+  // « Aucun mandat en cours » — ce bandeau ne relit jamais `bien.dateMandat` lui-même.
+  mandatTexte: string;
   prochaineVisiteHref?: string;
 }) {
   const bienReel = UUID_REGEX.test(bien.id);
@@ -98,7 +100,7 @@ export default function BienStatutAction({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               {statutLabel}
-              <span className="text-[12px] text-text-muted">Mandat depuis le {dateMandatFormatee}</span>
+              <span className="text-[12px] text-text-muted">{mandatTexte}</span>
             </div>
             {raisonTacheTexte && <p className="text-[14px] text-text-primary leading-snug">{raisonTacheTexte}</p>}
           </div>

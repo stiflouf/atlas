@@ -7,14 +7,34 @@
 | Section | État |
 |---|---|
 | §1 précédence (writers), §2 legacy write policy (défense serveur `modifierBien`), §3 type, §4 exclusivité, §5–§8 dates / statut / résiliation, §9 renouvellement primitif sans mutation, §10 `mandatCourantDuBien`, §11 invariant applicatif (`enregistrerMandatExistant`), §12 numéro, §13 workspace + verrous (signature corrigée, `modifierMandat`, `resilierMandat`), §14 création directe, §15 `enregistrerMandatExistant` (writer), §16 migration `0044`, champs verrouillables, matrice A–T | **IMPLÉMENTÉ** |
-| §2 retrait des champs legacy du formulaire d'édition (masquage UI) ; §16 bascule des lecteurs UI (`LEGACY_UI_SWITCH_TIMING`), écran « Enregistrer le mandat existant », écrans modification / résiliation | **DÉCIDÉ, lot UI** |
+| §2 retrait des champs legacy du formulaire d'édition (masquage UI) ; §16 bascule des lecteurs UI (`LEGACY_UI_SWITCH_TIMING`), écran « Enregistrer le mandat existant », modification / résiliation, gestion des parties, lectures Mandat scoped (P3-2) | **IMPLÉMENTÉ** (lot `MANDATE_CANONICAL_UI_V1`, 2026-09-18) |
 | §16 `parties_mandat` (M-3) : table (migration `0045`), rôles `mandant` / `representant`, writers scoped (`ajouterPartieMandat`, `retirerPartieMandat`, `modifierRolePartieMandat`), lecture jointe `listerPartiesMandat`, repointage et dédoublonnage par le moteur de fusion Contact | **IMPLÉMENTÉ** (lot `MANDATE_PARTIES_V1`, 2026-09-17) |
 | renouvellement humain (verrou double, écran), automatisations, cible `mandat_id` sur les événements, connecteurs | **DÉCIDÉ, lots ultérieurs** |
 
-Écart assumé au lot lifecycle : le masquage des champs `date_mandat` / `statut_mandat` dans
-`BienFormulaire` en édition n'est pas livré (il exigerait qu'une page lise `mandats`, ce que le test
-structurel « aucun écran ne lit mandats » interdit jusqu'au lot UI) ; la **défense serveur** (§2)
-est, elle, livrée et testée — une édition legacy sur un bien à mandat canonique est ignorée.
+L'écart assumé au lot lifecycle (masquage des champs legacy en édition) est fermé par le lot
+`MANDATE_CANONICAL_UI_V1` (2026-09-18) : `BienFormulaire` reçoit `mandatCanonique` de la page
+(`existeMandatCanoniqueDuBien`, scoped) et ne propose plus `date_mandat` / `statut_mandat` ; la
+défense serveur (§2) reste en place.
+
+**Lot `MANDATE_CANONICAL_UI_V1` (produit, Mandate maturity restant `CLOSED`).** Lectures Mandat
+scoped par le workspace de session (P3-2 du re-audit final : `getMandatById`, `listerMandatsDuBien`,
+`listerMandatsDuProjetVendeur` exigent `workspaceId` via `mandats ⋈ biens` ; nouveau
+`existeMandatCanoniqueDuBien`). Précédence §1 écrite UNE fois : `chargerPresentationMandatBien`
+(`lib/presentationMandatBien.ts`) rend `canonique` (dès qu'un mandat canonique EXISTE — historique
+non vide —, même sans courant, même à type NULL : « Non renseigné », jamais un repli champ par champ)
+/ `legacy` / `aucun`, avec `statutMandatEffectif` et `dateMandatEffective` pour les lecteurs qui
+n'ont besoin que d'un libellé ; 3 requêtes (historique, courant, parties du courant). Fiche Bien :
+`MandatBienPanel` (mandat actuel, historique, mandants / représentants avec lien Contact, Modifier,
+Résilier avec confirmation, Ajouter une personne via la recherche Contact existante, changement de
+rôle, retrait confirmé ; legacy-only : bloc legacy + « Enregistrer le mandat existant », date
+préremplie depuis `biens.date_mandat` mais SOUMISE par l'humain) ; `BienVendeurMandat`,
+`BienStatutAction`, `ProspectVendeurBienCree` et le point d'attention `mandat_non_actif`
+(`ContextePointsAttention.mandat`) basculent ENSEMBLE sur le statut effectif — un canonique
+résilié ou expiré n'affiche jamais le « Actif » legacy figé. Server Actions `actions/mandat.ts`
+(session → workspace de session → parsing → writer → `?mandat=<refus>`). Le test structurel « aucun
+écran ne lit mandats » est inversé : consommateurs UI listés, read models scoped seuls, jamais la
+table. Non touchés : dashboard (`delaiMoyenProspectMandatSigneJours` mesure le jalon de signature du
+prospect, pas l'état du mandat), listes (aucune n'affiche l'état du mandat). Aucune migration.
 
 > Rubriques : Contexte · Problème · Décision · Alternatives écartées · Modèle de données /
 > contrats · Invariants · Conséquences · Risques · Hors périmètre · Questions ouvertes ·
@@ -368,6 +388,9 @@ connecteur réel l'exigera.
   `mandatCourantDuBien` avec fallback legacy par entité (§1) — jamais un écran canonique et l'autre
   legacy sur le même bien. Le test structurel « aucun écran ne lit `mandats` »
   (`db/mandatCanonique.structurel.test.ts`) est **inversé** à ce moment-là, pas avant.
+  **Réalisé** par `MANDATE_CANONICAL_UI_V1` (2026-09-18) : bascule groupée via
+  `chargerPresentationMandatBien` / `statutMandatEffectif` ; test structurel inversé (consommateurs
+  autorisés énumérés) ; le dashboard reste sur le jalon prospect, qui n'est pas un état de mandat.
 - **`MANDATE_SIGNED_EVENT_POLICY`** : l'événement `mandat_signe` continue de cibler le prospect ;
   pas de migration vers `mandat_id` au lot lifecycle. Limitation reconnue : son index d'idempotence
   « un `mandat_signe` par prospect à vie » empêche de ré-émettre pour un renouvellement — à

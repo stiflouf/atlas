@@ -133,15 +133,47 @@ describe("ADR-055 §F — le modèle historique du mandat reste intact et fait f
     expect([...tables.keys()].filter((nom) => horsPerimetre.includes(nom))).toEqual([]);
   });
 
-  it("aucun écran ne lit mandats", () => {
-    const fautifs = FICHIERS.filter(
+  // Lot MANDATE_CANONICAL_UI_V1 (ADR-060 §1) — l'invariant « aucun écran ne lit mandats » est
+  // INVERSÉ : les écrans lisent le mandat canonique, mais UNIQUEMENT via les read models
+  // workspace-safe (`presentationMandatBien`, `existeMandatCanoniqueDuBien`), jamais la table, et
+  // seuls les consommateurs listés ici y touchent. Une page ou un composant supplémentaire qui
+  // lirait le mandat doit être ajouté à cette liste en connaissance de cause.
+  it("les écrans autorisés lisent le mandat canonique uniquement via les read models workspace-safe", () => {
+    const ECRANS = FICHIERS.filter(
       (chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components"))
-      // Références de CODE uniquement : le mot « mandats » apparaît légitimement dans des libellés
-      // d'interface (« mandats actifs »), qui ne lisent rien.
-    ).filter((chemin) =>
-      /mandatRepository|mandats as |from "@\/types\/mandat"|mandatsTable/.test(readFileSync(chemin, "utf8"))
     );
-    expect(fautifs, "le mandat canonique est une fondation, pas une lecture").toEqual([]);
+    // Jamais la table ni le client DB depuis un écran.
+    const lecteursTable = ECRANS.filter((chemin) => /mandats as |mandatsTable|partiesMandatTable|from "@\/db\//.test(readFileSync(chemin, "utf8")));
+    expect(lecteursTable, "aucun écran ne lit la table mandats").toEqual([]);
+
+    const CONSOMMATEURS_AUTORISES = [
+      join("src", "app", "biens", "[id]", "page.tsx"),
+      join("src", "app", "biens", "[id]", "modifier", "page.tsx"),
+      join("src", "app", "prospects-vendeurs", "[id]", "page.tsx"),
+      join("src", "app", "visites", "[id]", "preparer", "page.tsx"),
+      join("src", "components", "mandat", "MandatBienPanel.tsx"),
+      join("src", "components", "bien", "BienVendeurMandat.tsx"),
+      join("src", "components", "prospectVendeur", "ProspectVendeurBienCree.tsx"),
+    ];
+    const consommateurs = ECRANS.filter((chemin) =>
+      /mandatRepository|partieMandatRepository|presentationMandatBien|from "@\/types\/mandat"|from "@\/types\/partieMandat"/.test(
+        readFileSync(chemin, "utf8")
+      )
+    );
+    expect(consommateurs.map((c) => c.replace(/^.*?src\//, "src/")).sort()).toEqual([...CONSOMMATEURS_AUTORISES].sort());
+
+    // Les pages ne lisent que par le read model de présentation (ou l'existence scoped) ; les
+    // composants reçoivent tout en props et n'importent aucun repository.
+    for (const chemin of consommateurs) {
+      const code = readFileSync(chemin, "utf8").replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
+      if (chemin.includes(join("src", "components"))) {
+        expect(code, chemin).not.toMatch(/mandatRepository|partieMandatRepository|chargerPresentationMandatBien/);
+      } else {
+        const importsRepo = code.match(/import \{([^}]*)\} from "@\/lib\/mandatRepository"/)?.[1] ?? "";
+        expect(importsRepo.replace(/\s/g, ""), chemin).toMatch(/^(existeMandatCanoniqueDuBien)?$/);
+        expect(code, chemin).not.toMatch(/partieMandatRepository|mandatCourantDuBien|listerMandatsDuBien|getMandatById/);
+      }
+    }
   });
 
   it("aucun moteur pur ne consomme le mandat canonique", () => {

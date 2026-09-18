@@ -1051,25 +1051,27 @@ Limites qui en découlent, toutes assumées le temps de la transition :
 - **Aucune relation projet ↔ bien.** `projets_vendeur` ne pointe vers aucun bien : la frontière
   (un projet, plusieurs biens ? un bien, plusieurs projets successifs ?) est renvoyée au lot
   Property/Mandat. `prospects_vendeurs.bien_id` reste `UNIQUE` et posé uniquement à la signature.
-- **`mandats` a un cycle de vie canonique (ADR-060, lot `MANDATE_LIFECYCLE_FOUNDATION_V1`)** : type,
-  numéro, terme, exclusivité, résiliation, mandat courant, writers scoped workspace, signature
-  sérialisée. Ce qui reste **non livré** : les **écrans** (fiche bien, prospect, points d'attention
-  et dashboard lisent toujours `biens.statut_mandat` / `date_mandat` ; le masquage des champs legacy
-  dans le formulaire d'édition attend le lot UI — la défense serveur, elle, est active), le
-  **renouvellement humain** (seul le primitif `creerMandatSuccesseur` existe, sans clôture de
-  l'ancien : la relation `remplace_mandat_id` suffit au mandat courant), le geste « Enregistrer le
-  mandat existant » à l'écran (le writer `enregistrerMandatExistant` existe), et toute
-  **automatisation** d'échéance (`mandat_expire_bientot`, `mandat_expire`, `mandat_resilie`) — les
-  calculs sont possibles via `date_fin` et le statut dérivé, rien ne les consomme encore.
+- **`mandats` a un cycle de vie canonique (ADR-060, lots `MANDATE_LIFECYCLE_FOUNDATION_V1` et
+  `MANDATE_CANONICAL_UI_V1`)** : type, numéro, terme, exclusivité, résiliation, mandat courant,
+  writers scoped workspace, signature sérialisée, et depuis le lot UI la fiche Bien, la fiche
+  prospect et le point d'attention lisent le canonique dès qu'il existe (précédence par entité,
+  `presentationMandatBien`), avec Modifier / Résilier / Enregistrer le mandat existant / parties.
+  Ce qui reste **non livré** : le **renouvellement humain** (seul le primitif
+  `creerMandatSuccesseur` existe, sans clôture de l'ancien : la relation `remplace_mandat_id` suffit
+  au mandat courant), toute **automatisation** d'échéance (`mandat_expire_bientot`, `mandat_expire`,
+  `mandat_resilie`) et toute surface Today — les calculs sont possibles via `date_fin` et le statut
+  dérivé, rien ne les consomme encore ; les colonnes legacy `biens.statut_mandat` / `date_mandat`
+  restent stockées (mortes en lecture pour un bien à mandat canonique) et le point d'attention garde
+  un repli legacy quand l'appelant ne fournit pas de statut effectif.
 - **La date de signature et la prise d'effet sont confondues** : une seule date est saisie
   (`date_debut`, ADR-060 §5) ; `signe_le` viendra par décision dédiée si une prise d'effet
   différée est constatée.
-- **Les parties de mandat existent (`parties_mandat`, lot `MANDATE_PARTIES_V1`, ADR-060 §16)
-  mais restent une fondation sans écran** : rôles `mandant` / `representant` seulement, writers et
-  lecture jointe livrés, repoint par la fusion Contact livré. Ce qui reste non livré : l'écran de
-  sélection des parties (proposition depuis `parties_projet` + décision humaine — **rien n'est copié
-  automatiquement**, un mandat signé aujourd'hui n'a aucune partie tant qu'un humain n'en ajoute
-  pas), toute **personne morale** (une SCI ou une indivision est représentée par un Contact humain
+- **Les parties de mandat (`parties_mandat`, ADR-060 §16) se gèrent depuis la fiche Bien** (lot
+  `MANDATE_CANONICAL_UI_V1`) : ajout par recherche Contact, deux rôles `mandant` / `representant`,
+  changement de rôle, retrait ; parties affichées pour le mandat courant seulement (celles des
+  mandats historiques ne sont pas chargées — un read model batch sans consommateur). Ce qui reste
+  non livré : la proposition depuis `parties_projet` (**rien n'est copié automatiquement**, un mandat
+  signé n'a aucune partie tant qu'un humain n'en ajoute pas), toute **personne morale** (une SCI ou une indivision est représentée par un Contact humain
   `representant`, aucune entité Organisation), tout rôle au-delà des deux valeurs, et toute règle
   « au moins un mandant » (workflow futur, jamais une contrainte de base). Aucun backfill : les
   mandats antérieurs n'ont aucune partie.

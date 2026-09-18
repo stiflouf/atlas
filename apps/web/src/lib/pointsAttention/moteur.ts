@@ -1,4 +1,5 @@
 import type { Bien, StatutMandat } from "@/types/bien";
+import type { StatutMandatEffectif } from "@/lib/presentationMandatBien";
 import type { ProfilAcquereur } from "@/types/client";
 import type { TransportsProximite, VelibProximite } from "@/types/transports";
 import type { PointAttention } from "@/types/pointsAttention";
@@ -20,6 +21,11 @@ export type ContextePointsAttention = {
   acquereur: ProfilAcquereur;
   transports?: TransportsProximite;
   velib?: VelibProximite;
+  // ADR-060 §1 (lot MANDATE_CANONICAL_UI_V1) — le statut EFFECTIF du mandat, tranché par le read
+  // model de présentation (canonique dès qu'un mandat canonique existe, legacy sinon). Fourni par
+  // l'appelant qui connaît le workspace ; absent, la règle retombe sur le legacy du bien — un
+  // moteur pur ne lit jamais la base.
+  mandat?: StatutMandatEffectif;
 };
 
 type ReglePointAttention = {
@@ -51,7 +57,15 @@ const reglePrixSuperieurBudgetMax: ReglePointAttention = {
 
 const regleMandatNonActif: ReglePointAttention = {
   id: "mandat_non_actif",
-  evaluer: ({ bien }) => {
+  evaluer: ({ bien, mandat }) => {
+    if (mandat) {
+      if (mandat.actif) return undefined;
+      return {
+        id: "mandat_non_actif",
+        texte: `Le mandat de ce bien n'est pas actif (${mandat.libelle.toLowerCase()}).`,
+        provenance: "Mandat (statut effectif)",
+      };
+    }
     if (bien.statutMandat === "actif") return undefined;
     return {
       id: "mandat_non_actif",

@@ -71,7 +71,7 @@ describe("creerMandat — les faits saisis, rien d'inventé", () => {
     const bien = await unBien();
     for (const type of ["simple", "exclusif", "semi_exclusif"] as const) {
       const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type });
-      expect((await getMandatById(mandat.id))!.type).toBe(type);
+      expect((await getMandatById(mandat.id, WORKSPACE_TEST))!.type).toBe(type);
     }
   });
 
@@ -113,9 +113,9 @@ describe("creerMandat — les faits saisis, rien d'inventé", () => {
   it("une ligne antérieure sans type reste lisible, jamais traduite en « simple »", async () => {
     const bien = await unBien();
     const [ligne] = await getDb().insert(mandatsTable).values({ bienId: bien.id, dateDebut: "2026-01-01" }).returning();
-    const relu = await getMandatById(ligne.id);
+    const relu = await getMandatById(ligne.id, WORKSPACE_TEST);
     expect(relu!.type).toBeUndefined();
-    const historique = await listerMandatsDuBien(bien.id, AUJOURDHUI);
+    const historique = await listerMandatsDuBien(bien.id, WORKSPACE_TEST, AUJOURDHUI);
     expect(historique[0].statut).toBe("actif");
   });
 });
@@ -144,7 +144,7 @@ describe("modifierMandat — sous verrou, dans le workspace, sur un mandat vivan
     const bien = await unBien();
     const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type: "simple" });
     expect(await modifierMandat(mandat.id, { type: "simple", dateFin: "2025-12-31" }, WORKSPACE_TEST)).toEqual({ statut: "dates_incoherentes" });
-    expect((await getMandatById(mandat.id))!.dateFin).toBeUndefined();
+    expect((await getMandatById(mandat.id, WORKSPACE_TEST))!.dateFin).toBeUndefined();
   });
 
   it("résilié → refusé ; remplacé → refusé", async () => {
@@ -156,7 +156,7 @@ describe("modifierMandat — sous verrou, dans le workspace, sur un mandat vivan
     const remplace = await creerMandat({ bienId: bien.id, dateDebut: "2026-03-01", type: "simple" });
     await creerMandatSuccesseur(remplace.id, { dateDebut: "2026-09-01", type: "simple" });
     expect(await modifierMandat(remplace.id, { type: "exclusif" }, WORKSPACE_TEST)).toEqual({ statut: "remplace" });
-    expect((await getMandatById(remplace.id))!.type).toBe("simple");
+    expect((await getMandatById(remplace.id, WORKSPACE_TEST))!.type).toBe("simple");
   });
 
   it("autre workspace ou id inconnu → introuvable, indistinguables", async () => {
@@ -166,7 +166,7 @@ describe("modifierMandat — sous verrou, dans le workspace, sur un mandat vivan
     expect(await modifierMandat(mandat.id, { type: "exclusif" }, ailleurs)).toEqual({ statut: "introuvable" });
     expect(await modifierMandat("00000000-0000-4000-8000-000000000000", { type: "exclusif" }, WORKSPACE_TEST)).toEqual({ statut: "introuvable" });
     expect(await modifierMandat("pas-un-uuid", { type: "exclusif" }, WORKSPACE_TEST)).toEqual({ statut: "introuvable" });
-    expect((await getMandatById(mandat.id))!.type).toBe("simple");
+    expect((await getMandatById(mandat.id, WORKSPACE_TEST))!.type).toBe("simple");
   });
 });
 
@@ -176,11 +176,11 @@ describe("resilierMandat — un fait unique qui ne touche pas au terme", () => {
     const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-12-31", type: "simple" });
     const resultat = await resilierMandat(mandat.id, { resilieLe: "2026-05-01", motifResiliation: " Vendeur retire le bien " }, WORKSPACE_TEST);
     expect(resultat.statut).toBe("resilie");
-    const relu = (await getMandatById(mandat.id))!;
+    const relu = (await getMandatById(mandat.id, WORKSPACE_TEST))!;
     expect(relu.resilieLe).toBe("2026-05-01");
     expect(relu.motifResiliation).toBe("Vendeur retire le bien");
     expect(relu.dateFin, "le terme prévu reste un fait distinct").toBe("2026-12-31");
-    expect((await listerMandatsDuBien(bien.id, AUJOURDHUI))[0].statut).toBe("resilie");
+    expect((await listerMandatsDuBien(bien.id, WORKSPACE_TEST, AUJOURDHUI))[0].statut).toBe("resilie");
 
     const autre = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type: "simple" });
     const sansMotif = await resilierMandat(autre.id, { resilieLe: "2026-05-01", motifResiliation: "  " }, WORKSPACE_TEST);
@@ -195,7 +195,7 @@ describe("resilierMandat — un fait unique qui ne touche pas au terme", () => {
     expect(await resilierMandat(mandat.id, { resilieLe: "2026-04-01" }, ailleurs)).toEqual({ statut: "introuvable" });
     expect((await resilierMandat(mandat.id, { resilieLe: "2026-04-01" }, WORKSPACE_TEST)).statut).toBe("resilie");
     expect(await resilierMandat(mandat.id, { resilieLe: "2026-05-01" }, WORKSPACE_TEST)).toEqual({ statut: "deja_resilie" });
-    expect((await getMandatById(mandat.id))!.resilieLe, "la première résiliation reste").toBe("2026-04-01");
+    expect((await getMandatById(mandat.id, WORKSPACE_TEST))!.resilieLe, "la première résiliation reste").toBe("2026-04-01");
 
     const remplace = await creerMandat({ bienId: bien.id, dateDebut: "2026-03-01", type: "simple" });
     await creerMandatSuccesseur(remplace.id, { dateDebut: "2026-09-01", type: "simple" });
@@ -229,9 +229,9 @@ describe("mandatCourantDuBien — ADR-060 §10, une requête, une réponse déte
     const ancien = await creerMandat({ bienId: remplace.id, dateDebut: "2026-01-01", type: "simple" });
     const successeur = await creerMandatSuccesseur(ancien.id, { dateDebut: "2026-07-01", type: "exclusif" });
     // L'ancien reste « actif » au sens de sa ligne (aucune date fabriquée), mais la relation l'exclut.
-    expect((await getMandatById(ancien.id))!.dateFin).toBeUndefined();
+    expect((await getMandatById(ancien.id, WORKSPACE_TEST))!.dateFin).toBeUndefined();
     expect((await mandatCourantDuBien(remplace.id, WORKSPACE_TEST, AUJOURDHUI))!.id).toBe(successeur.id);
-    const historique = await listerMandatsDuBien(remplace.id, AUJOURDHUI);
+    const historique = await listerMandatsDuBien(remplace.id, WORKSPACE_TEST, AUJOURDHUI);
     expect(historique.map((h) => [h.id, h.statut, h.remplaceParId])).toEqual([
       [ancien.id, "actif", successeur.id],
       [successeur.id, "a_venir", undefined],
@@ -266,7 +266,7 @@ describe("mandatCourantDuBien — ADR-060 §10, une requête, une réponse déte
     for (let i = 0; i < 3; i += 1) expect((await mandatCourantDuBien(bien.id, WORKSPACE_TEST, AUJOURDHUI))!.id).toBe(attendu);
     expect([ancien.id, a.id].includes((await mandatCourantDuBien(bien.id, WORKSPACE_TEST, AUJOURDHUI))!.id)).toBe(false);
     // Tout reste lisible : rien n'a été réparé.
-    expect(await listerMandatsDuBien(bien.id, AUJOURDHUI)).toHaveLength(6);
+    expect(await listerMandatsDuBien(bien.id, WORKSPACE_TEST, AUJOURDHUI)).toHaveLength(6);
   });
 
   it("bien d'un autre workspace → aucun mandat courant", async () => {
@@ -328,8 +328,8 @@ describe("renouvellement (primitif) — l'ancien n'est jamais mutilé", () => {
   it("créer un successeur ne pose ni date_fin ni resilie_le sur le remplacé", async () => {
     const bien = await unBien();
     const ancien = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type: "simple", numero: "A" });
-    const avant = await getMandatById(ancien.id);
+    const avant = await getMandatById(ancien.id, WORKSPACE_TEST);
     await creerMandatSuccesseur(ancien.id, { dateDebut: "2026-07-01", type: "exclusif", numero: "B" });
-    expect(await getMandatById(ancien.id)).toEqual(avant);
+    expect(await getMandatById(ancien.id, WORKSPACE_TEST)).toEqual(avant);
   });
 });

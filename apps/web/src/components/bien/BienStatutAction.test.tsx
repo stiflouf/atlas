@@ -30,7 +30,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest()}
         statutLabel={<Badge variant="default">En commercialisation</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
       />
     );
     expect(html).toContain("Marquer une offre en cours");
@@ -44,7 +44,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest({ offreEnCoursLe: "2026-08-01T00:00:00.000Z" })}
         statutLabel={<Badge variant="accent">Offre en cours</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
       />
     );
     expect(html).toContain("Retirer l");
@@ -57,7 +57,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest({ offreEnCoursLe: "2026-08-01T00:00:00.000Z", compromisSigneLe: "2026-08-10T00:00:00.000Z" })}
         statutLabel={<Badge variant="success">Compromis signé</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
       />
     );
     expect(html).toContain("Annuler le compromis");
@@ -71,7 +71,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest({ archiveLe: "2026-08-01T00:00:00.000Z" })}
         statutLabel={<Badge variant="default">En commercialisation</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
       />
     );
     expect(archive).not.toContain("Marquer une offre en cours");
@@ -80,7 +80,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest({ id: "bien-001" })}
         statutLabel={<Badge variant="default">En commercialisation</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
       />
     );
     expect(mock).not.toContain("Marquer une offre en cours");
@@ -91,7 +91,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest()}
         statutLabel={<Badge variant="default">En commercialisation</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
         prochaineVisiteHref="/visites/v-1/preparer"
       />
     );
@@ -107,7 +107,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest()}
         statutLabel={<Badge variant="default">En commercialisation</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
         raisonTacheTexte="Préparer le compromis avant le 30 mai"
       />
     );
@@ -117,7 +117,7 @@ describe("BienStatutAction", () => {
       <BienStatutAction
         bien={bienTest()}
         statutLabel={<Badge variant="default">En commercialisation</Badge>}
-        dateMandatFormatee="12 mars 2026"
+        mandatTexte="Mandat depuis le 12 mars 2026"
       />
     );
     expect(sansRaison).not.toContain("Préparer le compromis");

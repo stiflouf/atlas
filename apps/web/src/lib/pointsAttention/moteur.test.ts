@@ -98,6 +98,30 @@ describe("produirePointsAttention — caractérisation (avant refactor ADR-034)"
       });
       expect(points.map((p) => p.id)).not.toContain("mandat_non_actif");
     });
+
+    // ADR-060 §1 (lot MANDATE_CANONICAL_UI_V1) — le statut EFFECTIF fourni par l'appelant prime sur
+    // le legacy du bien : un canonique résilié/expiré (« Aucun mandat en cours ») déclenche le point
+    // même si `bien.statutMandat` dit encore « actif » ; un canonique actif ne le déclenche pas même
+    // si le legacy dit « suspendu ».
+    it("statut effectif fourni : canonique non actif + legacy actif → déclenché, sans retomber sur le legacy", () => {
+      const points = produirePointsAttention({
+        bien: bienTest({ statutMandat: "actif" }),
+        acquereur: acquereurTest(),
+        mandat: { actif: false, libelle: "Aucun mandat en cours", variante: "muted" },
+      });
+      const point = points.find((p) => p.id === "mandat_non_actif");
+      expect(point?.texte).toBe("Le mandat de ce bien n'est pas actif (aucun mandat en cours).");
+      expect(point?.provenance).toBe("Mandat (statut effectif)");
+    });
+
+    it("statut effectif fourni : canonique actif + legacy suspendu → non déclenché", () => {
+      const points = produirePointsAttention({
+        bien: bienTest({ statutMandat: "suspendu" }),
+        acquereur: acquereurTest(),
+        mandat: { actif: true, libelle: "Actif", variante: "success" },
+      });
+      expect(points.map((p) => p.id)).not.toContain("mandat_non_actif");
+    });
   });
 
   describe("aucun_transport_proche", () => {

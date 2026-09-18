@@ -4,6 +4,8 @@ import { ArrowLeft } from "lucide-react";
 import { modifierBienAction } from "@/actions/modifierBien";
 import BienFormulaire from "@/components/bien/BienFormulaire";
 import { getBienById } from "@/lib/bienRepository";
+import { existeMandatCanoniqueDuBien } from "@/lib/mandatRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -16,6 +18,8 @@ export default async function ModifierBienPage({ params }: PageProps) {
 
   const bien = await getBienById(id);
   if (!bien) notFound();
+  // ADR-060 §2 — décidé côté serveur, dans le workspace de session : le formulaire ne le devine pas.
+  const mandatCanonique = await existeMandatCanoniqueDuBien(bien.id, await exigerWorkspaceCourant());
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -31,7 +35,7 @@ export default async function ModifierBienPage({ params }: PageProps) {
         Modifier le bien
       </h1>
 
-      <BienFormulaire bien={bien} action={modifierBienAction} libelleSubmit="Enregistrer les modifications" />
+      <BienFormulaire bien={bien} action={modifierBienAction} libelleSubmit="Enregistrer les modifications" mandatCanonique={mandatCanonique} />
     </div>
   );
 }

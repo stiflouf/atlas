@@ -1038,8 +1038,28 @@ Index : `mandats_bien_idx`, `mandats_projet_vendeur_idx`, `mandats_remplace_idx`
 - **Création directe d'un bien** (§14) : statut `actif` → mandat canonique créé avec le bien
   (`creerBienAction`) ; `suspendu` / `expire` → aucun mandat fabriqué.
 - **Précédence et legacy write policy** (§1–§2) : dès qu'un mandat canonique existe pour un bien,
-  `modifierBien` **n'écrit plus** `date_mandat` / `statut_mandat` (défense serveur). Les lecteurs
-  UI et moteurs restent sur le legacy jusqu'au lot UI, qui basculera tous les écrans ensemble.
+  `modifierBien` **n'écrit plus** `date_mandat` / `statut_mandat` (défense serveur), et
+  `BienFormulaire` en édition ne les propose plus (`mandatCanonique`, décidé par la page via
+  `existeMandatCanoniqueDuBien`).
+- **Lectures produit scoped** (lot `MANDATE_CANONICAL_UI_V1`) : `getMandatById(id, workspaceId)`,
+  `listerMandatsDuBien(bienId, workspaceId, aujourdhui?)`, `listerMandatsDuProjetVendeur(projetId,
+  workspaceId)`, `existeMandatCanoniqueDuBien(bienId, workspaceId)` — toutes par `mandats ⋈ biens`
+  sur `biens.workspace_id` ; autre workspace = introuvable / `[]`, indistinguable d'un id inconnu.
+- **Coexistence UI réelle — règle canonique PAR ENTITÉ** (`lib/presentationMandatBien.ts`,
+  `chargerPresentationMandatBien(bien, workspaceId)`) : au moins un mandat canonique pour le bien
+  (historique non vide) → mode `canonique` (`mandatCourant?`, `historique`, `parties` du courant) —
+  **même sans mandat courant** (tous expirés, dernier résilié) et même à `type` / `date_fin` NULL
+  (« Non renseigné »), jamais un repli champ par champ vers le bien ; aucun canonique → mode
+  `legacy` (`statut_mandat`, `date_mandat`) ; legacy inexploitable → `aucun`. `statutMandatEffectif`
+  / `dateMandatEffective` traduisent la présentation pour le bandeau, le bloc vendeur, la synthèse
+  prospect et le point d'attention `mandat_non_actif` — tous basculés ensemble. 3 requêtes
+  (historique avec successeur, courant, parties du courant). Écran : `MandatBienPanel` (fiche
+  Bien) — mandat actuel, historique, mandants / représentants, Modifier, Résilier (confirmation),
+  Enregistrer le mandat existant (legacy-only, date préremplie mais soumise), Ajouter une personne
+  (recherche Contact existante), changement de rôle, retrait. Server Actions : `actions/mandat.ts`.
+  Garde structurelle : seuls les consommateurs UI énumérés lisent le mandat, uniquement via ces
+  read models, jamais la table (`db/mandatCanonique.structurel.test.ts`,
+  `components/mandat/mandatCanoniqueUi.structurel.test.ts`).
 - Non livré par le lot lifecycle (décidé) : renouvellement humain, écrans, automatisations, cible
   `mandat_id` sur les événements, connecteurs. `parties_mandat` (M-3) est livrée par le lot
   `MANDATE_PARTIES_V1` — voir la section suivante.
@@ -1085,8 +1105,10 @@ contact.
   été proposé sans qu'aucun mandat n'ait jamais existé. `mandat_signe_le` deviendra dérivable de
   `mandats.date_debut` — plus tard, jamais dans ce lot.
 
-**Source de vérité pendant la coexistence : `biens` et `prospects_vendeurs`.** Un test structurel
-vérifie qu'aucun écran ni aucun moteur pur ne référence `mandats`.
+**Source de vérité pendant la coexistence.** Pour le MANDAT : le canonique dès qu'il existe
+(présentation ci-dessus), le legacy du bien sinon. Les moteurs purs (compatibilité, opportunités,
+alertes, fiscal) ne référencent toujours pas `mandats` (test structurel) ; le point d'attention
+`mandat_non_actif` reçoit le statut effectif de son appelant.
 
 ## `parties_mandat` (ADR-060 §16, lot `MANDATE_PARTIES_V1`, migration `0045`)
 

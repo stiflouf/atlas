@@ -170,11 +170,15 @@ describe("ADR-060 §16 — hors périmètre du lot parties", () => {
     for (const chemin of provenance) expect(codeSeul(chemin), relatif(chemin)).not.toMatch(/partie_mandat|partieMandat|partiesMandat/);
   });
 
-  it("aucun écran, aucun composant, aucune Server Action, aucune automatisation ne touche parties_mandat", () => {
-    const fautifs = FICHIERS.filter(
+  // Lot MANDATE_CANONICAL_UI_V1 : les parties se gèrent depuis la fiche Bien — par UNE Server
+  // Action (`actions/mandat.ts`, writers du repository) et UN composant présentationnel
+  // (`MandatBienPanel`, props seulement). Aucune page, aucune automatisation.
+  it("seuls actions/mandat.ts et MandatBienPanel touchent parties_mandat ; aucune page, aucune automatisation", () => {
+    const consommateurs = FICHIERS.filter(
       (c) => [join("src", "app"), join("src", "components"), join("src", "actions"), join("lib", "automatisations")].some((d) => c.includes(d))
     ).filter((c) => /partieMandatRepository|partiesMandat|types\/partieMandat|parties_mandat/.test(codeSeul(c)));
-    expect(fautifs.map(relatif)).toEqual([]);
+    expect(consommateurs.map(relatif).sort()).toEqual(["actions/mandat.ts", "components/mandat/MandatBienPanel.tsx"]);
+    expect(codeSeul(join(SRC, "components", "mandat", "MandatBienPanel.tsx"))).not.toMatch(/partieMandatRepository|@\/db\//);
   });
 
   it("aucune copie automatique ni backfill : signature, création directe, enregistrement et successeur n'écrivent aucune partie", () => {

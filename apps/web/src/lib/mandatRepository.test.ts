@@ -86,7 +86,7 @@ describe("mandatRepository — le mandat (intégration Postgres)", () => {
       type: "simple",
     });
 
-    const relu = await getMandatById(mandat.id);
+    const relu = await getMandatById(mandat.id, WORKSPACE_TEST);
     expect(relu).toBeDefined();
     expect(relu!.bienId).toBe(bien.id);
     expect(relu!.projetVendeurId).toBe(projet.id);
@@ -105,8 +105,8 @@ describe("mandatRepository — le mandat (intégration Postgres)", () => {
   });
 
   it("retourne undefined pour un identifiant inconnu ou non-UUID, sans erreur de cast", async () => {
-    expect(await getMandatById("00000000-0000-0000-0000-000000000000")).toBeUndefined();
-    expect(await getMandatById("mandat-001")).toBeUndefined();
+    expect(await getMandatById("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).toBeUndefined();
+    expect(await getMandatById("mandat-001", WORKSPACE_TEST)).toBeUndefined();
   });
 
   it("refuse un bien ou un projet inexistant plutôt qu'un mandat orphelin", async () => {
@@ -133,7 +133,7 @@ describe("mandatRepository — le mandat (intégration Postgres)", () => {
     await expect(
       creerMandat({ bienId: bienIci.id, projetVendeurId: projetAilleurs.id, dateDebut: "2026-03-01", type: "simple" })
     ).rejects.toThrow(/workspaces différents/);
-    expect(await listerMandatsDuBien(bienIci.id)).toEqual([]);
+    expect(await listerMandatsDuBien(bienIci.id, WORKSPACE_TEST)).toEqual([]);
   });
 
   it("refuse une période ou une résiliation incohérente — le CHECK, pas une convention", async () => {
@@ -154,7 +154,7 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
     const premier = await creerMandat({ bienId: bien.id, dateDebut: "2024-01-01", type: "simple", dateFin: "2024-04-01" });
     const second = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type: "simple" });
 
-    const mandats = await listerMandatsDuBien(bien.id);
+    const mandats = await listerMandatsDuBien(bien.id, WORKSPACE_TEST);
     expect(mandats).toHaveLength(2);
     // Ordre chronologique de prise d'effet : l'historique se lit dans le sens où il s'est produit.
     expect(mandats.map((mandat) => mandat.id)).toEqual([premier.id, second.id]);
@@ -168,7 +168,7 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
     await creerMandat({ bienId: bien.id, projetVendeurId: projet.id, dateDebut: "2026-01-01", type: "simple", dateFin: "2026-04-01" });
     await creerMandat({ bienId: bien.id, projetVendeurId: projet.id, dateDebut: "2026-04-02", type: "simple" });
 
-    expect(await listerMandatsDuProjetVendeur(projet.id)).toHaveLength(2);
+    expect(await listerMandatsDuProjetVendeur(projet.id, WORKSPACE_TEST)).toHaveLength(2);
   });
 
   it("un renouvellement crée une ligne et laisse le mandat remplacé strictement intact", async () => {
@@ -194,7 +194,7 @@ describe("ADR-055 CAS 7 — l'historique contractuel n'est jamais écrasé", () 
     expect(successeur.bienId).toBe(bien.id);
 
     // Le mandat remplacé n'a PAS été modifié — ni clôturé d'autorité, ni marqué « remplacé ».
-    const relu = await getMandatById(initial.id);
+    const relu = await getMandatById(initial.id, WORKSPACE_TEST);
     expect(relu).toEqual(initial);
   });
 

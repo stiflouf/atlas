@@ -156,11 +156,19 @@ export async function creerMandatSuccesseur(
   return creerMandat({ ...input, bienId: remplace.bienId, remplaceMandatId: mandatRemplaceId }, executeur);
 }
 
-// Aucun filtrage par workspace en lecture : ce lot ne l'active pas, comme les précédents.
-export async function getMandatById(id: string): Promise<Mandat | undefined> {
+// LECTURES SCOPED (ADR-054 §7, lot MANDATE_CANONICAL_UI_V1) : dès qu'un écran consomme le mandat
+// canonique, chaque lecture remonte au bien et filtre par le workspace de SESSION. Un mandat d'un
+// autre workspace est INTROUVABLE — publiquement indistinguable d'un id inconnu — et une liste
+// d'un bien ou d'un projet d'un autre workspace est vide, jamais partielle.
+export async function getMandatById(id: string, workspaceId: string, executeur: Executeur = getDb()): Promise<Mandat | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb().select().from(mandatsTable).where(eq(mandatsTable.id, id)).limit(1);
-  return ligne ? ligneVersMandat(ligne) : undefined;
+  const [ligne] = await executeur
+    .select({ mandat: mandatsTable })
+    .from(mandatsTable)
+    .innerJoin(biensTable, eq(mandatsTable.bienId, biensTable.id))
+    .where(and(eq(mandatsTable.id, id), eq(biensTable.workspaceId, workspaceId)))
+    .limit(1);
+  return ligne ? ligneVersMandat(ligne.mandat) : undefined;
 }
 
 // « Remplacé » = un successeur référence cette ligne (ADR-060 §9-10). Sous-requête corrélée, jamais
@@ -176,6 +184,7 @@ function successeurDe(executeur: Executeur) {
 // une jointure — jamais une requête par ligne.
 export async function listerMandatsDuBien(
   bienId: string,
+  workspaceId: string,
   aujourdhui: string = dateDuJour(),
   executeur: Executeur = getDb()
 ): Promise<MandatHistorique[]> {
@@ -183,8 +192,9 @@ export async function listerMandatsDuBien(
   const lignes = await executeur
     .select({ mandat: mandatsTable, remplaceParId: successeurs.id })
     .from(mandatsTable)
+    .innerJoin(biensTable, eq(mandatsTable.bienId, biensTable.id))
     .leftJoin(successeurs, eq(successeurs.remplaceMandatId, mandatsTable.id))
-    .where(eq(mandatsTable.bienId, bienId))
+    .where(and(eq(mandatsTable.bienId, bienId), eq(biensTable.workspaceId, workspaceId)))
     .orderBy(asc(mandatsTable.dateDebut), asc(mandatsTable.creeLe), asc(mandatsTable.id));
   // Un mandat remplacé deux fois (cas incohérent, lisible) apparaîtrait deux fois : on garde la
   // première ligne par id, le successeur retenu étant déterministe par l'ordre de la jointure.
@@ -197,14 +207,22 @@ export async function listerMandatsDuBien(
   return [...parId.values()];
 }
 
-export async function listerMandatsDuProjetVendeur(projetVendeurId: string): Promise<Mandat[]> {
+// Le périmètre passe par le BIEN de chaque mandat (feuille de `biens`), jamais par le projet : un
+// projet et un bien de workspaces différents ne peuvent pas être reliés (`creerMandat`), donc le
+// filtre est le même — et il reste celui de l'entité propriétaire.
+export async function listerMandatsDuProjetVendeur(
+  projetVendeurId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Mandat[]> {
   if (!UUID_REGEX.test(projetVendeurId)) return [];
-  const lignes = await getDb()
-    .select()
+  const lignes = await executeur
+    .select({ mandat: mandatsTable })
     .from(mandatsTable)
-    .where(eq(mandatsTable.projetVendeurId, projetVendeurId))
+    .innerJoin(biensTable, eq(mandatsTable.bienId, biensTable.id))
+    .where(and(eq(mandatsTable.projetVendeurId, projetVendeurId), eq(biensTable.workspaceId, workspaceId)))
     .orderBy(asc(mandatsTable.dateDebut), asc(mandatsTable.creeLe));
-  return lignes.map(ligneVersMandat);
+  return lignes.map((l) => ligneVersMandat(l.mandat));
 }
 
 // ADR-060 §1 — la PRÉCÉDENCE se décide par entité : dès qu'un mandat canonique existe pour le bien,
@@ -216,6 +234,24 @@ export async function existeMandatCanonique(bienId: string, executeur: Executeur
     .select({ id: mandatsTable.id })
     .from(mandatsTable)
     .where(eq(mandatsTable.bienId, bienId))
+    .limit(1);
+  return ligne !== undefined;
+}
+
+// Même question, dans le workspace de SESSION (lecture produit, lot MANDATE_CANONICAL_UI_V1) : dit
+// à un écran si le bien est en mode canonique (ADR-060 §1) sans charger l'historique. Un bien d'un
+// autre workspace n'a aucun mandat canonique visible — comme s'il n'existait pas.
+export async function existeMandatCanoniqueDuBien(
+  bienId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<boolean> {
+  if (!UUID_REGEX.test(bienId)) return false;
+  const [ligne] = await executeur
+    .select({ id: mandatsTable.id })
+    .from(mandatsTable)
+    .innerJoin(biensTable, eq(mandatsTable.bienId, biensTable.id))
+    .where(and(eq(mandatsTable.bienId, bienId), eq(biensTable.workspaceId, workspaceId)))
     .limit(1);
   return ligne !== undefined;
 }

@@ -121,7 +121,7 @@ async function soumettre(fd: FormData): Promise<string> {
 
 const biensDuProspect = async (prospectId: string) => {
   const p = await getProspectVendeurById(prospectId);
-  return p?.bienId ? await listerMandatsDuBien(p.bienId) : [];
+  return p?.bienId ? await listerMandatsDuBien(p.bienId, WORKSPACE_TEST) : [];
 };
 
 describe("signerMandatProspectVendeur — repository", () => {
@@ -173,7 +173,7 @@ describe("signerMandatProspectVendeur — repository", () => {
     expect([a.statut, b.statut].sort()).toEqual(["deja_signe", "signe"]);
     const biens = await getDb().select().from(biensTable).where(inArray(biensTable.reference, [`${M} c1`, `${M} c2`]));
     expect(biens).toHaveLength(1);
-    expect(await listerMandatsDuBien(biens[0].id)).toHaveLength(1);
+    expect(await listerMandatsDuBien(biens[0].id, WORKSPACE_TEST)).toHaveLength(1);
     const evenements = await getDb().select().from(evenementsMetierTable).where(eq(evenementsMetierTable.prospectVendeurId, prospect.id));
     expect(evenements.filter((e) => e.typeEvenement === "mandat_signe")).toHaveLength(1);
   });

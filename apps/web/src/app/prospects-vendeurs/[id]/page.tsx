@@ -19,6 +19,7 @@ import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
 import { listerNotesProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
 import { getBienById } from "@/lib/bienRepository";
+import { chargerPresentationMandatBien, statutMandatEffectif } from "@/lib/presentationMandatBien";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import { deriverStatutTache } from "@/types/tache";
 import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
@@ -87,6 +88,11 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
   // Le bien n'est chargé que lorsqu'il existe réellement (bienId n'est posé qu'à la signature du
   // mandat, ADR-027) — jamais un lien construit à l'aveugle vers une fiche inexistante.
   const bienCree = prospect.bienId ? await getBienById(prospect.bienId) : undefined;
+  // ADR-060 §1 — même read model que la fiche Bien : le mandat canonique créé à la signature est
+  // ce que cette synthèse montre, jamais le seul jalon legacy.
+  const mandatEffectifBien = bienCree
+    ? statutMandatEffectif(await chargerPresentationMandatBien(bienCree, await exigerWorkspaceCourant()))
+    : undefined;
 
   const jours = joursDepuisDernierEchange(prospect);
   const nombreEchanges = notes.filter((n) => TYPES_NOTE_INTERACTION.includes(n.type)).length;
@@ -142,9 +148,9 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
         </div>
       )}
 
-      {bienCree && (
+      {bienCree && mandatEffectifBien && (
         <div className="mb-6">
-          <ProspectVendeurBienCree bien={bienCree} />
+          <ProspectVendeurBienCree bien={bienCree} mandatEffectif={mandatEffectifBien} />
         </div>
       )}
 

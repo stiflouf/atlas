@@ -15,14 +15,21 @@ function triEtat(valeur: boolean | undefined): "" | "oui" | "non" {
 // Formulaire partagé création/édition : mêmes champs, mêmes noms, seule la préselection change.
 // `bien` absent = création (valeurs par défaut) ; `bien` fourni = édition (préremplissage, champ
 // id caché pour que la Server Action sache quelle ligne modifier).
+//
+// ADR-060 §2 (lot MANDATE_CANONICAL_UI_V1) — `mandatCanonique` : fourni par la page (read model
+// scoped), jamais découvert ici. Vrai = le bien a un mandat canonique : les champs legacy
+// statut/date de mandat ne sont plus proposés en édition (le serveur les ignore de toute façon) ;
+// le mandat se corrige depuis la fiche du bien. Faux ou absent (création, legacy-only) : inchangé.
 export default function BienFormulaire({
   bien,
   action,
   libelleSubmit,
+  mandatCanonique = false,
 }: {
   bien?: Bien;
   action: (formData: FormData) => Promise<void>;
   libelleSubmit: string;
+  mandatCanonique?: boolean;
 }) {
   return (
     <form action={action} className="flex flex-col gap-4">
@@ -129,26 +136,32 @@ export default function BienFormulaire({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className={labelCls}>Statut du mandat</label>
-          <select name="statutMandat" defaultValue={bien?.statutMandat ?? "actif"} className={inputCls}>
-            <option value="actif">Actif</option>
-            <option value="suspendu">Suspendu</option>
-            <option value="expire">Expiré</option>
-          </select>
+      {mandatCanonique ? (
+        <p className="text-[12px] text-text-3 border border-border rounded-lg px-3 py-2">
+          Le mandat de ce bien se consulte et se modifie depuis sa fiche (bloc « Mandat »).
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls}>Statut du mandat</label>
+            <select name="statutMandat" defaultValue={bien?.statutMandat ?? "actif"} className={inputCls}>
+              <option value="actif">Actif</option>
+              <option value="suspendu">Suspendu</option>
+              <option value="expire">Expiré</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Date du mandat *</label>
+            <input
+              name="dateMandat"
+              type="date"
+              required
+              defaultValue={bien?.dateMandat ?? ""}
+              className={inputCls}
+            />
+          </div>
         </div>
-        <div>
-          <label className={labelCls}>Date du mandat *</label>
-          <input
-            name="dateMandat"
-            type="date"
-            required
-            defaultValue={bien?.dateMandat ?? ""}
-            className={inputCls}
-          />
-        </div>
-      </div>
+      )}
 
       {/* ADR-060 §14 — en CRÉATION seulement : un bien créé « Actif » naît avec son mandat canonique,
           dont le type est exigé côté serveur. En édition, le mandat se corrige par ses propres

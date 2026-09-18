@@ -1,7 +1,13 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { like } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+
+// ADR-054 / ADR-060 (lot MANDATE_CANONICAL_UI_V1) — la page lit le mandat canonique dans le
+// workspace de session ; ici le périmètre de test, résolu sans cookie.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
