@@ -1794,6 +1794,14 @@ des FK valides séparément ne suffisent pas (ADR-029). Moteur de checklist dér
 **Rôle** : offre d'achat structurée sur un bien — bien, acquéreur, montant, date, statut, date de
 validité optionnelle, date de décision et motif de perte (ADR-020). Voir ADR-015 et ADR-020.
 
+> **ADR-061 (décidé, non implémenté — lot `OFFER_LIFECYCLE_FOUNDATION_V1`)** : `offres` deviendra
+> la source de vérité d'« offre en cours » (fin du dual-write vers `biens.offre_en_cours_le`),
+> transitions sous verrou du bien avec `UPDATE … WHERE statut = <attendu>`, acceptation exclusive
+> (les autres offres `en_cours` du bien passent `refusee` / `autre_offre_acceptee`), état de
+> clôture `caduque`, événements `offre_*` et `compromis_realise` / `compromis_annule` ciblés par
+> `evenements_metier.offre_id` / `compromis_id`, statut commercial effectif avec `offre_acceptee`.
+> Le modèle ci-dessous décrit l'état ACTUEL.
+
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |

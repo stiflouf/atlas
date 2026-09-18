@@ -283,6 +283,13 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Offres structurées
 
+- **Décidé par ADR-061, non implémenté** (lot `OFFER_LIFECYCLE_FOUNDATION_V1`) : la décision sur une
+  offre n'est aujourd'hui ni atomique ni sérialisée (`changerStatutOffre` = `UPDATE WHERE id` sans
+  condition de statut, garde par lecture séparée) ; plusieurs offres `acceptee` peuvent coexister
+  sur un même bien ; « offre en cours » se lit dans `biens.offre_en_cours_le`, jamais dans
+  `offres` (badge fantôme après refus/retrait de toutes les offres) ; aucun événement métier Offre
+  ni `compromis_realise` / `compromis_annule` ; lectures et écritures offre/compromis non scopées
+  par le workspace. ADR-061 tranche chacun de ces points ; rien n'est encore livré.
 - **Transitions de statut non réversibles en V1** — une fois `acceptee`/`refusee`/`retiree`,
   aucune action ne permet de revenir à `en_cours` ni de changer vers un autre statut final. Une
   erreur de saisie nécessite une intervention directe en base (ADR-015).
