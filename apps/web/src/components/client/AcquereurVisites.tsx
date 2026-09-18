@@ -11,7 +11,9 @@ function formatDate(iso: string): string {
 // Visites de la Fiche Acquéreur Premium — lecture seule sur l'entité Visite réelle (ADR-040),
 // jamais un compte rendu (ResultatCompatibilite/CompteRenduVisite non chargés ici, voir garde-fou
 // B du chantier) ni un calendrier inventé. "Préparer" n'apparaît que pour une visite encore
-// planifiee, vers la route réelle déjà existante /visites/[id]/preparer.
+// planifiee, vers la route réelle déjà existante /visites/[id]/preparer — dont le [id] est
+// l'identifiant du rendez-vous Calendar (`rendezVousCalendarId`, ADR-040), JAMAIS l'UUID interne de
+// la visite : la route résout un rendez-vous, pas une ligne `visites` (voir rendezVousContexte.ts).
 export default function AcquereurVisites({
   visites,
   biensParId,
@@ -48,7 +50,7 @@ export default function AcquereurVisites({
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
           {visite.statut === "planifiee" && (
-            <Link href={`/visites/${visite.id}/preparer`} className="text-[12px] font-medium text-accent hover:text-accent-hover">
+            <Link href={`/visites/${visite.rendezVousCalendarId}/preparer`} className="text-[12px] font-medium text-accent hover:text-accent-hover">
               Préparer →
             </Link>
           )}

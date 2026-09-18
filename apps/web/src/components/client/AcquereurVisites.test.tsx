@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Bien } from "@/types/bien";
 import type { Visite } from "@/types/visite";
@@ -58,15 +60,38 @@ describe("AcquereurVisites", () => {
 
   it("affiche Préparer uniquement pour une visite encore planifiee, vers la vraie route existante", () => {
     const planifiee = renderToStaticMarkup(
-      <AcquereurVisites visites={[visiteTest({ id: "v-1", statut: "planifiee" })]} biensParId={new Map([["bien-1", bienTest()]])} />
+      <AcquereurVisites
+        visites={[visiteTest({ id: "v-1", statut: "planifiee", rendezVousCalendarId: "gcal-evt-42" })]}
+        biensParId={new Map([["bien-1", bienTest()]])}
+      />
     );
     expect(planifiee).toContain("Préparer");
-    expect(planifiee).toContain('href="/visites/v-1/preparer"');
+    expect(planifiee).toContain('href="/visites/gcal-evt-42/preparer"');
 
     const realisee = renderToStaticMarkup(
       <AcquereurVisites visites={[visiteTest({ id: "v-2", statut: "realisee" })]} biensParId={new Map([["bien-1", bienTest()]])} />
     );
     expect(realisee).not.toContain("Préparer");
+  });
+
+  // HOTFIX_VISIT_PREPARE_LINK_V1 — la route /visites/[id]/preparer résout un RENDEZ-VOUS Calendar
+  // (rendezVousContexte.ts : mock ou préfixe gcal-), jamais une ligne `visites` : construire le lien
+  // avec l'UUID interne produisait un 404 pour toute visite réelle depuis la fiche acquéreur.
+  it("le lien Préparer porte rendezVousCalendarId, jamais l'UUID interne de la visite", () => {
+    const VISIT_UUID = "3f0c9a1e-7b2d-4c6a-9e8f-1a2b3c4d5e6f";
+    const CALENDAR_EVENT_ID = "gcal-abc123";
+    const html = renderToStaticMarkup(
+      <AcquereurVisites
+        visites={[visiteTest({ id: VISIT_UUID, statut: "planifiee", rendezVousCalendarId: CALENDAR_EVENT_ID })]}
+        biensParId={new Map([["bien-1", bienTest()]])}
+      />
+    );
+    expect(html).toContain(`href="/visites/${CALENDAR_EVENT_ID}/preparer"`);
+    expect(html).not.toContain(`/visites/${VISIT_UUID}/preparer`);
+    // Garde structurelle minimale : le composant ne reconstruit jamais ce lien avec `visite.id`.
+    const source = readFileSync(join(__dirname, "AcquereurVisites.tsx"), "utf8");
+    expect(source).not.toMatch(/\/visites\/\$\{visite\.id\}\/preparer/);
+    expect(source).toContain("/visites/${visite.rendezVousCalendarId}/preparer");
   });
 
   it("ne mentionne jamais de compte rendu enregistré (garde-fou du chantier)", () => {

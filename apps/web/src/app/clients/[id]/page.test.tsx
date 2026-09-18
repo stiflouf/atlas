@@ -161,7 +161,10 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
       const avantRealisation = renderToStaticMarkup(
         await rendreFiche(acquereur.id)
       );
-      expect(avantRealisation).toContain(`href="/visites/${visite.id}/preparer"`);
+      // HOTFIX_VISIT_PREPARE_LINK_V1 — la route de préparation résout un rendez-vous Calendar :
+      // le lien porte rendezVousCalendarId, jamais l'UUID interne (qui produisait un 404).
+      expect(avantRealisation).toContain(`href="/visites/${visite.rendezVousCalendarId}/preparer"`);
+      expect(avantRealisation).not.toContain(`href="/visites/${visite.id}/preparer"`);
       expect(avantRealisation).toContain(bien.titre);
 
       await marquerVisiteRealisee(visite.id);
@@ -169,7 +172,7 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
       const apresRealisation = renderToStaticMarkup(
         await rendreFiche(acquereur.id)
       );
-      expect(apresRealisation).not.toContain(`href="/visites/${visite.id}/preparer"`);
+      expect(apresRealisation).not.toContain(`href="/visites/${visite.rendezVousCalendarId}/preparer"`);
       expect(apresRealisation).toContain("Réalisée");
       expect(apresRealisation).not.toMatch(/compte[\s-]?rendu/i);
     } finally {
