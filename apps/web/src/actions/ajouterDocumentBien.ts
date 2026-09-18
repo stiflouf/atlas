@@ -1,5 +1,6 @@
 "use server";
 
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { redirect } from "next/navigation";
 import { getBienById } from "@/lib/bienRepository";
 import {
@@ -90,7 +91,7 @@ export async function ajouterDocumentBienAction(formData: FormData): Promise<voi
   const acquereurId = parseTexteOptionnel(formData.get("acquereurId"));
   const prospectVendeurId = parseTexteOptionnel(formData.get("prospectVendeurId"));
 
-  await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId });
+  await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
 
   const cleStockage = genererCleStockage();
   const octets = Buffer.from(await fichier.arrayBuffer());
@@ -143,7 +144,7 @@ export async function corrigerClassementDocumentBienAction(formData: FormData): 
   const acquereurId = parseTexteOuNull(formData.get("acquereurId"));
   const prospectVendeurId = parseTexteOuNull(formData.get("prospectVendeurId"));
 
-  await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId });
+  await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
 
   const champs: ChampsCorrectionDocumentBien = {
     bienId,

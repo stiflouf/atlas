@@ -29,6 +29,7 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const {
   biens: biensTable,
   acquereurs: acquereursTable,
@@ -68,6 +69,7 @@ afterAll(async () => {
       await getDb().delete(evenementsMetier).where(filtre);
     }
   }
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) await getDb().delete(offresTable).where(eq(offresTable.id, id));
   for (const id of idsComptesRendusCrees) await getDb().delete(comptesRendusVisiteTable).where(eq(comptesRendusVisiteTable.id, id));
   for (const id of idsBiensCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
@@ -138,7 +140,7 @@ describe("ajouterOffreAction — non-régression tâche suivi_apres_visite (ADR-
     fd.append("compteRenduVisiteIds", cr.id);
     await ajouterOffreAction(fd).catch(() => {});
 
-    const offres = await listerOffresPourBien(bien.id);
+    const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.map((o) => o.id));
     expect(offres).toHaveLength(1);
 

@@ -10,6 +10,7 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const {
   biens: biensTable,
   acquereurs: acquereursTable,
@@ -18,7 +19,7 @@ const {
 } = await import("@/db/schema");
 const { creerBien } = await import("./bienRepository");
 const { creerAcquereur } = await import("./clientRepository");
-const { enregistrerOffre, changerStatutOffre } = await import("./offreRepository");
+const { enregistrerOffre, accepterOffre } = await import("./offreRepository");
 const {
   listerCompromisPourBien,
   listerCompromisPourAcquereur,
@@ -39,6 +40,7 @@ afterAll(async () => {
   for (const id of idsCompromisCrees) {
     await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
   }
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) {
     await getDb().delete(offresTable).where(eq(offresTable.id, id));
   }
@@ -85,13 +87,13 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
 
 describe("compromisRepository (intégration Postgres)", () => {
   it("retourne [] pour un id non-UUID (bien/acquéreur mocké), sans erreur de cast", async () => {
-    await expect(listerCompromisPourBien("bien-001")).resolves.toEqual([]);
-    await expect(listerCompromisPourAcquereur("client-001")).resolves.toEqual([]);
+    await expect(listerCompromisPourBien("bien-001", WORKSPACE_TEST)).resolves.toEqual([]);
+    await expect(listerCompromisPourAcquereur("client-001", WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("getCompromisById() retourne undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(getCompromisById("compromis-mock")).resolves.toBeUndefined();
-    await expect(getCompromisById("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    await expect(getCompromisById("compromis-mock", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(getCompromisById("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("enregistrerCompromis() persiste avec statut 'en_cours' par défaut, sans offreId, listerCompromisPourBien()/listerCompromisPourAcquereur() le retrouvent triée DESC", async () => {
@@ -123,10 +125,10 @@ describe("compromisRepository (intégration Postgres)", () => {
     idsCompromisCrees.push(recent.id);
     expect(recent.dateActe).toBe("2026-10-01");
 
-    const pourBien = await listerCompromisPourBien(bien.id);
+    const pourBien = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
     expect(pourBien.map((c) => c.id)).toEqual([recent.id, ancien.id]);
 
-    const pourAcquereur = await listerCompromisPourAcquereur(acquereur.id);
+    const pourAcquereur = await listerCompromisPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect(pourAcquereur.map((c) => c.id)).toEqual([recent.id, ancien.id]);
   });
 
@@ -139,7 +141,7 @@ describe("compromisRepository (intégration Postgres)", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     const compromisCree = await enregistrerCompromis({
       bienId: bien.id,
@@ -227,7 +229,7 @@ describe("compromisRepository (intégration Postgres)", () => {
   });
 
   it("getCompromisParOffreId() retourne undefined pour un id non-UUID, sans erreur de cast", async () => {
-    await expect(getCompromisParOffreId("offre-mock")).resolves.toBeUndefined();
+    await expect(getCompromisParOffreId("offre-mock", WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("getCompromisParOffreId() retourne undefined quand aucun compromis ne référence l'offre (ADR-045)", async () => {
@@ -235,14 +237,14 @@ describe("compromisRepository (intégration Postgres)", () => {
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
 
-    await expect(getCompromisParOffreId(offre.id)).resolves.toBeUndefined();
+    await expect(getCompromisParOffreId(offre.id, WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("getCompromisParOffreId() retourne le compromis exact quand un seul le référence (ADR-045)", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("007");
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 310000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
     const compromisCree = await enregistrerCompromis({
       bienId: bien.id,
       acquereurId: acquereur.id,
@@ -252,7 +254,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    const resultat = await getCompromisParOffreId(offre.id);
+    const resultat = await getCompromisParOffreId(offre.id, WORKSPACE_TEST);
     expect(resultat?.id).toBe(compromisCree.id);
   });
 
@@ -266,7 +268,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("008");
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 320000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     const c1 = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, offreId: offre.id, prixConvenu: 320000, dateSignature: "2026-08-05" });
     idsCompromisCrees.push(c1.id);
@@ -285,7 +287,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     const cause = (erreurCapturee as Error).cause as { constraint_name?: string } | undefined;
     expect(cause?.constraint_name).toBe("compromis_offre_id_unique");
 
-    const resultat = await getCompromisParOffreId(offre.id);
+    const resultat = await getCompromisParOffreId(offre.id, WORKSPACE_TEST);
     expect(resultat?.id).toBe(c1.id);
   });
 
@@ -318,7 +320,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     const cause = (erreurCapturee as Error).cause as { constraint_name?: string } | undefined;
     expect(cause?.constraint_name).toBe("compromis_bien_id_en_cours_unique");
 
-    const pourBien = await listerCompromisPourBien(bien.id);
+    const pourBien = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
     expect(pourBien).toHaveLength(1);
   });
 
@@ -351,7 +353,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     });
     idsCompromisCrees.push(c3.id);
 
-    const pourBien = await listerCompromisPourBien(bien.id);
+    const pourBien = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
     expect(pourBien).toHaveLength(3);
     expect(pourBien.find((c) => c.id === c1.id)?.statut).toBe("annule");
     expect(pourBien.find((c) => c.id === c2.id)?.statut).toBe("realise");
@@ -381,8 +383,8 @@ describe("compromisRepository (intégration Postgres)", () => {
     expect(compromisB.offreId).toBeUndefined();
   });
 
-  it("modifierDateActeCompromis() retourne undefined pour un id non-UUID, sans erreur de cast", async () => {
-    await expect(modifierDateActeCompromis("compromis-mock", "2026-10-15")).resolves.toBeUndefined();
+  it("modifierDateActeCompromis() rend introuvable pour un id non-UUID, sans erreur de cast", async () => {
+    await expect(modifierDateActeCompromis("compromis-mock", "2026-10-15", WORKSPACE_TEST)).resolves.toEqual({ statut: "introuvable" });
   });
 
   it("modifierDateActeCompromis() renseigne une date d'acte absente (ADR-046)", async () => {
@@ -391,8 +393,8 @@ describe("compromisRepository (intégration Postgres)", () => {
     idsCompromisCrees.push(compromisCree.id);
     expect(compromisCree.dateActe).toBeUndefined();
 
-    const modifie = await modifierDateActeCompromis(compromisCree.id, "2026-10-15");
-    expect(modifie?.dateActe).toBe("2026-10-15");
+    const modifie = await modifierDateActeCompromis(compromisCree.id, "2026-10-15", WORKSPACE_TEST);
+    expect(modifie.statut === "modifie" ? modifie.compromis.dateActe : "non modifié").toBe("2026-10-15");
   });
 
   it("modifierDateActeCompromis() reporte une date d'acte existante (ADR-046)", async () => {
@@ -402,8 +404,8 @@ describe("compromisRepository (intégration Postgres)", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    const modifie = await modifierDateActeCompromis(compromisCree.id, "2026-11-02");
-    expect(modifie?.dateActe).toBe("2026-11-02");
+    const modifie = await modifierDateActeCompromis(compromisCree.id, "2026-11-02", WORKSPACE_TEST);
+    expect(modifie.statut === "modifie" ? modifie.compromis.dateActe : "non modifié").toBe("2026-11-02");
   });
 
   it("modifierDateActeCompromis() efface une date d'acte devenue inconnue (undefined -> NULL, ADR-046)", async () => {
@@ -413,7 +415,7 @@ describe("compromisRepository (intégration Postgres)", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    const modifie = await modifierDateActeCompromis(compromisCree.id, undefined);
-    expect(modifie?.dateActe).toBeUndefined();
+    const modifie = await modifierDateActeCompromis(compromisCree.id, undefined, WORKSPACE_TEST);
+    expect(modifie.statut === "modifie" ? modifie.compromis.dateActe : "non modifié").toBeUndefined();
   });
 });

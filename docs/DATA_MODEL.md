@@ -1794,13 +1794,41 @@ des FK valides séparément ne suffisent pas (ADR-029). Moteur de checklist dér
 **Rôle** : offre d'achat structurée sur un bien — bien, acquéreur, montant, date, statut, date de
 validité optionnelle, date de décision et motif de perte (ADR-020). Voir ADR-015 et ADR-020.
 
-> **ADR-061 (décidé, non implémenté — lot `OFFER_LIFECYCLE_FOUNDATION_V1`)** : `offres` deviendra
-> la source de vérité d'« offre en cours » (fin du dual-write vers `biens.offre_en_cours_le`),
-> transitions sous verrou du bien avec `UPDATE … WHERE statut = <attendu>`, acceptation exclusive
-> (les autres offres `en_cours` du bien passent `refusee` / `autre_offre_acceptee`), état de
-> clôture `caduque`, événements `offre_*` et `compromis_realise` / `compromis_annule` ciblés par
-> `evenements_metier.offre_id` / `compromis_id`, statut commercial effectif avec `offre_acceptee`.
-> Le modèle ci-dessous décrit l'état ACTUEL.
+**Cycle de vie canonique (ADR-061, lot `OFFER_LIFECYCLE_FOUNDATION_V1`, migration `0046`).**
+`offres` est la SOURCE DE VÉRITÉ du cycle de vie et d'« offre en cours » :
+
+- statuts `en_cours` → `acceptee` | `refusee` | `retiree` ; `acceptee` → `caduque` (clôture explicite
+  d'une acceptation, geste humain, jamais automatique) ; finals irréversibles ; `motif_perte` étendu
+  du motif SYSTÈME `autre_offre_acceptee` (jamais saisissable) ;
+- **un seul writer** `deciderOffre` (`lib/offreRepository.ts`, wrappers `accepterOffre` /
+  `refuserOffre` / `retirerOffre` / `rendreOffreCaduque`) : verrou du BIEN scoped → verrou de l'offre
+  → `UPDATE … WHERE id AND statut = <attendu>` → concurrentes par id croissant → événements, une
+  transaction ; résultats typés (`decidee`, `introuvable`, `deja_finalisee`, `transition_interdite`,
+  `bien_archive`, `acquereur_archive`, `acceptation_active_existante`) ;
+- **acceptation exclusive** (politique A) : accepter A refuse, dans la même transaction, toutes les
+  autres offres `en_cours` du bien (`autre_offre_acceptee`, même `date_decision`) ; **au plus une
+  `acceptee` par bien** (applicatif sous verrou — pas d'index SQL, §7 : les lignes historiques
+  incohérentes restent lisibles dans un ordre déterministe, jamais réparées) ;
+- `date_decision` porte la décision initiale ; la caducité ne l'écrase pas (date dans l'événement) ;
+- création `creerOffre` (bien et acquéreur du même workspace sous verrou, `en_cours`, liens visites,
+  `offre_recue`) : **`biens.offre_en_cours_le` n'est plus écrit** par le domaine Offre ; conservé,
+  lu uniquement pour un bien sans AUCUNE offre canonique (`chargerEtatOffresBien`, mode
+  `canonique` | `legacy` | `aucun`) ; actions legacy `marquerOffreEnCours` / `retirerOffre` ignorées
+  et masquées dès qu'une offre canonique existe (idem `marquerCompromisSigne` / `annulerCompromis`
+  dès qu'un compromis canonique existe) ;
+- **statut commercial** : `statutCommercialBienEffectif(bien, offres, compromis)` — `vendu` >
+  `compromis_signe` > **`offre_acceptee`** > `offre_en_cours` > `en_commercialisation`, legacy par
+  entité absente seulement ; en liste, offres et compromis chargés en lot (2 requêtes pour N biens) ;
+- **événements** `offre_recue`, `offre_acceptee`, `offre_refusee`, `offre_retiree`, `offre_caduque`
+  (cible `evenements_metier.offre_id`, idempotents par `(type, offre_id)`) et `compromis_realise` /
+  `compromis_annule` (cible `compromis_id`), tous émis dans la transaction du writer ; aucune règle
+  ne les consomme encore ;
+- **lectures scoped** : `getOffreById`, `listerOffresPourBien`, `listerOffresPourAcquereur`,
+  `listerOffresEnCoursPourPaire`, `existeOffreCanoniqueDuBien`, `chargerEtatOffresBien`,
+  `chargerEtatsOffresParBien` exigent `workspaceId` (`offres ⋈ biens`) ; index `offres_bien_idx`,
+  `offres_acquereur_idx`. Compromis : `creerCompromis` / `deciderCompromis` /
+  `modifierDateActeCompromis` sous le même ordre de verrous, lectures scoped ; l'annulation d'un
+  compromis ne touche jamais l'offre (ni réouverture, ni caducité).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
@@ -2589,6 +2617,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0043_contact_fusion_model.sql` | ADR-059 : colonnes `fusionne_dans_contact_id` (FK auto-référente) et `fusionne_le` sur `contacts`, deux CHECK (cohérence, pas soi-même), index partiel `contacts_fusionne_dans_idx` ; table `contact_fusions` (journal append-only, feuille de `contacts`, CHECK survivant ≠ absorbé, deux index). Strictement additive — aucun moteur de fusion, **aucun backfill**, aucune ligne absorbée |
 | `0044_mandate_lifecycle.sql` | ADR-060 : colonnes nullables sans default `type` (CHECK), `numero`, `exclusivite_jusqu_au` (CHECK dans la période), `motif_resiliation` sur `mandats` ; index `mandats_bien_idx`, `mandats_projet_vendeur_idx`, `mandats_remplace_idx`. Strictement additive, **aucun backfill** |
 | `0045_mandate_parties.sql` | ADR-060 §16 : table `parties_mandat` (feuille de `mandats` et `contacts`, FK NO ACTION, `CHECK` rôle `mandant`/`representant`, `UNIQUE(mandat_id, contact_id)`, deux index). Strictement additive — aucune partie inventée depuis `parties_projet` ni depuis un propriétaire legacy, **aucun backfill** |
+| `0046_offer_lifecycle.sql` | ADR-061 : CHECK `offres.statut` + `caduque`, CHECK `motif_perte` + `autre_offre_acceptee`, index `offres_bien_idx` / `offres_acquereur_idx` ; `evenements_metier.offre_id` (FK NO ACTION) dans le CHECK « une seule cible », 7 types d'événements Offre/Compromis, index unique partiel `(type_evenement, offre_id)`. Strictement additive (CHECK seulement élargis), **aucun backfill**, aucun index unique sur `acceptee` |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

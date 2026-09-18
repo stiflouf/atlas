@@ -95,7 +95,7 @@ async function creerAcquereurTest(email: string) {
 describe("resoudreDestinatairesDepuisBien", () => {
   it("aucun candidat si ni vendeur ni compromis", async () => {
     const bien = await creerBienTest("[test réel] COMM-BIEN-001");
-    await expect(resoudreDestinatairesDepuisBien(bien.id)).resolves.toEqual([]);
+    await expect(resoudreDestinatairesDepuisBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("un seul candidat vendeur si aucun compromis n'existe", async () => {
@@ -121,7 +121,7 @@ describe("resoudreDestinatairesDepuisBien", () => {
     if (!conversion) return;
     idsBiens.push(conversion.bien.id);
 
-    const candidats = await resoudreDestinatairesDepuisBien(conversion.bien.id);
+    const candidats = await resoudreDestinatairesDepuisBien(conversion.bien.id, WORKSPACE_TEST);
     expect(candidats).toHaveLength(1);
     expect(candidats[0]).toMatchObject({ type: "prospectVendeur", nom: "Dupont" });
   });
@@ -158,7 +158,7 @@ describe("resoudreDestinatairesDepuisBien", () => {
     });
     idsCompromis.push(compromis.id);
 
-    const candidats = await resoudreDestinatairesDepuisBien(conversion.bien.id);
+    const candidats = await resoudreDestinatairesDepuisBien(conversion.bien.id, WORKSPACE_TEST);
     expect(candidats).toHaveLength(2);
     expect(candidats.map((c) => c.type).sort()).toEqual(["acquereur", "prospectVendeur"]);
   });
@@ -181,7 +181,7 @@ describe("resoudreDestinatairesDepuisDocument", () => {
     });
     idsDocuments.push(document.id);
 
-    const candidats = await resoudreDestinatairesDepuisDocument(document, bien.id);
+    const candidats = await resoudreDestinatairesDepuisDocument(document, bien.id, WORKSPACE_TEST);
     expect(candidats).toHaveLength(1);
     expect(candidats[0]).toMatchObject({ type: "acquereur", id: acquereur.id });
   });
@@ -208,14 +208,14 @@ describe("resoudreDestinatairesDepuisDocument", () => {
     });
     idsDocuments.push(document.id);
 
-    const candidats = await resoudreDestinatairesDepuisDocument(document, bien.id);
+    const candidats = await resoudreDestinatairesDepuisDocument(document, bien.id, WORKSPACE_TEST);
     // Repli sur le bien : ni vendeur (non converti pour CE bien) ni compromis -> aucun candidat.
     expect(candidats).toEqual([]);
   });
 
   it("aucun document -> repli direct sur le bien", async () => {
     const bien = await creerBienTest("[test réel] COMM-DOC-003");
-    const candidats = await resoudreDestinatairesDepuisDocument(undefined, bien.id);
+    const candidats = await resoudreDestinatairesDepuisDocument(undefined, bien.id, WORKSPACE_TEST);
     expect(candidats).toEqual([]);
   });
 });

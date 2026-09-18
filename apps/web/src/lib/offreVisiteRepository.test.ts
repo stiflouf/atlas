@@ -130,7 +130,7 @@ describe("offreVisiteRepository (intégration Postgres)", () => {
     await retirerLienVisiteOffre(lien.id);
 
     await expect(listerLiensPourBien(bien.id)).resolves.toEqual([]);
-    await expect(getOffreById(offre.id)).resolves.toBeDefined();
+    await expect(getOffreById(offre.id, WORKSPACE_TEST)).resolves.toBeDefined();
     await expect(getCompteRenduVisiteById(compteRendu.id)).resolves.toBeDefined();
   });
 

@@ -10,16 +10,20 @@ import PhotoPrincipale from "@/components/bien/PhotoPrincipale";
 import ButtonLink from "@/components/ui/ButtonLink";
 import EmptyState from "@/components/ui/EmptyState";
 import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
-import { deriverStatutCommercial, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
+import { statutCommercialBienEffectif, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
+import { chargerEtatsOffresParBien } from "@/lib/offreRepository";
+import { listerCompromisParBiens } from "@/lib/compromisRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 const PAR_PAGE = 25;
 
-// Statut dérivé uniquement des champs déjà chargés sur `Bien` (offreEnCoursLe/compromisSigneLe) —
-// deriverStatutCommercial() sans second argument ignore volontairement les compromis structurés
-// (voir sa doc), aucune requête additionnelle par ligne (§12 : pas de requête coûteuse en liste).
+// ADR-061 §11 — statut commercial EFFECTIF en liste : offres et compromis de la page chargés EN LOT
+// (deux requêtes pour N biens, jamais une par ligne, §12 : pas de requête coûteuse en liste), puis
+// la même règle que la fiche (`statutCommercialBienEffectif`) — plus jamais les seuls jalons legacy.
 const VARIANT_STATUT_COMMERCIAL: Record<StatutCommercial, "default" | "accent" | "success"> = {
   en_commercialisation: "default",
   offre_en_cours: "accent",
+  offre_acceptee: "accent",
   compromis_signe: "success",
   vendu: "success",
 };
@@ -74,6 +78,15 @@ export default async function BiensPage({ searchParams }: PageProps) {
   const biensDemo = aucunBienReel ? await listerBiens() : undefined;
   const biens = biensDemo ?? biensPage;
   const totalAffiche = biensDemo ? biensDemo.length : total;
+  const workspaceId = await exigerWorkspaceCourant();
+  const [etatsOffres, compromisParBien] = await Promise.all([
+    chargerEtatsOffresParBien(biens, workspaceId),
+    listerCompromisParBiens(biens.map((b) => b.id), workspaceId),
+  ]);
+  const statutCommercialDe = (bien: (typeof biens)[number]) => {
+    const etat = etatsOffres.get(bien.id);
+    return statutCommercialBienEffectif(bien, etat?.mode === "canonique" ? etat.offres : [], compromisParBien.get(bien.id) ?? []);
+  };
   const totalPages = Math.max(1, Math.ceil(totalAffiche / PAR_PAGE));
 
   return (
@@ -158,8 +171,8 @@ export default async function BiensPage({ searchParams }: PageProps) {
                       {/* Un seul badge sur le média : le statut commercial. La référence redevient
                           une métadonnée, en pied de card. */}
                       <span className="absolute left-2.5 top-2.5">
-                        <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
-                          {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
+                        <Badge variant={VARIANT_STATUT_COMMERCIAL[statutCommercialDe(bien)]}>
+                          {LABEL_STATUT_COMMERCIAL[statutCommercialDe(bien)]}
                         </Badge>
                       </span>
                       {/* Le prix sur le voile : c'est l'information cherchée en premier, et elle
@@ -214,8 +227,8 @@ export default async function BiensPage({ searchParams }: PageProps) {
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                          <Badge variant={VARIANT_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}>
-                            {LABEL_STATUT_COMMERCIAL[deriverStatutCommercial(bien)]}
+                          <Badge variant={VARIANT_STATUT_COMMERCIAL[statutCommercialDe(bien)]}>
+                            {LABEL_STATUT_COMMERCIAL[statutCommercialDe(bien)]}
                           </Badge>
                           <span className="text-[11px] tracking-[0.06em] text-text-muted tabular-nums">
                             {bien.reference}

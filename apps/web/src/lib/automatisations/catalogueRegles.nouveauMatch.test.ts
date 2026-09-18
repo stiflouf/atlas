@@ -187,7 +187,7 @@ describe("règle nouveau_match_bien_acquereur — « Préparer un email » cible
     const tache = await getTacheById(ligneTache.id);
     expect(tache).toBeDefined();
 
-    const contexte = await resoudreContexteCommunicationDepuisTache(tache!);
+    const contexte = await resoudreContexteCommunicationDepuisTache(tache!, WORKSPACE_TEST);
     expect(contexte.cibleType).toBe("acquereur");
     expect(contexte.candidats).toHaveLength(1);
     expect(contexte.candidats[0]).toMatchObject({ type: "acquereur", id: acquereur.id });

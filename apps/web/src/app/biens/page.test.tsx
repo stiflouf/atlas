@@ -7,6 +7,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { eq, like } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
+
+// ADR-054 / ADR-061 — le périmètre est résolu depuis la session, mocké ici sur le workspace de test.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
+
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");

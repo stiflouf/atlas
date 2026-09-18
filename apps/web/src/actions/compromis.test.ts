@@ -27,6 +27,7 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const {
   biens: biensTable,
   acquereurs: acquereursTable,
@@ -38,9 +39,9 @@ const {
 const { creerBien, archiverBien, getBienById, annulerCompromis: annulerCompromisJalonLegacy } = await import(
   "@/lib/bienRepository"
 );
-const { deriverStatutCommercial } = await import("@/lib/statutCommercialBien");
+const { statutCommercialBienEffectif } = await import("@/lib/statutCommercialBien");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
-const { enregistrerOffre, changerStatutOffre } = await import("@/lib/offreRepository");
+const { enregistrerOffre, accepterOffre } = await import("@/lib/offreRepository");
 const { enregistrerCompromis, listerCompromisPourBien, getCompromisById, marquerCompromisRealise, marquerCompromisAnnule } =
   await import("@/lib/compromisRepository");
 const { ajouterCompromisAction, changerStatutCompromisAction, modifierDateActeAction } = await import("./compromis");
@@ -68,6 +69,7 @@ afterAll(async () => {
   for (const id of idsCompromisCrees) {
     await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
   }
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) {
     await getDb().delete(offresTable).where(eq(offresTable.id, id));
   }
@@ -134,7 +136,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       )
     ).rejects.toThrow(/bien archivé/);
 
-    await expect(listerCompromisPourBien(bien.id)).resolves.toEqual([]);
+    await expect(listerCompromisPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("refuse explicitement (throw) un compromis pour un acquéreur archivé", async () => {
@@ -152,7 +154,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       )
     ).rejects.toThrow(/acquéreur archivé/);
 
-    await expect(listerCompromisPourBien(bien.id)).resolves.toEqual([]);
+    await expect(listerCompromisPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("refuse explicitement (throw) un prix convenu invalide", async () => {
@@ -186,7 +188,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       )
     ).rejects.toThrow(/déjà en cours/);
 
-    await expect(listerCompromisPourBien(bien.id)).resolves.toHaveLength(1);
+    await expect(listerCompromisPourBien(bien.id, WORKSPACE_TEST)).resolves.toHaveLength(1);
   });
 
   it("refuse explicitement (throw) une offre liée introuvable", async () => {
@@ -215,7 +217,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     await expect(
       ajouterCompromisAction(
@@ -240,7 +242,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     await expect(
       ajouterCompromisAction(
@@ -287,7 +289,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     await ajouterCompromisAction(
       formData({
@@ -299,7 +301,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
       })
     ).catch(() => {});
 
-    const compromisListe = await listerCompromisPourBien(bien.id);
+    const compromisListe = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
     idsCompromisCrees.push(...compromisListe.map((c) => c.id));
     expect(compromisListe).toHaveLength(1);
     expect(compromisListe[0].offreId).toBe(offre.id);
@@ -314,7 +316,7 @@ describe("ajouterCompromisAction — offre déjà utilisée par un compromis (AD
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("OFFRE-DEJA-UTILISEE");
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     const premierCompromis = await enregistrerCompromis({
       bienId: bien.id,
@@ -343,7 +345,7 @@ describe("ajouterCompromisAction — offre déjà utilisée par un compromis (AD
     ).rejects.toThrow(/déjà associée à un compromis/);
 
     // Un seul compromis référence cette offre — aucun second créé.
-    const compromisListe = await listerCompromisPourBien(bien.id);
+    const compromisListe = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
     expect(compromisListe).toHaveLength(1);
   });
 
@@ -351,7 +353,7 @@ describe("ajouterCompromisAction — offre déjà utilisée par un compromis (AD
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("OFFRE-DEJA-UTILISEE-ANNULE");
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     const premierCompromis = await enregistrerCompromis({
       bienId: bien.id,
@@ -384,7 +386,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
   it("refuse explicitement (throw) sur un compromis introuvable", async () => {
     await expect(
       changerStatutCompromisAction(
-        formData({ compromisId: "00000000-0000-0000-0000-000000000000", statut: "realise" })
+        formData({ compromisId: "00000000-0000-0000-0000-000000000000", statut: "realise", dateActeReelle: "2026-09-01" })
       )
     ).rejects.toThrow(/introuvable/);
   });
@@ -401,7 +403,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise" }))
+      changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" }))
     ).rejects.toThrow(/archivé/);
   });
 
@@ -420,7 +422,9 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     ).catch(() => {});
 
     await expect(
-      changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "annule" }))
+      changerStatutCompromisAction(
+        formData({ compromisId: compromisCree.id, statut: "annule", dateAnnulation: "2026-09-02", motifAnnulation: "autre" })
+      )
     ).rejects.toThrow(/statut final/);
   });
 
@@ -459,7 +463,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
       changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise" }))
     ).rejects.toThrow(/date réelle/);
 
-    const inchange = await getCompromisById(compromisCree.id);
+    const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.statut).toBe("en_cours");
     expect(inchange?.dateActeReelle).toBeUndefined();
   });
@@ -479,7 +483,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
       formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-10-08" })
     ).catch(() => {});
 
-    const apres = await getCompromisById(compromisCree.id);
+    const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.statut).toBe("realise");
     expect(apres?.dateActeReelle).toBe("2026-10-08");
     expect(apres?.dateActe).toBe("2026-10-01");
@@ -501,7 +505,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
       )
     ).rejects.toThrow(/date d'annulation/);
 
-    const inchange = await getCompromisById(compromisCree.id);
+    const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.statut).toBe("en_cours");
     expect(inchange?.dateAnnulation).toBeUndefined();
   });
@@ -522,7 +526,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
       )
     ).rejects.toThrow(/motif/);
 
-    const inchange = await getCompromisById(compromisCree.id);
+    const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.statut).toBe("en_cours");
     expect(inchange?.motifAnnulation).toBeUndefined();
   });
@@ -546,7 +550,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
       })
     ).catch(() => {});
 
-    const apres = await getCompromisById(compromisCree.id);
+    const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.statut).toBe("annule");
     expect(apres?.dateAnnulation).toBe("2026-08-15");
     expect(apres?.motifAnnulation).toBe("financement_refuse");
@@ -572,8 +576,8 @@ describe("statut commercial du Bien — priorité au modèle structuré (ADR-046
     const bienApres = await getBienById(bien.id);
     expect(bienApres?.compromisSigneLe).toBeUndefined();
 
-    const compromisDuBien = await listerCompromisPourBien(bien.id);
-    expect(deriverStatutCommercial(bienApres!, compromisDuBien)).toBe("compromis_signe");
+    const compromisDuBien = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
+    expect(statutCommercialBienEffectif(bienApres!, [], compromisDuBien)).toBe("compromis_signe");
   });
 
   it("compromis structuré annulé via le vrai parcours + jalon legacy jamais effacé -> statut n'affiche plus compromis_signe (test de régression principal)", async () => {
@@ -602,8 +606,8 @@ describe("statut commercial du Bien — priorité au modèle structuré (ADR-046
     const bienApres = await getBienById(bien.id);
     expect(bienApres?.compromisSigneLe).toBeDefined();
 
-    const compromisDuBien = await listerCompromisPourBien(bien.id);
-    expect(deriverStatutCommercial(bienApres!, compromisDuBien)).not.toBe("compromis_signe");
+    const compromisDuBien = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
+    expect(statutCommercialBienEffectif(bienApres!, [], compromisDuBien)).not.toBe("compromis_signe");
   });
 });
 
@@ -616,7 +620,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
 
     await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-10-15" })).catch(() => {});
 
-    const apres = await getCompromisById(compromisCree.id);
+    const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.dateActe).toBe("2026-10-15");
   });
 
@@ -629,7 +633,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
 
     await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-11-02" })).catch(() => {});
 
-    const apres = await getCompromisById(compromisCree.id);
+    const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.dateActe).toBe("2026-11-02");
   });
 
@@ -642,7 +646,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
 
     await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "" })).catch(() => {});
 
-    const apres = await getCompromisById(compromisCree.id);
+    const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.dateActe).toBeUndefined();
   });
 
@@ -658,7 +662,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
       modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
     ).rejects.toThrow(/en cours/);
 
-    const inchange = await getCompromisById(compromisCree.id);
+    const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.dateActe).toBe("2026-10-15");
   });
 
@@ -674,7 +678,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
       modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
     ).rejects.toThrow(/en cours/);
 
-    const inchange = await getCompromisById(compromisCree.id);
+    const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.dateActe).toBe("2026-10-15");
   });
 

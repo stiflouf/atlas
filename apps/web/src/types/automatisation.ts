@@ -14,13 +14,24 @@ import type { CibleTache, PrioriteTache, TypeTache } from "./tache";
 // `bienId`/`acquereurId`/`cycleCompatibilite` au lieu de `ancreCycle` : aucun ancrage temporel
 // métier externe n'existe ici (contrairement au dernier contact d'un prospect), l'idempotence de
 // cycle repose donc sur un compteur entier plutôt qu'un timestamp.
+//
+// ADR-061 — types OFFRE (ponctuels : chaque transition survient au plus une fois par offre, le
+// cycle de vie étant irréversible) et fin de vie du COMPROMIS. Émis dans la transaction du writer
+// qui pose le fait ; aucune règle ne les consomme encore (AUTOMATION_ENGINE_GENERALIZATION_V1).
 export type TypeEvenementMetier =
   | "visite_realisee"
   | "rdv_estimation_realise"
   | "mandat_signe"
   | "compromis_signe"
   | "inactivite_prospect_vendeur"
-  | "compatibilite_bien_acquereur_devenue_compatible";
+  | "compatibilite_bien_acquereur_devenue_compatible"
+  | "offre_recue"
+  | "offre_acceptee"
+  | "offre_refusee"
+  | "offre_retiree"
+  | "offre_caduque"
+  | "compromis_realise"
+  | "compromis_annule";
 
 export type EvenementMetier = {
   id: string;
@@ -33,6 +44,8 @@ export type EvenementMetier = {
   compteRenduVisiteId?: string;
   prospectVendeurId?: string;
   compromisId?: string;
+  // ADR-061 — cible des types `offre_*` ; le bien se dérive par l'offre, jamais dupliqué ici.
+  offreId?: string;
   // Ancre du cycle temporel (ADR-033) — le dernierContactLe (ou creeLe si aucun contact n'a
   // jamais eu lieu) qui a servi de base au calcul du seuil franchi. Distincte de `survenuLe` : ici
   // le moment où le FAIT a été établi (le dernier contact réel), pas le moment où Atlas l'a

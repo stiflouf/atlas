@@ -1103,6 +1103,13 @@ export const comptesRendusVisite = pgTable(
 // restent valides sans date ni motif (aucun backfill), une contrainte "statut final => date/motif
 // non nul" les casserait. motif_perte : CHECK sur la valeur uniquement (vocabulaire MotifPerte),
 // jamais sur son obligation, qui reste entièrement portée par la Server Action.
+// ADR-061 (lot OFFER_LIFECYCLE_FOUNDATION_V1) — `offres` est désormais la SOURCE DE VÉRITÉ du
+// cycle de vie : transitions sous verrou du bien (`deciderOffre`, offreRepository.ts), `caduque` =
+// clôture explicite d'une acceptation (jamais une réécriture en refusée/retirée), motif système
+// `autre_offre_acceptee` posé par l'acceptation d'une offre concurrente. Le couplage vers
+// `biens.offre_en_cours_le` est ROMPU : le domaine Offre ne l'écrit plus. Aucune unicité SQL sur
+// `acceptee` (V1 : invariant applicatif sous verrou du bien, ADR-061 §7 — les lignes historiques
+// incohérentes restent lisibles). Index FK posés avec les premiers lecteurs scoped.
 export const offres = pgTable(
   "offres",
   {
@@ -1122,11 +1129,13 @@ export const offres = pgTable(
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    check("offres_statut_check", sql`${table.statut} IN ('en_cours','acceptee','refusee','retiree')`),
+    check("offres_statut_check", sql`${table.statut} IN ('en_cours','acceptee','refusee','retiree','caduque')`),
     check(
       "offres_motif_perte_check",
-      sql`${table.motifPerte} IS NULL OR ${table.motifPerte} IN ('financement_refuse','acquereur_se_retire','vendeur_se_retire','desaccord_prix','juridique_administratif','delai_calendrier','autre')`
+      sql`${table.motifPerte} IS NULL OR ${table.motifPerte} IN ('financement_refuse','acquereur_se_retire','vendeur_se_retire','desaccord_prix','juridique_administratif','delai_calendrier','autre','autre_offre_acceptee')`
     ),
+    index("offres_bien_idx").on(table.bienId),
+    index("offres_acquereur_idx").on(table.acquereurId),
   ]
 );
 
@@ -2075,6 +2084,10 @@ export const evenementsMetier = pgTable(
     compteRenduVisiteId: uuid("compte_rendu_visite_id").references(() => comptesRendusVisite.id),
     prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id),
     compromisId: uuid("compromis_id").references(() => compromis.id),
+    // ADR-061 — cible OFFRE des événements `offre_*` (NO ACTION : le journal est append-only et
+    // aucune offre n'est supprimée). Jamais de `bien_id` posé en même temps : le bien se dérive
+    // par `offre → bien`, et le CHECK « une seule cible » l'interdirait.
+    offreId: uuid("offre_id").references(() => offres.id),
     ancreCycle: timestamp("ancre_cycle", { withTimezone: true }),
     bienId: uuid("bien_id").references(() => biens.id),
     acquereurId: uuid("acquereur_id").references(() => acquereurs.id),
@@ -2086,7 +2099,9 @@ export const evenementsMetier = pgTable(
       "evenements_metier_type_check",
       sql`${table.typeEvenement} IN (
         'visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe',
-        'inactivite_prospect_vendeur','compatibilite_bien_acquereur_devenue_compatible'
+        'inactivite_prospect_vendeur','compatibilite_bien_acquereur_devenue_compatible',
+        'offre_recue','offre_acceptee','offre_refusee','offre_retiree','offre_caduque',
+        'compromis_realise','compromis_annule'
       )`
     ),
     // Étendu par ADR-036 : le couple (bien_id, acquereur_id), posé ENSEMBLE, compte désormais comme
@@ -2099,6 +2114,7 @@ export const evenementsMetier = pgTable(
         (case when ${table.compteRenduVisiteId} is not null then 1 else 0 end) +
         (case when ${table.prospectVendeurId} is not null then 1 else 0 end) +
         (case when ${table.compromisId} is not null then 1 else 0 end) +
+        (case when ${table.offreId} is not null then 1 else 0 end) +
         (case when ${table.bienId} is not null and ${table.acquereurId} is not null then 1 else 0 end)
       ) = 1`
     ),
@@ -2125,6 +2141,11 @@ export const evenementsMetier = pgTable(
     uniqueIndex("evenements_metier_compromis_unique")
       .on(table.typeEvenement, table.compromisId)
       .where(sql`${table.compromisId} IS NOT NULL`),
+    // ADR-061 — types Offre PONCTUELS (cycle de vie irréversible : chaque transition survient au
+    // plus une fois par offre) : une occurrence par (type, offre).
+    uniqueIndex("evenements_metier_offre_unique")
+      .on(table.typeEvenement, table.offreId)
+      .where(sql`${table.offreId} IS NOT NULL`),
     // Dédié au type cyclique de compatibilité (ADR-036), même principe que l'index ci-dessus pour
     // 'inactivite_prospect_vendeur' : une occurrence par (bien, acquéreur, cycle) — le même cycle
     // rejoué (retry exact, deux synchronisations concurrentes de la même paire) ne duplique jamais ;

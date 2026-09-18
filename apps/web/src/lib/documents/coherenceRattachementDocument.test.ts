@@ -90,7 +90,7 @@ async function creerAcquereurTest(email: string) {
 
 describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => {
   it("accepte l'absence de tout rattachement", async () => {
-    await expect(validerCoherenceRattachementsDocument({ bienId: "bien-1" })).resolves.toBeUndefined();
+    await expect(validerCoherenceRattachementsDocument({ bienId: "bien-1" }, WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("rejette un compromis n'appartenant pas au bien du document", async () => {
@@ -106,7 +106,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
     idsCompromis.push(compromis.id);
 
     await expect(
-      validerCoherenceRattachementsDocument({ bienId: autreBien.id, compromisId: compromis.id })
+      validerCoherenceRattachementsDocument({ bienId: autreBien.id, compromisId: compromis.id }, WORKSPACE_TEST)
     ).rejects.toThrow(/n'appartient pas au bien/);
   });
 
@@ -127,7 +127,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
         bienId: bien.id,
         compromisId: compromis.id,
         acquereurId: autreAcquereur.id,
-      })
+      }, WORKSPACE_TEST)
     ).rejects.toThrow(/acquéreur rattaché ne correspond pas/);
   });
 
@@ -147,7 +147,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
         bienId: bien.id,
         compromisId: compromis.id,
         acquereurId: acquereur.id,
-      })
+      }, WORKSPACE_TEST)
     ).resolves.toBeUndefined();
   });
 
@@ -177,7 +177,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
     if (conversion) idsBiens.push(conversion.bien.id);
 
     await expect(
-      validerCoherenceRattachementsDocument({ bienId: autreBien.id, prospectVendeurId: prospect.id })
+      validerCoherenceRattachementsDocument({ bienId: autreBien.id, prospectVendeurId: prospect.id }, WORKSPACE_TEST)
     ).rejects.toThrow(/n'est pas le vendeur/);
   });
 
@@ -205,7 +205,7 @@ describe("validerCoherenceRattachementsDocument (intégration Postgres)", () => 
     idsBiens.push(conversion.bien.id);
 
     await expect(
-      validerCoherenceRattachementsDocument({ bienId: conversion.bien.id, prospectVendeurId: prospect.id })
+      validerCoherenceRattachementsDocument({ bienId: conversion.bien.id, prospectVendeurId: prospect.id }, WORKSPACE_TEST)
     ).resolves.toBeUndefined();
   });
 });

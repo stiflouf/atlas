@@ -8,6 +8,13 @@ import type { Contact } from "@/types/contact";
 // direct, absorbé → survivant, chaîne → dernier maillon ; aucun bouton sans rattachement ; jamais
 // un lien vers un absorbé ; résolution par le repository, dans le workspace du dossier, sans
 // aucune écriture ; identité affichée et destination du lien convergent après une vraie fusion.
+
+// ADR-054 / ADR-061 — les fiches acquéreur/prospect résolvent le workspace de session (lectures
+// Offre/Compromis scoped) ; mocké sur le workspace de test.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
+
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas_test";
 
 const { getDb } = await import("@/db/client");

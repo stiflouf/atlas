@@ -153,7 +153,7 @@ describe("règle preparation_dossier_notaire_apres_compromis — wording ADR-046
     expect(cible).toEqual({ type: "compromis", id: compromis.id });
     expect(deriverRouteFicheCible(tache!)).toBeUndefined();
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache!);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache!, WORKSPACE_TEST);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.candidats[0].type).toBe("acquereur");
     expect(resultat.candidats[0].id).toBe(acquereur.id);

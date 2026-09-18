@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import BrouillonEmailFormulaire from "@/components/communications/BrouillonEmailFormulaire";
@@ -22,7 +23,7 @@ type PageProps = { searchParams: Promise<ParametresEcranCommunication> };
 export default async function PageNouvelleCommunication({ searchParams }: PageProps) {
   const params = await searchParams;
 
-  const resultat = await resoudreContexteEcranCommunication(params);
+  const resultat = await resoudreContexteEcranCommunication(params, await exigerWorkspaceCourant());
   if (!resultat) notFound();
   const { titre, determinerIntention, candidats, faits, retourHref, bienId, tacheId } = resultat;
   const { gmailAutorise } = await chargerCapacitesGoogle();

@@ -119,3 +119,41 @@ describe("statutCommercialBien — garde-fou compromis actif", () => {
     expect(inchange?.offreEnCoursLe).toBeDefined();
   });
 });
+
+// ADR-061 §12 — LEGACY_ACTIONS_POLICY (C) : dès qu'une Offre canonique existe, les actions legacy
+// « offre en cours / retirer l'offre » n'écrivent plus rien (redirection simple) ; dès qu'un
+// Compromis canonique existe, idem pour « compromis signé / annuler ». Sans entité canonique, le
+// comportement legacy est conservé.
+describe("actions legacy neutralisées par le canonique (ADR-061)", () => {
+  it("offre canonique présente : marquerOffreEnCours et retirerOffre n'écrivent rien", async () => {
+    const { enregistrerOffre } = await import("@/lib/offreRepository");
+    const { creerAcquereur } = await import("@/lib/clientRepository");
+    const { offres: offresTable, acquereurs: acquereursTable } = await import("@/db/schema");
+    const bien = await creerBien(bienTest("[test réel] STATUT-LEGACY-CANONIQUE"), WORKSPACE_TEST);
+    idsCrees.push(bien.id);
+    const acquereur = await creerAcquereur(
+      { prenom: "T", nom: "[test réel] Legacy canonique", email: "legacy-canonique@example.test", telephone: "0600000000", budgetMin: 1, budgetMax: 2, criteres: [], stadeProjet: "offre", notes: "", datePremiereContact: "2026-01-01" },
+      WORKSPACE_TEST
+    );
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+
+    await marquerOffreEnCoursAction(formData(bien.id)).catch(() => {});
+    expect((await getBienById(bien.id))!.offreEnCoursLe, "aucune écriture legacy en mode canonique").toBeUndefined();
+
+    await marquerOffreEnCours(bien.id);
+    await retirerOffreAction(formData(bien.id)).catch(() => {});
+    expect((await getBienById(bien.id))!.offreEnCoursLe, "le jalon stocké n'est pas non plus retiré").toBeDefined();
+
+    await getDb().delete(offresTable).where(eq(offresTable.id, offre.id));
+    await getDb().delete(acquereursTable).where(eq(acquereursTable.id, acquereur.id));
+  });
+
+  it("aucune offre canonique : le comportement legacy est conservé", async () => {
+    const bien = await creerBien(bienTest("[test réel] STATUT-LEGACY-SEUL"), WORKSPACE_TEST);
+    idsCrees.push(bien.id);
+    await marquerOffreEnCoursAction(formData(bien.id)).catch(() => {});
+    expect((await getBienById(bien.id))!.offreEnCoursLe).toBeDefined();
+    await retirerOffreAction(formData(bien.id)).catch(() => {});
+    expect((await getBienById(bien.id))!.offreEnCoursLe).toBeUndefined();
+  });
+});

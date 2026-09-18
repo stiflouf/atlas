@@ -7,6 +7,12 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // ADR-048) — vraie base Postgres, vraie page Server Component. La leçon du chantier Fiche Bien
 // Premium s'applique ici aussi : un câblage correct en apparence (repository -> orchestration ->
 // page -> composant) doit être vérifié de bout en bout, pas seulement composant par composant.
+
+// ADR-054 / ADR-061 — le périmètre est résolu depuis la session, mocké ici sur le workspace de test.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
+
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");

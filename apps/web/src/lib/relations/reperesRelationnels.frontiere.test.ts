@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,6 +9,13 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // Ces tests fixent cette limite là où elle compte : la mémoire relationnelle (VALUE-03), la
 // projection communicationnelle (VALUE-04) et la rédaction assistée (VALUE-05) doivent se comporter
 // EXACTEMENT comme avant, y compris quand un repère est explicitement marqué utilisable.
+
+// ADR-054 / ADR-061 — la fiche acquéreur résout le workspace de session (lectures Offre/Compromis
+// scoped) ; mocké sur le workspace de test.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
+
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 // Marqueur volontairement absurde : une correspondance accidentelle est impossible.

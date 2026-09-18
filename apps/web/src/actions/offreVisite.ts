@@ -10,6 +10,7 @@ import {
   getLienOffreVisiteById,
 } from "@/lib/offreVisiteRepository";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Rattachement rétroactif (ADR-019) : contrairement au rattachement fait à la création d'une
 // offre (voir ajouterOffreAction), ce chemin permet de lier une visite à une offre déjà
@@ -20,11 +21,12 @@ import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 // l'historique inclut les entités archivées).
 export async function lierVisiteAOffreAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const offreId = String(formData.get("offreId") ?? "");
   const compteRenduVisiteId = String(formData.get("compteRenduVisiteId") ?? "");
 
   const [offre, compteRendu] = await Promise.all([
-    getOffreById(offreId),
+    getOffreById(offreId, workspaceId),
     getCompteRenduVisiteById(compteRenduVisiteId),
   ]);
   if (!offre) throw new Error("Offre introuvable.");
@@ -49,11 +51,12 @@ export async function lierVisiteAOffreAction(formData: FormData): Promise<void> 
 // serait qu'une donnée de confort côté navigateur, pas une source fiable.
 export async function delierVisiteAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const lienId = String(formData.get("lienId") ?? "");
 
   const lien = await getLienOffreVisiteById(lienId);
   if (!lien) throw new Error("Lien introuvable.");
-  const offre = await getOffreById(lien.offreId);
+  const offre = await getOffreById(lien.offreId, workspaceId);
   if (!offre) throw new Error("Offre introuvable.");
 
   await retirerLienVisiteOffre(lienId);

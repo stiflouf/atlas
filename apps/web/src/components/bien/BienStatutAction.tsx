@@ -27,6 +27,8 @@ export default function BienStatutAction({
   raisonTacheTexte,
   mandatTexte,
   prochaineVisiteHref,
+  offreCanonique = false,
+  compromisCanonique = false,
 }: {
   bien: Bien;
   statutLabel: React.ReactNode;
@@ -35,12 +37,19 @@ export default function BienStatutAction({
   // « Aucun mandat en cours » — ce bandeau ne relit jamais `bien.dateMandat` lui-même.
   mandatTexte: string;
   prochaineVisiteHref?: string;
+  // ADR-061 §12 (LEGACY_ACTIONS_POLICY C) — fournis par la page (existence d'une Offre / d'un
+  // Compromis canonique dans le workspace de session), jamais découverts ici : dès qu'une entité
+  // canonique existe, les jalons legacy correspondants ne s'écrivent plus qu'à travers elle — les
+  // boutons « offre en cours / retirer l'offre » (resp. « compromis signé / annuler ») disparaissent,
+  // et le serveur ignore de toute façon leur écriture.
+  offreCanonique?: boolean;
+  compromisCanonique?: boolean;
 }) {
   const bienReel = UUID_REGEX.test(bien.id);
   const actif = !bien.archiveLe;
 
   const actionsJalon: React.ReactNode[] = [];
-  if (bienReel && actif) {
+  if (bienReel && actif && !offreCanonique) {
     if (!bien.offreEnCoursLe) {
       actionsJalon.push(
         <form key="offre-en-cours" action={marquerOffreEnCoursAction}>
@@ -51,7 +60,7 @@ export default function BienStatutAction({
         </form>
       );
     }
-    if (bien.offreEnCoursLe && !bien.compromisSigneLe) {
+    if (bien.offreEnCoursLe && !bien.compromisSigneLe && !compromisCanonique) {
       actionsJalon.push(
         <form key="retirer-offre" action={retirerOffreAction}>
           <input type="hidden" name="id" value={bien.id} />
@@ -61,6 +70,8 @@ export default function BienStatutAction({
         </form>
       );
     }
+  }
+  if (bienReel && actif && !compromisCanonique) {
     if (!bien.compromisSigneLe) {
       // Poids visuel réduit (ghost, au lieu de secondary) quand ce n'est pas l'action primaire —
       // polish hiérarchie visuelle : ne rivalise plus avec l'action de jalon vraiment prioritaire

@@ -15,12 +15,13 @@ export type CandidatRattachementsDocument = {
 // ajouterCompromisAction/offreId, ADR-016) — ces comparaisons croisées ne sont pas exprimables en
 // CHECK SQL (inter-tables).
 export async function validerCoherenceRattachementsDocument(
-  candidat: CandidatRattachementsDocument
+  candidat: CandidatRattachementsDocument,
+  workspaceId: string
 ): Promise<void> {
   const { bienId, compromisId, acquereurId, prospectVendeurId } = candidat;
 
   if (compromisId) {
-    const compromis = await getCompromisById(compromisId);
+    const compromis = await getCompromisById(compromisId, workspaceId);
     if (!compromis) throw new Error("Compromis introuvable pour ce rattachement.");
     if (compromis.bienId !== bienId) {
       throw new Error("Ce compromis n'appartient pas au bien de ce document.");

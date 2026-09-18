@@ -36,6 +36,7 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const {
   biens: biensTable,
   acquereurs: acquereursTable,
@@ -46,7 +47,7 @@ const {
 } = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
-const { enregistrerOffre, changerStatutOffre } = await import("@/lib/offreRepository");
+const { enregistrerOffre, accepterOffre } = await import("@/lib/offreRepository");
 const { enregistrerCompromis, marquerCompromisRealise } = await import("@/lib/compromisRepository");
 const { ajouterCompromisAction } = await import("./compromis");
 
@@ -70,6 +71,7 @@ afterAll(async () => {
   for (const id of idsCompromisCrees) {
     await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
   }
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) {
     await getDb().delete(offresTable).where(eq(offresTable.id, id));
   }
@@ -125,7 +127,7 @@ describe("ajouterCompromisAction — défense en profondeur DB (ADR-047, garde a
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("OFFRE-RACE");
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+    await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     const premierCompromis = await enregistrerCompromis({
       bienId: bien.id,

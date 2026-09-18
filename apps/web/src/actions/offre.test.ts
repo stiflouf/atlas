@@ -26,6 +26,7 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const {
   biens: biensTable,
   acquereurs: acquereursTable,
@@ -47,6 +48,7 @@ const idsComptesRendusCrees: string[] = [];
 afterAll(async () => {
   // offre_visites disparaît en cascade avec offres/comptes_rendus_visite (ADR-019), pas de
   // nettoyage explicite nécessaire pour cette table de liaison.
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) {
     await getDb().delete(offresTable).where(eq(offresTable.id, id));
   }
@@ -111,7 +113,7 @@ describe("ajouterOffreAction — garde-fous", () => {
       )
     ).rejects.toThrow(/bien archivé/);
 
-    await expect(listerOffresPourBien(bien.id)).resolves.toEqual([]);
+    await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("refuse explicitement (throw) une offre pour un acquéreur archivé", async () => {
@@ -124,7 +126,7 @@ describe("ajouterOffreAction — garde-fous", () => {
       )
     ).rejects.toThrow(/acquéreur archivé/);
 
-    await expect(listerOffresPourBien(bien.id)).resolves.toEqual([]);
+    await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("refuse explicitement (throw) un montant invalide", async () => {
@@ -137,19 +139,22 @@ describe("ajouterOffreAction — garde-fous", () => {
     ).rejects.toThrow(/montant/);
   });
 
-  it("pose offreEnCoursLe sur le bien lors d'une offre valide", async () => {
+  // ADR-061 §12 — fin du dual-write : le domaine Offre n'écrit plus `biens.offre_en_cours_le` ;
+  // « offre en cours » se lit dans `offres` (statut commercial effectif).
+  it("ne pose plus offreEnCoursLe sur le bien lors d'une offre valide (ADR-061)", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("COUPLAGE");
 
     await ajouterOffreAction(
       formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "310000", dateOffre: "2026-08-01" })
     ).catch(() => {});
 
-    const offres = await listerOffresPourBien(bien.id);
+    const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.map((o) => o.id));
     expect(offres).toHaveLength(1);
 
     const bienApres = await getBienById(bien.id);
-    expect(bienApres?.offreEnCoursLe).toBeDefined();
+    expect(bienApres?.offreEnCoursLe).toBeUndefined();
+    expect(offres[0].statut).toBe("en_cours");
   });
 });
 
@@ -169,7 +174,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
     fd.append("compteRenduVisiteIds", cr.id);
     await ajouterOffreAction(fd).catch(() => {});
 
-    const offres = await listerOffresPourBien(bien.id);
+    const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.map((o) => o.id));
     expect(offres).toHaveLength(1);
 
@@ -193,7 +198,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
     fd.append("compteRenduVisiteIds", cr.id);
 
     await expect(ajouterOffreAction(fd)).rejects.toThrow(/acquéreur/);
-    await expect(listerOffresPourBien(bien.id)).resolves.toEqual([]);
+    await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("refuse explicitement (throw) une visite postérieure à l'offre, sans créer l'offre", async () => {
@@ -211,7 +216,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
     fd.append("compteRenduVisiteIds", cr.id);
 
     await expect(ajouterOffreAction(fd)).rejects.toThrow(/postérieure/);
-    await expect(listerOffresPourBien(bien.id)).resolves.toEqual([]);
+    await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   // Preuve du tout-ou-rien de enregistrerOffreAvecLiensEtJalon : un même id de visite répété deux
@@ -235,7 +240,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
 
     await expect(ajouterOffreAction(fd)).rejects.toThrow();
 
-    await expect(listerOffresPourBien(bien.id)).resolves.toEqual([]);
+    await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
     const bienApres = await getBienById(bien.id);
     expect(bienApres?.offreEnCoursLe).toBeUndefined();
   });
@@ -258,7 +263,7 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
       )
     ).rejects.toThrow(/offre en cours existe déjà/);
 
-    const offres = await listerOffresPourBien(bien.id);
+    const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     expect(offres).toHaveLength(1); // aucune deuxième offre créée
   });
 
@@ -282,13 +287,13 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
       })
     ).catch(() => {});
 
-    const offres = await listerOffresPourBien(bien.id);
+    const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.filter((o) => o.id !== premiere.id).map((o) => o.id));
     expect(offres).toHaveLength(2);
     expect(offres.every((o) => o.statut === "en_cours")).toBe(true);
     // La première offre reste totalement inchangée (jamais un UPDATE, jamais un retrait
     // automatique — ADR-044 §22-23).
-    const premiereApres = await getOffreById(premiere.id);
+    const premiereApres = await getOffreById(premiere.id, WORKSPACE_TEST);
     expect(premiereApres?.montant).toBe(300000);
     expect(premiereApres?.statut).toBe("en_cours");
   });
@@ -310,7 +315,7 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
       formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" })
     ).catch(() => {});
 
-    const offres = await listerOffresPourBien(bien.id);
+    const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.filter((o) => o.id !== premiere.id).map((o) => o.id));
     expect(offres.filter((o) => o.statut === "en_cours")).toHaveLength(1);
   });
@@ -330,7 +335,7 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
       formData({ bienId: bien.id, acquereurId: autreAcquereur.id, montant: "310000", dateOffre: "2026-08-10" })
     ).catch(() => {});
 
-    const offres = await listerOffresPourBien(bien.id);
+    const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.filter((o) => o.id !== premiere.id).map((o) => o.id));
     expect(offres).toHaveLength(2);
   });
@@ -418,7 +423,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
       changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee" }))
     ).rejects.toThrow(/date de décision/);
 
-    const inchangee = await getOffreById(offre.id);
+    const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
   });
 
@@ -436,7 +441,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
       changerStatutOffreAction(formData({ offreId: offre.id, statut: "refusee", dateDecision: "2026-08-06" }))
     ).rejects.toThrow(/motif/);
 
-    const inchangee = await getOffreById(offre.id);
+    const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
     expect(inchangee?.motifPerte).toBeUndefined();
   });
@@ -457,7 +462,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
       )
     ).rejects.toThrow(/n'a pas de sens/);
 
-    const inchangee = await getOffreById(offre.id);
+    const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
   });
 
@@ -477,7 +482,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
       )
     ).rejects.toThrow(/motif/);
 
-    const inchangee = await getOffreById(offre.id);
+    const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
   });
 
@@ -495,9 +500,57 @@ describe("changerStatutOffreAction — garde-fous", () => {
       formData({ offreId: offre.id, statut: "retiree", dateDecision: "2026-08-07", motifPerte: "acquereur_se_retire" })
     ).catch(() => {});
 
-    const apres = await getOffreById(offre.id);
+    const apres = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(apres?.statut).toBe("retiree");
     expect(apres?.dateDecision).toBe("2026-08-07");
     expect(apres?.motifPerte).toBe("acquereur_se_retire");
+  });
+});
+
+// ADR-061 (lot OFFER_LIFECYCLE_FOUNDATION_V1) — gestes exposés par l'action : caducité explicite,
+// motif système jamais accepté d'un humain, refus typés traduits.
+describe("changerStatutOffreAction — ADR-061", () => {
+  it("le motif système autre_offre_acceptee est refusé en saisie humaine (refus, retrait, caducité)", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("MOTIF-SYSTEME");
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(offre.id);
+    for (const statut of ["refusee", "retiree"]) {
+      await expect(
+        changerStatutOffreAction(formData({ offreId: offre.id, statut, dateDecision: "2026-08-05", motifPerte: "autre_offre_acceptee" }))
+      ).rejects.toThrow(/motif de la perte est obligatoire/);
+    }
+    expect((await getOffreById(offre.id, WORKSPACE_TEST))!.statut).toBe("en_cours");
+  });
+
+  it("caduque : uniquement depuis acceptee, motif humain, dateDecision de l'acceptation conservée ; puis une autre offre s'accepte", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("CADUQUE");
+    const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(offre.id);
+    await expect(changerStatutOffreAction(formData({ offreId: offre.id, statut: "caduque", motifPerte: "autre" }))).rejects.toThrow(/Transition de statut invalide/);
+
+    await changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" })).catch(() => {});
+    await expect(changerStatutOffreAction(formData({ offreId: offre.id, statut: "caduque", motifPerte: "autre_offre_acceptee" }))).rejects.toThrow(/motif/);
+    await changerStatutOffreAction(formData({ offreId: offre.id, statut: "caduque", motifPerte: "acquereur_se_retire" })).catch(() => {});
+    const relue = (await getOffreById(offre.id, WORKSPACE_TEST))!;
+    expect(relue).toMatchObject({ statut: "caduque", motifPerte: "acquereur_se_retire", dateDecision: "2026-08-05" });
+
+    const { acquereur: autre } = await creerBienEtAcquereurDeTest("CADUQUE-B");
+    const offreB = await enregistrerOffre({ bienId: bien.id, acquereurId: autre.id, montant: 310000, dateOffre: "2026-08-02" });
+    idsOffresCrees.push(offreB.id);
+    await changerStatutOffreAction(formData({ offreId: offreB.id, statut: "acceptee", dateDecision: "2026-08-10" })).catch(() => {});
+    expect((await getOffreById(offreB.id, WORKSPACE_TEST))!.statut).toBe("acceptee");
+  });
+
+  it("acceptation active existante : message explicite, rien d'écrit", async () => {
+    const { bien, acquereur } = await creerBienEtAcquereurDeTest("ACTIVE");
+    const { acquereur: autre } = await creerBienEtAcquereurDeTest("ACTIVE-B");
+    const a = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
+    idsOffresCrees.push(a.id);
+    await changerStatutOffreAction(formData({ offreId: a.id, statut: "acceptee", dateDecision: "2026-08-05" })).catch(() => {});
+    // Une offre reçue APRÈS l'acceptation de A (sinon elle aurait été refusée par la politique A).
+    const b = await enregistrerOffre({ bienId: bien.id, acquereurId: autre.id, montant: 310000, dateOffre: "2026-08-06" });
+    idsOffresCrees.push(b.id);
+    await expect(changerStatutOffreAction(formData({ offreId: b.id, statut: "acceptee", dateDecision: "2026-08-06" }))).rejects.toThrow(/rendez son acceptation caduque/);
+    expect((await getOffreById(b.id, WORKSPACE_TEST))!.statut).toBe("en_cours");
   });
 });

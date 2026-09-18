@@ -1,3 +1,4 @@
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Scale, FileCheck } from "lucide-react";
@@ -40,7 +41,7 @@ const POINT_SEVERITE: Record<SeveritePackNotaire, string> = {
 
 export default async function PageDossierNotaire({ params }: PageProps) {
   const { id } = await params;
-  const contexte = await chargerContextePackNotaire(id);
+  const contexte = await chargerContextePackNotaire(id, await exigerWorkspaceCourant());
   if (!contexte) notFound();
   const { ctx, documents } = contexte;
   const { bien, compromisActuel } = ctx;

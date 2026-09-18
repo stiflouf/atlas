@@ -19,10 +19,10 @@ export function versCandidatAcquereur(a: ProfilAcquereur): DestinataireCandidat 
 // l'acquéreur du compromis le plus pertinent (en_cours, sinon le plus récent). Les deux peuvent
 // coexister — jamais tranché arbitrairement ici : l'appelant présente un choix humain si plusieurs
 // candidats sont retournés (correction n°1).
-export async function resoudreDestinatairesDepuisBien(bienId: string): Promise<DestinataireCandidat[]> {
+export async function resoudreDestinatairesDepuisBien(bienId: string, workspaceId: string): Promise<DestinataireCandidat[]> {
   const [prospectVendeur, compromisListe] = await Promise.all([
     getProspectVendeurParBien(bienId),
-    listerCompromisPourBien(bienId),
+    listerCompromisPourBien(bienId, workspaceId),
   ]);
 
   const candidats: DestinataireCandidat[] = [];
@@ -48,7 +48,8 @@ export async function resoudreDestinatairesDepuisBien(bienId: string): Promise<D
 // contacts syndic/notaire sans coder de règle implicite aujourd'hui.
 export async function resoudreDestinatairesDepuisDocument(
   document: DocumentBien | undefined,
-  bienId: string
+  bienId: string,
+  workspaceId: string
 ): Promise<DestinataireCandidat[]> {
   if (document?.acquereurId && !document.prospectVendeurId) {
     const acquereur = await getClientById(document.acquereurId);
@@ -58,5 +59,5 @@ export async function resoudreDestinatairesDepuisDocument(
     const prospectVendeur = await getProspectVendeurById(document.prospectVendeurId);
     if (prospectVendeur) return [versCandidatProspectVendeur(prospectVendeur)];
   }
-  return resoudreDestinatairesDepuisBien(bienId);
+  return resoudreDestinatairesDepuisBien(bienId, workspaceId);
 }

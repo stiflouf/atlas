@@ -69,11 +69,11 @@ export function trouverCandidatChoisi(candidats: DestinataireCandidat[], valeur:
   return candidats.find((c) => c.type === type && c.id === id);
 }
 
-async function chargerContexteDossier(bienId: string) {
+async function chargerContexteDossier(bienId: string, workspaceId: string) {
   const bien = await getBienById(bienId);
   if (!bien) return undefined;
   const documents = await listerDocumentsPourBien(bien.id);
-  const compromis = await listerCompromisPourBien(bien.id);
+  const compromis = await listerCompromisPourBien(bien.id, workspaceId);
   const compromisActuel =
     compromis.find((c) => c.statut === "en_cours") ??
     [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1))[0];
@@ -81,10 +81,10 @@ async function chargerContexteDossier(bienId: string) {
   return { bien, documents, compromisActuel, prospectVendeurOrigine };
 }
 
-async function resoudreDepuisTache(tacheId: string): Promise<ResultatContexte | undefined> {
+async function resoudreDepuisTache(tacheId: string, workspaceId: string): Promise<ResultatContexte | undefined> {
   const tache = await getTacheById(tacheId);
   if (!tache) return undefined;
-  const { cibleType, candidats, faits } = await resoudreContexteCommunicationDepuisTache(tache);
+  const { cibleType, candidats, faits } = await resoudreContexteCommunicationDepuisTache(tache, workspaceId);
   return {
     titre: tache.titre,
     determinerIntention: (typeCandidatChoisi) =>
@@ -97,8 +97,8 @@ async function resoudreDepuisTache(tacheId: string): Promise<ResultatContexte | 
   };
 }
 
-async function resoudreDepuisConstat(bienId: string, exigenceCode: string): Promise<ResultatContexte | undefined> {
-  const contexte = await chargerContexteDossier(bienId);
+async function resoudreDepuisConstat(bienId: string, exigenceCode: string, workspaceId: string): Promise<ResultatContexte | undefined> {
+  const contexte = await chargerContexteDossier(bienId, workspaceId);
   if (!contexte) return undefined;
   const { bien, documents, compromisActuel, prospectVendeurOrigine } = contexte;
   const checklist = calculerChecklistDossier({ bien, compromisActuel, prospectVendeurOrigine }, documents);
@@ -107,7 +107,7 @@ async function resoudreDepuisConstat(bienId: string, exigenceCode: string): Prom
     return undefined;
   }
 
-  const candidats = await resoudreDestinatairesDepuisDocument(exigence.document, bienId);
+  const candidats = await resoudreDestinatairesDepuisDocument(exigence.document, bienId, workspaceId);
   const intentionFixe: IntentionCommunication =
     exigence.etat === "manquant" ? "demande_document_manquant" : "relance_piece_a_verifier";
   return {
@@ -129,15 +129,15 @@ async function resoudreDepuisConstat(bienId: string, exigenceCode: string): Prom
 //
 // Aucune tâche n'est créée pour obtenir un tacheId : `envois_email.tache_id` est nullable et toute
 // la chaîne d'envoi (ADR-031-bis) l'accepte déjà absent — rien n'a été modifié côté Gmail.
-async function resoudreDepuisAcquereur(acquereurId: string): Promise<ResultatContexte | undefined> {
+async function resoudreDepuisAcquereur(acquereurId: string, workspaceId: string): Promise<ResultatContexte | undefined> {
   const acquereur = await getClientById(acquereurId);
   if (!acquereur || acquereur.archiveLe) return undefined;
 
   const [visites, tousComptesRendus, offres, compromis, compatibilites, biens] = await Promise.all([
     listerVisitesPourAcquereur(acquereur.id),
     listerComptesRendus(),
-    listerOffresPourAcquereur(acquereur.id),
-    listerCompromisPourAcquereur(acquereur.id),
+    listerOffresPourAcquereur(acquereur.id, workspaceId),
+    listerCompromisPourAcquereur(acquereur.id, workspaceId),
     evaluerCompatibiliteAcquereur(acquereur.id),
     listerBiens(),
   ]);
@@ -174,8 +174,8 @@ async function resoudreDepuisAcquereur(acquereurId: string): Promise<ResultatCon
   };
 }
 
-async function resoudreDepuisNotaire(bienId: string): Promise<ResultatContexte | undefined> {
-  const contexte = await chargerContexteDossier(bienId);
+async function resoudreDepuisNotaire(bienId: string, workspaceId: string): Promise<ResultatContexte | undefined> {
+  const contexte = await chargerContexteDossier(bienId, workspaceId);
   if (!contexte) return undefined;
   const { bien, documents, compromisActuel, prospectVendeurOrigine } = contexte;
   const checklist = calculerChecklistDossier({ bien, compromisActuel, prospectVendeurOrigine }, documents);
@@ -196,12 +196,15 @@ async function resoudreDepuisNotaire(bienId: string): Promise<ResultatContexte |
 
 // Aiguillage unique — l'ordre des branches est celui d'origine, inchangé. Aucun paramètre d'URL
 // n'est une autorisation : chaque branche revalide entièrement la situation côté serveur.
+// ADR-061 / ADR-054 — `workspaceId` de SESSION, fourni par la page ou l'action : les lectures
+// Offre/Compromis en aval sont scoped (les autres lectures suivent la politique produit actuelle).
 export async function resoudreContexteEcranCommunication(
-  params: ParametresEcranCommunication
+  params: ParametresEcranCommunication,
+  workspaceId: string
 ): Promise<ResultatContexte | undefined> {
-  if (params.tacheId) return resoudreDepuisTache(params.tacheId);
-  if (params.bienId && params.exigenceCode) return resoudreDepuisConstat(params.bienId, params.exigenceCode);
-  if (params.bienId && params.notaire === "1") return resoudreDepuisNotaire(params.bienId);
-  if (params.acquereurId) return resoudreDepuisAcquereur(params.acquereurId);
+  if (params.tacheId) return resoudreDepuisTache(params.tacheId, workspaceId);
+  if (params.bienId && params.exigenceCode) return resoudreDepuisConstat(params.bienId, params.exigenceCode, workspaceId);
+  if (params.bienId && params.notaire === "1") return resoudreDepuisNotaire(params.bienId, workspaceId);
+  if (params.acquereurId) return resoudreDepuisAcquereur(params.acquereurId, workspaceId);
   return undefined;
 }

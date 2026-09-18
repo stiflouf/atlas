@@ -123,8 +123,11 @@ describe("read models et actions Mandat : workspace de session, jamais de SQL ho
   it("aucune route nouvelle, aucune migration après 0045, aucune automatisation Mandat", () => {
     const pages = listerFichiers(join(SRC, "app")).filter((c) => /\/page\.tsx$/.test(c) && /mandat/i.test(relatif(c)));
     expect(pages.map(relatif)).toEqual(["app/prospects-vendeurs/[id]/signer-mandat/page.tsx"]);
+    // Le lot UI Mandat n'a ajouté aucune migration : 0045 (parties) est la dernière du domaine Mandat ;
+    // les migrations ultérieures appartiennent à d'autres domaines (0046 = Offre, ADR-061).
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrations[migrations.length - 1]).toBe("0045_mandate_parties.sql");
+    expect(migrations.filter((f) => /mandat/i.test(f)).pop()).toBe("0045_mandate_parties.sql");
+    expect(migrations.some((f) => f.startsWith("0045_"))).toBe(true);
     for (const chemin of listerFichiers(join(SRC, "lib", "automatisations"))) {
       expect(codeSeul(chemin), relatif(chemin)).not.toMatch(/mandatRepository|presentationMandatBien|partieMandatRepository/);
     }

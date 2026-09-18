@@ -1,31 +1,26 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getDb } from "@/db/client";
-import { getBienById, marquerCompromisSigne } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
-import { getOffreById } from "@/lib/offreRepository";
 import {
-  enregistrerCompromis,
-  getCompromisById,
-  getCompromisParOffreId,
-  marquerCompromisAnnule,
-  marquerCompromisRealise,
+  creerCompromis,
+  deciderCompromis,
   modifierDateActeCompromis,
-  listerCompromisPourBien,
+  type ResultatCreationCompromis,
+  type ResultatDecisionCompromis,
+  type ResultatModificationDateActe,
 } from "@/lib/compromisRepository";
-import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { StatutCompromis } from "@/types/compromis";
-import { MOTIFS_PERTE, type MotifPerte } from "@/types/motifPerte";
+import { estMotifPerteHumain } from "@/types/motifPerte";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
-const TRANSITIONS_VALIDES: StatutCompromis[] = ["realise", "annule"];
+// ADR-061 §13 (lot OFFER_LIFECYCLE_FOUNDATION_V1) — création et transitions du Compromis passent par
+// des writers transactionnels scoped (verrou du bien, même ordre que l'Offre), qui rendent un
+// résultat typé traduit ici en message ; les événements `compromis_signe` / `compromis_realise` /
+// `compromis_annule` sont émis dans la transaction du writer, traités après COMMIT.
 
-function parseMotifPerte(valeur: FormDataEntryValue | null): MotifPerte | undefined {
-  return MOTIFS_PERTE.includes(valeur as MotifPerte) ? (valeur as MotifPerte) : undefined;
-}
+const TRANSITIONS_VALIDES: StatutCompromis[] = ["realise", "annule"];
 
 function parseMontant(valeur: FormDataEntryValue | null): number | undefined {
   const montant = Number(valeur);
@@ -53,7 +48,6 @@ function parseOffreIdOptionnel(valeur: FormDataEntryValue | null): string | unde
 // non transactionnels) en même temps qu'elle y accroche le moteur d'automatisations.
 export async function ajouterCompromisAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
-  // ADR-054 — appartenance explicite de l'événement métier (table racine).
   const workspaceId = await exigerWorkspaceCourant();
   const bienId = String(formData.get("bienId") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
@@ -65,64 +59,49 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
   if (!prixConvenu) throw new Error("Le prix convenu doit être un nombre positif.");
   if (!dateSignature) throw new Error("La date de signature est obligatoire.");
 
-  const [bien, acquereur] = await Promise.all([getBienById(bienId), getClientById(acquereurId)]);
-  if (!bien) throw new Error("Bien introuvable.");
-  if (bien.archiveLe) throw new Error("Impossible d'ajouter un compromis sur un bien archivé.");
-  if (!acquereur) throw new Error("Acquéreur introuvable.");
-  if (acquereur.archiveLe) throw new Error("Impossible d'ajouter un compromis pour un acquéreur archivé.");
-
-  const compromisExistants = await listerCompromisPourBien(bienId);
-  if (compromisExistants.some((c) => c.statut === "en_cours")) {
-    throw new Error("Un compromis est déjà en cours pour ce bien.");
-  }
-
-  if (offreId) {
-    const offre = await getOffreById(offreId);
-    if (!offre) throw new Error("Offre introuvable.");
-    if (offre.bienId !== bienId) throw new Error("Cette offre ne concerne pas ce bien.");
-    if (offre.acquereurId !== acquereurId) throw new Error("Cette offre ne concerne pas cet acquéreur.");
-    if (offre.statut !== "acceptee") throw new Error("Cette offre n'est pas acceptée.");
-    // ADR-045 — en V1, une Offre acceptée ne peut être l'origine structurée que d'au plus un
-    // Compromis. Garde applicative stricte, sans confirmation possible pour la contourner
-    // (contrairement au doublon Offre×Offre d'ADR-044) : recontrôlée ici à chaque appel, jamais
-    // une confiance dans un état affiché au GET.
-    const compromisExistantPourOffre = await getCompromisParOffreId(offreId);
-    if (compromisExistantPourOffre) {
-      throw new Error("Cette offre est déjà associée à un compromis.");
-    }
-  }
-
-  const idsExecutionsATraiter = await getDb().transaction(async (tx) => {
-    let compromis;
-    try {
-      compromis = await enregistrerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe }, tx);
-    } catch (erreur) {
-      // Défense en profondeur (ADR-047) : les gardes applicatives ci-dessus couvrent le cas
-      // séquentiel normal, mais une écriture concurrente peut passer les deux gardes avant que
-      // cette transaction ne s'exécute. Les contraintes DB protègent alors l'invariant — traduites
-      // ici en un message identique aux gardes applicatives, jamais une erreur Postgres brute.
-      const cause = erreur instanceof Error ? erreur.cause : undefined;
-      if (cause && typeof cause === "object" && "constraint_name" in cause) {
-        if (cause.constraint_name === "compromis_offre_id_unique") {
-          throw new Error("Cette offre est déjà associée à un compromis.");
-        }
-        if (cause.constraint_name === "compromis_bien_id_en_cours_unique") {
-          throw new Error("Un compromis est déjà en cours pour ce bien.");
-        }
-      }
-      throw erreur;
-    }
-    await marquerCompromisSigne(bienId, tx);
-    const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
-      { typeEvenement: "compromis_signe", compromisId: compromis.id },
-      workspaceId,
-      tx
-    );
-    return idsExecutionsATraiter;
-  });
-  await traiterExecutionsEnAttente(idsExecutionsATraiter);
+  const resultat = await creerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe }, workspaceId);
+  if (resultat.statut !== "cree") throw new Error(messageRefusCreation(resultat));
+  await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
 
   redirect(`/biens/${bienId}`);
+}
+
+function messageRefusCreation(resultat: Exclude<ResultatCreationCompromis, { statut: "cree" }>): string {
+  switch (resultat.statut) {
+    case "bien_introuvable":
+      return "Bien introuvable.";
+    case "acquereur_introuvable":
+      return "Acquéreur introuvable.";
+    case "bien_archive":
+      return "Impossible d'ajouter un compromis sur un bien archivé.";
+    case "acquereur_archive":
+      return "Impossible d'ajouter un compromis pour un acquéreur archivé.";
+    case "compromis_en_cours_existant":
+      return "Un compromis est déjà en cours pour ce bien.";
+    case "offre_introuvable":
+      return "Offre introuvable.";
+    case "offre_autre_bien":
+      return "Cette offre ne concerne pas ce bien.";
+    case "offre_incoherente":
+      return "Cette offre ne concerne pas cet acquéreur.";
+    case "offre_non_acceptee":
+      return "Cette offre n'est pas acceptée.";
+    case "offre_deja_utilisee":
+      return "Cette offre est déjà associée à un compromis.";
+  }
+}
+
+function messageRefusDecision(resultat: Exclude<ResultatDecisionCompromis, { statut: "decide" }> | Exclude<ResultatModificationDateActe, { statut: "modifie" }>): string {
+  switch (resultat.statut) {
+    case "introuvable":
+      return "Compromis introuvable.";
+    case "deja_finalise":
+      return "Ce compromis est déjà dans un statut final.";
+    case "bien_archive":
+      return "Impossible de modifier un compromis sur un bien archivé.";
+    case "acquereur_archive":
+      return "Impossible de modifier un compromis pour un acquéreur archivé.";
+  }
 }
 
 // Refus explicite (throw) si le compromis est introuvable, si le bien ou l'acquéreur est
@@ -136,6 +115,7 @@ export async function ajouterCompromisAction(formData: FormData): Promise<void> 
 // gestes commerciaux volontairement séparés (ADR-014/ADR-016/ADR-017).
 export async function changerStatutCompromisAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const compromisId = String(formData.get("compromisId") ?? "");
   const statut = String(formData.get("statut") ?? "") as StatutCompromis;
 
@@ -143,38 +123,28 @@ export async function changerStatutCompromisAction(formData: FormData): Promise<
     throw new Error("Transition de statut invalide.");
   }
 
-  const compromisActuel = await getCompromisById(compromisId);
-  if (!compromisActuel) throw new Error("Compromis introuvable.");
-  if (compromisActuel.statut !== "en_cours") {
-    throw new Error("Ce compromis est déjà dans un statut final.");
-  }
-
-  const [bien, acquereur] = await Promise.all([
-    getBienById(compromisActuel.bienId),
-    getClientById(compromisActuel.acquereurId),
-  ]);
-  if (bien?.archiveLe) throw new Error("Impossible de modifier un compromis sur un bien archivé.");
-  if (acquereur?.archiveLe) throw new Error("Impossible de modifier un compromis pour un acquéreur archivé.");
-
+  let resultat: ResultatDecisionCompromis;
   if (statut === "realise") {
     const dateActeReelle = parseDateOptionnelle(formData.get("dateActeReelle"));
     if (!dateActeReelle) {
       throw new Error("La date réelle de signature de l'acte est obligatoire pour marquer une vente réalisée.");
     }
-    await marquerCompromisRealise(compromisId, dateActeReelle);
+    resultat = await deciderCompromis(compromisId, { statut: "realise", dateActeReelle }, workspaceId);
   } else {
     const dateAnnulation = parseDateOptionnelle(formData.get("dateAnnulation"));
     if (!dateAnnulation) {
       throw new Error("La date d'annulation est obligatoire.");
     }
-    const motifAnnulation = parseMotifPerte(formData.get("motifAnnulation"));
-    if (!motifAnnulation) {
+    const motifAnnulation = String(formData.get("motifAnnulation") ?? "").trim();
+    if (!estMotifPerteHumain(motifAnnulation)) {
       throw new Error("Le motif de l'annulation est obligatoire.");
     }
-    await marquerCompromisAnnule(compromisId, dateAnnulation, motifAnnulation);
+    resultat = await deciderCompromis(compromisId, { statut: "annule", dateAnnulation, motifAnnulation }, workspaceId);
   }
+  if (resultat.statut !== "decide") throw new Error(messageRefusDecision(resultat));
+  await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
 
-  redirect(`/biens/${compromisActuel.bienId}`);
+  redirect(`/biens/${resultat.compromis.bienId}`);
 }
 
 // Modification de la date d'acte PRÉVUE (ADR-046) — jamais une transition de statut, action
@@ -189,23 +159,13 @@ export async function changerStatutCompromisAction(formData: FormData): Promise<
 // date (report sans nouvelle date connue) — jamais remplacé par une estimation inventée.
 export async function modifierDateActeAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const compromisId = String(formData.get("compromisId") ?? "");
   const dateActe = parseDateOptionnelle(formData.get("dateActe"));
 
-  const compromisActuel = await getCompromisById(compromisId);
-  if (!compromisActuel) throw new Error("Compromis introuvable.");
-  if (compromisActuel.statut !== "en_cours") {
-    throw new Error("La date d'acte prévue n'est modifiable que pour un compromis en cours.");
-  }
+  const resultat = await modifierDateActeCompromis(compromisId, dateActe, workspaceId);
+  if (resultat.statut === "deja_finalise") throw new Error("La date d'acte prévue n'est modifiable que pour un compromis en cours.");
+  if (resultat.statut !== "modifie") throw new Error(messageRefusDecision(resultat));
 
-  const [bien, acquereur] = await Promise.all([
-    getBienById(compromisActuel.bienId),
-    getClientById(compromisActuel.acquereurId),
-  ]);
-  if (bien?.archiveLe) throw new Error("Impossible de modifier un compromis sur un bien archivé.");
-  if (acquereur?.archiveLe) throw new Error("Impossible de modifier un compromis pour un acquéreur archivé.");
-
-  await modifierDateActeCompromis(compromisId, dateActe);
-
-  redirect(`/biens/${compromisActuel.bienId}`);
+  redirect(`/biens/${resultat.compromis.bienId}`);
 }

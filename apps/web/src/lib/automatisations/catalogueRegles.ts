@@ -248,7 +248,10 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
       // jamais une machine d'état inventée : une offre encore "en_cours", ou un compromis
       // "en_cours"/"realise", représentent une opportunité déjà activement engagée par un autre
       // chemin ; un compromis "annule" ne bloque jamais indéfiniment un futur cycle légitime.
-      const [offres, compromisListe] = await Promise.all([listerOffresPourBien(bienId), listerCompromisPourBien(bienId)]);
+      const [offres, compromisListe] = await Promise.all([
+        listerOffresPourBien(bienId, evenement.workspaceId),
+        listerCompromisPourBien(bienId, evenement.workspaceId),
+      ]);
       const offreEnCours = offres.some((o) => o.acquereurId === acquereurId && o.statut === "en_cours");
       if (offreEnCours) return undefined;
       const compromisAvance = compromisListe.some(

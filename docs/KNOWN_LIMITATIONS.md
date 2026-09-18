@@ -283,13 +283,21 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Offres structurées
 
-- **Décidé par ADR-061, non implémenté** (lot `OFFER_LIFECYCLE_FOUNDATION_V1`) : la décision sur une
-  offre n'est aujourd'hui ni atomique ni sérialisée (`changerStatutOffre` = `UPDATE WHERE id` sans
-  condition de statut, garde par lecture séparée) ; plusieurs offres `acceptee` peuvent coexister
-  sur un même bien ; « offre en cours » se lit dans `biens.offre_en_cours_le`, jamais dans
-  `offres` (badge fantôme après refus/retrait de toutes les offres) ; aucun événement métier Offre
-  ni `compromis_realise` / `compromis_annule` ; lectures et écritures offre/compromis non scopées
-  par le workspace. ADR-061 tranche chacun de ces points ; rien n'est encore livré.
+- **Cycle de vie Offre livré par ADR-061 (`OFFER_LIFECYCLE_FOUNDATION_V1`, migration `0046`)** :
+  décisions atomiques sous verrou du bien (`deciderOffre`), acceptation exclusive (les autres offres
+  en cours passent `refusee` / `autre_offre_acceptee`), état `caduque` (geste humain explicite),
+  une seule acceptation active par bien via les writers, `offres` source de vérité du statut
+  commercial (`offre_acceptee` ajouté), fin du dual-write `biens.offre_en_cours_le`, événements
+  `offre_*` / `compromis_realise` / `compromis_annule`, lectures et écritures Offre/Compromis
+  scoped par le workspace. Ce qui reste **non livré** : co-acquéreurs, pont acquéreur →
+  Contact/projet canonique (`offres.acquereur_id` reste sur `acquereurs`), contre-offre,
+  conditions suspensives / financement, expiration automatique de `date_validite` (jamais de
+  transition automatique), fiche `/offres/{id}` complète, automatisations consommant les événements
+  Offre (lot `AUTOMATION_ENGINE_GENERALIZATION_V1`), Today, provenance/connecteurs Offre, et
+  l'**index unique SQL partiel sur `statut = 'acceptee'`** (différé : les lignes historiques
+  incohérentes restent lisibles, jamais réparées ; les writers refusent toute nouvelle incohérence).
+- **`date_decision` d'une offre `caduque` porte la date de l'acceptation initiale** (jamais écrasée) :
+  la date de la caducité n'existe que comme `survenu_le` de l'événement `offre_caduque`.
 - **Transitions de statut non réversibles en V1** — une fois `acceptee`/`refusee`/`retiree`,
   aucune action ne permet de revenir à `en_cours` ni de changer vers un autre statut final. Une
   erreur de saisie nécessite une intervention directe en base (ADR-015).
@@ -813,11 +821,9 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Aucune fiche Compromis navigable** (`/compromis/{id}` n'existe pas) — un compromis reste
   toujours affiché en carte inline, dans l'onglet « Compromis » de la fiche Bien ou sur la fiche
   Acquéreur (lecture seule). Limite V1 assumée, cohérente avec l'absence de fiche Offre (ADR-044).
-- **Pas de garde DB contre la réutilisation d'une Offre par plusieurs Compromis** — la politique
-  « une Offre acceptée, origine d'au plus un Compromis » vit uniquement dans `ajouterCompromisAction`
-  (application), pas dans une contrainte `UNIQUE(offre_id)` : décision explicite ADR-045, un accès
-  direct à la base pourrait toujours créer une incohérence. `getCompromisParOffreId()` détecterait
-  alors plusieurs lignes et lèverait une exception explicite plutôt que de choisir arbitrairement.
+- **Garde DB contre la réutilisation d'une Offre par plusieurs Compromis : `UNIQUE(offre_id)` depuis
+  ADR-047** (cette limitation est fermée) ; `getCompromisParOffreId()` reste fail-closed pour une
+  incohérence antérieure à la contrainte.
 ## Suivi du Compromis jusqu'à l'acte authentique (ADR-046)
 
 - **Aucun rappel/alerte temporel sur `dateActe`** (approche, dépassée, absente) — décision explicite :
@@ -835,8 +841,7 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   structurellement à `compromis_signe`. Aucune automatisation n'en dépend aujourd'hui, donc aucun
   besoin démontré, mais toute future automatisation post-signature nécessiterait ce chantier au
   préalable.
-- **Pas de garde DB contre la réutilisation d'une Offre par plusieurs Compromis** (inchangé depuis
-  ADR-045) — politique purement applicative, aucun `UNIQUE(offre_id)`.
+- **Réutilisation d'une Offre par plusieurs Compromis : fermée par `UNIQUE(offre_id)` (ADR-047).**
 
 ## Traçabilité des transmissions du Pack Notaire (ADR-049)
 

@@ -1,3 +1,4 @@
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getBienById } from "@/lib/bienRepository";
@@ -27,6 +28,7 @@ function formatPrix(montant: number): string {
 export default async function NouvelleOffrePage({ searchParams }: PageProps) {
   const params = await searchParams;
   const bienId = params.bienId ?? "";
+  const workspaceId = await exigerWorkspaceCourant();
   const bien = bienId ? await getBienById(bienId) : undefined;
 
   // Sans Bien valide et non archivé, cette page contextuelle n'a rien à préremplir de fiable —
@@ -56,7 +58,7 @@ export default async function NouvelleOffrePage({ searchParams }: PageProps) {
   const [acquereurCandidat, comptesRendus, offresDuBien] = await Promise.all([
     params.acquereurId ? getClientById(params.acquereurId) : undefined,
     listerComptesRendusPourBien(bien.id),
-    listerOffresPourBien(bien.id),
+    listerOffresPourBien(bien.id, workspaceId),
   ]);
   const offresEnCoursDuBien = offresDuBien.filter((o) => o.statut === "en_cours");
 

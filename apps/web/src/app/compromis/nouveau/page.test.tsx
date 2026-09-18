@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
@@ -6,14 +6,21 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // Test d'intégration réel (ADR-045) — route canonique de création de Compromis. Vraie base
 // Postgres, même patron que src/app/offres/nouveau/page.test.tsx : aucune query param n'est jamais
 // traitée comme un fait métier, chaque scénario vérifie la revalidation serveur.
+
+// ADR-054 / ADR-061 — le périmètre est résolu depuis la session, mocké ici sur le workspace de test.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
+
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const { biens: biensTable, acquereurs: acquereursTable, offres: offresTable, compromis: compromisTable } =
   await import("@/db/schema");
 const { creerBien, archiverBien } = await import("@/lib/bienRepository");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
-const { enregistrerOffre, changerStatutOffre } = await import("@/lib/offreRepository");
+const { enregistrerOffre, accepterOffre } = await import("@/lib/offreRepository");
 const { enregistrerCompromis } = await import("@/lib/compromisRepository");
 const NouveauCompromisPage = (await import("./page")).default;
 
@@ -24,6 +31,7 @@ const idsCompromisCrees: string[] = [];
 
 afterAll(async () => {
   for (const id of idsCompromisCrees) await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) await getDb().delete(offresTable).where(eq(offresTable.id, id));
   for (const id of idsBiensCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
   for (const id of idsAcquereursCrees) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
@@ -69,7 +77,7 @@ async function creerAcquereurDeTest(suffixe: string) {
 async function creerOffreAccepteeDeTest(bienId: string, acquereurId: string, montant: number) {
   const offre = await enregistrerOffre({ bienId, acquereurId, montant, dateOffre: "2026-08-01" });
   idsOffresCrees.push(offre.id);
-  await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-02" });
+  await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
   return offre;
 }
 

@@ -350,7 +350,7 @@ function deriverHistoriqueComplet(entrees: {
     // lignes antérieures à cette ADR (aucun backfill). Sans elle, aucun événement — le statut reste
     // consultable dans la section Offres, jamais daté ici à une date inventée.
     if (offre.statut !== "en_cours" && offre.dateDecision) {
-      const LIBELLE_DECISION = { acceptee: "Offre acceptée", refusee: "Offre refusée", retiree: "Offre retirée" };
+      const LIBELLE_DECISION = { acceptee: "Offre acceptée", refusee: "Offre refusée", retiree: "Offre retirée", caduque: "Acceptation caduque" };
       evenements.push({
         id: `offre_decidee:${offre.id}`,
         type: "offre_decidee",

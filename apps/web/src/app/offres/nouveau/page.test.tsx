@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
@@ -7,6 +7,12 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // même patron que src/app/visites/[id]/page.test.tsx : aucune query param n'est jamais traitée
 // comme un fait métier, chaque scénario vérifie la revalidation serveur (id inexistant, id
 // archivé, correspondance bien/acquéreur/CR) plutôt que de supposer le préremplissage fiable.
+
+// ADR-054 / ADR-061 — le périmètre est résolu depuis la session, mocké ici sur le workspace de test.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
+
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");

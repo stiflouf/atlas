@@ -1,8 +1,18 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
-import { compromis as compromisTable } from "@/db/schema";
+import { acquereurs as acquereursTable, biens as biensTable, compromis as compromisTable, offres as offresTable } from "@/db/schema";
 import type { Compromis, StatutCompromis } from "@/types/compromis";
-import type { MotifPerte } from "@/types/motifPerte";
+import type { MotifPerte, MotifPerteHumain } from "@/types/motifPerte";
+import { marquerCompromisSigne } from "@/lib/bienRepository";
+import { verrouillerBienPourOffres } from "@/lib/offreRepository";
+import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
+
+// ADR-016/017/047, et ADR-061 §13 (lot OFFER_LIFECYCLE_FOUNDATION_V1) — accès au Compromis. Le
+// modèle n'est PAS refondu : ce lot le rend workspace-safe (feuille de `biens`, ADR-054 §7 : toute
+// lecture remonte à `biens.workspace_id`), met la création et les transitions sous le MÊME ordre de
+// verrous que l'Offre (bien scoped → offre → compromis), et émet `compromis_realise` /
+// `compromis_annule` dans la transaction de la transition. Les contraintes ADR-047
+// (`UNIQUE(offre_id)`, un seul `en_cours` par bien) restent le dernier filet.
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -25,77 +35,82 @@ function ligneVersCompromis(ligne: LigneCompromis): Compromis {
   };
 }
 
-// Pas de repli mock : un compromis n'existe que pour un bien/acquéreur réels (FK uuid), il n'y a
-// pas de dataset de démonstration équivalent à fabriquer. Un id non-UUID (bien/acquéreur mocké)
-// ne peut correspondre à aucune ligne réelle : liste vide plutôt qu'une erreur de cast Postgres.
-export async function listerCompromisPourBien(bienId: string): Promise<Compromis[]> {
+// ───────────────────────────── LECTURES (scoped) ─────────────────────────────
+
+// Un id non-UUID (bien/acquéreur mocké) ne peut correspondre à aucune ligne : liste vide.
+export async function listerCompromisPourBien(bienId: string, workspaceId: string, executeur: Executeur = getDb()): Promise<Compromis[]> {
   if (!UUID_REGEX.test(bienId)) return [];
-  try {
-    const lignes = await getDb()
-      .select()
-      .from(compromisTable)
-      .where(eq(compromisTable.bienId, bienId))
-      .orderBy(desc(compromisTable.dateSignature));
-    return lignes.map(ligneVersCompromis);
-  } catch (erreur) {
-    console.error("[compromis] lecture Postgres indisponible :", erreur);
-    return [];
-  }
+  const lignes = await executeur
+    .select({ compromis: compromisTable })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.bienId, bienId), eq(biensTable.workspaceId, workspaceId)))
+    .orderBy(desc(compromisTable.dateSignature));
+  return lignes.map((l) => ligneVersCompromis(l.compromis));
 }
 
-export async function listerCompromisPourAcquereur(acquereurId: string): Promise<Compromis[]> {
+// Variante EN LOT pour les listes (ADR-061 §11) : une requête pour N biens.
+export async function listerCompromisParBiens(bienIds: string[], workspaceId: string, executeur: Executeur = getDb()): Promise<Map<string, Compromis[]>> {
+  const ids = bienIds.filter((id) => UUID_REGEX.test(id));
+  const parBien = new Map<string, Compromis[]>(bienIds.map((id) => [id, []]));
+  if (ids.length === 0) return parBien;
+  const lignes = await executeur
+    .select({ compromis: compromisTable })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(inArray(compromisTable.bienId, ids), eq(biensTable.workspaceId, workspaceId)))
+    .orderBy(desc(compromisTable.dateSignature));
+  for (const { compromis } of lignes) parBien.get(compromis.bienId)?.push(ligneVersCompromis(compromis));
+  return parBien;
+}
+
+export async function listerCompromisPourAcquereur(acquereurId: string, workspaceId: string, executeur: Executeur = getDb()): Promise<Compromis[]> {
   if (!UUID_REGEX.test(acquereurId)) return [];
-  try {
-    const lignes = await getDb()
-      .select()
-      .from(compromisTable)
-      .where(eq(compromisTable.acquereurId, acquereurId))
-      .orderBy(desc(compromisTable.dateSignature));
-    return lignes.map(ligneVersCompromis);
-  } catch (erreur) {
-    console.error("[compromis] lecture Postgres indisponible :", erreur);
-    return [];
-  }
+  const lignes = await executeur
+    .select({ compromis: compromisTable })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.acquereurId, acquereurId), eq(biensTable.workspaceId, workspaceId)))
+    .orderBy(desc(compromisTable.dateSignature));
+  return lignes.map((l) => ligneVersCompromis(l.compromis));
 }
 
-// Résolution directe, jamais filtrée par archivage — nécessaire pour que
-// changerStatutCompromisAction retrouve le bien/acquéreur avant de vérifier leur archivage.
-export async function getCompromisById(id: string): Promise<Compromis | undefined> {
+// Résolution directe, jamais filtrée par archivage — mais toujours par workspace.
+export async function getCompromisById(id: string, workspaceId: string, executeur: Executeur = getDb()): Promise<Compromis | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  try {
-    const [ligne] = await getDb().select().from(compromisTable).where(eq(compromisTable.id, id));
-    return ligne ? ligneVersCompromis(ligne) : undefined;
-  } catch (erreur) {
-    console.error("[compromis] lecture Postgres indisponible :", erreur);
-    return undefined;
-  }
+  const [ligne] = await executeur
+    .select({ compromis: compromisTable })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.id, id), eq(biensTable.workspaceId, workspaceId)))
+    .limit(1);
+  return ligne ? ligneVersCompromis(ligne.compromis) : undefined;
 }
 
-// Provenance Offre -> Compromis (ADR-045) : en V1, une Offre acceptée ne peut être l'origine
-// structurée d'au plus un Compromis — garde purement applicative, aucun UNIQUE(offre_id) en base
-// (décision explicite ADR-045, même choix qu'ADR-043 pour tache_id : la garantie vit dans
-// ajouterCompromisAction, pas dans une contrainte SQL). Lecture fail-closed, jamais un `rows[0]`
-// silencieux : 0 ligne -> `undefined` (offre disponible) ; exactement 1 -> retournée ; plus d'1 ->
-// exception explicite (incohérence historique, ne devrait structurellement jamais arriver tant que
-// la garde applicative est respectée, mais ne doit jamais être masquée si elle survient).
-export async function getCompromisParOffreId(offreId: string): Promise<Compromis | undefined> {
+// Provenance Offre → Compromis (ADR-045/047) : `UNIQUE(offre_id)` garantit au plus une ligne ;
+// lecture fail-closed conservée (une incohérence antérieure à la contrainte ne doit jamais être
+// masquée).
+export async function getCompromisParOffreId(offreId: string, workspaceId: string, executeur: Executeur = getDb()): Promise<Compromis | undefined> {
   if (!UUID_REGEX.test(offreId)) return undefined;
-  const lignes = await getDb().select().from(compromisTable).where(eq(compromisTable.offreId, offreId));
+  const lignes = await executeur
+    .select({ compromis: compromisTable })
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.offreId, offreId), eq(biensTable.workspaceId, workspaceId)));
   if (lignes.length === 0) return undefined;
   if (lignes.length > 1) {
     throw new Error(`Incohérence de données : ${lignes.length} compromis référencent l'offre ${offreId} (attendu au plus un).`);
   }
-  return ligneVersCompromis(lignes[0]);
+  return ligneVersCompromis(lignes[0].compromis);
 }
 
-// Validation (bien/acquéreur non archivés, cohérence de l'offre liée, un seul en_cours par bien)
-// déjà faite par l'appelant (server action) — insertion pure ici, même principe que les autres
-// repositories.
-export type NouveauCompromis = Omit<Compromis, "id" | "statut" | "creeLe">;
+// ───────────────────────────── CRÉATION ─────────────────────────────
 
-// `executeur` optionnel (ADR-032) : permet d'émettre l'événement métier `compromis_signe` et de
-// poser `biens.compromisSigneLe` dans la même transaction que cet enregistrement — corrige au
-// passage l'absence d'atomicité entre les deux écritures dans `ajouterCompromisAction`.
+export type NouveauCompromis = Omit<Compromis, "id" | "statut" | "creeLe" | "dateActeReelle" | "dateAnnulation" | "motifAnnulation">;
+
+// PRIMITIVE BASSE d'insertion : aucune garde, aucun verrou, aucun événement, aucun jalon. Réservée
+// à la composition de `creerCompromis` (le writer) et aux fixtures de test (lignes « telles
+// qu'importées ») ; jamais un chemin produit (garde structurelle).
 export async function enregistrerCompromis(input: NouveauCompromis, executeur: Executeur = getDb()): Promise<Compromis> {
   const [ligne] = await executeur
     .insert(compromisTable)
@@ -111,49 +126,187 @@ export async function enregistrerCompromis(input: NouveauCompromis, executeur: E
   return ligneVersCompromis(ligne);
 }
 
-// Écriture atomique dédiée à la transition 'annule' (ADR-020, symétrique à
-// marquerCompromisRealise) : statut, dateAnnulation et motifAnnulation posés dans le même UPDATE —
-// jamais de fenêtre où le compromis serait 'annule' sans date ni motif. dateActeReelle n'est
-// jamais touchée ici (réservée à 'realise'). Aucune garde métier interne (transitions autorisées,
-// archivage) : même séparation que le reste du fichier.
+export type ResultatCreationCompromis =
+  | { statut: "cree"; compromis: Compromis; idsExecutionsATraiter: string[] }
+  | { statut: "bien_introuvable" }
+  | { statut: "acquereur_introuvable" }
+  | { statut: "bien_archive" }
+  | { statut: "acquereur_archive" }
+  | { statut: "compromis_en_cours_existant" }
+  | { statut: "offre_introuvable" }
+  | { statut: "offre_autre_bien" }
+  | { statut: "offre_incoherente" }
+  | { statut: "offre_non_acceptee"; statutOffre: string }
+  | { statut: "offre_deja_utilisee" };
+
+// ADR-061 §13 — création SOUS VERROU DU BIEN (scoped, même racine que l'Offre) : les gardes
+// « un seul en_cours par bien », « offre acceptée, même bien, même acquéreur, non déjà utilisée »
+// sont relues sous verrou ; les contraintes ADR-047 restent le dernier filet, traduites en résultat
+// typé. Le compromis direct sans offre (ADR-045) reste supporté. `biens.compromis_signe_le` est
+// toujours posé ici (ADR-032, inchangé par ce lot) ; `compromis_signe` émis dans la transaction.
+export async function creerCompromis(input: NouveauCompromis, workspaceId: string, executeur: Executeur = getDb()): Promise<ResultatCreationCompromis> {
+  return executeur.transaction(async (tx) => {
+    const bien = await verrouillerBienPourOffres(input.bienId, workspaceId, tx);
+    if (bien.statut !== "verrouille") return { statut: "bien_introuvable" };
+    const [acquereur] = await tx
+      .select({ archiveLe: acquereursTable.archiveLe })
+      .from(acquereursTable)
+      .where(and(eq(acquereursTable.id, input.acquereurId), eq(acquereursTable.workspaceId, workspaceId)))
+      .limit(1);
+    if (!acquereur) return { statut: "acquereur_introuvable" };
+    if (bien.archive) return { statut: "bien_archive" };
+    if (acquereur.archiveLe) return { statut: "acquereur_archive" };
+
+    const existants = await listerCompromisPourBien(input.bienId, workspaceId, tx);
+    if (existants.some((c) => c.statut === "en_cours")) return { statut: "compromis_en_cours_existant" };
+
+    if (input.offreId) {
+      if (!UUID_REGEX.test(input.offreId)) return { statut: "offre_introuvable" };
+      const [offre] = await tx.select().from(offresTable).where(eq(offresTable.id, input.offreId)).for("update");
+      if (!offre) return { statut: "offre_introuvable" };
+      if (offre.bienId !== input.bienId) return { statut: "offre_autre_bien" };
+      if (offre.acquereurId !== input.acquereurId) return { statut: "offre_incoherente" };
+      if (offre.statut !== "acceptee") return { statut: "offre_non_acceptee", statutOffre: offre.statut };
+      if (await getCompromisParOffreId(input.offreId, workspaceId, tx)) return { statut: "offre_deja_utilisee" };
+    }
+
+    let compromis: Compromis;
+    try {
+      compromis = await enregistrerCompromis(input, tx);
+    } catch (erreur) {
+      const cause = erreur instanceof Error ? erreur.cause : undefined;
+      if (cause && typeof cause === "object" && "constraint_name" in cause) {
+        if (cause.constraint_name === "compromis_offre_id_unique") return { statut: "offre_deja_utilisee" };
+        if (cause.constraint_name === "compromis_bien_id_en_cours_unique") return { statut: "compromis_en_cours_existant" };
+      }
+      throw erreur;
+    }
+    await marquerCompromisSigne(input.bienId, tx);
+    const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
+      { typeEvenement: "compromis_signe", compromisId: compromis.id },
+      workspaceId,
+      tx
+    );
+    return { statut: "cree", compromis, idsExecutionsATraiter };
+  });
+}
+
+// ───────────────────────────── TRANSITIONS ─────────────────────────────
+
+export type TransitionCompromis =
+  | { statut: "realise"; dateActeReelle: string }
+  | { statut: "annule"; dateAnnulation: string; motifAnnulation: MotifPerteHumain };
+
+export type ResultatDecisionCompromis =
+  | { statut: "decide"; compromis: Compromis; idsExecutionsATraiter: string[] }
+  | { statut: "introuvable" }
+  | { statut: "deja_finalise"; statutActuel: StatutCompromis }
+  | { statut: "bien_archive" }
+  | { statut: "acquereur_archive" };
+
+// ADR-061 §13 — `realise` / `annule` depuis `en_cours` uniquement : verrou du bien (scoped) puis du
+// compromis, `UPDATE … WHERE statut = 'en_cours'`, événement dans la transaction. L'annulation ne
+// touche JAMAIS l'offre d'origine (ni réouverture, ni caducité) ni `biens.compromis_signe_le`.
+export async function deciderCompromis(
+  compromisId: string,
+  transition: TransitionCompromis,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ResultatDecisionCompromis> {
+  if (!UUID_REGEX.test(compromisId)) return { statut: "introuvable" };
+  return executeur.transaction(async (tx) => {
+    const cible = await getCompromisById(compromisId, workspaceId, tx);
+    if (!cible) return { statut: "introuvable" };
+    const bien = await verrouillerBienPourOffres(cible.bienId, workspaceId, tx);
+    if (bien.statut !== "verrouille") return { statut: "introuvable" };
+    const [ligne] = await tx.select().from(compromisTable).where(eq(compromisTable.id, compromisId)).for("update");
+    if (!ligne) return { statut: "introuvable" };
+    const statutActuel = ligne.statut as StatutCompromis;
+    if (statutActuel !== "en_cours") return { statut: "deja_finalise", statutActuel };
+    if (bien.archive) return { statut: "bien_archive" };
+    const [acquereur] = await tx
+      .select({ archiveLe: acquereursTable.archiveLe })
+      .from(acquereursTable)
+      .where(eq(acquereursTable.id, ligne.acquereurId))
+      .limit(1);
+    if (acquereur?.archiveLe) return { statut: "acquereur_archive" };
+
+    const modifie =
+      transition.statut === "realise"
+        ? await marquerCompromisRealise(compromisId, transition.dateActeReelle, tx)
+        : await marquerCompromisAnnule(compromisId, transition.dateAnnulation, transition.motifAnnulation, tx);
+    if (!modifie) return { statut: "deja_finalise", statutActuel };
+
+    const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
+      { typeEvenement: transition.statut === "realise" ? "compromis_realise" : "compromis_annule", compromisId },
+      workspaceId,
+      tx
+    );
+    return { statut: "decide", compromis: modifie, idsExecutionsATraiter };
+  });
+}
+
+// PRIMITIVES BASSES de transition — UPDATE conditionnel `WHERE statut = 'en_cours'` (statut + date
+// + motif posés ensemble, ADR-017/020), `undefined` si aucune ligne (déjà finalisé). Aucune garde
+// métier, aucun verrou, aucun événement : réservées à `deciderCompromis` et aux fixtures de test —
+// jamais un chemin produit (garde structurelle).
+export async function marquerCompromisRealise(id: string, dateActeReelle: string, executeur: Executeur = getDb()): Promise<Compromis | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await executeur
+    .update(compromisTable)
+    .set({ statut: "realise", dateActeReelle })
+    .where(and(eq(compromisTable.id, id), eq(compromisTable.statut, "en_cours")))
+    .returning();
+  return ligne ? ligneVersCompromis(ligne) : undefined;
+}
+
 export async function marquerCompromisAnnule(
   id: string,
   dateAnnulation: string,
-  motifAnnulation: MotifPerte
+  motifAnnulation: MotifPerte,
+  executeur: Executeur = getDb()
 ): Promise<Compromis | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(compromisTable)
     .set({ statut: "annule", dateAnnulation, motifAnnulation })
-    .where(eq(compromisTable.id, id))
+    .where(and(eq(compromisTable.id, id), eq(compromisTable.statut, "en_cours")))
     .returning();
   return ligne ? ligneVersCompromis(ligne) : undefined;
 }
 
-// Modification de la date d'acte PRÉVUE (ADR-046) — jamais dateActeReelle (constatée, ADR-017,
-// posée uniquement par marquerCompromisRealise). Insertion pure, aucune garde métier interne (le
-// statut 'en_cours' est vérifié par la Server Action appelante, même séparation que le reste de ce
-// fichier) : cette fonction accepte `undefined` pour effacer explicitement une date devenue
-// obsolète (report sans nouvelle date connue) — jamais une estimation inventée pour combler NULL.
-export async function modifierDateActeCompromis(id: string, dateActe: string | undefined): Promise<Compromis | undefined> {
-  if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
-    .update(compromisTable)
-    .set({ dateActe: dateActe ?? null })
-    .where(eq(compromisTable.id, id))
-    .returning();
-  return ligne ? ligneVersCompromis(ligne) : undefined;
-}
+// Modification de la date d'acte PRÉVUE (ADR-046) — jamais dateActeReelle ; uniquement `en_cours`,
+// sous verrou, scoped. `undefined` efface explicitement la date.
+export type ResultatModificationDateActe = { statut: "modifie"; compromis: Compromis } | { statut: "introuvable" } | { statut: "deja_finalise"; statutActuel: StatutCompromis } | { statut: "bien_archive" } | { statut: "acquereur_archive" };
 
-// Écriture atomique dédiée à la transition 'realise' (ADR-017) : statut et dateActeReelle posés
-// dans le même UPDATE, jamais deux écritures séparées — aucune fenêtre où le compromis serait
-// 'realise' sans dateActeReelle. dateActe (prévue) n'est jamais touchée ici.
-export async function marquerCompromisRealise(id: string, dateActeReelle: string): Promise<Compromis | undefined> {
-  if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
-    .update(compromisTable)
-    .set({ statut: "realise", dateActeReelle })
-    .where(eq(compromisTable.id, id))
-    .returning();
-  return ligne ? ligneVersCompromis(ligne) : undefined;
+export async function modifierDateActeCompromis(
+  compromisId: string,
+  dateActe: string | undefined,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ResultatModificationDateActe> {
+  if (!UUID_REGEX.test(compromisId)) return { statut: "introuvable" };
+  return executeur.transaction(async (tx) => {
+    const cible = await getCompromisById(compromisId, workspaceId, tx);
+    if (!cible) return { statut: "introuvable" };
+    const bien = await verrouillerBienPourOffres(cible.bienId, workspaceId, tx);
+    if (bien.statut !== "verrouille") return { statut: "introuvable" };
+    const [ligne] = await tx.select().from(compromisTable).where(eq(compromisTable.id, compromisId)).for("update");
+    if (!ligne) return { statut: "introuvable" };
+    if (ligne.statut !== "en_cours") return { statut: "deja_finalise", statutActuel: ligne.statut as StatutCompromis };
+    if (bien.archive) return { statut: "bien_archive" };
+    const [acquereur] = await tx
+      .select({ archiveLe: acquereursTable.archiveLe })
+      .from(acquereursTable)
+      .where(eq(acquereursTable.id, ligne.acquereurId))
+      .limit(1);
+    if (acquereur?.archiveLe) return { statut: "acquereur_archive" };
+    const [modifie] = await tx
+      .update(compromisTable)
+      .set({ dateActe: dateActe ?? null })
+      .where(and(eq(compromisTable.id, compromisId), eq(compromisTable.statut, "en_cours")))
+      .returning();
+    if (!modifie) return { statut: "deja_finalise", statutActuel: ligne.statut as StatutCompromis };
+    return { statut: "modifie", compromis: ligneVersCompromis(modifie) };
+  });
 }

@@ -75,7 +75,10 @@ export function deriverHistoriqueBien(
     // statut — jamais affiché si dateDecision manque (lignes historiques créées avant ADR-020,
     // aucun backfill). Le motif n'apparaît jamais dans le texte de l'événement (déjà consultable
     // dans l'onglet Offres) — l'historique reste un fait court, pas un détail.
-    if (offre.statut === "acceptee" && offre.dateDecision) {
+    // ADR-061 — `caduque` = acceptation clôturée : `dateDecision` porte toujours la date de
+    // l'acceptation (jamais écrasée), qui reste le fait daté ; la caducité n'a pas de date sur la
+    // ligne (elle vit dans l'événement `offre_caduque`) et n'est donc jamais datée ici.
+    if ((offre.statut === "acceptee" || offre.statut === "caduque") && offre.dateDecision) {
       evenements.push({ date: offre.dateDecision, texte: `Offre acceptée — ${formatPrix(offre.montant)}` });
     }
     if (offre.statut === "refusee" && offre.dateDecision) {

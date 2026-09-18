@@ -1,6 +1,16 @@
 # ADR-061 — Maturité de l'Offre : cycle de vie canonique, acceptation sérialisée, précédence legacy et événements
 
-**Statut :** Accepté — **DÉCIDÉ, NON IMPLÉMENTÉ** (lot d'implémentation : `OFFER_LIFECYCLE_FOUNDATION_V1`).
+**Statut :** Accepté — **IMPLÉMENTÉ** (2026-09-18, lot `OFFER_LIFECYCLE_FOUNDATION_V1`, migration `0046`).
+
+| Section | État |
+|---|---|
+| §1–§18 : vocabulaire + `caduque`, matrice, writer transactionnel `deciderOffre` sous verrou du bien, `UPDATE` conditionnel, politique A, motif système, une acceptation active par bien (applicatif), `offres` source de vérité, événements Offre + Compromis, cible `offre_id`, fin du dual-write, actions legacy neutralisées, `statutCommercialBienEffectif` + `offre_acceptee`, read model de coexistence (fiche + liste en lot), Compromis scoped sous le même ordre de verrous, lectures scoped | **IMPLÉMENTÉ** |
+| UI : formulaires de la fiche Bien (motifs humains seuls, annonce du refus automatique, geste « Rendre l'acceptation caduque », boutons legacy masqués en mode canonique) | **IMPLÉMENTÉ** (minimal, pas de fiche Offre) |
+| index unique SQL partiel sur `acceptee`, pont acquéreur → Contact, contre-offre, financement, expiration automatique, automatisations consommant les événements | **DÉCIDÉ HORS PÉRIMÈTRE / lots ultérieurs** |
+
+Écart d'implémentation assumé par rapport au texte initial de §2 : `date_decision` n'est **pas**
+écrasée par la caducité — elle garde la date de l'acceptation initiale (le fait daté) ; la date
+de la caducité est celle de l'événement `offre_caduque` (`survenu_le`). §2 ci-dessous est corrigé.
 **Date :** 2026-09-18
 **Décideurs :** Steven Gausset (CEO), CTO
 
@@ -146,16 +156,17 @@ hors périmètre (ADR-056 ne cible pas encore l'offre).
 | `en_cours` | `acceptee` | humain | `date_decision` | `offre_acceptee` |
 | `en_cours` | `refusee` | humain **ou système** (§5) | `date_decision`, `motif_perte` | `offre_refusee` |
 | `en_cours` | `retiree` | humain | `date_decision`, `motif_perte` | `offre_retiree` |
-| `acceptee` | `caduque` | humain | `date_decision` (de la caducité), `motif_perte` | `offre_caduque` |
+| `acceptee` | `caduque` | humain | `motif_perte` (la `date_decision` de l'acceptation est conservée) | `offre_caduque` |
 
 Tout le reste est interdit : `refusee`/`retiree`/`caduque` sont terminaux ; `acceptee` ne devient
 jamais `refusee` ni `retiree` (le passé ne se réécrit pas) ; aucun retour vers `en_cours`. Une
 erreur de saisie sur une offre finale se corrige par une **nouvelle offre** (montant, date), jamais
 par mutation — même discipline qu'ADR-015 (« une nouvelle proposition = une nouvelle ligne »).
 
-`date_decision` de la caducité écrase-t-elle celle de l'acceptation ? **Non** : la ligne garde une
-seule `date_decision` ; celle de l'acceptation reste lisible dans l'événement `offre_acceptee`
-(horodaté, immuable). La colonne porte la **dernière** décision, le journal porte toutes.
+`date_decision` de la caducité écrase-t-elle celle de l'acceptation ? **Non** : la ligne garde la
+`date_decision` de l'acceptation (le fait daté, jamais réécrit) ; la caducité n'a pas de date sur
+la ligne, elle est datée par l'événement `offre_caduque` (`survenu_le`). Le motif de la caducité,
+lui, remplace `motif_perte` (vide sur une offre acceptée).
 
 ### 3. Atomicité : un writer transactionnel unique
 

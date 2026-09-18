@@ -259,7 +259,7 @@ describe("règle retour_vendeur_apres_visite — jamais l'acquéreur, même en p
       origineCode: REGLE,
       cible: champs!.cible,
     }, WORKSPACE_TEST);
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.candidats[0].type).toBe("prospectVendeur");
     expect(resultat.candidats.some((c) => c.type === "acquereur")).toBe(false);

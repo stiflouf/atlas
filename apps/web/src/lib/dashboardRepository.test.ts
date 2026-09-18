@@ -17,6 +17,7 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const {
   biens: biensTable,
   acquereurs: acquereursTable,
@@ -27,7 +28,7 @@ const {
 } = await import("@/db/schema");
 const { creerBien, archiverBien } = await import("./bienRepository");
 const { creerAcquereur } = await import("./clientRepository");
-const { enregistrerOffre, changerStatutOffre } = await import("./offreRepository");
+const { enregistrerOffre, refuserOffre, retirerOffre } = await import("./offreRepository");
 const { enregistrerCompromis, marquerCompromisAnnule, marquerCompromisRealise, modifierDateActeCompromis } = await import(
   "./compromisRepository"
 );
@@ -81,6 +82,7 @@ afterAll(async () => {
   for (const id of idsCompromisCrees) {
     await getDb().delete(compromisTable).where(eq(compromisTable.id, id));
   }
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) {
     await getDb().delete(offresTable).where(eq(offresTable.id, id));
   }
@@ -277,7 +279,7 @@ describe("dashboardRepository — chargerPipeline", () => {
     const avant = await chargerPipeline();
     expect(avant.pipelinePrevisionnelParMois).toContainEqual({ mois: "2031-05", montant: 555000 });
 
-    await modifierDateActeCompromis(c.id, "2031-06-15");
+    await modifierDateActeCompromis(c.id, "2031-06-15", WORKSPACE_TEST);
 
     const apres = await chargerPipeline();
     expect(apres.pipelinePrevisionnelParMois).toContainEqual({ mois: "2031-06", montant: 555000 });
@@ -564,11 +566,7 @@ describe("dashboardRepository — chargerPertes (ADR-020)", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offreRefusee.id);
-    await changerStatutOffre(offreRefusee.id, {
-      statut: "refusee",
-      dateDecision: "2026-08-05",
-      motifPerte: "desaccord_prix",
-    });
+    await refuserOffre(offreRefusee.id, "2026-08-05", "desaccord_prix", WORKSPACE_TEST);
 
     const { bien: bienT, acquereur: acqT } = await creerBienEtAcquereurDeTest("PERTES-002-RETIREE");
     const offreRetiree = await enregistrerOffre({
@@ -578,11 +576,7 @@ describe("dashboardRepository — chargerPertes (ADR-020)", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offreRetiree.id);
-    await changerStatutOffre(offreRetiree.id, {
-      statut: "retiree",
-      dateDecision: "2026-08-06",
-      motifPerte: "acquereur_se_retire",
-    });
+    await retirerOffre(offreRetiree.id, "2026-08-06", "acquereur_se_retire", WORKSPACE_TEST);
 
     const apres = await chargerPertes();
 
@@ -621,11 +615,7 @@ describe("dashboardRepository — chargerPertes (ADR-020)", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, {
-      statut: "refusee",
-      dateDecision: "2026-08-05",
-      motifPerte: "juridique_administratif",
-    });
+    await refuserOffre(offre.id, "2026-08-05", "juridique_administratif", WORKSPACE_TEST);
 
     const { bien: bienC, acquereur: acqC } = await creerBienEtAcquereurDeTest("PERTES-005-COMPROMIS");
     const nombreAvantCompromis =
@@ -658,11 +648,8 @@ describe("dashboardRepository — chargerPertes (ADR-020)", () => {
       dateOffre: "2031-05-01",
     });
     idsOffresCrees.push(offre.id);
-    await changerStatutOffre(offre.id, {
-      statut: "retiree",
-      dateDecision: "2031-05-15",
-      motifPerte: "autre",
-    });
+    const r = await retirerOffre(offre.id, "2031-05-15", "autre", WORKSPACE_TEST);
+    if (r.statut !== "decidee") throw new Error(`retrait: ${JSON.stringify(r)}`);
 
     const { bien: bienC, acquereur: acqC } = await creerBienEtAcquereurDeTest("PERTES-007-COMPROMIS");
     const c = await enregistrerCompromis({

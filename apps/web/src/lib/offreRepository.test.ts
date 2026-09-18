@@ -10,6 +10,7 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
+const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const { biens: biensTable, acquereurs: acquereursTable, offres: offresTable } = await import("@/db/schema");
 const { creerBien } = await import("./bienRepository");
 const { creerAcquereur } = await import("./clientRepository");
@@ -19,7 +20,8 @@ const {
   listerOffresEnCoursPourPaire,
   getOffreById,
   enregistrerOffre,
-  changerStatutOffre,
+  accepterOffre,
+  refuserOffre,
 } = await import("./offreRepository");
 
 const idsOffresCrees: string[] = [];
@@ -27,6 +29,7 @@ const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
+  await supprimerEvenementsDeTestPourOffres(idsOffresCrees);
   for (const id of idsOffresCrees) {
     await getDb().delete(offresTable).where(eq(offresTable.id, id));
   }
@@ -73,13 +76,13 @@ async function creerBienEtAcquereurDeTest(suffixe: string) {
 
 describe("offreRepository (intégration Postgres)", () => {
   it("retourne [] pour un id non-UUID (bien/acquéreur mocké), sans erreur de cast", async () => {
-    await expect(listerOffresPourBien("bien-001")).resolves.toEqual([]);
-    await expect(listerOffresPourAcquereur("client-001")).resolves.toEqual([]);
+    await expect(listerOffresPourBien("bien-001", WORKSPACE_TEST)).resolves.toEqual([]);
+    await expect(listerOffresPourAcquereur("client-001", WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("getOffreById() retourne undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(getOffreById("offre-mock")).resolves.toBeUndefined();
-    await expect(getOffreById("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    await expect(getOffreById("offre-mock", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(getOffreById("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("enregistrerOffre() persiste avec statut 'en_cours' par défaut, listerOffresPourBien()/listerOffresPourAcquereur() la retrouvent triée DESC", async () => {
@@ -105,14 +108,14 @@ describe("offreRepository (intégration Postgres)", () => {
     idsOffresCrees.push(recente.id);
     expect(recente.dateValidite).toBe("2026-08-20");
 
-    const pourBien = await listerOffresPourBien(bien.id);
+    const pourBien = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     expect(pourBien.map((o) => o.id)).toEqual([recente.id, ancienne.id]);
 
-    const pourAcquereur = await listerOffresPourAcquereur(acquereur.id);
+    const pourAcquereur = await listerOffresPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect(pourAcquereur.map((o) => o.id)).toEqual([recente.id, ancienne.id]);
   });
 
-  it("changerStatutOffre() met à jour uniquement le statut, montant/acquéreur/bien/dateOffre restent immuables", async () => {
+  it("accepterOffre() met à jour uniquement le statut, montant/acquéreur/bien/dateOffre restent immuables", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("002");
     const offre = await enregistrerOffre({
       bienId: bien.id,
@@ -122,27 +125,25 @@ describe("offreRepository (intégration Postgres)", () => {
     });
     idsOffresCrees.push(offre.id);
 
-    const acceptee = await changerStatutOffre(offre.id, { statut: "acceptee", dateDecision: "2026-08-06" });
+    const resultat = await accepterOffre(offre.id, "2026-08-06", WORKSPACE_TEST);
+    if (resultat.statut !== "decidee") throw new Error(resultat.statut);
+    const acceptee = resultat.offre;
 
-    expect(acceptee?.statut).toBe("acceptee");
-    expect(acceptee?.montant).toBe(350000);
-    expect(acceptee?.acquereurId).toBe(acquereur.id);
-    expect(acceptee?.bienId).toBe(bien.id);
-    expect(acceptee?.dateOffre).toBe("2026-08-05");
-    expect(acceptee?.dateDecision).toBe("2026-08-06");
-    expect(acceptee?.motifPerte).toBeUndefined();
+    expect(acceptee.statut).toBe("acceptee");
+    expect(acceptee.montant).toBe(350000);
+    expect(acceptee.acquereurId).toBe(acquereur.id);
+    expect(acceptee.bienId).toBe(bien.id);
+    expect(acceptee.dateOffre).toBe("2026-08-05");
+    expect(acceptee.dateDecision).toBe("2026-08-06");
+    expect(acceptee.motifPerte).toBeUndefined();
   });
 
-  it("changerStatutOffre() retourne undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(
-      changerStatutOffre("offre-mock", { statut: "acceptee", dateDecision: "2026-08-01" })
-    ).resolves.toBeUndefined();
-    await expect(
-      changerStatutOffre("00000000-0000-0000-0000-000000000000", { statut: "acceptee", dateDecision: "2026-08-01" })
-    ).resolves.toBeUndefined();
+  it("accepterOffre() rend introuvable pour un id non-UUID ou inexistant", async () => {
+    await expect(accepterOffre("offre-mock", "2026-08-01", WORKSPACE_TEST)).resolves.toEqual({ statut: "introuvable" });
+    await expect(accepterOffre("00000000-0000-0000-0000-000000000000", "2026-08-01", WORKSPACE_TEST)).resolves.toEqual({ statut: "introuvable" });
   });
 
-  it("changerStatutOffre() pose dateDecision et motifPerte atomiquement pour refusee/retiree (ADR-020)", async () => {
+  it("refuserOffre() pose dateDecision et motifPerte atomiquement (ADR-020)", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("003");
     const offre = await enregistrerOffre({
       bienId: bien.id,
@@ -152,19 +153,16 @@ describe("offreRepository (intégration Postgres)", () => {
     });
     idsOffresCrees.push(offre.id);
 
-    const refusee = await changerStatutOffre(offre.id, {
-      statut: "refusee",
-      dateDecision: "2026-08-12",
-      motifPerte: "desaccord_prix",
-    });
+    const resultat = await refuserOffre(offre.id, "2026-08-12", "desaccord_prix", WORKSPACE_TEST);
+    if (resultat.statut !== "decidee") throw new Error(resultat.statut);
 
-    expect(refusee?.statut).toBe("refusee");
-    expect(refusee?.dateDecision).toBe("2026-08-12");
-    expect(refusee?.motifPerte).toBe("desaccord_prix");
+    expect(resultat.offre.statut).toBe("refusee");
+    expect(resultat.offre.dateDecision).toBe("2026-08-12");
+    expect(resultat.offre.motifPerte).toBe("desaccord_prix");
   });
 
   it("listerOffresEnCoursPourPaire() retourne [] pour un id non-UUID, sans erreur de cast", async () => {
-    await expect(listerOffresEnCoursPourPaire("bien-mock", "acquereur-mock")).resolves.toEqual([]);
+    await expect(listerOffresEnCoursPourPaire("bien-mock", "acquereur-mock", WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("listerOffresEnCoursPourPaire() ne retourne que les offres 'en_cours' de la paire exacte (ADR-044)", async () => {
@@ -175,11 +173,11 @@ describe("offreRepository (intégration Postgres)", () => {
     idsOffresCrees.push(enCours.id);
     const refuseeAvant = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 280000, dateOffre: "2026-07-01" });
     idsOffresCrees.push(refuseeAvant.id);
-    await changerStatutOffre(refuseeAvant.id, { statut: "refusee", dateDecision: "2026-07-05", motifPerte: "desaccord_prix" });
+    await refuserOffre(refuseeAvant.id, "2026-07-05", "desaccord_prix", WORKSPACE_TEST);
     const autrePaire = await enregistrerOffre({ bienId: bien.id, acquereurId: autreAcquereur.id, montant: 310000, dateOffre: "2026-08-02" });
     idsOffresCrees.push(autrePaire.id);
 
-    const resultat = await listerOffresEnCoursPourPaire(bien.id, acquereur.id);
+    const resultat = await listerOffresEnCoursPourPaire(bien.id, acquereur.id, WORKSPACE_TEST);
     expect(resultat.map((o) => o.id)).toEqual([enCours.id]);
   });
 });

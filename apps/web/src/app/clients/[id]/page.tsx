@@ -94,8 +94,9 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   // confirmation.
   const tacheTermineeConfirmee = tachesTerminees.find((t) => t.id === tacheTerminee);
 
-  const offres = (await listerOffresPourAcquereur(client.id)).sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
-  const compromis = (await listerCompromisPourAcquereur(client.id)).sort((a, b) =>
+  const workspaceId = await exigerWorkspaceCourant();
+  const offres = (await listerOffresPourAcquereur(client.id, workspaceId)).sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
+  const compromis = (await listerCompromisPourAcquereur(client.id, workspaceId)).sort((a, b) =>
     a.dateSignature < b.dateSignature ? 1 : -1
   );
   const visites = await listerVisitesPourAcquereur(client.id);

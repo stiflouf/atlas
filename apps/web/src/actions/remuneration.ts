@@ -12,6 +12,7 @@ import {
 } from "@/lib/remunerationRepository";
 import { parseMontantCentimes } from "@/types/remuneration";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // undefined = absent (champ optionnel non renseigné), null n'est jamais retourné par ce helper —
 // distinct de parseMontantCentimesOuNull utilisé par la correction (§ modifierRemunerationAction).
@@ -48,7 +49,7 @@ export async function ajouterRemunerationAction(formData: FormData): Promise<voi
   await exigerSessionAtlas();
   const compromisId = String(formData.get("compromisId") ?? "");
 
-  const compromisActuel = await getCompromisById(compromisId);
+  const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
   if (!compromisActuel) throw new Error("Compromis introuvable.");
   if (compromisActuel.statut === "annule") {
     throw new Error("Impossible d'ajouter une rémunération sur un compromis annulé.");
@@ -108,7 +109,7 @@ export async function modifierRemunerationAction(formData: FormData): Promise<vo
   const remunerationActuelle = await getRemunerationParCompromis(compromisId);
   if (!remunerationActuelle) throw new Error("Rémunération introuvable.");
 
-  const compromisActuel = await getCompromisById(compromisId);
+  const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
   if (!compromisActuel) throw new Error("Compromis introuvable.");
   if (compromisActuel.statut === "annule") {
     throw new Error("Impossible de corriger une rémunération sur un compromis annulé.");
@@ -175,7 +176,7 @@ export async function marquerRemunerationEncaisseeAction(formData: FormData): Pr
     throw new Error("Cette rémunération est déjà marquée comme encaissée.");
   }
 
-  const compromisActuel = await getCompromisById(compromisId);
+  const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
   if (!compromisActuel) throw new Error("Compromis introuvable.");
   if (compromisActuel.statut !== "realise") {
     throw new Error("Une rémunération ne peut être marquée encaissée que sur un compromis réalisé.");

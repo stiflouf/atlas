@@ -1,3 +1,4 @@
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { NextResponse } from "next/server";
 import { calculerPackNotaire, chargerContextePackNotaire } from "@/lib/documents/packNotaire";
 import { ErreurGenerationPack, genererZipPackNotaire } from "@/lib/documents/genererZipPackNotaire";
@@ -19,7 +20,7 @@ export async function POST(request: Request, { params }: RouteProps) {
   const refus = await refuserSiSessionAtlasAbsente();
   if (refus) return refus;
   const { id } = await params;
-  const contexte = await chargerContextePackNotaire(id);
+  const contexte = await chargerContextePackNotaire(id, await exigerWorkspaceCourant());
   if (!contexte) return NextResponse.json({ erreur: "Bien introuvable." }, { status: 404 });
   const { ctx, documents } = contexte;
 

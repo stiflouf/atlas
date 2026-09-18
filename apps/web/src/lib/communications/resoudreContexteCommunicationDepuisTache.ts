@@ -29,7 +29,7 @@ function formatDateFr(iso: string): string {
 // déjà réelles de la tâche (deriverCibleTache, ADR-028) — jamais titre/contexte (texte libre) pour
 // deviner une personne. Retourne 0, 1 ou plusieurs candidats ; jamais tranché arbitrairement ici,
 // l'appelant présente un choix humain si `candidats.length > 1`.
-export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Promise<ContexteCommunicationTache> {
+export async function resoudreContexteCommunicationDepuisTache(tache: Tache, workspaceId: string): Promise<ContexteCommunicationTache> {
   const cible = deriverCibleTache(tache);
   const base = { tacheContexte: tache.contexte };
   if (!cible) return { candidats: [], faits: base };
@@ -107,7 +107,7 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Pr
     }
 
     case "offre": {
-      const offre = await getOffreById(cible.id);
+      const offre = await getOffreById(cible.id, workspaceId);
       if (!offre) return { cibleType: cible.type, candidats: [], faits: base };
       const [a, bien] = await Promise.all([getClientById(offre.acquereurId), getBienById(offre.bienId)]);
       return {
@@ -118,7 +118,7 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Pr
     }
 
     case "compromis": {
-      const compromis = await getCompromisById(cible.id);
+      const compromis = await getCompromisById(cible.id, workspaceId);
       if (!compromis) return { cibleType: cible.type, candidats: [], faits: base };
       const [a, bien] = await Promise.all([getClientById(compromis.acquereurId), getBienById(compromis.bienId)]);
       return {
@@ -134,7 +134,7 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache): Pr
     }
 
     case "bien": {
-      const [candidats, bien] = await Promise.all([resoudreDestinatairesDepuisBien(cible.id), getBienById(cible.id)]);
+      const [candidats, bien] = await Promise.all([resoudreDestinatairesDepuisBien(cible.id, workspaceId), getBienById(cible.id)]);
       return { cibleType: cible.type, candidats, faits: { ...base, bienAdresse: bien?.adresse } };
     }
 

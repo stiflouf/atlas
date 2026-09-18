@@ -16,6 +16,7 @@ function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier 
     compteRenduVisiteId: ligne.compteRenduVisiteId ?? undefined,
     prospectVendeurId: ligne.prospectVendeurId ?? undefined,
     compromisId: ligne.compromisId ?? undefined,
+    offreId: ligne.offreId ?? undefined,
     ancreCycle: ligne.ancreCycle ? ligne.ancreCycle.toISOString() : undefined,
     bienId: ligne.bienId ?? undefined,
     acquereurId: ligne.acquereurId ?? undefined,
@@ -33,7 +34,9 @@ function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier 
 export type NouvelEvenementMetier =
   | { typeEvenement: "visite_realisee"; compteRenduVisiteId: string }
   | { typeEvenement: "rdv_estimation_realise" | "mandat_signe"; prospectVendeurId: string }
-  | { typeEvenement: "compromis_signe"; compromisId: string }
+  | { typeEvenement: "compromis_signe" | "compromis_realise" | "compromis_annule"; compromisId: string }
+  // ADR-061 — cible offre_id ; idempotent par (type, offre_id).
+  | { typeEvenement: "offre_recue" | "offre_acceptee" | "offre_refusee" | "offre_retiree" | "offre_caduque"; offreId: string }
   | { typeEvenement: "inactivite_prospect_vendeur"; prospectVendeurId: string; ancreCycle: Date }
   | {
       typeEvenement: "compatibilite_bien_acquereur_devenue_compatible";
@@ -77,6 +80,7 @@ export async function emettreEvenementEtPreparerExecutions(
     compteRenduVisiteId: "compteRenduVisiteId" in input ? input.compteRenduVisiteId : null,
     prospectVendeurId: "prospectVendeurId" in input ? input.prospectVendeurId : null,
     compromisId: "compromisId" in input ? input.compromisId : null,
+    offreId: "offreId" in input ? input.offreId : null,
     ancreCycle: "ancreCycle" in input ? input.ancreCycle : null,
     bienId: "bienId" in input ? input.bienId : null,
     acquereurId: "acquereurId" in input ? input.acquereurId : null,
@@ -91,6 +95,8 @@ export async function emettreEvenementEtPreparerExecutions(
       ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compteRenduVisiteId], where: sql`${evenementsMetier.compteRenduVisiteId} IS NOT NULL` }
       : "compromisId" in input
         ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compromisId], where: sql`${evenementsMetier.compromisId} IS NOT NULL` }
+        : "offreId" in input
+          ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.offreId], where: sql`${evenementsMetier.offreId} IS NOT NULL` }
         : input.typeEvenement === "compatibilite_bien_acquereur_devenue_compatible"
           ? {
               colonnes: [

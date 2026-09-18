@@ -8,7 +8,7 @@ import { injecterSessionAtlasValide } from "./session";
 import { nettoyerDonneesE2E } from "./nettoyage";
 import { creerBien } from "../src/lib/bienRepository";
 import { creerAcquereur } from "../src/lib/clientRepository";
-import { enregistrerCompromis } from "../src/lib/compromisRepository";
+import { creerCompromis } from "../src/lib/compromisRepository";
 import { WORKSPACE_TEST } from "../src/db/workspaceDeTest";
 
 const runId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -50,12 +50,8 @@ test.beforeAll(async () => {
   }, WORKSPACE_TEST);
   acquereurId = acquereur.id;
 
-  await enregistrerCompromis({
-    bienId,
-    acquereurId,
-    prixConvenu: 245000,
-    dateSignature: "2026-06-01",
-  });
+  const resultat = await creerCompromis({ bienId, acquereurId, prixConvenu: 245000, dateSignature: "2026-06-01" }, WORKSPACE_TEST);
+  if (resultat.statut !== "cree") throw new Error(`compromis non créé : ${resultat.statut}`);
 });
 
 test.afterAll(async () => {

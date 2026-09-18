@@ -36,7 +36,7 @@ import {
 import { LABEL_STATUT_OFFRE, type Offre } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS, type Compromis } from "@/types/compromis";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
-import { MOTIFS_PERTE, LABEL_MOTIF_PERTE } from "@/types/motifPerte";
+import { MOTIFS_PERTE_HUMAINS, LABEL_MOTIF_PERTE } from "@/types/motifPerte";
 import {
   LABEL_ETAT_REMUNERATION,
   deriverEtatRemuneration,
@@ -259,6 +259,7 @@ export default function BienTabs({
   const comptesRendusTries = [...comptesRendus].sort((a, b) => (a.dateVisite < b.dateVisite ? 1 : -1));
   const offresTriees = [...offres].sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
   const offresAccepteesDuBien = offres.filter((o) => o.statut === "acceptee");
+  const offresEnCoursDuBien = offres.filter((o) => o.statut === "en_cours");
   // ADR-045 — évite une requête dédiée pour savoir si une offre est déjà l'origine d'un compromis :
   // `compromis` est déjà chargé pour cet onglet, un simple Set suffit (solution minimale, §20).
   const idsOffresDejaUtiliseesParCompromis = new Set(compromis.filter((c) => c.offreId).map((c) => c.offreId));
@@ -943,6 +944,15 @@ export default function BienTabs({
                         {offre.motifPerte && ` — ${LABEL_MOTIF_PERTE[offre.motifPerte]}`}
                       </p>
                     )}
+                    {/* ADR-061 — accepter refuse automatiquement les autres offres en cours du bien
+                        (motif système « Une autre offre a été acceptée ») : annoncé AVANT le geste,
+                        jamais silencieux. Seuls les motifs HUMAINS sont proposés. */}
+                    {offre.statut === "en_cours" && !bien.archiveLe && offresEnCoursDuBien.length > 1 && (
+                      <p className="text-[12px] text-text-muted mt-3">
+                        Accepter cette offre refusera automatiquement {offresEnCoursDuBien.length - 1} autre
+                        {offresEnCoursDuBien.length - 1 > 1 ? "s offres en cours" : " offre en cours"} sur ce bien.
+                      </p>
+                    )}
                     {offre.statut === "en_cours" && !bien.archiveLe && (
                       <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border-subtle">
                         {(["acceptee", "refusee", "retiree"] as const).map((statut) => (
@@ -952,6 +962,7 @@ export default function BienTabs({
                             className="flex flex-wrap items-center gap-2"
                           >
                             <input type="hidden" name="offreId" value={offre.id} />
+                            <input type="hidden" name="bienId" value={bien.id} />
                             <input type="hidden" name="statut" value={statut} />
                             <input
                               type="date"
@@ -970,7 +981,7 @@ export default function BienTabs({
                                 <option value="" disabled>
                                   Motif
                                 </option>
-                                {MOTIFS_PERTE.map((motif) => (
+                                {MOTIFS_PERTE_HUMAINS.map((motif) => (
                                   <option key={motif} value={motif}>
                                     {LABEL_MOTIF_PERTE[motif]}
                                   </option>
@@ -984,6 +995,45 @@ export default function BienTabs({
                         ))}
                       </div>
                     )}
+
+                    {/* ADR-061 §6 — « Acceptation caduque » : GESTE HUMAIN explicite qui clôt une
+                        acceptation dont l'engagement a cessé (rétractation, compromis annulé) sans
+                        réécrire le fait de l'acceptation ; libère le bien pour une autre acceptation.
+                        Jamais déclenché automatiquement. Masqué tant qu'un compromis en cours existe
+                        pour cette offre (l'engagement vit alors dans le compromis). */}
+                    {offre.statut === "acceptee" &&
+                      !bien.archiveLe &&
+                      !compromis.some((c) => c.offreId === offre.id && c.statut === "en_cours") && (
+                        <details className="mt-3 pt-3 border-t border-border-subtle">
+                          <summary className="cursor-pointer text-[12px] font-medium text-text-secondary hover:text-text-primary select-none">
+                            Rendre l&apos;acceptation caduque
+                          </summary>
+                          <form action={changerStatutOffreAction} className="flex flex-wrap items-center gap-2 mt-2">
+                            <input type="hidden" name="offreId" value={offre.id} />
+                            <input type="hidden" name="bienId" value={bien.id} />
+                            <input type="hidden" name="statut" value="caduque" />
+                            <select
+                              name="motifPerte"
+                              required
+                              defaultValue=""
+                              aria-label="Motif de la caducité"
+                              className="border border-border-default rounded-lg px-2 py-1 text-[12px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
+                            >
+                              <option value="" disabled>
+                                Motif
+                              </option>
+                              {MOTIFS_PERTE_HUMAINS.map((motif) => (
+                                <option key={motif} value={motif}>
+                                  {LABEL_MOTIF_PERTE[motif]}
+                                </option>
+                              ))}
+                            </select>
+                            <Button type="submit" variant="destructive" size="sm">
+                              Confirmer la caducité
+                            </Button>
+                          </form>
+                        </details>
+                      )}
 
                     {/* Créer le compromis (ADR-045) — uniquement pour une offre acceptée, jamais
                         en_cours/refusee/retiree. Masqué si le bien est archivé, si un compromis est
@@ -1214,7 +1264,7 @@ export default function BienTabs({
                             <option value="" disabled>
                               Motif
                             </option>
-                            {MOTIFS_PERTE.map((motif) => (
+                            {MOTIFS_PERTE_HUMAINS.map((motif) => (
                               <option key={motif} value={motif}>
                                 {LABEL_MOTIF_PERTE[motif]}
                               </option>

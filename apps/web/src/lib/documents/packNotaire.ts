@@ -85,12 +85,13 @@ export function determinerCompromisActuel(compromis: Compromis[]): Compromis | u
 // utilisé pour calculer le Pack, réutilisé tel quel par le Route Handler ZIP (ADR-030) et par la
 // Server Action de transmission (ADR-049) : jamais une troisième réimplémentation.
 export async function chargerContextePackNotaire(
-  bienId: string
+  bienId: string,
+  workspaceId: string
 ): Promise<{ ctx: ContextePackNotaire; documents: DocumentBien[] } | undefined> {
   const bien = await getBienById(bienId);
   if (!bien) return undefined;
   const documents = await listerDocumentsPourBien(bien.id);
-  const compromis = await listerCompromisPourBien(bien.id);
+  const compromis = await listerCompromisPourBien(bien.id, workspaceId);
   const compromisActuel = determinerCompromisActuel(compromis);
   const prospectVendeurOrigine = await getProspectVendeurParBien(bien.id);
   const acquereur = compromisActuel ? await getClientById(compromisActuel.acquereurId) : undefined;

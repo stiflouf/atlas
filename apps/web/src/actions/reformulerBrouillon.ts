@@ -1,6 +1,7 @@
 "use server";
 
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { assemblerFaits, LABEL_TON_MESSAGE, type TonMessage } from "@/lib/communications/contexteCommunication";
 import {
   resoudreContexteEcranCommunication,
@@ -52,14 +53,17 @@ export async function reformulerBrouillonAction(
 
   // Mêmes identifiants d'écran que la page, revalidés par le même résolveur : un lien ou un champ
   // forgé ne donne accès à aucun contexte que la page n'aurait pas elle-même produit.
-  const contexteEcran = await resoudreContexteEcranCommunication({
-    tacheId: texteOptionnel(formData.get("tacheId")),
-    bienId: texteOptionnel(formData.get("bienId")),
-    acquereurId: texteOptionnel(formData.get("acquereurId")),
-    exigenceCode: texteOptionnel(formData.get("exigenceCode")),
-    notaire: texteOptionnel(formData.get("notaire")),
-    candidat: texteOptionnel(formData.get("candidat")),
-  });
+  const contexteEcran = await resoudreContexteEcranCommunication(
+    {
+      tacheId: texteOptionnel(formData.get("tacheId")),
+      bienId: texteOptionnel(formData.get("bienId")),
+      acquereurId: texteOptionnel(formData.get("acquereurId")),
+      exigenceCode: texteOptionnel(formData.get("exigenceCode")),
+      notaire: texteOptionnel(formData.get("notaire")),
+      candidat: texteOptionnel(formData.get("candidat")),
+    },
+    await exigerWorkspaceCourant()
+  );
   if (!contexteEcran) return { statut: "indisponible" };
 
   const candidat =

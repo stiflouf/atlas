@@ -1,5 +1,6 @@
 "use server";
 
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { createHash } from "node:crypto";
 import { getBienById } from "@/lib/bienRepository";
 import { getCompromisById } from "@/lib/compromisRepository";
@@ -82,7 +83,8 @@ export async function enregistrerTransmissionDossierNotaireAction(
     transmisLe = parsed;
   }
 
-  const compromis = await getCompromisById(compromisId);
+  const workspaceId = await exigerWorkspaceCourant();
+  const compromis = await getCompromisById(compromisId, workspaceId);
   if (!compromis) return { statut: "echec", message: "Compromis introuvable." };
   if (compromis.statut === "annule") {
     return { statut: "echec", message: "Ce compromis est annulé — aucune nouvelle transmission ne peut y être rattachée." };
@@ -94,7 +96,7 @@ export async function enregistrerTransmissionDossierNotaireAction(
     return { statut: "echec", message: "Ce bien est archivé — aucune nouvelle transmission ne peut être enregistrée." };
   }
 
-  const contexte = await chargerContextePackNotaire(compromis.bienId);
+  const contexte = await chargerContextePackNotaire(compromis.bienId, workspaceId);
   if (!contexte) return { statut: "echec", message: "Contexte du dossier introuvable." };
   const { ctx, documents } = contexte;
 

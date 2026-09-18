@@ -1,3 +1,4 @@
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getBienById } from "@/lib/bienRepository";
@@ -49,6 +50,7 @@ function EtatHonnete({ bienId, titre, message }: { bienId?: string; titre: strin
 export default async function NouveauCompromisPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const bienId = params.bienId ?? "";
+  const workspaceId = await exigerWorkspaceCourant();
   const bien = bienId ? await getBienById(bienId) : undefined;
 
   if (!bien || bien.archiveLe) {
@@ -63,7 +65,7 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
   // Garde "un seul compromis en_cours par bien" (ADR-016, inchangée) — détectée ici pour ne
   // jamais afficher un formulaire voué à échouer, la garde reste par ailleurs strictement
   // appliquée par ajouterCompromisAction indépendamment de cet affichage.
-  const compromisDuBien = await listerCompromisPourBien(bien.id);
+  const compromisDuBien = await listerCompromisPourBien(bien.id, workspaceId);
   if (compromisDuBien.some((c) => c.statut === "en_cours")) {
     return (
       <EtatHonnete
@@ -76,7 +78,7 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
 
   const [acquereurCandidat, offresDuBien] = await Promise.all([
     params.acquereurId ? getClientById(params.acquereurId) : undefined,
-    listerOffresPourBien(bien.id),
+    listerOffresPourBien(bien.id, workspaceId),
   ]);
   const offresAcceptees = offresDuBien.filter((o) => o.statut === "acceptee");
 
@@ -91,7 +93,7 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
   // ignorée, jamais substituée par une autre offre acceptée du bien.
   let offreValide: Awaited<ReturnType<typeof getOffreById>> | undefined;
   if (acquereurValide && params.offreId) {
-    const offreCandidate = await getOffreById(params.offreId);
+    const offreCandidate = await getOffreById(params.offreId, workspaceId);
     if (
       offreCandidate &&
       offreCandidate.bienId === bien.id &&
@@ -106,7 +108,7 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
   // stricte, aucune confirmation possible pour la contourner) — état honnête plutôt qu'un
   // formulaire voué à échouer. Aucun lien vers une fiche Compromis : elle n'existe pas.
   if (offreValide) {
-    const compromisExistantPourOffre = await getCompromisParOffreId(offreValide.id);
+    const compromisExistantPourOffre = await getCompromisParOffreId(offreValide.id, workspaceId);
     if (compromisExistantPourOffre) {
       return (
         <EtatHonnete

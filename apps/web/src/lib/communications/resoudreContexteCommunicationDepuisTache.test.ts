@@ -152,7 +152,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
   it("tâche sans rattachement -> aucun candidat", async () => {
     const tache = await creerTache({ titre: "Tâche générale", type: "autre", priorite: "normale", origine: "manuelle" }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toEqual([]);
     expect(resultat.cibleType).toBeUndefined();
   });
@@ -171,7 +171,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.candidats[0]).toMatchObject({ type: "prospectVendeur", nom: "Dupont" });
     expect(resultat.faits.dateRdvEstimation).toBeDefined();
@@ -188,7 +188,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toEqual([{ type: "acquereur", id: acquereur.id, nom: "Martin", prenom: "Jean", email: "resol1@test.local" }]);
   });
 
@@ -213,7 +213,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.candidats[0].type).toBe("acquereur");
     expect(resultat.faits.dateVisite).toBeDefined();
@@ -235,7 +235,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.faits.montantOffre).toBe(280000);
   });
@@ -255,7 +255,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.faits.prixConvenuCompromis).toBe(295000);
   });
@@ -271,7 +271,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toEqual([]);
   });
 
@@ -321,7 +321,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toHaveLength(1);
     expect(resultat.candidats[0].type).toBe("prospectVendeur");
     expect(resultat.faits.bienAdresse).toBe(bien.adresse);
@@ -377,7 +377,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(TA.id).not.toBe(TB.id);
 
     // TA, résolue APRÈS que B existe : doit rester reliée à A, jamais contaminée par B.
-    const resultatTA = await resoudreContexteCommunicationDepuisTache(TA);
+    const resultatTA = await resoudreContexteCommunicationDepuisTache(TA, WORKSPACE_TEST);
     expect(resultatTA.candidats).toHaveLength(1);
     expect(resultatTA.candidats[0].type).toBe("prospectVendeur");
     expect(resultatTA.faits.bienAdresse).toBe(bien.adresse);
@@ -396,7 +396,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(empreinteTA).not.toContain(acquereurB.prenom);
 
     // TB, symétriquement : reste reliée à B, jamais contaminée par A.
-    const resultatTB = await resoudreContexteCommunicationDepuisTache(TB);
+    const resultatTB = await resoudreContexteCommunicationDepuisTache(TB, WORKSPACE_TEST);
     expect(resultatTB.faits.interetVisiteValeur).toBe("interesse");
     expect(resultatTB.faits.dateVisite).toMatch(/mars|2026/);
     const empreinteTB = JSON.stringify({ faits: resultatTB.faits, candidats: resultatTB.candidats });
@@ -446,11 +446,11 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
       interet: "a_reflechir",
     });
 
-    const resultatPremiere = await resoudreContexteCommunicationDepuisTache(premiereTache);
+    const resultatPremiere = await resoudreContexteCommunicationDepuisTache(premiereTache, WORKSPACE_TEST);
     expect(resultatPremiere.faits.interetVisiteValeur).toBe("interesse");
     expect(resultatPremiere.faits.dateVisite).toMatch(/mai/);
 
-    const resultatSeconde = await resoudreContexteCommunicationDepuisTache(secondeTache);
+    const resultatSeconde = await resoudreContexteCommunicationDepuisTache(secondeTache, WORKSPACE_TEST);
     expect(resultatSeconde.faits.interetVisiteValeur).toBe("a_reflechir");
     expect(resultatSeconde.faits.dateVisite).toMatch(/janvier/);
 
@@ -497,7 +497,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.faits.interetVisiteValeur).toBeUndefined();
     expect(resultat.faits.dateVisite).toBeUndefined();
   });
@@ -519,7 +519,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     }, WORKSPACE_TEST);
     idsTaches.push(tache.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tache);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tache, WORKSPACE_TEST);
     expect(resultat.candidats).toEqual([]);
   });
 
@@ -566,7 +566,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     expect(tacheAncienne).toBeDefined();
     idsTaches.push(tacheAncienne!.id);
 
-    const resultat = await resoudreContexteCommunicationDepuisTache(tacheAncienne!);
+    const resultat = await resoudreContexteCommunicationDepuisTache(tacheAncienne!, WORKSPACE_TEST);
     expect(resultat.cibleType).toBe("acquereur");
     expect(resultat.candidats).toEqual([{ type: "acquereur", id: acquereur.id, nom: acquereur.nom, prenom: acquereur.prenom, email: acquereur.email }]);
     // Aucun fait de visite n'est jamais renvoyé pour une cible acquéreur — rien à contaminer.

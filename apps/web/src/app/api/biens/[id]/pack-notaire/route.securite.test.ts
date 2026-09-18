@@ -46,6 +46,9 @@ describe("POST /api/biens/[id]/pack-notaire — sécurité (ADR-047)", () => {
   });
 
   it("session Atlas valide conserve le comportement existant (404 sur un bien introuvable)", async () => {
+    // ADR-061 — la route résout désormais le workspace de session (lectures Compromis scoped) :
+    // identité autorisée, appartenance bootstrappée puis retirée pour ne rien laisser en base.
+    vi.stubEnv("ATLAS_ALLOWED_EMAIL", "conseiller@example.com");
     const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
     await creerSessionAtlas({ sub: "google-sub-123", email: "conseiller@example.com" });
 
@@ -53,5 +56,10 @@ describe("POST /api/biens/[id]/pack-notaire — sécurité (ADR-047)", () => {
     const idBienInexistant = "00000000-0000-0000-0000-000000000000";
     const reponse = await POST(requetePost(idBienInexistant), { params: Promise.resolve({ id: idBienInexistant }) });
     expect(reponse.status).toBe(404);
+
+    const { getDb } = await import("@/db/client");
+    const { workspaceMembres } = await import("@/db/schema");
+    const { eq } = await import("drizzle-orm");
+    await getDb().delete(workspaceMembres).where(eq(workspaceMembres.identiteSub, "google-sub-123"));
   });
 });

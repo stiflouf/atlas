@@ -34,7 +34,7 @@ import { LABEL_REGLE_AUTOMATISATION } from "@/lib/automatisations/catalogueRegle
 import { calculerChecklistDossier } from "@/lib/documents/checklistDossier";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { rendezVousDuJour } from "@/data/agenda";
-import { deriverStatutCommercial, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
+import { statutCommercialBienEffectif, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -49,6 +49,7 @@ const statutConfig: Record<StatutDossier, { label: string; variant: "default" | 
 const variantStatutCommercial: Record<StatutCommercial, "default" | "accent" | "success"> = {
   en_commercialisation: "default",
   offre_en_cours: "accent",
+  offre_acceptee: "accent",
   compromis_signe: "success",
   vendu: "success",
 };
@@ -92,9 +93,11 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
   const comptesRendus = await listerComptesRendusPourBien(bien.id);
   const visites = await listerVisitesPourBien(bien.id);
   const documents = await listerDocumentsPourBien(bien.id);
-  const offres = await listerOffresPourBien(bien.id);
+  // ADR-061 — offres et compromis lus dans le workspace de session ; leur EXISTENCE décide du mode
+  // canonique du statut commercial (jamais un retour aux jalons legacy).
+  const offres = await listerOffresPourBien(bien.id, workspaceId);
   const liens = await listerLiensPourBien(bien.id);
-  const compromis = await listerCompromisPourBien(bien.id);
+  const compromis = await listerCompromisPourBien(bien.id, workspaceId);
   const remunerations = await listerRemunerationsPourBien(bien.id);
   // ADR-049 — historique des transmissions notariales, par Compromis (jamais recalculé, snapshot
   // brut restitué tel quel par le repository).
@@ -122,7 +125,7 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
     [...compromis].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1))[0];
   const checklist = calculerChecklistDossier({ bien, compromisActuel, prospectVendeurOrigine }, documents);
   const tachePrincipale = tachePrioritaire(taches);
-  const statutCommercial = deriverStatutCommercial(bien, compromis);
+  const statutCommercial = statutCommercialBienEffectif(bien, offres, compromis);
   const prochaineVisite = rendezVousDuJour.find(
     (rdv) => rdv.bien?.id === bien.id && rdv.preparationDisponible
   );
@@ -241,6 +244,8 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
           raisonTacheTexte={raisonTacheTexte}
           mandatTexte={mandatTexte}
           prochaineVisiteHref={prochaineVisiteHref}
+          offreCanonique={offres.length > 0}
+          compromisCanonique={compromis.length > 0}
         />
       </div>
 
