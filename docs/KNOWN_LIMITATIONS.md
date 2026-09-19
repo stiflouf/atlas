@@ -780,6 +780,31 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   la transition `visites.statut → 'realisee'` en est aujourd'hui une conséquence systématique
   (un seul site d'appel dans tout le code, `marquerVisiteRealisee`), jamais une garantie imposée
   par une contrainte DB inter-tables (non exprimable en `CHECK` Postgres classique).
+- **Aucun scoping workspace sur le domaine Visite** — confirmé par audit (ADR-063) : les 10
+  fonctions exportées de `visiteRepository.ts`/`compteRenduVisiteRepository.ts` ne prennent aucun
+  `workspaceId` et ne joignent jamais `biens.workspace_id`, contrairement à Offre/Mandat (ADR-054
+  §7). Dormant tant qu'un seul workspace existe ; à corriger dans un futur
+  `VISIT_NATIVE_LIFECYCLE_V1`.
+- **Visite native (indépendante de Calendar) non implémentée** — `rendez_vous_calendar_id` reste
+  `NOT NULL UNIQUE` : aucune Visite ne peut aujourd'hui exister sans rendez-vous Calendar résolu.
+  ADR-063 documente la cible (colonne nullable, index unique partiel) sans l'implémenter.
+- **Bon de visite signé non implémenté** — aucune table, aucune colonne, aucun code de signature.
+  Besoin produit confirmé (terrain), modèle de données décidé par ADR-063
+  (`bons_visite`/`signatures_bon_visite`, snapshot signataire, immutabilité après signature,
+  provider/hash conceptuels), rien construit. `documents_bien` n'a aujourd'hui aucune colonne
+  `visite_id`.
+- **Automatisation Visite différée** — `visite_j_1`/`visite_sans_compte_rendu` restent des
+  candidates non construites (ADR-062, confirmé par ADR-063), dépendent du scoping workspace
+  ci-dessus.
+- **Acquéreur legacy sur la Visite** — même modèle que Mandat/Offre/Compromis
+  (`acquereur_id` scalaire) ; confirmé non bloquant pour la maturité du domaine (ADR-063,
+  `BUYER_LEGACY_BLOCKER = NO`). Le bon de visite introduit cependant une distinction nouvelle entre
+  le projet acquéreur (Visite) et le(s) signataire(s) effectivement présent(s) (bon de visite),
+  jamais fusionnés dans une seule colonne.
+- **Prestataire de signature non choisi** — le niveau de signature V1 (manuscrite tactile,
+  checkbox, OTP, prestataire externe) reste une décision produit ouverte, volontairement non
+  tranchée par ADR-063 : le contrat de données (`provider`/`external_signature_id`) doit rester
+  compatible avec n'importe lequel sans redesign.
 
 ## Retour vendeur après visite (ADR-042)
 

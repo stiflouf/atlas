@@ -1740,6 +1740,20 @@ transaction (ADR-040) — `visites.statut` et `comptesRendusVisite.interet` rest
 séparées : le premier répond à "que s'est-il passé ?", le second à "quel est le retour de
 l'acquéreur ?".
 
+### État actuel vs. cible décidée (ADR-063, `ADR063_VISIT_MATURITY_V1` — DECIDED / NOT YET IMPLEMENTED)
+
+Le modèle ci-dessus est **l'état actuel réel**, inchangé par ADR-063 (audit seul, aucun code, aucune
+migration). ADR-063 documente une cible pour un futur lot `VISIT_NATIVE_LIFECYCLE_V1`, notamment :
+`rendez_vous_calendar_id` nullable (index unique **partiel** au lieu de `NOT NULL UNIQUE`, création
+native possible sans Calendar), ajout de `realisee_le`/`annulee_le` (aucune date de transition n'est
+aujourd'hui persistée au-delà de `cree_le`), `UNIQUE(visite_id) WHERE visite_id IS NOT NULL` sur
+`comptes_rendus_visite` (la cardinalité 0..1 par visite n'est aujourd'hui garantie que par l'unique
+chemin d'écriture applicatif, jamais par une contrainte DB), et un scoping workspace actuellement
+**totalement absent** sur `visiteRepository.ts`/`compteRenduVisiteRepository.ts` (aucune des 10
+fonctions exportées ne prend de `workspaceId`). Un second lot futur, `VISIT_SIGNED_FORM_V1`,
+documenterait un bon de visite signé (`bons_visite` + `signatures_bon_visite`, nouvelle colonne
+`documents_bien.visite_id`) — voir ADR-063 pour le détail complet. Rien de tout cela n'est implémenté.
+
 ## `documents_bien`
 
 **Rôle** : documents réels attachés à un bien (mandat, diagnostics, plans, compromis...). Depuis
