@@ -52,7 +52,7 @@ beforeAll(async () => {
   await getDb().delete(runsScanAutomatisationTable).where(eq(runsScanAutomatisationTable.regleCode, REGLE));
   await getDb()
     .update(configurationsAutomatisationTable)
-    .set({ active: false, seuilJoursInactivite: null })
+    .set({ active: false, seuilJours: null })
     .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
 });
 
@@ -128,7 +128,7 @@ describe("scannerInactiviteProspectVendeur — règle inactive ou non configuré
   it("règle inactive : aucun run créé, execute=false", async () => {
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
     const resultat = await scannerInactiviteProspectVendeur(new Date("2026-08-14T10:00:00Z"));
-    expect(resultat).toEqual({ execute: false });
+    expect(resultat).toEqual({ codeRegle: REGLE, execute: false });
   });
 
   it("règle active mais sans seuil configuré : aucun run créé, execute=false", async () => {
@@ -137,11 +137,11 @@ describe("scannerInactiviteProspectVendeur — règle inactive ou non configuré
     // volontairement absent en V1, contourné ici pour le test) pour simuler l'état initial seedé.
     await getDb()
       .update(configurationsAutomatisationTable)
-      .set({ seuilJoursInactivite: null })
+      .set({ seuilJours: null })
       .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
     await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
     const resultat = await scannerInactiviteProspectVendeur(new Date("2026-08-14T10:00:00Z"));
-    expect(resultat).toEqual({ execute: false });
+    expect(resultat).toEqual({ codeRegle: REGLE, execute: false });
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });

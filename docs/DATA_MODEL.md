@@ -2369,11 +2369,13 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `type_evenement` | text | non | `CHECK`, 6 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) |
+| `type_evenement` | text | non | `CHECK`, 15 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) + 7 types Offre/Compromis (ADR-061) + 3 types temporels ponctuels (`mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, ADR-062) |
 | `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, **`NO ACTION`**) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, **`NO ACTION`**) | oui | |
-| `ancre_cycle` | timestamptz | oui | ADR-033 — `NULL` pour les 4 types ponctuels ; pour `inactivite_prospect_vendeur`, `dernierContactLe` (ou `creeLe` si aucun contact n'a jamais eu lieu) au moment du franchissement du seuil. Voir index dédié ci-dessous |
+| `offre_id` | uuid (FK → `offres.id`, **`NO ACTION`**) | oui | ADR-061 — cible des 5 types `offre_*` ; réutilisée telle quelle par `offre_sans_decision`/`offre_acceptee_sans_compromis` (ADR-062, même index d'idempotence générique, aucun nouveau) |
+| `mandat_id` | uuid (FK → `mandats.id`, **`NO ACTION`**) | oui | ADR-062 — cible de `mandat_expire_bientot`. Un renouvellement crée une nouvelle ligne `mandats` (`remplace_mandat_id`) : identité d'occurrence authentiquement nouvelle, jamais un rejeu |
+| `ancre_cycle` | timestamptz | oui | ADR-033 — `NULL` pour tous les types ponctuels ; pour `inactivite_prospect_vendeur`, `dernierContactLe` (ou `creeLe` si aucun contact n'a jamais eu lieu) au moment du franchissement du seuil. Voir index dédié ci-dessous |
 | `bien_id` | uuid (FK → `biens.id`, **`NO ACTION`**) | oui | ADR-036 — toujours posé avec `acquereur_id` (jamais l'un sans l'autre) |
 | `acquereur_id` | uuid (FK → `acquereurs.id`, **`NO ACTION`**) | oui | ADR-036 — idem |
 | `cycle_compatibilite` | integer | oui | ADR-036 — compteur (jamais un timestamp : aucun ancrage métier externe n'existe ici) incrémenté à chaque retour à `compatible`. `NULL` pour tous les autres types |
@@ -2381,10 +2383,10 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 
 **Contraintes** :
 - `evenements_metier_une_seule_cible_check` — exactement une cible logique est renseignée (`= 1`,
-  pas `<= 1`) : les trois colonnes ponctuelles/cycliques historiques comptent chacune pour une
-  cible, et le couple `(bien_id, acquereur_id)` posé **ensemble** (ADR-036) compte pour une
-  quatrième — jamais deux. `ancre_cycle`/`cycle_compatibilite` n'entrent jamais dans ce calcul (ce
-  ne sont pas des cibles).
+  pas `<= 1`) : `compte_rendu_visite_id`/`prospect_vendeur_id`/`compromis_id`/`offre_id`/`mandat_id`
+  comptent chacune pour une cible, et le couple `(bien_id, acquereur_id)` posé **ensemble**
+  (ADR-036) compte pour une sixième — jamais deux. `ancre_cycle`/`cycle_compatibilite` n'entrent
+  jamais dans ce calcul (ce ne sont pas des cibles).
 - `evenements_metier_bien_acquereur_ensemble_check` (ADR-036) — `bien_id` et `acquereur_id` sont
   soit tous deux `NULL`, soit tous deux renseignés : jamais l'un sans l'autre.
 - Index unique partiel `(type_evenement, compte_rendu_visite_id) WHERE ... IS NOT NULL`, idem pour
@@ -2404,6 +2406,13 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
   que le précédent : une occurrence par (paire, cycle). Un retour ultérieur à `compatible`
   incrémente le cycle et ouvre une nouvelle occurrence ; le même cycle rejoué (retry, deux
   synchronisations concurrentes de la même paire) ne duplique jamais.
+- Index unique partiel `(type_evenement, offre_id) WHERE offre_id IS NOT NULL` (ADR-061) — une
+  occurrence par (type, offre) ; couvre à la fois les 5 types `offre_*` et, depuis ADR-062, les
+  types temporels `offre_sans_decision`/`offre_acceptee_sans_compromis` (aucun index dédié
+  supplémentaire, la clé `(type, offre_id)` suffit puisque chaque type ne survient qu'une fois par
+  offre).
+- Index unique partiel `(type_evenement, mandat_id) WHERE mandat_id IS NOT NULL` (ADR-062) — une
+  occurrence par mandat pour `mandat_expire_bientot`.
 
 **Aucun `ON DELETE CASCADE` depuis les entités source** (volontaire, ADR-032 correction n°5, étendu
 sans exception à `biens`/`acquereurs` par ADR-036) : supprimer un compte rendu de visite, un
@@ -2420,7 +2429,7 @@ code TypeScript, pas une table) à un événement donné — traçable, jamais r
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK`, 7 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`, ADR-042 ajoute `retour_vendeur_apres_visite`) |
+| `regle_code` | text | non | `CHECK`, 10 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`, ADR-042 ajoute `retour_vendeur_apres_visite`, ADR-062 ajoute `mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`) |
 | `evenement_id` | uuid (FK → `evenements_metier.id`, **`NO ACTION`**) | non | |
 | `tache_id` | uuid (FK → `taches.id`, `SET NULL`, **`UNIQUE`**) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche ; `UNIQUE` (ADR-047) plusieurs `NULL` restent valides |
 | `demarree_le` | timestamptz | non | posée à la création de la ligne (dans la transaction métier — ADR-032 correction n°2, jamais après coup) |
@@ -2457,9 +2466,9 @@ catalogue reste TypeScript, versionné et testé, pas un constructeur no-code).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
-| `regle_code` | text (PK) | non | `CHECK`, une des 7 valeurs `CodeRegleAutomatisation` |
+| `regle_code` | text (PK) | non | `CHECK`, une des 10 valeurs `CodeRegleAutomatisation` |
 | `active` | boolean | non | défaut `false` — une règle absente de cette table est traitée comme inactive par l'appelant, jamais supposée active |
-| `seuil_jours_inactivite` | integer | oui | ADR-033 — paramètre produit explicite, n'a de sens que pour `inactivite_prospect_vendeur` (`NULL` pour les autres). `CHECK > 0` si renseigné. Activer la règle sans seuil valide configuré est refusé (Server Action), jamais une valeur implicite |
+| `seuil_jours` | integer | oui | ADR-033, **généralisé ADR-062** (colonne renommée depuis `seuil_jours_inactivite`, renommage pur, aucune valeur modifiée) — paramètre produit explicite, n'a de sens que pour les règles temporelles à seuil (`inactivite_prospect_vendeur`, `mandat_expire_bientot`, `offre_sans_decision`, `offre_acceptee_sans_compromis`), `NULL` pour les autres. Chaque règle possède sa propre LIGNE (PK = `regle_code`) : le sens de la colonne se lit au niveau de la ligne, jamais ambigu malgré le nom générique. `CHECK > 0` si renseigné. Activer une règle à seuil sans valeur valide configurée est refusé (Server Action), jamais une valeur implicite |
 | `modifie_le` | timestamptz | non | |
 
 Lue **au moment de l'émission de l'événement**, dans la transaction métier (ADR-032 correction
@@ -2476,10 +2485,10 @@ même quand il ne trouve rien de nouveau (aucune ligne `evenements_metier` n'est
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK`, une des 7 valeurs `CodeRegleAutomatisation` |
+| `regle_code` | text | non | `CHECK` restreint aux règles réellement TEMPORELLES : `suivi_apres_visite`/`suivi_apres_rdv_estimation`/`preparation_apres_mandat`/`preparation_dossier_notaire_apres_compromis` (jamais utilisées ici en pratique — événementielles pures), `inactivite_prospect_vendeur`, et depuis ADR-062 `mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`. `nouveau_match_bien_acquereur`/`retour_vendeur_apres_visite` volontairement absentes : purement événementielles, aucune ligne de ce journal ne les concernera jamais |
 | `demarre_le` | timestamptz | non | posé à l'insertion, au tout début du scan |
 | `termine_le` | timestamptz | oui | posé à la complétion (succès ou échec) — absent si le process a crashé pendant le scan |
-| `nombre_candidats` | integer | oui | prospects actifs analysés |
+| `nombre_candidats` | integer | oui | prospects/mandats/offres candidats analysés selon la règle |
 | `nombre_occurrences_creees` | integer | oui | événements réellement nouveaux (jamais un rejeu idempotent) |
 | `erreur_technique` | text | oui | message court, jamais un dump brut |
 
@@ -2618,6 +2627,9 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0044_mandate_lifecycle.sql` | ADR-060 : colonnes nullables sans default `type` (CHECK), `numero`, `exclusivite_jusqu_au` (CHECK dans la période), `motif_resiliation` sur `mandats` ; index `mandats_bien_idx`, `mandats_projet_vendeur_idx`, `mandats_remplace_idx`. Strictement additive, **aucun backfill** |
 | `0045_mandate_parties.sql` | ADR-060 §16 : table `parties_mandat` (feuille de `mandats` et `contacts`, FK NO ACTION, `CHECK` rôle `mandant`/`representant`, `UNIQUE(mandat_id, contact_id)`, deux index). Strictement additive — aucune partie inventée depuis `parties_projet` ni depuis un propriétaire legacy, **aucun backfill** |
 | `0046_offer_lifecycle.sql` | ADR-061 : CHECK `offres.statut` + `caduque`, CHECK `motif_perte` + `autre_offre_acceptee`, index `offres_bien_idx` / `offres_acquereur_idx` ; `evenements_metier.offre_id` (FK NO ACTION) dans le CHECK « une seule cible », 7 types d'événements Offre/Compromis, index unique partiel `(type_evenement, offre_id)`. Strictement additive (CHECK seulement élargis), **aucun backfill**, aucun index unique sur `acceptee` |
+| `0047_automation_engine_generalization.sql` | ADR-062 : `evenements_metier.mandat_id` (FK NO ACTION) dans le CHECK « une seule cible », 3 nouveaux types d'événements temporels, index unique partiel `(type_evenement, mandat_id)` ; CHECK `regle_code` élargis (`configurations_automatisation`, `executions_automatisation`) pour les 3 nouvelles règles ; seed des 3 nouvelles lignes de configuration (`active = false`, `workspace_id = 'default'` explicite). Strictement additive, **aucun backfill** |
+| `0048_rename_seuil_jours.sql` | ADR-062 : renommage PUR `configurations_automatisation.seuil_jours_inactivite` → `seuil_jours` (généralisation du seuil produit — colonne réutilisée par toute règle temporelle à seuil, un sens par ligne). Aucune valeur modifiée, aucune ligne réécrite |
+| `0049_runs_scan_regle_code_check.sql` | ADR-062 (suite de 0047) : CHECK `regle_code` élargi sur `runs_scan_automatisation` pour les 3 nouvelles règles temporelles — sans cette extension, `demarrerRunScanAutomatisation` aurait échoué au premier scan réel les concernant |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

@@ -330,6 +330,27 @@
       "when": 1789734120007,
       "tag": "0046_offer_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1789835493700,
+      "tag": "0047_automation_engine_generalization",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789835569913,
+      "tag": "0048_rename_seuil_jours",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1789836916539,
+      "tag": "0049_runs_scan_regle_code_check",
+      "breakpoints": true
     }
   ]
 }

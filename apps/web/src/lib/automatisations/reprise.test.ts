@@ -257,3 +257,61 @@ describe("reprendreExecutionsBloquees — activation figée", () => {
     expect(await tachesPourAcquereur(acquereur.id)).toHaveLength(0);
   });
 });
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 (brief §31) — régression minimale : la reprise ne connaît
+// AUCUN code de règle en dur (`reprise.ts` délègue entièrement à `trouverRegle(execution.regleCode)`,
+// data-driven) — une exécution bloquée pour une des 3 NOUVELLES règles temporelles doit être reprise
+// exactement comme n'importe quelle autre, sans code spécifique à ajouter dans reprise.ts lui-même.
+// Le reste du mécanisme (plafond de tentatives, idempotence, concurrence) est déjà couvert
+// exhaustivement ci-dessus pour une règle événementielle — jamais dupliqué ici.
+describe("reprendreExecutionsBloquees — régression rule-agnostic (nouvelle règle temporelle)", () => {
+  const REGLE_TEMPORELLE = "offre_sans_decision" as const;
+  const idsOffresRepriseTest: string[] = [];
+  const idsBiensRepriseTest: string[] = [];
+  const idsAcquereursRepriseTest: string[] = [];
+
+  afterAll(async () => {
+    await definirActivationAutomatisation(REGLE_TEMPORELLE, false, WORKSPACE_TEST);
+    const { offres: offresTable, evenementsMetier: evtTable, executionsAutomatisation: execTable } = await import("@/db/schema");
+    if (idsOffresRepriseTest.length > 0) {
+      const evenements = await getDb().select({ id: evtTable.id }).from(evtTable).where(inArray(evtTable.offreId, idsOffresRepriseTest));
+      const idsEvt = evenements.map((e) => e.id);
+      if (idsEvt.length > 0) {
+        await getDb().delete(execTable).where(inArray(execTable.evenementId, idsEvt));
+        await getDb().delete(evtTable).where(inArray(evtTable.id, idsEvt));
+      }
+      await getDb().delete(tachesTable).where(inArray(tachesTable.offreId, idsOffresRepriseTest));
+      await getDb().delete(offresTable).where(inArray(offresTable.id, idsOffresRepriseTest));
+    }
+    for (const id of idsBiensRepriseTest) await getDb().delete(biensTable).where(eq(biensTable.id, id));
+    for (const id of idsAcquereursRepriseTest) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
+  });
+
+  it("reprend une exécution a_traiter d'une règle temporelle nouvellement ajoutée exactement comme une règle existante", async () => {
+    await definirActivationAutomatisation(REGLE_TEMPORELLE, true, WORKSPACE_TEST);
+
+    const bien = await creerBienDeTest("REGLE-TEMPORELLE");
+    const acquereur = await creerAcquereurDeTest("REGLE-TEMPORELLE");
+    idsBiensRepriseTest.push(bien.id);
+    idsAcquereursRepriseTest.push(acquereur.id);
+    const { creerOffre } = await import("@/lib/offreRepository");
+    const resultatOffre = await creerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-01-01" }, [], WORKSPACE_TEST);
+    if (resultatOffre.statut !== "creee") throw new Error(`création attendue, reçu ${resultatOffre.statut}`);
+    idsOffresRepriseTest.push(resultatOffre.offre.id);
+
+    // Événement + exécution "à traiter" jamais soumis à traiterExecutionsEnAttente — même simulation
+    // de crash que creerExecutionATraiterDeTest ci-dessus, pour la nouvelle règle temporelle.
+    const { idsExecutionsATraiter } = await getDb().transaction((tx) =>
+      emettreEvenementEtPreparerExecutions({ typeEvenement: REGLE_TEMPORELLE, offreId: resultatOffre.offre.id }, WORKSPACE_TEST, tx)
+    );
+    const executionId = idsExecutionsATraiter[0];
+    expect(executionId).toBeDefined();
+
+    await reprendreExecutionsBloquees();
+    const execution = await getExecutionAutomatisationById(executionId);
+    expect(execution?.reussieLe).toBeDefined();
+    expect(execution?.tacheId).toBeDefined();
+
+    await definirActivationAutomatisation(REGLE_TEMPORELLE, false, WORKSPACE_TEST);
+  });
+});

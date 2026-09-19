@@ -5,16 +5,17 @@ import { describe, expect, it, vi } from "vitest";
 process.env.AUTOMATISATIONS_SCAN_SECRET = "secret-de-test-tres-long-et-suffisant";
 
 // Sujet de cette suite : le contrat HTTP de l'endpoint (garde du secret partagé, passe-plat du
-// résultat) — jamais le scanner lui-même, couvert en base réelle par scanTemporel.test.ts.
-// Le scanner est donc remplacé ici. Sans ce remplacement, l'appel 200 lit la ligne de
-// configuration PARTAGÉE de 'inactivite_prospect_vendeur' et, si elle est active, écrit un run
-// dans le journal de cette même règle : deux identités métier CANONIQUES (clé primaire + CHECK sur
-// regle_code, impossible d'en dériver une variante unique par fichier de test) dont
-// scanTemporel.test.ts est le seul propriétaire légitime. Ce fichier ne touche donc plus du tout la
-// base — aucune DATABASE_URL n'est nécessaire ici.
+// résultat du REGISTRE) — jamais un scanner individuel, chacun couvert en base réelle par sa propre
+// suite (scanTemporel.test.ts et scanners/*.test.ts). `executerScanTemporelComplet` (le point
+// d'entrée du registre, AUTOMATION_ENGINE_GENERALIZATION_V1) est donc remplacé ici. Sans ce
+// remplacement, l'appel 200 toucherait les lignes de configuration PARTAGÉES de toutes les règles
+// temporelles : identités métier CANONIQUES (clé primaire + CHECK sur regle_code, impossible d'en
+// dériver une variante unique par fichier de test) dont chaque suite de scanner est la seule
+// propriétaire légitime. Ce fichier ne touche donc plus du tout la base — aucune DATABASE_URL n'est
+// nécessaire ici.
 const scannerMock = vi.fn();
 vi.mock("@/lib/automatisations/scanTemporel", () => ({
-  scannerInactiviteProspectVendeur: scannerMock,
+  executerScanTemporelComplet: scannerMock,
 }));
 
 const { POST } = await import("./route");
@@ -44,11 +45,21 @@ describe("POST /api/automatisations/scan", () => {
     expect(scannerMock).not.toHaveBeenCalled();
   });
 
-  it("200 avec le secret correct : renvoie tel quel le résultat du scanner", async () => {
-    scannerMock.mockResolvedValueOnce({ execute: false });
+  it("200 avec le secret correct : renvoie tel quel le résultat du registre (un tableau, un par scanner)", async () => {
+    scannerMock.mockResolvedValueOnce([
+      { codeRegle: "inactivite_prospect_vendeur", execute: false },
+      { codeRegle: "mandat_expire_bientot", execute: false },
+      { codeRegle: "offre_sans_decision", execute: false },
+      { codeRegle: "offre_acceptee_sans_compromis", execute: false },
+    ]);
     const reponse = await POST(requete("Bearer secret-de-test-tres-long-et-suffisant"));
     expect(reponse.status).toBe(200);
-    expect(await reponse.json()).toEqual({ execute: false });
+    expect(await reponse.json()).toEqual([
+      { codeRegle: "inactivite_prospect_vendeur", execute: false },
+      { codeRegle: "mandat_expire_bientot", execute: false },
+      { codeRegle: "offre_sans_decision", execute: false },
+      { codeRegle: "offre_acceptee_sans_compromis", execute: false },
+    ]);
     expect(scannerMock).toHaveBeenCalledTimes(1);
   });
 });

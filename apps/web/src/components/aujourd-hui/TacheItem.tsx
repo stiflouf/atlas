@@ -18,11 +18,17 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export default function TacheItem({
   tache,
   redirectTo = "/",
+  lienCibleOverride,
 }: {
   tache: Tache;
   redirectTo?: string;
+  // AUTOMATION_ENGINE_GENERALIZATION_V1 — lien pré-résolu par l'appelant pour une cible sans fiche
+  // dédiée (offre/compromis — `deriverRouteFicheCible` retourne `undefined` pour elles,
+  // volontairement, brief §24). Prend le pas sur `deriverRouteFicheCible` quand fourni ; `undefined`
+  // laisse le comportement par défaut inchangé (toujours "aucun lien factice").
+  lienCibleOverride?: string;
 }) {
-  const routeFiche = deriverRouteFicheCible(tache);
+  const routeFiche = lienCibleOverride ?? deriverRouteFicheCible(tache);
   const cible = deriverCibleTache(tache);
 
   return (

@@ -72,3 +72,22 @@ export function formatDateRelative(dateISO: string, aujourdHuiISO: string): stri
 export function joursCivilsEcoules(dateReference: Date, maintenant: Date, fuseau: string = FUSEAU_HORAIRE_APP): number {
   return differenceJoursCivils(formatDateISO(dateReference, fuseau), formatDateISO(maintenant, fuseau));
 }
+
+// Reconstitue un instant (midi UTC, même convention que `versMidiUTC` ci-dessus) à partir d'une
+// date CIVILE "YYYY-MM-DD" telle que stockée dans une colonne `date` (ex. `offres.dateOffre`,
+// `mandats.dateFin`) — pour la redonner à `joursCivilsEcoules`/un affichage, sans jamais réintroduire
+// le décalage ±1h d'un `new Date(dateISO)` minuit-UTC brut lors d'un changement d'heure été/hiver
+// (AUTOMATION_ENGINE_GENERALIZATION_V1).
+export function dateCivileVersDate(dateCivileISO: string): Date {
+  return new Date(versMidiUTC(dateCivileISO));
+}
+
+// Décale une date civile de N jours (négatif = avant, positif = après), dans le fuseau donné —
+// pour calculer un seuil de scan temporel ("il y a `seuil` jours", "dans `seuil` jours") comme une
+// simple comparaison SQL sur une colonne `date`, jamais un calcul par ligne en JS
+// (AUTOMATION_ENGINE_GENERALIZATION_V1). Le passage par `Date.UTC` gère nativement les
+// débordements de mois/année (ex. 20 janvier - 30 jours -> 21 décembre de l'année précédente).
+export function ajouterJoursCivils(date: Date, jours: number, fuseau: string = FUSEAU_HORAIRE_APP): string {
+  const [annee, mois, jour] = formatDateISO(date, fuseau).split("-").map(Number);
+  return formatDateISO(new Date(Date.UTC(annee, mois - 1, jour + jours, 12)), "UTC");
+}

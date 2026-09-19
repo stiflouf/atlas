@@ -17,7 +17,16 @@ import type { CibleTache, PrioriteTache, TypeTache } from "./tache";
 //
 // ADR-061 — types OFFRE (ponctuels : chaque transition survient au plus une fois par offre, le
 // cycle de vie étant irréversible) et fin de vie du COMPROMIS. Émis dans la transaction du writer
-// qui pose le fait ; aucune règle ne les consomme encore (AUTOMATION_ENGINE_GENERALIZATION_V1).
+// qui pose le fait.
+//
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — trois types TEMPORELS PONCTUELS supplémentaires, émis par
+// un scanner (jamais par un writer métier) quand un seuil configuré est franchi : chaque type
+// survient au plus une fois par cible (mandat/offre), comme les types Offre ci-dessus — aucun
+// `ancreCycle` : contrairement à `inactivite_prospect_vendeur`, il n'existe pas de second passage
+// légitime pour la MÊME cible (un mandat renouvelé change d'identité — `mandatId` — ; une offre
+// décidée sort définitivement du champ de la règle qui l'a vue "sans décision"/"acceptée").
+// `offre_sans_decision`/`offre_acceptee_sans_compromis` portent `offreId`, déjà cible d'ADR-061 :
+// aucun nouveau champ, l'index d'idempotence générique `evenements_metier_offre_unique` suffit.
 export type TypeEvenementMetier =
   | "visite_realisee"
   | "rdv_estimation_realise"
@@ -31,7 +40,10 @@ export type TypeEvenementMetier =
   | "offre_retiree"
   | "offre_caduque"
   | "compromis_realise"
-  | "compromis_annule";
+  | "compromis_annule"
+  | "mandat_expire_bientot"
+  | "offre_sans_decision"
+  | "offre_acceptee_sans_compromis";
 
 export type EvenementMetier = {
   id: string;
@@ -45,7 +57,12 @@ export type EvenementMetier = {
   prospectVendeurId?: string;
   compromisId?: string;
   // ADR-061 — cible des types `offre_*` ; le bien se dérive par l'offre, jamais dupliqué ici.
+  // Réutilisée telle quelle par `offre_sans_decision`/`offre_acceptee_sans_compromis`
+  // (AUTOMATION_ENGINE_GENERALIZATION_V1).
   offreId?: string;
+  // AUTOMATION_ENGINE_GENERALIZATION_V1 — cible de `mandat_expire_bientot`. Le bien se dérive par
+  // le mandat (`mandat.bienId`), jamais dupliqué ici — même raisonnement que `offreId`.
+  mandatId?: string;
   // Ancre du cycle temporel (ADR-033) — le dernierContactLe (ou creeLe si aucun contact n'a
   // jamais eu lieu) qui a servi de base au calcul du seuil franchi. Distincte de `survenuLe` : ici
   // le moment où le FAIT a été établi (le dernier contact réel), pas le moment où Atlas l'a
@@ -71,7 +88,10 @@ export type CodeRegleAutomatisation =
   | "preparation_dossier_notaire_apres_compromis"
   | "inactivite_prospect_vendeur"
   | "nouveau_match_bien_acquereur"
-  | "retour_vendeur_apres_visite";
+  | "retour_vendeur_apres_visite"
+  | "mandat_expire_bientot"
+  | "offre_sans_decision"
+  | "offre_acceptee_sans_compromis";
 
 export const CODES_REGLE_AUTOMATISATION: CodeRegleAutomatisation[] = [
   "suivi_apres_visite",
@@ -81,6 +101,9 @@ export const CODES_REGLE_AUTOMATISATION: CodeRegleAutomatisation[] = [
   "inactivite_prospect_vendeur",
   "nouveau_match_bien_acquereur",
   "retour_vendeur_apres_visite",
+  "mandat_expire_bientot",
+  "offre_sans_decision",
+  "offre_acceptee_sans_compromis",
 ];
 
 // Snapshot d'exécution d'une règle pour un événement précis. Trois états dérivés, jamais un
@@ -115,10 +138,13 @@ export function deriverEtatExecutionAutomatisation(execution: ExecutionAutomatis
 export type ConfigurationAutomatisation = {
   regleCode: CodeRegleAutomatisation;
   active: boolean;
-  // Seuil produit explicite (ADR-033, jamais une constante cachée) — n'a de sens que pour
-  // 'inactivite_prospect_vendeur' aujourd'hui, `undefined` pour les autres règles. `undefined`
+  // Seuil produit explicite (ADR-033), jamais une constante cachée — GÉNÉRALISÉ par
+  // AUTOMATION_ENGINE_GENERALIZATION_V1 (colonne db renommée `seuil_jours`, plus de nom lié à une
+  // seule règle) : n'a de sens que pour les règles temporelles à seuil
+  // (`inactivite_prospect_vendeur`, `mandat_expire_bientot`, `offre_sans_decision`,
+  // `offre_acceptee_sans_compromis`), `undefined` pour les autres règles ET par défaut. `undefined`
   // interdit l'activation de la règle (validée côté Server Action) : jamais de valeur implicite.
-  seuilJoursInactivite?: number;
+  seuilJours?: number;
   modifieLe: string;
 };
 

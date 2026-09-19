@@ -10,10 +10,16 @@ import { CODES_REGLE_AUTOMATISATION, type CodeRegleAutomatisation } from "@/type
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
-// Règles dont l'activation exige un paramètre produit explicite (ADR-033, point 4) — seule
-// 'inactivite_prospect_vendeur' aujourd'hui. Vérifié ici (Server Action), jamais dans le
-// repository (ADR-007 : la validation métier ne vit jamais dans la couche IO).
-const REGLES_AVEC_SEUIL_OBLIGATOIRE: CodeRegleAutomatisation[] = ["inactivite_prospect_vendeur"];
+// Règles dont l'activation exige un paramètre produit explicite (ADR-033, point 4 ; généralisé
+// AUTOMATION_ENGINE_GENERALIZATION_V1 aux 3 nouvelles règles temporelles à seuil). Vérifié ici
+// (Server Action), jamais dans le repository (ADR-007 : la validation métier ne vit jamais dans la
+// couche IO).
+const REGLES_AVEC_SEUIL_OBLIGATOIRE: CodeRegleAutomatisation[] = [
+  "inactivite_prospect_vendeur",
+  "mandat_expire_bientot",
+  "offre_sans_decision",
+  "offre_acceptee_sans_compromis",
+];
 
 // Bascule explicite (ADR-032, point 7) — jamais un état implicite. `active` vient d'une case à
 // cocher/valeur de formulaire, jamais deviné. Refuse explicitement d'activer une règle qui exige
@@ -29,7 +35,7 @@ export async function basculerAutomatisationAction(formData: FormData): Promise<
 
   if (active && REGLES_AVEC_SEUIL_OBLIGATOIRE.includes(regleCode as CodeRegleAutomatisation)) {
     const configuration = await getConfigurationAutomatisation(regleCode as CodeRegleAutomatisation);
-    if (configuration.seuilJoursInactivite == null) {
+    if (configuration.seuilJours == null) {
       throw new Error("Impossible d'activer cette règle sans seuil configuré.");
     }
   }

@@ -1,7 +1,8 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { taches as tachesTable } from "@/db/schema";
 import { tachesMetier as tachesDemo } from "@/data/taches";
+import type { CodeRegleAutomatisation } from "@/types/automatisation";
 import type { CibleTache, OrigineTache, PrioriteTache, Tache, TypeTache } from "@/types/tache";
 
 type LigneTache = typeof tachesTable.$inferSelect;
@@ -162,4 +163,63 @@ export async function annulerTache(id: string): Promise<Tache | undefined> {
     .where(and(eq(tachesTable.id, id), isNull(tachesTable.termineeLe), isNull(tachesTable.annuleeLe)))
     .returning();
   return ligne ? ligneVersTache(ligne) : undefined;
+}
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — obsolescence en LOT des tâches automatiques d'une règle
+// temporelle : ferme (même sémantique terminale que `annulerTache`, jamais un DELETE — brief §40)
+// toute tâche encore ouverte de cette règle dont la cible n'est PLUS dans `idsCiblesValides` (le jeu
+// de candidats recalculé par le scan EN COURS). Grâce au caractère monotone des seuils temporels
+// (une date ne redevient jamais "pas encore franchie"), sortir du jeu de candidats signifie
+// TOUJOURS que la cause a disparu (mandat renouvelé/résilié, offre décidée, compromis apparu...) —
+// jamais une fausse obsolescence.
+//
+// Filtre `origine = 'automatique' AND origine_code = regleCode` : ne touche JAMAIS une tâche
+// manuelle, ni une tâche d'une autre règle. Filtre `annulee_le IS NULL AND terminee_le IS NULL` :
+// ne touche jamais une tâche déjà close — qu'elle l'ait été par ce même mécanisme lors d'un scan
+// précédent OU par un geste humain (`terminerTacheAction`/`annulerTacheAction`) ; c'est cette garde,
+// et elle seule, qui fait qu'une tâche fermée manuellement n'est jamais rouverte par un scan
+// ultérieur (politique A, brief §41) — aucune colonne ni logique dédiée n'est nécessaire.
+//
+// Une seule requête UPDATE, jamais une par tâche (brief §38).
+export async function cloturerTachesAutomatiquesObsoletes(
+  regleCode: CodeRegleAutomatisation,
+  colonneCible: "bienId" | "offreId",
+  idsCiblesValides: string[],
+  executeur: Executeur = getDb()
+): Promise<number> {
+  const colonne = colonneCible === "bienId" ? tachesTable.bienId : tachesTable.offreId;
+  const idsValides = idsCiblesValides.filter((id) => UUID_REGEX.test(id));
+  const lignes = await executeur
+    .update(tachesTable)
+    .set({ annuleeLe: new Date() })
+    .where(
+      and(
+        eq(tachesTable.origine, "automatique"),
+        eq(tachesTable.origineCode, regleCode),
+        isNull(tachesTable.termineeLe),
+        isNull(tachesTable.annuleeLe),
+        idsValides.length > 0 ? notInArray(colonne, idsValides) : undefined
+      )
+    )
+    .returning({ id: tachesTable.id });
+  return lignes.length;
+}
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — variante par IDENTIFIANTS EXPLICITES, pour une règle dont
+// l'identité d'occurrence (ex. mandatId) diffère de la colonne cible de la tâche (bienId, brief §11
+// — aucune colonne `mandat_id` sur `taches`) : `cloturerTachesAutomatiquesObsoletes` "NOT IN
+// candidats" ne peut alors PAS détecter l'obsolescence (le bien reste un candidat valide à travers
+// un renouvellement, seule l'identité du mandat change) — l'appelant doit calculer lui-même,
+// via une jointure execution -> événement, quelles tâches précises sont concernées (voir
+// scanners/mandatExpireBientot.ts). Même garde `annulee_le/terminee_le IS NULL` : ne rouvre jamais
+// une tâche déjà close, humainement ou automatiquement.
+export async function cloturerTachesParIds(ids: string[], executeur: Executeur = getDb()): Promise<number> {
+  const idsValides = ids.filter((id) => UUID_REGEX.test(id));
+  if (idsValides.length === 0) return 0;
+  const lignes = await executeur
+    .update(tachesTable)
+    .set({ annuleeLe: new Date() })
+    .where(and(inArray(tachesTable.id, idsValides), isNull(tachesTable.termineeLe), isNull(tachesTable.annuleeLe)))
+    .returning({ id: tachesTable.id });
+  return lignes.length;
 }

@@ -18,6 +18,7 @@ const {
   getMandatById,
   listerMandatsDuBien,
   mandatCourantDuBien,
+  mandatsCourantsExpirantBientot,
   modifierMandat,
   resilierMandat,
 } = await import("./mandatRepository");
@@ -275,6 +276,61 @@ describe("mandatCourantDuBien — ADR-060 §10, une requête, une réponse déte
     await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", type: "simple" });
     expect(await mandatCourantDuBien(bien.id, WORKSPACE_TEST, AUJOURDHUI)).toBeUndefined();
     expect(await mandatCourantDuBien(bien.id, ailleurs, AUJOURDHUI)).toBeDefined();
+  });
+});
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — variante EN LOT de mandatCourantDuBien pour le scanner
+// mandat_expire_bientot : même WHERE (non résilié, non remplacé), plus la fenêtre [aujourd'hui,
+// finFenetre] sur date_fin, réduit au premier par bien selon le même ordre déterministe.
+describe("mandatsCourantsExpirantBientot — set-based, même déterminisme que mandatCourantDuBien", () => {
+  it("dans la fenêtre → trouvé ; hors fenêtre (trop tôt ou trop tard) → absent", async () => {
+    const bien = await unBien();
+    const m = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
+    const candidats = await mandatsCourantsExpirantBientot(WORKSPACE_TEST, AUJOURDHUI, "2026-07-15");
+    expect(candidats.map((c) => c.id)).toContain(m.id);
+
+    const bienLoin = await unBien();
+    await creerMandat({ bienId: bienLoin.id, dateDebut: "2026-01-01", dateFin: "2026-12-31", type: "simple" });
+    const candidatsCourts = await mandatsCourantsExpirantBientot(WORKSPACE_TEST, AUJOURDHUI, "2026-07-15");
+    expect(candidatsCourts.map((c) => c.bienId)).not.toContain(bienLoin.id);
+  });
+
+  it("résilié → exclu", async () => {
+    const bien = await unBien();
+    const m = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
+    await resilierMandat(m.id, { resilieLe: "2026-06-01" }, WORKSPACE_TEST);
+    const candidats = await mandatsCourantsExpirantBientot(WORKSPACE_TEST, AUJOURDHUI, "2026-07-15");
+    expect(candidats.map((c) => c.id)).not.toContain(m.id);
+  });
+
+  it("remplacé → exclu, le successeur prend sa place si sa propre échéance est dans la fenêtre", async () => {
+    const bien = await unBien();
+    const ancien = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
+    const successeur = await creerMandatSuccesseur(ancien.id, { dateDebut: "2026-07-05", dateFin: "2026-07-10", type: "simple" });
+    const candidats = await mandatsCourantsExpirantBientot(WORKSPACE_TEST, AUJOURDHUI, "2026-07-15");
+    expect(candidats.map((c) => c.id)).not.toContain(ancien.id);
+    expect(candidats.map((c) => c.id)).toContain(successeur.id);
+  });
+
+  it("deux mandats vivants sur le même bien (import incohérent) : un seul candidat, même tie-break déterministe", async () => {
+    const bien = await unBien();
+    const ancien = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
+    const recent = await creerMandat({ bienId: bien.id, dateDebut: "2026-03-01", dateFin: "2026-07-08", type: "simple" });
+    const candidats = await mandatsCourantsExpirantBientot(WORKSPACE_TEST, AUJOURDHUI, "2026-07-15");
+    const pourCeBien = candidats.filter((c) => c.bienId === bien.id);
+    expect(pourCeBien).toHaveLength(1);
+    expect(pourCeBien[0].id).toBe(recent.id);
+    expect(pourCeBien[0].id).not.toBe(ancien.id);
+  });
+
+  it("autre workspace → invisible", async () => {
+    const ailleurs = await unAutreWorkspace("expirant-bientot");
+    const bien = await unBien(ailleurs);
+    const m = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
+    const candidats = await mandatsCourantsExpirantBientot(WORKSPACE_TEST, AUJOURDHUI, "2026-07-15");
+    expect(candidats.map((c) => c.id)).not.toContain(m.id);
+    const candidatsAilleurs = await mandatsCourantsExpirantBientot(ailleurs, AUJOURDHUI, "2026-07-15");
+    expect(candidatsAilleurs.map((c) => c.id)).toContain(m.id);
   });
 });
 

@@ -15,8 +15,8 @@ function tacheTest(surcharge: Partial<Tache> = {}): Tache {
   };
 }
 
-function render(tache: Tache): string {
-  return renderToStaticMarkup(TacheItem({ tache }));
+function render(tache: Tache, lienCibleOverride?: string): string {
+  return renderToStaticMarkup(TacheItem({ tache, lienCibleOverride }));
 }
 
 describe("TacheItem — Voir la fiche (ADR-039)", () => {
@@ -53,6 +53,24 @@ describe("TacheItem — Voir la fiche (ADR-039)", () => {
       const html = render(tacheTest(surcharge));
       expect(html).not.toContain("Voir la fiche");
     }
+  });
+});
+
+describe("TacheItem — lienCibleOverride (AUTOMATION_ENGINE_GENERALIZATION_V1)", () => {
+  it("cible offre sans override : aucun lien (comportement par défaut inchangé)", () => {
+    const html = render(tacheTest({ offreId: "offre-1" }));
+    expect(html).not.toContain("Voir la fiche");
+  });
+
+  it("cible offre AVEC override : lien vers le bien qui héberge l'offre (brief §24)", () => {
+    const html = render(tacheTest({ offreId: "offre-1" }), "/biens/bien-42");
+    expect(html).toContain("Voir la fiche");
+    expect(html).toContain('href="/biens/bien-42"');
+  });
+
+  it("cible bien déjà navigable : l'override, s'il est fourni, prend quand même le pas sur deriverRouteFicheCible", () => {
+    const html = render(tacheTest({ bienId: "bien-1" }), "/biens/bien-1?onglet=offres");
+    expect(html).toContain('href="/biens/bien-1?onglet=offres"');
   });
 });
 

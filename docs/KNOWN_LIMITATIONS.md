@@ -237,17 +237,35 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   `echouee`, une ligne `executions_automatisation` est figée ; corriger une tâche produite par
   erreur se fait au niveau de la tâche elle-même (ADR-028), jamais en rejouant l'exécution.
 
-## Moteur temporel et relances programmées (ADR-033)
+## Moteur temporel et relances programmées (ADR-033, généralisé AUTOMATION_ENGINE_GENERALIZATION_V1)
 
 - **Aucun déclencheur intégré à Atlas** — `POST /api/automatisations/scan` existe et fonctionne,
   mais rien dans le code ne l'appelle périodiquement : sans un cron **externe** configuré (choix
   qui dépend d'un hébergement lui-même non tranché, voir ADR-002), le moteur temporel ne s'exécute
   jamais spontanément. Ce n'est pas un oubli — c'est le choix délibéré d'un endpoint neutre plutôt
-  que de coupler le code à une plateforme précise.
-- **Une seule règle temporelle** (`inactivite_prospect_vendeur`) — relance acquéreur et relance sur
-  offre sans décision restent des candidates non construites (voir ADR-033, la première nécessite
-  un chantier de modélisation préalable : aucun `dernierContactLe` structuré n'existe côté
-  `acquereurs`).
+  que de coupler le code à une plateforme précise. La route délègue désormais à un REGISTRE
+  (`SCANNERS_TEMPORELS`, `scanTemporel.ts`) qui exécute chaque scanner activé et isole ses erreurs —
+  elle ne connaît plus aucun code de règle en dur (voir ADR-062).
+- **Quatre règles temporelles** (`inactivite_prospect_vendeur`, `mandat_expire_bientot`,
+  `offre_sans_decision`, `offre_acceptee_sans_compromis`) — la relance acquéreur reste une candidate
+  non construite (nécessite un chantier de modélisation préalable : aucun `dernierContactLe`
+  structuré n'existe côté `acquereurs`). `offre_acceptee_sans_compromis` est volontairement
+  TEMPORELLE UNIQUEMENT (ADR-062) : aucune règle événementielle réactive sur `offre_acceptee`
+  n'existe en parallèle, pour éviter tout risque de double tâche sur une même offre.
+- **Le paramètre de seuil (`configurations_automatisation.seuil_jours`) est générique** — une
+  colonne, une signification par ligne (par `regle_code`), plus un nom lié à une seule règle. V1
+  reste volontairement simple : un seul seuil entier par règle, jamais un jeu de paramètres
+  structurés ni un constructeur de règles (aucun DSL, ADR-062).
+- **`mandat_expire_bientot` cible le BIEN, pas le mandat** — `taches` ne porte aucune colonne
+  `mandat_id` (jamais ajoutée pour ce seul usage) ; la tâche produite pointe vers la fiche du bien,
+  son contexte textuel précise l'échéance. `evenements_metier.mandat_id` existe en revanche (cible
+  de l'événement, pour l'idempotence par mandat), sans lien avec `taches`.
+- **Obsolescence des tâches automatiques, nouvelle en V1** — chaque scanner ferme (jamais ne
+  supprime) les tâches automatiques de sa règle dont la cause a disparu, au scan suivant. Une tâche
+  fermée par un humain n'est jamais rouverte par un scan ultérieur tant que le même fait n'a pas
+  changé (politique A, brief §41) — mécanisme structurel (l'identité d'occurrence est portée par
+  l'index unique partiel de `evenements_metier`), aucune colonne dédiée. Ce mécanisme n'existe QUE
+  pour les 4 règles temporelles — aucune règle événementielle (ADR-032) n'a d'équivalent.
 - **Aucun scheduler, aucune échéance secondaire** — pas de notion de relance répétée ou croissante
   (ex. "relancer à nouveau si toujours sans réponse après 14 jours") ; un seul seuil, un seul cycle
   par période de silence.
@@ -289,11 +307,14 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   une seule acceptation active par bien via les writers, `offres` source de vérité du statut
   commercial (`offre_acceptee` ajouté), fin du dual-write `biens.offre_en_cours_le`, événements
   `offre_*` / `compromis_realise` / `compromis_annule`, lectures et écritures Offre/Compromis
-  scoped par le workspace. Ce qui reste **non livré** : co-acquéreurs, pont acquéreur →
+  scoped par le workspace. `AUTOMATION_ENGINE_GENERALIZATION_V1` (ADR-062) a depuis consommé une
+  partie de ces événements (`offre_sans_decision`, `offre_acceptee_sans_compromis`, deux règles
+  temporelles) et fait apparaître les tâches produites sur Aujourd'hui, avec un lien fonctionnel
+  vers le bien qui héberge l'offre. Ce qui reste **non livré** : co-acquéreurs, pont acquéreur →
   Contact/projet canonique (`offres.acquereur_id` reste sur `acquereurs`), contre-offre,
   conditions suspensives / financement, expiration automatique de `date_validite` (jamais de
-  transition automatique), fiche `/offres/{id}` complète, automatisations consommant les événements
-  Offre (lot `AUTOMATION_ENGINE_GENERALIZATION_V1`), Today, provenance/connecteurs Offre, et
+  transition automatique), fiche `/offres/{id}` complète, un vrai cockpit Aujourd'hui (au-delà de
+  l'affichage correct des tâches existantes), provenance/connecteurs Offre, et
   l'**index unique SQL partiel sur `statut = 'acceptee'`** (différé : les lignes historiques
   incohérentes restent lisibles, jamais réparées ; les writers refusent toute nouvelle incohérence).
 - **`date_decision` d'une offre `caduque` porte la date de l'acceptation initiale** (jamais écrasée) :

@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lte, ne, notExists, sql } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
-import { acquereurs as acquereursTable, biens as biensTable, offres as offresTable } from "@/db/schema";
+import { acquereurs as acquereursTable, biens as biensTable, compromis as compromisTable, offres as offresTable } from "@/db/schema";
 import { transitionOffreAutorisee, type Offre, type StatutOffre } from "@/types/offre";
 import type { OffreVisite } from "@/types/offreVisite";
 import { MOTIF_PERTE_SYSTEME, type MotifPerte, type MotifPerteHumain } from "@/types/motifPerte";
@@ -170,6 +170,68 @@ export async function chargerEtatsOffresParBien(
     }
   }
   return new Map(biens.map((b) => [b.id, etatDepuisOffres(b, parBien.get(b.id) ?? [])]));
+}
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — candidats du scanner `offre_sans_decision` : offres encore
+// `en_cours` dont la date métier (`dateOffre`, pas `creeLe`) dépasse le seuil configuré. Comparaison
+// de dates directement en SQL (`seuilDateISO` déjà décalé par l'appelant via `ajouterJoursCivils`),
+// jamais un calcul par ligne en JS — une requête, indépendante du nombre d'offres du workspace.
+export async function offresEnCoursDepasseesSeuil(
+  workspaceId: string,
+  seuilDateISO: string,
+  executeur: Executeur = getDb()
+): Promise<Offre[]> {
+  const lignes = await executeur
+    .select({ offre: offresTable })
+    .from(offresTable)
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(and(eq(biensTable.workspaceId, workspaceId), eq(offresTable.statut, "en_cours"), lte(offresTable.dateOffre, seuilDateISO)))
+    .orderBy(...ORDRE_OFFRES);
+  return lignes.map((l) => ligneVersOffre(l.offre));
+}
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — candidats du scanner `offre_acceptee_sans_compromis` :
+// offres `acceptee` depuis au moins le seuil configuré (`dateDecision`, posée une fois à
+// l'acceptation, §ADR-061) et sans AUCUN compromis lié — anti-jointure corrélée `notExists`, même
+// style que `successeurDe` dans mandatRepository.ts, jamais un `LEFT JOIN ... IS NULL`. Une requête,
+// indépendante du nombre d'offres du workspace.
+export async function offresAccepteesSansCompromis(
+  workspaceId: string,
+  seuilDateISO: string,
+  executeur: Executeur = getDb()
+): Promise<Offre[]> {
+  const lignes = await executeur
+    .select({ offre: offresTable })
+    .from(offresTable)
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(biensTable.workspaceId, workspaceId),
+        eq(offresTable.statut, "acceptee"),
+        lte(offresTable.dateDecision, seuilDateISO),
+        notExists(executeur.select({ un: sql`1` }).from(compromisTable).where(eq(compromisTable.offreId, offresTable.id)))
+      )
+    )
+    .orderBy(...ORDRE_OFFRES);
+  return lignes.map((l) => ligneVersOffre(l.offre));
+}
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — résolution EN LOT du bien de plusieurs offres, au seul
+// service du cockpit Aujourd'hui (lien "Voir la fiche" d'une tâche ciblant une offre — brief §24 :
+// aucune fiche Offre dédiée, la navigation reste `/biens/{bienId}`, où BienTabs héberge l'onglet
+// Offres). Jamais utilisée pour une décision métier — une simple projection id -> bienId.
+//
+// Volontairement NON scopée par workspace : `app/page.tsx` (Aujourd'hui), son unique appelant,
+// lit déjà `listerTaches()`/`listerBiens()`/`listerClients()` sans filtre de workspace — limitation
+// pré-existante et documentée (KNOWN_LIMITATIONS.md, ADR-054 §"aucune lecture scoped sur Aujourd'hui").
+// Scoper cette seule projection isolément n'améliorerait rien (les tâches elles-mêmes restent
+// non scopées juste avant) et introduirait une dépendance de session que cette page n'a nulle part
+// ailleurs — cohérence avec l'existant, jamais une régression.
+export async function bienIdsPourOffres(offreIds: string[], executeur: Executeur = getDb()): Promise<Map<string, string>> {
+  const ids = offreIds.filter((id) => UUID_REGEX.test(id));
+  if (ids.length === 0) return new Map();
+  const lignes = await executeur.select({ id: offresTable.id, bienId: offresTable.bienId }).from(offresTable).where(inArray(offresTable.id, ids));
+  return new Map(lignes.map((l) => [l.id, l.bienId]));
 }
 
 // ───────────────────────────── VERROUS ─────────────────────────────

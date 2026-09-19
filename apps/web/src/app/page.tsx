@@ -14,6 +14,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import { listerTaches } from "@/lib/tacheRepository";
+import { bienIdsPourOffres } from "@/lib/offreRepository";
 import { listerProspectsVendeursArchives } from "@/lib/prospectVendeurRepository";
 import type { Bien } from "@/types/bien";
 import { deriverStatutTache, type Tache } from "@/types/tache";
@@ -151,6 +152,19 @@ export default async function AujourdHui() {
         (!t.prospectVendeurId || !prospectsVendeursArchivesIds.has(t.prospectVendeurId))
     )
     .sort((a, b) => scoreTache(b, maintenant) - scoreTache(a, maintenant));
+
+  // AUTOMATION_ENGINE_GENERALIZATION_V1 — une tâche ciblant une offre n'a pas de fiche dédiée
+  // (`deriverRouteFicheCible` retourne `undefined` pour elle, brief §24) ; le lien "Voir la fiche"
+  // pointe à la place vers le bien qui héberge cette offre (BienTabs). Résolution EN LOT (une seule
+  // requête pour toutes les tâches offre de cette page), jamais une par tâche.
+  const idsOffresDesTaches = autresTaches.map((t) => t.offreId).filter((id): id is string => Boolean(id));
+  const bienIdParOffre = await bienIdsPourOffres(idsOffresDesTaches);
+  const lienCibleParTache = new Map<string, string>();
+  for (const tache of autresTaches) {
+    if (!tache.offreId) continue;
+    const bienId = bienIdParOffre.get(tache.offreId);
+    if (bienId) lienCibleParTache.set(tache.id, `/biens/${bienId}`);
+  }
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
@@ -309,7 +323,7 @@ export default async function AujourdHui() {
               </SectionTitle>
               <Card className="px-4 divide-y divide-border-subtle">
                 {autresTaches.map((tache) => (
-                  <TacheItem key={tache.id} tache={tache} />
+                  <TacheItem key={tache.id} tache={tache} lienCibleOverride={lienCibleParTache.get(tache.id)} />
                 ))}
               </Card>
             </section>

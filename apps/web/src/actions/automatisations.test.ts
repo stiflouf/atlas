@@ -32,7 +32,7 @@ const REGLE = "inactivite_prospect_vendeur";
 afterAll(async () => {
   await getDb()
     .update(configurationsAutomatisationTable)
-    .set({ active: false, seuilJoursInactivite: null })
+    .set({ active: false, seuilJours: null })
     .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
 });
 
@@ -47,14 +47,14 @@ async function getSeuilActuel(): Promise<number | null> {
     .select()
     .from(configurationsAutomatisationTable)
     .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
-  return ligne?.seuilJoursInactivite ?? null;
+  return ligne?.seuilJours ?? null;
 }
 
 describe("basculerAutomatisationAction — garde du seuil obligatoire (inactivite_prospect_vendeur)", () => {
   it("refuse explicitement (throw) d'activer la règle tant qu'aucun seuil n'est configuré", async () => {
     await getDb()
       .update(configurationsAutomatisationTable)
-      .set({ active: false, seuilJoursInactivite: null })
+      .set({ active: false, seuilJours: null })
       .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
 
     await expect(
@@ -94,7 +94,7 @@ describe("definirSeuilAutomatisationAction — validation", () => {
   it("refuse explicitement (throw) un seuil non entier ou négatif, ne modifie rien", async () => {
     await getDb()
       .update(configurationsAutomatisationTable)
-      .set({ seuilJoursInactivite: 5 })
+      .set({ seuilJours: 5 })
       .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
 
     await expect(

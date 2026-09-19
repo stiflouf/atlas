@@ -37,9 +37,25 @@ const COULEUR_ETAT_RUN: Record<EtatRunScanAutomatisation, string> = {
   echoue: "text-danger",
 };
 
-// Règles temporelles (ADR-033) — les seules à exposer un seuil et un dernier passage de scanner,
-// distinct de la dernière exécution ADR-032 (qui n'existe que si une occurrence a été trouvée).
-const REGLES_TEMPORELLES: CodeRegleAutomatisation[] = ["inactivite_prospect_vendeur"];
+// Règles temporelles (ADR-033, généralisées AUTOMATION_ENGINE_GENERALIZATION_V1) — les seules à
+// exposer un seuil et un dernier passage de scanner, distinct de la dernière exécution ADR-032 (qui
+// n'existe que si une occurrence a été trouvée).
+const REGLES_TEMPORELLES: CodeRegleAutomatisation[] = [
+  "inactivite_prospect_vendeur",
+  "mandat_expire_bientot",
+  "offre_sans_decision",
+  "offre_acceptee_sans_compromis",
+];
+
+// Libellé du seuil, propre à chaque règle temporelle (le sens de `seuil_jours` se lit au niveau de
+// la ligne, jamais de la colonne — voir db/schema.ts) : "Après N jours sans contact",
+// "N jours avant l'échéance"... jamais un seul texte générique qui perdrait le sens métier.
+const LIBELLE_SEUIL: Partial<Record<CodeRegleAutomatisation, { prefixe: string; suffixe: string }>> = {
+  inactivite_prospect_vendeur: { prefixe: "Après", suffixe: "jours sans contact" },
+  mandat_expire_bientot: { prefixe: "Dans les", suffixe: "jours avant l'échéance du mandat" },
+  offre_sans_decision: { prefixe: "Après", suffixe: "jours sans décision sur l'offre" },
+  offre_acceptee_sans_compromis: { prefixe: "Après", suffixe: "jours depuis l'acceptation, sans compromis" },
+};
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx, app/biens/page.tsx) :
 // sans ce flag, next build tente de pré-générer cette page en interrogeant la DB au moment du build —
@@ -121,21 +137,21 @@ export default async function PageAutomatisations() {
                 >
                   <input type="hidden" name="regleCode" value={regle.code} />
                   <label className="text-[12px] text-text-2">
-                    Après
+                    {LIBELLE_SEUIL[regle.code]?.prefixe ?? "Après"}
                     <input
                       type="number"
                       name="seuilJours"
                       min={1}
                       required
-                      defaultValue={config?.seuilJoursInactivite ?? ""}
+                      defaultValue={config?.seuilJours ?? ""}
                       className="w-16 mx-1.5 border border-border-md rounded px-2 py-1 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                     />
-                    jours sans contact
+                    {LIBELLE_SEUIL[regle.code]?.suffixe ?? "jours"}
                   </label>
                   <button type="submit" className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors">
                     Enregistrer
                   </button>
-                  {config?.seuilJoursInactivite == null && (
+                  {config?.seuilJours == null && (
                     <span className="text-[11px] text-danger">Seuil requis avant activation</span>
                   )}
                 </form>

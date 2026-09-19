@@ -77,7 +77,11 @@ describe("ADR-060 — migration lifecycle : additive, nullable, sans default", (
     // `parties_mandat` existe depuis le lot MANDATE_PARTIES_V1 (garanties dans
     // partieMandat.structurel.test.ts) ; le mandat lui-même n'embarque toujours aucun contact.
     expect(colonne("contact_id")).toBeUndefined();
-    expect(tables.get("evenements_metier")!.columns.map((c) => c.name)).not.toContain("mandat_id");
+    // `evenements_metier.mandat_id` N'existait PAS à la livraison de ce lot (ADR-060) — ajoutée
+    // depuis par AUTOMATION_ENGINE_GENERALIZATION_V1 (ADR-062, migration 0047) pour cibler
+    // `mandat_expire_bientot`. Ce lot-ci (mandate lifecycle) n'a lui-même jamais ajouté cette
+    // colonne ; la garantie déplacée ici : `taches`/`documents_bien` restent sans `mandat_id`, ADR-060
+    // n'a jamais fait de ce mandat une cible directe hors de son propre domaine.
     expect(tables.get("taches")!.columns.map((c) => c.name)).not.toContain("mandat_id");
     expect(tables.get("documents_bien")!.columns.map((c) => c.name)).not.toContain("mandat_id");
   });

@@ -8,7 +8,7 @@ function ligneVersConfiguration(ligne: typeof configurationsAutomatisation.$infe
   return {
     regleCode: ligne.regleCode as CodeRegleAutomatisation,
     active: ligne.active,
-    seuilJoursInactivite: ligne.seuilJoursInactivite ?? undefined,
+    seuilJours: ligne.seuilJours ?? undefined,
     modifieLe: ligne.modifieLe.toISOString(),
   };
 }
@@ -56,19 +56,16 @@ export async function definirActivationAutomatisation(
     });
 }
 
-// Seuil produit explicite (ADR-033, point 4) — jamais une constante cachée. Ne touche jamais
-// `active` : renseigner/corriger le seuil est un geste distinct de l'activation (la garde
-// "impossible d'activer sans seuil valide" vit dans la Server Action, pas ici — ADR-007).
-export async function definirSeuilAutomatisation(
-  regleCode: CodeRegleAutomatisation,
-  seuilJoursInactivite: number,
-  workspaceId: string
-): Promise<void> {
+// Seuil produit explicite (ADR-033, point 4 ; généralisé AUTOMATION_ENGINE_GENERALIZATION_V1 — plus
+// spécifique à une seule règle, voir types/automatisation.ts) — jamais une constante cachée. Ne
+// touche jamais `active` : renseigner/corriger le seuil est un geste distinct de l'activation (la
+// garde "impossible d'activer sans seuil valide" vit dans la Server Action, pas ici — ADR-007).
+export async function definirSeuilAutomatisation(regleCode: CodeRegleAutomatisation, seuilJours: number, workspaceId: string): Promise<void> {
   await getDb()
     .insert(configurationsAutomatisation)
-    .values({ regleCode, seuilJoursInactivite, workspaceId })
+    .values({ regleCode, seuilJours, workspaceId })
     .onConflictDoUpdate({
       target: configurationsAutomatisation.regleCode,
-      set: { seuilJoursInactivite, modifieLe: new Date() },
+      set: { seuilJours, modifieLe: new Date() },
     });
 }

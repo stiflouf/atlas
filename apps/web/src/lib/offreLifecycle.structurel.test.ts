@@ -76,8 +76,11 @@ describe("ADR-061 — migration 0046 : additive", () => {
     const sql = readFileSync(join(SRC, "db", "migrations", "0046_offer_lifecycle.sql"), "utf8").replace(/^--.*$/gm, "");
     expect(sql).not.toMatch(/^\s*(INSERT|UPDATE|DELETE)\b/m);
     expect(sql).not.toMatch(/DROP COLUMN|DROP TABLE/);
+    // 0046 n'est plus forcément la DERNIÈRE migration du dépôt (AUTOMATION_ENGINE_GENERALIZATION_V1,
+    // ADR-062, a depuis ajouté 0047-0049) — seule compte ici l'additivité de 0046 elle-même,
+    // vérifiée ci-dessus. On confirme seulement sa présence.
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrations[migrations.length - 1]).toBe("0046_offer_lifecycle.sql");
+    expect(migrations).toContain("0046_offer_lifecycle.sql");
   });
 });
 

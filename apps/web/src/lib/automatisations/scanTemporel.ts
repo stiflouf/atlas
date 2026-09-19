@@ -1,95 +1,75 @@
-import { getDb } from "@/db/client";
-import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
-import { calculerOccurrencesInactiviteDues } from "./calculOccurrencesInactivite";
-import { getConfigurationAutomatisation } from "./configurationAutomatisationRepository";
-import { emettreEvenementEtPreparerExecutions } from "./evenementMetierRepository";
-import { traiterExecutionsEnAttente } from "./moteur";
-import { demarrerRunScanAutomatisation, terminerRunScanAutomatisation } from "./runScanAutomatisationRepository";
-import { resoudreWorkspaceExecutionMachine } from "@/lib/workspaceRepository";
+import { scannerInactiviteProspectVendeur } from "./scanners/inactiviteProspectVendeur";
+import { scannerMandatExpireBientot } from "./scanners/mandatExpireBientot";
+import { scannerOffreSansDecision } from "./scanners/offreSansDecision";
+import { scannerOffreAccepteeSansCompromis } from "./scanners/offreAccepteeSansCompromis";
+import type { CodeRegleAutomatisation } from "@/types/automatisation";
 
-const REGLE_CODE = "inactivite_prospect_vendeur" as const;
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — moteur temporel GÉNÉRIQUE (ADR-033 généralisé). Remplace
+// l'ancien couplage direct route -> `scannerInactiviteProspectVendeur()` par un vrai registre :
+// chaque règle temporelle est un `ScannerTemporel` explicite, déclaré une fois ici, jamais un cas
+// spécial dans la route (brief §3/§29/§50). Volontairement AUCUNE abstraction "squelette" générique
+// au-delà du registre lui-même (brief §33, pas de DSL) : chaque scanner (src/lib/automatisations/
+// scanners/*.ts) reste du code TypeScript explicite suivant le même déroulé —
+// configuration -> workspace -> run -> candidats -> par occurrence -> obsolescence -> fin de run —
+// déjà éprouvé par `scannerInactiviteProspectVendeur` avant ce lot.
+export type ResultatScanRegle =
+  | { codeRegle: CodeRegleAutomatisation; execute: false }
+  | {
+      codeRegle: CodeRegleAutomatisation;
+      execute: true;
+      runId: string;
+      nombreCandidats: number;
+      nombreOccurrencesCreees: number;
+      nombreTachesObsoletes?: number;
+      erreurTechnique?: string;
+    };
+
+export type ScannerTemporel = {
+  codeRegle: CodeRegleAutomatisation;
+  executer: (maintenant?: Date) => Promise<ResultatScanRegle>;
+};
+
+// Un scanner par règle temporelle — même ordre que leur apparition dans le catalogue événementiel
+// n'a aucune importance ici (chacun est indépendant), mais chaque `codeRegle` DOIT correspondre à
+// une entrée réelle de `CATALOGUE_REGLES_AUTOMATISATION` (garde structurelle,
+// scanTemporel.registry.test.ts).
+export const SCANNERS_TEMPORELS: ScannerTemporel[] = [
+  { codeRegle: "inactivite_prospect_vendeur", executer: scannerInactiviteProspectVendeur },
+  { codeRegle: "mandat_expire_bientot", executer: scannerMandatExpireBientot },
+  { codeRegle: "offre_sans_decision", executer: scannerOffreSansDecision },
+  { codeRegle: "offre_acceptee_sans_compromis", executer: scannerOffreAccepteeSansCompromis },
+];
 
 function categoriserErreur(erreur: unknown): string {
   if (erreur instanceof Error) return erreur.message.slice(0, 200);
   return "erreur_inconnue";
 }
 
-export type ResultatScanInactiviteProspectVendeur =
-  | { execute: false }
-  | { execute: true; runId: string; nombreCandidats: number; nombreOccurrencesCreees: number; erreurTechnique?: string };
-
-// Point d'entrée du moteur temporel (ADR-033) — appelé par l'endpoint /api/automatisations/scan,
-// lui-même déclenché par un cron EXTERNE (aucun scheduler interne à Atlas). `maintenant` est un
-// paramètre explicite, jamais un `new Date()` implicite ici : calculé une seule fois par appel,
-// transmis tel quel à la fonction pure de calcul (déterminisme, testabilité).
-//
-// Si la règle est inactive ou son seuil non configuré, AUCUN run n'est créé — un run représente
-// une tentative de scan réellement effectuée, pas la consultation d'un feature flag.
-//
-// `listerProspectsVendeurs()` (déjà existant, ADR-027) exclut prospects archivés/perdus/mandat
-// déjà signé — jamais un filtre réinventé ici (ADR-033, point 9). Chaque occurrence est émise dans
-// sa PROPRE transaction courte : un scan portant sur des centaines de prospects ne dépend jamais
-// d'un seul verrou long, et une erreur sur un prospect n'affecte jamais les autres.
-export async function scannerInactiviteProspectVendeur(
-  maintenant: Date = new Date()
-): Promise<ResultatScanInactiviteProspectVendeur> {
-  const configuration = await getConfigurationAutomatisation(REGLE_CODE);
-  if (!configuration.active || configuration.seuilJoursInactivite == null) {
-    return { execute: false };
-  }
-
-  // ADR-054 — contexte d'exécution MACHINE : ce chemin n'a ni session ni identité humaine et ne
-  // doit surtout pas en simuler une. Le périmètre est lu en base et échouera bruyamment le jour où
-  // plusieurs workspaces existeront — un scan multi-workspace est une passe PAR workspace, une
-  // conception à part entière, jamais un contournement silencieux.
-  const workspaceId = await resoudreWorkspaceExecutionMachine();
-
-  const runId = await demarrerRunScanAutomatisation(REGLE_CODE, workspaceId);
-  let nombreCandidats = 0;
-  let nombreOccurrencesCreees = 0;
-
-  try {
-    const prospects = await listerProspectsVendeurs();
-    nombreCandidats = prospects.length;
-    const candidats = prospects.map((p) => ({
-      prospectVendeurId: p.id,
-      dernierContactLe: p.dernierContactLe,
-      creeLe: p.creeLe,
-    }));
-    const occurrences = calculerOccurrencesInactiviteDues(maintenant, configuration.seuilJoursInactivite, candidats);
-
-    for (const occurrence of occurrences) {
-      try {
-        const { evenement, idsExecutionsATraiter } = await getDb().transaction((tx) =>
-          emettreEvenementEtPreparerExecutions(
-            {
-              typeEvenement: REGLE_CODE,
-              prospectVendeurId: occurrence.prospectVendeurId,
-              ancreCycle: new Date(occurrence.ancreCycle),
-            },
-            workspaceId,
-            tx
-          )
-        );
-        // evenement défini = occurrence réellement nouvelle (jamais un rejeu idempotent) —
-        // c'est le seul compteur honnête de "occurrences créées", indépendant du nombre
-        // d'exécutions effectivement préparées (qui dépend en plus de l'activation, déjà vérifiée
-        // pour cette règle mais potentiellement pas pour une future règle réagissant au même type).
-        if (evenement) nombreOccurrencesCreees += 1;
-        await traiterExecutionsEnAttente(idsExecutionsATraiter);
-      } catch (erreur) {
-        // Isolée par prospect (ADR-033, point 14) — un crash sur une occurrence ne doit jamais
-        // interrompre le scan des suivantes ; le prochain run la retrouvera de toute façon (même
-        // ancre, aucune ligne d'événement n'aura été créée pour elle).
-        console.error("[automatisations] échec du traitement d'une occurrence d'inactivité :", erreur);
-      }
+// Point d'entrée unique appelé par /api/automatisations/scan — parcourt le REGISTRE, jamais une
+// règle nommée en dur (brief §29/§50). Chaque scanner est isolé (brief §30, même principe que
+// l'isolation par occurrence déjà interne à chaque scanner) : l'échec d'un scanner (exception non
+// rattrapée, ex. DB indisponible pendant SON run) n'empêche jamais les suivants de s'exécuter —
+// jamais une exception masquée pour autant, elle est rapportée dans le résultat de CE scanner.
+export async function executerScanTemporelComplet(maintenant: Date = new Date()): Promise<ResultatScanRegle[]> {
+  const resultats: ResultatScanRegle[] = [];
+  for (const scanner of SCANNERS_TEMPORELS) {
+    try {
+      resultats.push(await scanner.executer(maintenant));
+    } catch (erreur) {
+      resultats.push({
+        codeRegle: scanner.codeRegle,
+        execute: true,
+        runId: "",
+        nombreCandidats: 0,
+        nombreOccurrencesCreees: 0,
+        erreurTechnique: categoriserErreur(erreur),
+      });
     }
-
-    await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees });
-    return { execute: true, runId, nombreCandidats, nombreOccurrencesCreees };
-  } catch (erreur) {
-    const erreurTechnique = categoriserErreur(erreur);
-    await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees, erreurTechnique });
-    return { execute: true, runId, nombreCandidats, nombreOccurrencesCreees, erreurTechnique };
   }
+  return resultats;
 }
+
+export { scannerInactiviteProspectVendeur } from "./scanners/inactiviteProspectVendeur";
+export { scannerMandatExpireBientot } from "./scanners/mandatExpireBientot";
+export { scannerOffreSansDecision } from "./scanners/offreSansDecision";
+export { scannerOffreAccepteeSansCompromis } from "./scanners/offreAccepteeSansCompromis";

@@ -4,14 +4,16 @@ import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
-import { listerOffresPourBien } from "@/lib/offreRepository";
-import { listerCompromisPourBien } from "@/lib/compromisRepository";
+import { getMandatById } from "@/lib/mandatRepository";
+import { getOffreById, listerOffresPourBien } from "@/lib/offreRepository";
+import { getCompromisParOffreId, listerCompromisPourBien } from "@/lib/compromisRepository";
 import { existeVisitePlanifieePourPaire } from "@/lib/visiteRepository";
 import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
 import { resoudreProfilCompatibilite } from "@/lib/compatibilite/profilCompatibiliteRepository";
 import { existeExecutionAvecTacheOuvertePourPaire } from "./executionAutomatisationRepository";
 import type { ChampsTacheAutomatique, CodeRegleAutomatisation, EvenementMetier, TypeEvenementMetier } from "@/types/automatisation";
 import { nomComplet } from "@/lib/identite/nomPersonne";
+import { dateCivileVersDate, joursCivilsEcoules } from "@/lib/temps";
 
 // Catalogue de règles déterministes (ADR-032) — versionné et testé en code (pas de constructeur
 // no-code en V1, pas de règles en base : seule leur ACTIVATION vit en base,
@@ -282,6 +284,100 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
         type: "appel",
         priorite: "normale",
         cible: { type: "acquereur", id: acquereurId },
+      };
+    },
+  },
+  {
+    code: "mandat_expire_bientot",
+    nom: "Mandat expirant bientôt",
+    description: "Crée une tâche de préparation au renouvellement lorsque le mandat courant d'un bien approche de son échéance (AUTOMATION_ENGINE_GENERALIZATION_V1).",
+    typeEvenement: "mandat_expire_bientot",
+    // Cible le BIEN, jamais le mandat lui-même : `taches` ne porte aucune colonne `mandat_id`
+    // (ADR-028, jamais ajoutée pour ce seul usage — brief §9/§11) ; le bien reste une cible pleinement
+    // navigable (`ROUTE_FICHE_PAR_TYPE_CIBLE`), contrairement à `offre`/`compromis`.
+    construireTache: async (evenement) => {
+      if (!evenement.mandatId) return undefined;
+      const mandat = await getMandatById(evenement.mandatId, evenement.workspaceId);
+      // Introuvable (jamais supprimé en pratique) ou sans date_fin (le scanner ne produit jamais un
+      // tel événement — garde défensive, pas un cas attendu) — jamais de retry infini. Aucune
+      // revalidation "encore canonique aujourd'hui" ici (contrairement à nouveau_match_bien_acquereur,
+      // dont l'état source est volatile en continu) : le candidat vient d'être établi par le scanner
+      // à l'instant du DÉTECTEUR, exécuté quasi immédiatement après ; si le mandat devait malgré tout
+      // être résilié/remplacé entre-temps (course rare), le PROCHAIN scan le clôturera de toute façon
+      // (obsolescence, brief §12) — une revalidation ici n'ajouterait qu'une dépendance implicite à
+      // "aujourd'hui", jamais au `maintenant` explicite du scan (ADR-033, déterminisme).
+      if (!mandat || !mandat.dateFin) return undefined;
+
+      const bien = await getBienById(mandat.bienId);
+      if (!bien || bien.archiveLe) return undefined;
+
+      // `new Date()` — jamais `evenement.survenuLe` (toujours l'horloge réelle du serveur au moment
+      // du COMMIT, `defaultNow()` en base, indépendante de tout `maintenant` simulé passé au
+      // scanner) : purement un affichage humain, jamais relu par la garde ci-dessus ni par
+      // l'obsolescence — un décalage entre exécution immédiate et reprise différée y est honnête,
+      // pas une source d'incohérence métier.
+      const joursRestants = joursCivilsEcoules(new Date(), dateCivileVersDate(mandat.dateFin));
+      const dateFinFormatee = dateCivileVersDate(mandat.dateFin).toLocaleDateString("fr-FR");
+
+      return {
+        titre: "Mandat à renouveler bientôt",
+        contexte: `Le mandat arrive à échéance le ${dateFinFormatee}.`,
+        type: "relance",
+        priorite: joursRestants <= 7 ? "haute" : "normale",
+        cible: { type: "bien", id: bien.id },
+      };
+    },
+  },
+  {
+    code: "offre_sans_decision",
+    nom: "Offre sans décision",
+    description: "Crée une tâche de relance lorsqu'une offre reste `en_cours` au-delà du seuil configuré, sans décision (AUTOMATION_ENGINE_GENERALIZATION_V1).",
+    typeEvenement: "offre_sans_decision",
+    construireTache: async (evenement) => {
+      if (!evenement.offreId) return undefined;
+      const offre = await getOffreById(evenement.offreId, evenement.workspaceId);
+      // Revalidation : seule une offre encore `en_cours` au moment de l'exécution produit une
+      // tâche — une offre décidée entre l'émission de l'événement et son traitement (course rare,
+      // reprise après crash) ne doit jamais produire une relance obsolète.
+      if (!offre || offre.statut !== "en_cours") return undefined;
+
+      // `new Date()` — jamais `evenement.survenuLe` (horloge réelle du serveur au COMMIT,
+      // indépendante de tout `maintenant` simulé passé au scanner) : purement un affichage humain,
+      // jamais relu par une garde métier.
+      const joursEcoules = joursCivilsEcoules(dateCivileVersDate(offre.dateOffre), new Date());
+
+      return {
+        titre: "Offre en attente de décision",
+        contexte: `Cette offre est sans décision depuis ${joursEcoules} jour${joursEcoules > 1 ? "s" : ""}.`,
+        type: "relance",
+        priorite: "normale",
+        cible: { type: "offre", id: offre.id },
+      };
+    },
+  },
+  {
+    code: "offre_acceptee_sans_compromis",
+    nom: "Offre acceptée sans compromis",
+    description: "Crée une tâche de suivi lorsqu'une offre acceptée depuis au moins le seuil configuré n'a toujours aucun compromis lié (AUTOMATION_ENGINE_GENERALIZATION_V1).",
+    typeEvenement: "offre_acceptee_sans_compromis",
+    construireTache: async (evenement) => {
+      if (!evenement.offreId) return undefined;
+      const offre = await getOffreById(evenement.offreId, evenement.workspaceId);
+      if (!offre || offre.statut !== "acceptee") return undefined;
+      // Re-vérifie l'absence de compromis au moment de l'exécution (même raisonnement que
+      // ci-dessus) : un compromis créé entre l'émission et le traitement ne doit jamais produire
+      // une tâche de suivi obsolète — `UNIQUE(compromis.offre_id)` garantit qu'il y en a au plus un.
+      if (await getCompromisParOffreId(offre.id, evenement.workspaceId)) return undefined;
+      if (!offre.dateDecision) return undefined;
+
+      const joursEcoules = joursCivilsEcoules(dateCivileVersDate(offre.dateDecision), new Date());
+
+      return {
+        titre: "Offre acceptée : préparer le compromis",
+        contexte: `Cette offre est acceptée depuis ${joursEcoules} jour${joursEcoules > 1 ? "s" : ""} sans compromis associé.`,
+        type: "relance",
+        priorite: "normale",
+        cible: { type: "offre", id: offre.id },
       };
     },
   },

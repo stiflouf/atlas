@@ -2088,6 +2088,13 @@ export const evenementsMetier = pgTable(
     // aucune offre n'est supprimée). Jamais de `bien_id` posé en même temps : le bien se dérive
     // par `offre → bien`, et le CHECK « une seule cible » l'interdirait.
     offreId: uuid("offre_id").references(() => offres.id),
+    // AUTOMATION_ENGINE_GENERALIZATION_V1 — cible MANDAT de `mandat_expire_bientot` (NO ACTION,
+    // même raisonnement que `offreId` ci-dessus : journal append-only, aucun mandat supprimé). Le
+    // bien se dérive par `mandat → bien` ; jamais de `bien_id` posé en même temps (CHECK « une seule
+    // cible »). Contrairement à `mandat_signe` (toujours `prospectVendeurId`, non touché par ce
+    // lot), cet événement porte l'identité du mandat lui-même : un renouvellement crée une nouvelle
+    // ligne `mandats` (`remplace_mandat_id`), donc une occurrence authentiquement nouvelle.
+    mandatId: uuid("mandat_id").references(() => mandats.id),
     ancreCycle: timestamp("ancre_cycle", { withTimezone: true }),
     bienId: uuid("bien_id").references(() => biens.id),
     acquereurId: uuid("acquereur_id").references(() => acquereurs.id),
@@ -2101,13 +2108,16 @@ export const evenementsMetier = pgTable(
         'visite_realisee','rdv_estimation_realise','mandat_signe','compromis_signe',
         'inactivite_prospect_vendeur','compatibilite_bien_acquereur_devenue_compatible',
         'offre_recue','offre_acceptee','offre_refusee','offre_retiree','offre_caduque',
-        'compromis_realise','compromis_annule'
+        'compromis_realise','compromis_annule',
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
       )`
     ),
     // Étendu par ADR-036 : le couple (bien_id, acquereur_id), posé ENSEMBLE, compte désormais comme
     // une 4e cible logique possible — jamais une 5e/6e colonne comptée séparément (sinon un
     // événement de compatibilité, qui pose les deux, violerait "exactement une cible"). Le second
     // CHECK ci-dessous interdit indépendamment qu'une seule des deux colonnes soit posée seule.
+    // Étendu par AUTOMATION_ENGINE_GENERALIZATION_V1 : `mandat_id` compte comme une 5e cible
+    // logique possible, même principe que `offre_id`.
     check(
       "evenements_metier_une_seule_cible_check",
       sql`(
@@ -2115,6 +2125,7 @@ export const evenementsMetier = pgTable(
         (case when ${table.prospectVendeurId} is not null then 1 else 0 end) +
         (case when ${table.compromisId} is not null then 1 else 0 end) +
         (case when ${table.offreId} is not null then 1 else 0 end) +
+        (case when ${table.mandatId} is not null then 1 else 0 end) +
         (case when ${table.bienId} is not null and ${table.acquereurId} is not null then 1 else 0 end)
       ) = 1`
     ),
@@ -2142,10 +2153,18 @@ export const evenementsMetier = pgTable(
       .on(table.typeEvenement, table.compromisId)
       .where(sql`${table.compromisId} IS NOT NULL`),
     // ADR-061 — types Offre PONCTUELS (cycle de vie irréversible : chaque transition survient au
-    // plus une fois par offre) : une occurrence par (type, offre).
+    // plus une fois par offre) : une occurrence par (type, offre). Réutilisé tel quel par
+    // AUTOMATION_ENGINE_GENERALIZATION_V1 pour `offre_sans_decision`/`offre_acceptee_sans_compromis`
+    // (nouvelles valeurs de `typeEvenement` portant `offreId`, déjà couvertes par cet index générique
+    // — aucun nouvel index nécessaire).
     uniqueIndex("evenements_metier_offre_unique")
       .on(table.typeEvenement, table.offreId)
       .where(sql`${table.offreId} IS NOT NULL`),
+    // AUTOMATION_ENGINE_GENERALIZATION_V1 — cible MANDAT ponctuelle (une occurrence par mandat : un
+    // renouvellement crée une nouvelle ligne `mandats`, donc une nouvelle occurrence légitime).
+    uniqueIndex("evenements_metier_mandat_unique")
+      .on(table.typeEvenement, table.mandatId)
+      .where(sql`${table.mandatId} IS NOT NULL`),
     // Dédié au type cyclique de compatibilité (ADR-036), même principe que l'index ci-dessus pour
     // 'inactivite_prospect_vendeur' : une occurrence par (bien, acquéreur, cycle) — le même cycle
     // rejoué (retry exact, deux synchronisations concurrentes de la même paire) ne duplique jamais ;
@@ -2203,7 +2222,8 @@ export const executionsAutomatisation = pgTable(
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
         'inactivite_prospect_vendeur','nouveau_match_bien_acquereur',
-        'retour_vendeur_apres_visite'
+        'retour_vendeur_apres_visite',
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
       )`
     ),
     check("executions_automatisation_nombre_tentatives_positif_check", sql`${table.nombreTentatives} >= 0`),
@@ -2239,12 +2259,18 @@ export const configurationsAutomatisation = pgTable(
       .notNull()
       .references(() => workspaces.id),
     active: boolean("active").notNull().default(false),
-    // Paramètre produit explicite (ADR-033), pas une constante cachée — n'a de sens que pour
-    // 'inactivite_prospect_vendeur' aujourd'hui, NULL pour les autres règles ET par défaut : une
-    // règle qui a besoin d'un seuil ne peut jamais être activée tant qu'il n'est pas renseigné
-    // (garde applicative dans la Server Action, pas un CHECK croisé avec `active` ici — cohérent
-    // avec ADR-007, la validation métier vit dans la Server Action, pas dans le schéma).
-    seuilJoursInactivite: integer("seuil_jours_inactivite"),
+    // Paramètre produit explicite (ADR-033), pas une constante cachée — GÉNÉRALISÉ par
+    // AUTOMATION_ENGINE_GENERALIZATION_V1 (colonne renommée depuis `seuil_jours_inactivite`, qui ne
+    // servait qu'à une seule règle) : n'a de sens que pour les règles temporelles à seuil
+    // (`inactivite_prospect_vendeur`, `mandat_expire_bientot`, `offre_sans_decision`,
+    // `offre_acceptee_sans_compromis`), NULL pour les autres règles ET par défaut. Chaque règle
+    // possède sa PROPRE ligne (PK = regleCode) : un même nom de colonne réutilisé par plusieurs
+    // lignes n'est jamais ambigu, sa signification ("jours d'inactivité", "jours avant échéance",
+    // "jours sans décision"...) se lit au niveau de la ligne, jamais de la colonne. Une règle qui a
+    // besoin d'un seuil ne peut jamais être activée tant qu'il n'est pas renseigné (garde
+    // applicative dans la Server Action, pas un CHECK croisé avec `active` ici — cohérent avec
+    // ADR-007, la validation métier vit dans la Server Action, pas dans le schéma).
+    seuilJours: integer("seuil_jours"),
     modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -2254,12 +2280,13 @@ export const configurationsAutomatisation = pgTable(
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
         'inactivite_prospect_vendeur','nouveau_match_bien_acquereur',
-        'retour_vendeur_apres_visite'
+        'retour_vendeur_apres_visite',
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
       )`
     ),
     check(
       "configurations_automatisation_seuil_positif_check",
-      sql`${table.seuilJoursInactivite} IS NULL OR ${table.seuilJoursInactivite} > 0`
+      sql`${table.seuilJours} IS NULL OR ${table.seuilJours} > 0`
     ),
   ]
 );
@@ -2297,15 +2324,17 @@ export const runsScanAutomatisation = pgTable(
     erreurTechnique: text("erreur_technique"),
   },
   (table) => [
-    // 'nouveau_match_bien_acquereur' (ADR-037) volontairement absent : cette règle ne réagit qu'à
-    // un événement direct, jamais à un scan temporel — aucune ligne de ce journal ne la concernera
-    // jamais.
+    // 'nouveau_match_bien_acquereur'/'retour_vendeur_apres_visite' volontairement absentes : ces
+    // règles ne réagissent qu'à un événement direct, jamais à un scan temporel — aucune ligne de ce
+    // journal ne les concernera jamais. AUTOMATION_ENGINE_GENERALIZATION_V1 ajoute ses 3 règles
+    // temporelles, seules celles-ci créent effectivement un run.
     check(
       "runs_scan_automatisation_regle_code_check",
       sql`${table.regleCode} IN (
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
-        'inactivite_prospect_vendeur'
+        'inactivite_prospect_vendeur',
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
       )`
     ),
   ]

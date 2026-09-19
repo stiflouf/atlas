@@ -17,6 +17,7 @@ function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier 
     prospectVendeurId: ligne.prospectVendeurId ?? undefined,
     compromisId: ligne.compromisId ?? undefined,
     offreId: ligne.offreId ?? undefined,
+    mandatId: ligne.mandatId ?? undefined,
     ancreCycle: ligne.ancreCycle ? ligne.ancreCycle.toISOString() : undefined,
     bienId: ligne.bienId ?? undefined,
     acquereurId: ligne.acquereurId ?? undefined,
@@ -35,8 +36,22 @@ export type NouvelEvenementMetier =
   | { typeEvenement: "visite_realisee"; compteRenduVisiteId: string }
   | { typeEvenement: "rdv_estimation_realise" | "mandat_signe"; prospectVendeurId: string }
   | { typeEvenement: "compromis_signe" | "compromis_realise" | "compromis_annule"; compromisId: string }
-  // ADR-061 — cible offre_id ; idempotent par (type, offre_id).
-  | { typeEvenement: "offre_recue" | "offre_acceptee" | "offre_refusee" | "offre_retiree" | "offre_caduque"; offreId: string }
+  // ADR-061 — cible offre_id ; idempotent par (type, offre_id). AUTOMATION_ENGINE_GENERALIZATION_V1
+  // réutilise la MÊME cible (donc le même index d'idempotence) pour ses deux règles temporelles
+  // portant sur une offre — aucune distinction de forme n'est nécessaire, `offreId` suffit.
+  | {
+      typeEvenement:
+        | "offre_recue"
+        | "offre_acceptee"
+        | "offre_refusee"
+        | "offre_retiree"
+        | "offre_caduque"
+        | "offre_sans_decision"
+        | "offre_acceptee_sans_compromis";
+      offreId: string;
+    }
+  // AUTOMATION_ENGINE_GENERALIZATION_V1 — cible mandat_id ; idempotent par (type, mandat_id).
+  | { typeEvenement: "mandat_expire_bientot"; mandatId: string }
   | { typeEvenement: "inactivite_prospect_vendeur"; prospectVendeurId: string; ancreCycle: Date }
   | {
       typeEvenement: "compatibilite_bien_acquereur_devenue_compatible";
@@ -81,6 +96,7 @@ export async function emettreEvenementEtPreparerExecutions(
     prospectVendeurId: "prospectVendeurId" in input ? input.prospectVendeurId : null,
     compromisId: "compromisId" in input ? input.compromisId : null,
     offreId: "offreId" in input ? input.offreId : null,
+    mandatId: "mandatId" in input ? input.mandatId : null,
     ancreCycle: "ancreCycle" in input ? input.ancreCycle : null,
     bienId: "bienId" in input ? input.bienId : null,
     acquereurId: "acquereurId" in input ? input.acquereurId : null,
@@ -97,6 +113,8 @@ export async function emettreEvenementEtPreparerExecutions(
         ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.compromisId], where: sql`${evenementsMetier.compromisId} IS NOT NULL` }
         : "offreId" in input
           ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.offreId], where: sql`${evenementsMetier.offreId} IS NOT NULL` }
+        : "mandatId" in input
+          ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.mandatId], where: sql`${evenementsMetier.mandatId} IS NOT NULL` }
         : input.typeEvenement === "compatibilite_bien_acquereur_devenue_compatible"
           ? {
               colonnes: [

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, notExists, isNull, or, gt, gte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, notExists, isNull, or, gt, gte, lte, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb, type Executeur } from "@/db/client";
 import { biens as biensTable, mandats as mandatsTable, projetsVendeur as projetsVendeurTable } from "@/db/schema";
@@ -286,6 +286,43 @@ export async function mandatCourantDuBien(
     .orderBy(desc(mandatsTable.dateDebut), desc(mandatsTable.creeLe), desc(mandatsTable.id))
     .limit(1);
   return ligne ? ligneVersMandat(ligne.mandat) : undefined;
+}
+
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — variante EN LOT de `mandatCourantDuBien` pour le scanner
+// `mandat_expire_bientot` (ADR-060 §"Scalabilité", qui prescrit exactement ce calcul en une passe
+// pour une liste de biens plutôt que bien par bien). Même WHERE que `mandatCourantDuBien` (non
+// résilié, non remplacé via `successeurDe`), plus la fenêtre `dateFin BETWEEN aujourdhuiISO AND
+// finFenetreISO` ; puis réduction en JS au premier par bien selon le MÊME ordre déterministe
+// (dateDebut desc, creeLe desc, id desc) — même patron que `listerMandatsDuBien` ci-dessus (garder
+// la première ligne par clé, jamais une requête par ligne). Un bien avec plusieurs mandats "courants"
+// simultanés (import incohérent) reste lisible, toujours la même réponse déterministe ; rien n'est
+// réparé. Une requête, indépendante du nombre de biens du workspace.
+export async function mandatsCourantsExpirantBientot(
+  workspaceId: string,
+  aujourdhuiISO: string,
+  finFenetreISO: string,
+  executeur: Executeur = getDb()
+): Promise<Mandat[]> {
+  const lignes = await executeur
+    .select({ mandat: mandatsTable })
+    .from(mandatsTable)
+    .innerJoin(biensTable, eq(mandatsTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(biensTable.workspaceId, workspaceId),
+        notExists(successeurDe(executeur)),
+        or(isNull(mandatsTable.resilieLe), gt(mandatsTable.resilieLe, aujourdhuiISO)),
+        gte(mandatsTable.dateFin, aujourdhuiISO),
+        lte(mandatsTable.dateFin, finFenetreISO)
+      )
+    )
+    .orderBy(asc(mandatsTable.bienId), desc(mandatsTable.dateDebut), desc(mandatsTable.creeLe), desc(mandatsTable.id));
+
+  const parBien = new Map<string, Mandat>();
+  for (const { mandat } of lignes) {
+    if (!parBien.has(mandat.bienId)) parBien.set(mandat.bienId, ligneVersMandat(mandat));
+  }
+  return [...parBien.values()];
 }
 
 // ADR-060 §11 et §13 — verrouille le BIEN (scoped) avant qu'un writer standard ne crée un mandat

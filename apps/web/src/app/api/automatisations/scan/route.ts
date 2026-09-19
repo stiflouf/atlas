@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { scannerInactiviteProspectVendeur } from "@/lib/automatisations/scanTemporel";
+import { executerScanTemporelComplet } from "@/lib/automatisations/scanTemporel";
 
 function secretValide(recu: string, attendu: string): boolean {
   const recuBuf = Buffer.from(recu);
@@ -21,6 +21,11 @@ function secretValide(recu: string, attendu: string): boolean {
 // `Authorization: Bearer <secret>`, jamais en query string, comparaison en temps constant, jamais
 // journalisé (y compris en cas d'échec — seul le fait "non autorisé" est loggé, jamais la valeur
 // reçue).
+//
+// AUTOMATION_ENGINE_GENERALIZATION_V1 — la route ne connaît plus AUCUNE règle temporelle
+// nommément : elle délègue entièrement au registre (`SCANNERS_TEMPORELS`, scanTemporel.ts), qui
+// parcourt chaque scanner et isole ses erreurs. Le corps de la réponse est désormais un TABLEAU (un
+// résultat par scanner du registre), plus un objet unique.
 export async function POST(request: Request): Promise<NextResponse> {
   const secretAttendu = process.env.AUTOMATISATIONS_SCAN_SECRET;
   if (!secretAttendu) {
@@ -33,6 +38,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ erreur: "Non autorisé." }, { status: 401 });
   }
 
-  const resultat = await scannerInactiviteProspectVendeur();
-  return NextResponse.json(resultat);
+  const resultats = await executerScanTemporelComplet();
+  return NextResponse.json(resultats);
 }
