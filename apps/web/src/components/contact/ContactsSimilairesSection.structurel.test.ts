@@ -10,6 +10,10 @@ const COMPOSANT = join(__dirname, "ContactsSimilairesSection.tsx");
 
 function codeSeul(chemin: string): string {
   return readFileSync(chemin, "utf8")
+    // Checkout Windows (core.autocrlf) : les fins de ligne CRLF casseraient la comparaison
+    // structurelle ci-dessous, dont l'attendu contient un `\n` littéral au milieu d'un texte JSX
+    // reformaté sur deux lignes — normalisées ici, jamais pour un fichier réellement écrit.
+    .replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/^\s*\/\/.*$/gm, " ");
 }

@@ -31,7 +31,9 @@ const writers = listerFichiersSource(SRC).filter((chemin) => ECRIT_CONTACT_ID.te
 
 describe("ADR-059 §10 — gardes d'écriture sur contact_id", () => {
   it("l'inventaire des writers est celui attendu, et chacun passe par la garde partagée", () => {
-    expect(writers.map((c) => c.replace(SRC + "/", "")).sort()).toEqual(
+    // `join()` produit des chemins avec le séparateur natif de l'OS (`\` sous Windows) —
+    // normalisés en `/` UNIQUEMENT pour la comparaison structurelle ci-dessous.
+    expect(writers.map((c) => c.replaceAll("\\", "/").replace(SRC.replaceAll("\\", "/") + "/", "")).sort()).toEqual(
       [
         "lib/clientRepository.ts",
         "lib/fusionContactRepository.ts",

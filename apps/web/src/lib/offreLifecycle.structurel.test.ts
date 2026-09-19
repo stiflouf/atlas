@@ -37,7 +37,10 @@ function listerFichiers(racine: string): string[] {
 }
 
 const FICHIERS = listerFichiers(SRC);
-const relatif = (c: string) => c.replace(SRC + "/", "");
+// `join()` produit des chemins avec le séparateur natif de l'OS (`\` sous Windows) — normalisés en
+// `/` UNIQUEMENT pour la comparaison structurelle ci-dessous, jamais pour un accès disque réel
+// (`readFileSync`/`readdirSync` continuent de recevoir les chemins natifs, inchangés).
+const relatif = (c: string) => c.replaceAll("\\", "/").replace(SRC.replaceAll("\\", "/") + "/", "");
 const OFFRES = codeSeul(join(SRC, "lib", "offreRepository.ts"));
 const COMPROMIS = codeSeul(join(SRC, "lib", "compromisRepository.ts"));
 const SCHEMA_SRC = readFileSync(join(SRC, "db", "schema.ts"), "utf8");
@@ -195,7 +198,7 @@ describe("ADR-061 — hors périmètre du lot", () => {
       expect(tables.get(t)!.columns.map((c) => c.name), t).not.toContain("projet_acquereur_id");
     }
     expect([...tables.keys()]).not.toContain("parties_offre");
-    const pages = listerFichiers(join(SRC, "app")).filter((c) => /\/page\.tsx$/.test(c) && /offres|compromis/.test(relatif(c)));
+    const pages = listerFichiers(join(SRC, "app")).filter((c) => /\/page\.tsx$/.test(relatif(c)) && /offres|compromis/.test(relatif(c)));
     expect(pages.map(relatif).sort()).toEqual(["app/compromis/nouveau/page.tsx", "app/offres/nouveau/page.tsx"]);
   });
 

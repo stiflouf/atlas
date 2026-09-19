@@ -12,6 +12,10 @@ const SRC = join(__dirname, "..", "..");
 
 function codeSeul(chemin: string): string {
   return readFileSync(chemin, "utf8")
+    // Checkout Windows (core.autocrlf) : les fins de ligne CRLF casseraient toute comparaison
+    // structurelle contenant un `\n` littéral ci-dessous — normalisées ici, jamais pour un fichier
+    // réellement écrit (lecture seule).
+    .replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, " ")
     .replace(/^\s*\/\/.*$/gm, " ");
@@ -26,7 +30,9 @@ function listerFichiers(racine: string): string[] {
 }
 
 const FICHIERS = listerFichiers(SRC);
-const relatif = (chemin: string) => chemin.replace(SRC + "/", "");
+// `join()` produit des chemins avec le séparateur natif de l'OS (`\` sous Windows) — normalisés en
+// `/` UNIQUEMENT pour la comparaison structurelle ci-dessous, jamais pour un accès disque réel.
+const relatif = (chemin: string) => chemin.replaceAll("\\", "/").replace(SRC.replaceAll("\\", "/") + "/", "");
 
 describe("précédence canonique > legacy : une seule règle, centralisée", () => {
   it("les composants Mandat ne lisent ni statut/date legacy, ni la base, ni un repository", () => {
@@ -121,14 +127,27 @@ describe("read models et actions Mandat : workspace de session, jamais de SQL ho
   });
 
   it("aucune route nouvelle, aucune migration après 0045, aucune automatisation Mandat", () => {
-    const pages = listerFichiers(join(SRC, "app")).filter((c) => /\/page\.tsx$/.test(c) && /mandat/i.test(relatif(c)));
+    const pages = listerFichiers(join(SRC, "app")).filter((c) => /\/page\.tsx$/.test(relatif(c)) && /mandat/i.test(relatif(c)));
     expect(pages.map(relatif)).toEqual(["app/prospects-vendeurs/[id]/signer-mandat/page.tsx"]);
     // Le lot UI Mandat n'a ajouté aucune migration : 0045 (parties) est la dernière du domaine Mandat ;
     // les migrations ultérieures appartiennent à d'autres domaines (0046 = Offre, ADR-061).
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
     expect(migrations.filter((f) => /mandat/i.test(f)).pop()).toBe("0045_mandate_parties.sql");
     expect(migrations.some((f) => f.startsWith("0045_"))).toBe(true);
+    // AUTOMATION_ENGINE_GENERALIZATION_V1 (ADR-062, postérieur à ce lot) a délibérément ajouté la
+    // règle temporelle `mandat_expire_bientot`, qui lit légitimement le mandat canonique via les
+    // fonctions PUBLIQUES scoped de mandatRepository (`getMandatById`,
+    // `mandatsCourantsExpirantBientot`) — même patron que les lectures déjà établies vers
+    // offreRepository/compromisRepository/bienRepository dans ce même fichier. La garde de CE lot
+    // (MANDATE_CANONICAL_UI_V1) reste : aucun AUTRE fichier d'automatisations ne touche
+    // mandatRepository/presentationMandatBien/partieMandatRepository, et aucun ne lit les colonnes
+    // legacy `statutMandat`/`dateMandat` ni ne repasse par un accès SQL direct.
+    const AUTORISES_MANDAT_EXPIRE_BIENTOT = [join(SRC, "lib", "automatisations", "catalogueRegles.ts"), join(SRC, "lib", "automatisations", "scanners", "mandatExpireBientot.ts")];
     for (const chemin of listerFichiers(join(SRC, "lib", "automatisations"))) {
+      if (AUTORISES_MANDAT_EXPIRE_BIENTOT.includes(chemin)) {
+        expect(codeSeul(chemin), relatif(chemin)).not.toMatch(/presentationMandatBien|partieMandatRepository/);
+        continue;
+      }
       expect(codeSeul(chemin), relatif(chemin)).not.toMatch(/mandatRepository|presentationMandatBien|partieMandatRepository/);
     }
   });

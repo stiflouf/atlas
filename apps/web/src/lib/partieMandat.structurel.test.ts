@@ -29,6 +29,10 @@ const colonne = (nom: string) => parties.columns.find((c) => c.name === nom);
 
 function codeSeul(chemin: string): string {
   return readFileSync(chemin, "utf8")
+    // Checkout Windows (core.autocrlf) : les fins de ligne CRLF casseraient toute comparaison
+    // structurelle contenant un `\n` littéral ci-dessous — normalisées ici, jamais pour un fichier
+    // réellement écrit (lecture seule).
+    .replace(/\r\n/g, "\n")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
     .replace(/^\s*\/\/.*$/gm, " ");
 }
@@ -42,7 +46,9 @@ function listerFichiers(racine: string): string[] {
 }
 
 const FICHIERS = listerFichiers(SRC);
-const relatif = (chemin: string) => chemin.replace(SRC + "/", "");
+// `join()` produit des chemins avec le séparateur natif de l'OS (`\` sous Windows) — normalisés en
+// `/` UNIQUEMENT pour la comparaison structurelle ci-dessous, jamais pour un accès disque réel.
+const relatif = (chemin: string) => chemin.replaceAll("\\", "/").replace(SRC.replaceAll("\\", "/") + "/", "");
 
 describe("ADR-060 §16 — schéma parties_mandat", () => {
   it("la table existe : mandat_id, contact_id, role NOT NULL ; cree_le avec default ; rien d'autre", () => {
