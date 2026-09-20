@@ -2,6 +2,8 @@ import { scannerInactiviteProspectVendeur } from "./scanners/inactiviteProspectV
 import { scannerMandatExpireBientot } from "./scanners/mandatExpireBientot";
 import { scannerOffreSansDecision } from "./scanners/offreSansDecision";
 import { scannerOffreAccepteeSansCompromis } from "./scanners/offreAccepteeSansCompromis";
+import { scannerVisiteJ1 } from "./scanners/visiteJ1";
+import { scannerVisiteSansCompteRendu } from "./scanners/visiteSansCompteRendu";
 import type { CodeRegleAutomatisation } from "@/types/automatisation";
 
 // AUTOMATION_ENGINE_GENERALIZATION_V1 — moteur temporel GÉNÉRIQUE (ADR-033 généralisé). Remplace
@@ -38,6 +40,8 @@ export const SCANNERS_TEMPORELS: ScannerTemporel[] = [
   { codeRegle: "mandat_expire_bientot", executer: scannerMandatExpireBientot },
   { codeRegle: "offre_sans_decision", executer: scannerOffreSansDecision },
   { codeRegle: "offre_acceptee_sans_compromis", executer: scannerOffreAccepteeSansCompromis },
+  { codeRegle: "visite_j_1", executer: scannerVisiteJ1 },
+  { codeRegle: "visite_sans_compte_rendu", executer: scannerVisiteSansCompteRendu },
 ];
 
 function categoriserErreur(erreur: unknown): string {
@@ -73,3 +77,5 @@ export { scannerInactiviteProspectVendeur } from "./scanners/inactiviteProspectV
 export { scannerMandatExpireBientot } from "./scanners/mandatExpireBientot";
 export { scannerOffreSansDecision } from "./scanners/offreSansDecision";
 export { scannerOffreAccepteeSansCompromis } from "./scanners/offreAccepteeSansCompromis";
+export { scannerVisiteJ1 } from "./scanners/visiteJ1";
+export { scannerVisiteSansCompteRendu } from "./scanners/visiteSansCompteRendu";

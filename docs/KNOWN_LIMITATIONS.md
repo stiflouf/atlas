@@ -768,8 +768,12 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   nouvelle tâche (ADR-041) — mais les tâches déjà créées par son ancienne version restent inchangées,
   toujours ciblées sur un compte rendu. `deriverRouteFicheCible()` (ADR-039) n'a jamais été étendue
   pour le type de cible `"visite"` — ces tâches historiques n'affichent donc toujours aucun lien
-  « Voir la fiche » depuis le cockpit. Faire cibler `visites.id` par une règle est un changement de
-  modèle distinct, volontairement hors périmètre ADR-040/041.
+  « Voir la fiche » depuis le cockpit. **`VISIT_AUTOMATION_V1`** (ADR-063) a ajouté une colonne
+  **distincte** `taches.visite_canonique_id` (type de cible `"visiteCanonique"`, navigable,
+  `/visites/{id}`) pour ses propres règles (`visite_j_1`/`visite_sans_compte_rendu`) — sans jamais
+  toucher `taches.visite_id` ni les tâches historiques qui le portent, qui restent exactement dans
+  cet état. Faire cibler `visites.id` par `suivi_apres_visite`/renommer `visite_id` reste un
+  changement de modèle distinct, volontairement hors périmètre.
 - **Aucune synchronisation Calendar bidirectionnelle** : reporter ou annuler une visite dans Atlas
   ne modifie jamais l'événement Google Calendar d'origine, et une modification/suppression côté
   Calendar n'est jamais répercutée activement sur une visite déjà matérialisée. Calendar reste une
@@ -824,10 +828,19 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   une ligne `documents_bien` réellement rattachée). Aucun nettoyage automatique de ces octets morts
   n'existe — même dette, non retraitée, que celle déjà documentée pour l'upload générique
   (`ADR-050`, section Documents ci-dessus). Hors périmètre de ce lot.
-- **Automatisation Visite différée** — `visite_j_1`/`visite_sans_compte_rendu` restent des
-  candidates non construites (ADR-062, confirmé par ADR-063) ; le scoping workspace qui les
-  précondition est désormais livré, mais aucune des deux règles n'a été ajoutée par ce lot. Aucune
-  règle ne consomme non plus l'événement `bon_visite_signe` (posé pour un futur lot uniquement).
+- **Automatisation Visite** — **livrée par `VISIT_AUTOMATION_V1`** (2026-09-20, migration 0052) :
+  `visite_j_1` (rappel J-1, occurrence cyclique — un report ouvre légitimement une nouvelle
+  occurrence) et `visite_sans_compte_rendu` (relance après seuil configurable, occurrence
+  ponctuelle) sont désormais des règles réelles, câblées sur `visitesPlanifieesPourDate`/
+  `visitesPlanifieesPasseesSeuil` (lecteurs set-based, workspace-safe), avec obsolescence
+  automatique (annulation, réalisation, report) et fermeture humaine jamais ressuscitée (politique
+  A, comme le reste du domaine). Les tâches produites ciblent `taches.visite_canonique_id` (nouvelle
+  colonne dédiée, distincte de l'ancien `taches.visite_id` qui référence en réalité un compte
+  rendu) et apparaissent nativement dans la liste de tâches de Today avec un lien direct
+  `/visites/{id}` — le widget agenda (`getAgendaSemaine`) reste, lui, 100 % Calendar-sourcé,
+  volontairement non touché par ce lot. Aucune règle ne consomme l'événement `bon_visite_signe`
+  (posé pour un futur lot uniquement, aucune automation Bon signé dans ce lot) ; `compte_rendu_sans_retour_vendeur`
+  n'a volontairement pas été construite (redondante — voir l'entrée "Retour vendeur" ci-dessous).
 - **Acquéreur legacy sur la Visite** — même modèle que Mandat/Offre/Compromis
   (`acquereur_id` scalaire) ; confirmé non bloquant pour la maturité du domaine (ADR-063,
   `BUYER_LEGACY_BLOCKER = NO`). Le bon de visite introduit cependant une distinction nouvelle entre
@@ -841,6 +854,14 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Retour vendeur après visite (ADR-042)
 
+- **Mécanisme audité et certifié par `VISIT_AUTOMATION_V1`** (2026-09-20, ADR-063) : `retour_vendeur_apres_visite`
+  reste câblé sur `visite_realisee` (contrat inchangé) et produit exactement une tâche par compte
+  rendu réel, jamais un doublon — déjà garanti par l'idempotence structurelle du domaine (index
+  unique de l'événement + `UNIQUE(regle_code, evenement_id)`) et vérifié explicitement par
+  `catalogueRegles.retourVendeur.test.ts` ("double traitement", "traitement concurrent"). Aucune
+  automation supplémentaire (`compte_rendu_sans_retour_vendeur`) n'a été ajoutée : le signal
+  "tâche ouverte = retour non fait" est déjà exactement ce qu'une règle temporelle séparée
+  redétecterait, sans valeur ajoutée démontrée.
 - **Aucune tâche vendeur si le vendeur n'est pas structurellement identifié** : un bien créé
   directement (`/biens/nouveau`, hors conversion d'un prospect vendeur) n'a aucun vendeur
   résolvable — `retour_vendeur_apres_visite` ne produit alors jamais de tâche, jamais de fallback

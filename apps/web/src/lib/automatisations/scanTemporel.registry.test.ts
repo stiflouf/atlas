@@ -20,10 +20,17 @@ describe("SCANNERS_TEMPORELS — registre du moteur temporel", () => {
     expect(new Set(codes).size).toBe(codes.length);
   });
 
-  it("les 4 règles temporelles attendues sont bien enregistrées (généralisation V1)", () => {
+  it("les 6 règles temporelles attendues sont bien enregistrées (VISIT_AUTOMATION_V1)", () => {
     const codes = SCANNERS_TEMPORELS.map((s) => s.codeRegle).sort();
     expect(codes).toEqual(
-      ["inactivite_prospect_vendeur", "mandat_expire_bientot", "offre_acceptee_sans_compromis", "offre_sans_decision"].sort()
+      [
+        "inactivite_prospect_vendeur",
+        "mandat_expire_bientot",
+        "offre_acceptee_sans_compromis",
+        "offre_sans_decision",
+        "visite_j_1",
+        "visite_sans_compte_rendu",
+      ].sort()
     );
   });
 
@@ -33,6 +40,7 @@ describe("SCANNERS_TEMPORELS — registre du moteur temporel", () => {
     expect(source).not.toContain("mandatRepository");
     expect(source).not.toContain("offreRepository");
     expect(source).not.toContain("prospectVendeurRepository");
+    expect(source).not.toContain("visiteRepository");
     for (const scanner of SCANNERS_TEMPORELS) {
       expect(source).not.toContain(`"${scanner.codeRegle}"`);
       expect(source).not.toContain(`'${scanner.codeRegle}'`);

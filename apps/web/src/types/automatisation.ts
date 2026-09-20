@@ -48,7 +48,13 @@ export type TypeEvenementMetier =
   // `compteRenduVisiteId` : `visite_realisee` garde son contrat exact (ADR-041 §5), inchangé.
   | "visite_annulee"
   // VISIT_SIGNED_FORM_V1 (ADR-063) — ponctuel, cible `bonVisiteId` (nouvelle colonne dédiée).
-  | "bon_visite_signe";
+  | "bon_visite_signe"
+  // VISIT_AUTOMATION_V1 (ADR-063) — cyclique (`ancreCycle` = date prévue concernée, un report ouvre
+  // une nouvelle occurrence légitime, même mécanisme qu'`inactivite_prospect_vendeur`).
+  | "visite_j_1"
+  // VISIT_AUTOMATION_V1 — ponctuel, cible `visiteId` (le même que `visite_annulee`, index générique
+  // partagé — une occurrence par (type, visite)).
+  | "visite_sans_compte_rendu";
 
 export type EvenementMetier = {
   id: string;
@@ -101,7 +107,10 @@ export type CodeRegleAutomatisation =
   | "retour_vendeur_apres_visite"
   | "mandat_expire_bientot"
   | "offre_sans_decision"
-  | "offre_acceptee_sans_compromis";
+  | "offre_acceptee_sans_compromis"
+  // VISIT_AUTOMATION_V1 (ADR-063) — deux nouvelles règles temporelles.
+  | "visite_j_1"
+  | "visite_sans_compte_rendu";
 
 export const CODES_REGLE_AUTOMATISATION: CodeRegleAutomatisation[] = [
   "suivi_apres_visite",
@@ -114,6 +123,8 @@ export const CODES_REGLE_AUTOMATISATION: CodeRegleAutomatisation[] = [
   "mandat_expire_bientot",
   "offre_sans_decision",
   "offre_acceptee_sans_compromis",
+  "visite_j_1",
+  "visite_sans_compte_rendu",
 ];
 
 // Snapshot d'exécution d'une règle pour un événement précis. Trois états dérivés, jamais un

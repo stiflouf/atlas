@@ -54,6 +54,12 @@ describe("TacheItem — Voir la fiche (ADR-039)", () => {
       expect(html).not.toContain("Voir la fiche");
     }
   });
+
+  it("cible visiteCanonique (VISIT_AUTOMATION_V1) : lien direct vers la fiche Visite, sans override", () => {
+    const html = render(tacheTest({ visiteCanoniqueId: "visite-canonique-1" }));
+    expect(html).toContain("Voir la fiche");
+    expect(html).toContain('href="/visites/visite-canonique-1"');
+  });
 });
 
 describe("TacheItem — lienCibleOverride (AUTOMATION_ENGINE_GENERALIZATION_V1)", () => {

@@ -2085,6 +2085,12 @@ export const taches = pgTable(
     offreId: uuid("offre_id").references(() => offres.id, { onDelete: "cascade" }),
     compromisId: uuid("compromis_id").references(() => compromis.id, { onDelete: "cascade" }),
     remunerationId: uuid("remuneration_id").references(() => remuneration.id, { onDelete: "cascade" }),
+    // VISIT_AUTOMATION_V1 (ADR-063) — cible dédiée vers la Visite CANONIQUE (`visites.id`), distincte
+    // de `visiteId` ci-dessus qui référence en réalité `comptes_rendus_visite.id` (nom trompeur
+    // hérité, ADR-040, jamais renommé pour ne pas casser les tâches existantes). Les deux colonnes ne
+    // sont JAMAIS renseignées ensemble par construction (CHECK « une seule cible » ci-dessous) —
+    // aucune tâche ne cible les deux notions à la fois.
+    visiteCanoniqueId: uuid("visite_canonique_id").references(() => visites.id, { onDelete: "cascade" }),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
     termineeLe: timestamp("terminee_le", { withTimezone: true }),
     annuleeLe: timestamp("annulee_le", { withTimezone: true }),
@@ -2093,7 +2099,7 @@ export const taches = pgTable(
     check("taches_type_check", sql`${table.type} IN ('appel','email','message','document','relance','autre')`),
     check("taches_priorite_check", sql`${table.priorite} IN ('haute','normale','basse')`),
     check("taches_origine_check", sql`${table.origine} IN ('manuelle','automatique')`),
-    // Au plus une cible : somme des sept indicatrices de présence <= 1 — jamais "exactement 1"
+    // Au plus une cible : somme des huit indicatrices de présence <= 1 — jamais "exactement 1"
     // (une tâche générale sans rattachement reste valide), jamais "au moins 1".
     check(
       "taches_une_seule_cible_check",
@@ -2104,7 +2110,8 @@ export const taches = pgTable(
         (case when ${table.visiteId} is not null then 1 else 0 end) +
         (case when ${table.offreId} is not null then 1 else 0 end) +
         (case when ${table.compromisId} is not null then 1 else 0 end) +
-        (case when ${table.remunerationId} is not null then 1 else 0 end)
+        (case when ${table.remunerationId} is not null then 1 else 0 end) +
+        (case when ${table.visiteCanoniqueId} is not null then 1 else 0 end)
       ) <= 1`
     ),
   ]
@@ -2241,7 +2248,8 @@ export const evenementsMetier = pgTable(
         'offre_recue','offre_acceptee','offre_refusee','offre_retiree','offre_caduque',
         'compromis_realise','compromis_annule',
         'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis',
-        'visite_annulee','bon_visite_signe'
+        'visite_annulee','bon_visite_signe',
+        'visite_j_1','visite_sans_compte_rendu'
       )`
     ),
     // Étendu par ADR-036 : le couple (bien_id, acquereur_id), posé ENSEMBLE, compte désormais comme
@@ -2273,9 +2281,24 @@ export const evenementsMetier = pgTable(
     // VISIT_NATIVE_LIFECYCLE_V1 — dédié à `visite_id` (distinct de l'index ci-dessus, qui porte sur
     // `compte_rendu_visite_id` malgré son nom hérité) : une occurrence par (type, visite), pour
     // `visite_annulee`.
+    // VISIT_AUTOMATION_V1 — exclut désormais explicitement 'visite_j_1' (cyclique par nature, une
+    // Visite reportée peut redevenir "demain" plusieurs fois) : sans cette exclusion, cet index
+    // bloquerait à vie toute deuxième occurrence après un report, exactement le même raisonnement
+    // qu'ADR-033 pour 'inactivite_prospect_vendeur' ci-dessous. 'visite_annulee' et
+    // 'visite_sans_compte_rendu' restent ponctuelles (une seule occurrence possible par Visite,
+    // jamais rejouée) et continuent de partager cet index générique.
     uniqueIndex("evenements_metier_visite_id_unique")
       .on(table.typeEvenement, table.visiteId)
-      .where(sql`${table.visiteId} IS NOT NULL`),
+      .where(sql`${table.visiteId} IS NOT NULL AND ${table.typeEvenement} <> 'visite_j_1'`),
+    // Dédié au type cyclique 'visite_j_1' (VISIT_AUTOMATION_V1) — une occurrence par (Visite, date
+    // prévue concernée) : `ancreCycle` porte ici la date prévue au moment du franchissement du seuil
+    // J-1 (jamais `survenuLe`). Un report change la date prévue, donc l'ancre, et ouvre donc
+    // légitimement une nouvelle occurrence possible ; la même ancre rejouée (double submit, scans
+    // concurrents, ou la visite redevient candidate sans qu'aucun report n'ait eu lieu) ne duplique
+    // jamais.
+    uniqueIndex("evenements_metier_visite_j1_unique")
+      .on(table.typeEvenement, table.visiteId, table.ancreCycle)
+      .where(sql`${table.typeEvenement} = 'visite_j_1'`),
     // VISIT_SIGNED_FORM_V1 — une occurrence par bon pour `bon_visite_signe` (§24) : un bon ne peut
     // être signé qu'une fois (statut terminal `signe`, §11), donc au plus un événement par bon.
     uniqueIndex("evenements_metier_bon_visite_id_unique")
@@ -2368,7 +2391,8 @@ export const executionsAutomatisation = pgTable(
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
         'inactivite_prospect_vendeur','nouveau_match_bien_acquereur',
         'retour_vendeur_apres_visite',
-        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis',
+        'visite_j_1','visite_sans_compte_rendu'
       )`
     ),
     check("executions_automatisation_nombre_tentatives_positif_check", sql`${table.nombreTentatives} >= 0`),
@@ -2426,7 +2450,8 @@ export const configurationsAutomatisation = pgTable(
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
         'inactivite_prospect_vendeur','nouveau_match_bien_acquereur',
         'retour_vendeur_apres_visite',
-        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis',
+        'visite_j_1','visite_sans_compte_rendu'
       )`
     ),
     check(
@@ -2479,7 +2504,8 @@ export const runsScanAutomatisation = pgTable(
         'suivi_apres_visite','suivi_apres_rdv_estimation',
         'preparation_apres_mandat','preparation_dossier_notaire_apres_compromis',
         'inactivite_prospect_vendeur',
-        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis',
+        'visite_j_1','visite_sans_compte_rendu'
       )`
     ),
   ]

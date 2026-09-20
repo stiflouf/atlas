@@ -19,6 +19,8 @@ const REGLES_AVEC_SEUIL_OBLIGATOIRE: CodeRegleAutomatisation[] = [
   "mandat_expire_bientot",
   "offre_sans_decision",
   "offre_acceptee_sans_compromis",
+  "visite_j_1",
+  "visite_sans_compte_rendu",
 ];
 
 // Bascule explicite (ADR-032, point 7) — jamais un état implicite. `active` vient d'une case à

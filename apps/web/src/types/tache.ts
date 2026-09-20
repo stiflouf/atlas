@@ -47,7 +47,10 @@ export type TypeCible =
   | "visite"
   | "offre"
   | "compromis"
-  | "remuneration";
+  | "remuneration"
+  // VISIT_AUTOMATION_V1 (ADR-063) — Visite CANONIQUE (`visites.id`), distincte de "visite" ci-dessus
+  // qui cible en réalité un compte rendu (`comptes_rendus_visite.id`, nom trompeur hérité ADR-040).
+  | "visiteCanonique";
 
 export type CibleTache = { type: TypeCible; id: string };
 
@@ -73,6 +76,7 @@ export type Tache = {
   offreId?: string;
   compromisId?: string;
   remunerationId?: string;
+  visiteCanoniqueId?: string;
   creeLe: string;
   termineeLe?: string;
   annuleeLe?: string;
@@ -96,6 +100,7 @@ const CHAMPS_CIBLE: { type: TypeCible; champ: keyof Tache }[] = [
   { type: "offre", champ: "offreId" },
   { type: "compromis", champ: "compromisId" },
   { type: "remuneration", champ: "remunerationId" },
+  { type: "visiteCanonique", champ: "visiteCanoniqueId" },
 ];
 
 // Vue générique {type,id} dérivée des sept colonnes dédiées — jamais plus d'une ne devrait être
@@ -113,11 +118,13 @@ export function deriverCibleTache(tache: Tache): CibleTache | undefined {
 // Préfixe de route pour les seuls types de cible possédant réellement une fiche navigable dans
 // Atlas (ADR-039) — volontairement partiel : visite/offre/compromis/remuneration n'ont aucune page
 // dédiée aujourd'hui (consultables uniquement depuis la fiche bien qui les héberge), jamais un lien
-// factice construit pour elles.
+// factice construit pour elles. "visiteCanonique" EST navigable (VISIT_AUTOMATION_V1, ADR-063) —
+// `/visites/{id}` existe réellement (ADR-041), contrairement à "visite" (compte rendu) ci-dessus.
 const ROUTE_FICHE_PAR_TYPE_CIBLE: Partial<Record<TypeCible, string>> = {
   bien: "/biens",
   acquereur: "/clients",
   prospectVendeur: "/prospects-vendeurs",
+  visiteCanonique: "/visites",
 };
 
 // `undefined` = aucune fiche navigable pour ce type de cible (ou aucune cible du tout) — jamais un

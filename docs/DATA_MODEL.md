@@ -1629,7 +1629,7 @@ ce moteur (voir `docs/BUSINESS_RULES.md`). Aucune nouvelle colonne introduite pa
 ## `taches`
 
 **Rôle** : moteur de tâches générique (ADR-028) — remplace l'ancienne table `actions`. Contrairement
-à `actions`, l'intégrité référentielle est réelle : sept colonnes FK nullables dédiées (une par
+à `actions`, l'intégrité référentielle est réelle : huit colonnes FK nullables dédiées (une par
 cible réellement supportée), jamais un couple `objetType`/`objetId` polymorphe (voir ADR-010, qui ne
 couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (tâche générale).
 
@@ -1650,6 +1650,7 @@ couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (t
 | `offre_id` | uuid (FK → `offres.id`, `ON DELETE CASCADE`) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, `ON DELETE CASCADE`) | oui | |
 | `remuneration_id` | uuid (FK → `remuneration.id`, `ON DELETE CASCADE`) | oui | |
+| `visite_canonique_id` | uuid (FK → `visites.id`, `ON DELETE CASCADE`) | oui | `VISIT_AUTOMATION_V1` (ADR-063, migration 0052) — cible la Visite CANONIQUE, distincte de `visite_id` ci-dessus (nom trompeur hérité, jamais renommé). `deriverRouteFicheCible()` en dérive un lien navigable réel (`/visites/{id}`), contrairement à `visite_id` |
 | `cree_le` | timestamptz | non | |
 | `terminee_le` | timestamptz | oui | posée atomiquement (gel concurrent) par `terminerTache()` |
 | `annulee_le` | timestamptz | oui | posée atomiquement (gel concurrent) par `annulerTache()`, mutuellement exclusive avec `terminee_le` |
@@ -1658,7 +1659,7 @@ couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (t
 - `type IN ('appel','email','message','document','relance','autre')`
 - `priorite IN ('haute','normale','basse')`
 - `origine IN ('manuelle','automatique')`
-- `taches_une_seule_cible_check` — somme des sept indicatrices de présence (`bien_id` non NULL, etc.)
+- `taches_une_seule_cible_check` — somme des huit indicatrices de présence (`bien_id` non NULL, etc.)
   `<= 1` : au plus une cible à la fois, jamais "exactement une" (une tâche générale reste valide),
   jamais "au moins une".
 
@@ -2465,7 +2466,7 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `type_evenement` | text | non | `CHECK`, 17 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) + 7 types Offre/Compromis (ADR-061) + 3 types temporels ponctuels (`mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, ADR-062) + `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) + `bon_visite_signe` (`VISIT_SIGNED_FORM_V1`, ADR-063) |
+| `type_evenement` | text | non | `CHECK`, 19 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) + 7 types Offre/Compromis (ADR-061) + 3 types temporels ponctuels (`mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, ADR-062) + `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) + `bon_visite_signe` (`VISIT_SIGNED_FORM_V1`, ADR-063) + `visite_j_1`/`visite_sans_compte_rendu` (`VISIT_AUTOMATION_V1`, ADR-063) |
 | `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | cible de `visite_realisee` — contrat inchangé (`compteRenduVisiteId`, jamais `visiteId`), ADR-041 §5 |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, **`NO ACTION`**) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, **`NO ACTION`**) | oui | |
@@ -2511,8 +2512,17 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
   offre).
 - Index unique partiel `(type_evenement, mandat_id) WHERE mandat_id IS NOT NULL` (ADR-062) — une
   occurrence par mandat pour `mandat_expire_bientot`.
-- Index unique partiel `(type_evenement, visite_id) WHERE visite_id IS NOT NULL`
-  (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) — une occurrence par Visite pour `visite_annulee`.
+- Index unique partiel `(type_evenement, visite_id) WHERE visite_id IS NOT NULL AND type_evenement
+  <> 'visite_j_1'` (`VISIT_NATIVE_LIFECYCLE_V1` + `VISIT_AUTOMATION_V1`, ADR-063 — prédicat élargi par
+  migration 0052) — une occurrence par Visite pour les types PONCTUELS `visite_annulee` et
+  `visite_sans_compte_rendu`, qui partagent cet index générique. Exclut explicitement `visite_j_1`
+  (cyclique, voir index dédié ci-dessous) — même raisonnement qu'ADR-033 pour
+  `inactivite_prospect_vendeur`.
+- Index unique partiel dédié `(type_evenement, visite_id, ancre_cycle) WHERE type_evenement =
+  'visite_j_1'` (`VISIT_AUTOMATION_V1`, ADR-063, migration 0052) — une occurrence par (Visite, date
+  prévue concernée). `ancre_cycle` porte ici la date prévue au moment du franchissement du seuil
+  J-1 : un report change l'ancre et ouvre donc légitimement une nouvelle occurrence ; la même ancre
+  rejouée (scans concurrents, double submit) ne duplique jamais.
 - Index unique partiel `(type_evenement, bon_visite_id) WHERE bon_visite_id IS NOT NULL`
   (`VISIT_SIGNED_FORM_V1`, ADR-063) — une occurrence par bon pour `bon_visite_signe` (un bon ne peut
   être signé qu'une fois, statut terminal `signe`).
@@ -2532,7 +2542,7 @@ code TypeScript, pas une table) à un événement donné — traçable, jamais r
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK`, 10 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`, ADR-042 ajoute `retour_vendeur_apres_visite`, ADR-062 ajoute `mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`) |
+| `regle_code` | text | non | `CHECK`, 12 valeurs `CodeRegleAutomatisation` (ADR-033 ajoute `inactivite_prospect_vendeur`, ADR-037 ajoute `nouveau_match_bien_acquereur`, ADR-042 ajoute `retour_vendeur_apres_visite`, ADR-062 ajoute `mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, `VISIT_AUTOMATION_V1`/ADR-063 ajoute `visite_j_1`/`visite_sans_compte_rendu`) |
 | `evenement_id` | uuid (FK → `evenements_metier.id`, **`NO ACTION`**) | non | |
 | `tache_id` | uuid (FK → `taches.id`, `SET NULL`, **`UNIQUE`**) | oui | posé uniquement au succès, dans la même transaction que la création de la tâche ; `UNIQUE` (ADR-047) plusieurs `NULL` restent valides |
 | `demarree_le` | timestamptz | non | posée à la création de la ligne (dans la transaction métier — ADR-032 correction n°2, jamais après coup) |
@@ -2569,9 +2579,9 @@ catalogue reste TypeScript, versionné et testé, pas un constructeur no-code).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
-| `regle_code` | text (PK) | non | `CHECK`, une des 10 valeurs `CodeRegleAutomatisation` |
+| `regle_code` | text (PK) | non | `CHECK`, une des 12 valeurs `CodeRegleAutomatisation` |
 | `active` | boolean | non | défaut `false` — une règle absente de cette table est traitée comme inactive par l'appelant, jamais supposée active |
-| `seuil_jours` | integer | oui | ADR-033, **généralisé ADR-062** (colonne renommée depuis `seuil_jours_inactivite`, renommage pur, aucune valeur modifiée) — paramètre produit explicite, n'a de sens que pour les règles temporelles à seuil (`inactivite_prospect_vendeur`, `mandat_expire_bientot`, `offre_sans_decision`, `offre_acceptee_sans_compromis`), `NULL` pour les autres. Chaque règle possède sa propre LIGNE (PK = `regle_code`) : le sens de la colonne se lit au niveau de la ligne, jamais ambigu malgré le nom générique. `CHECK > 0` si renseigné. Activer une règle à seuil sans valeur valide configurée est refusé (Server Action), jamais une valeur implicite |
+| `seuil_jours` | integer | oui | ADR-033, **généralisé ADR-062, étendu `VISIT_AUTOMATION_V1`** (colonne renommée depuis `seuil_jours_inactivite`, renommage pur, aucune valeur modifiée) — paramètre produit explicite, n'a de sens que pour les règles temporelles à seuil (`inactivite_prospect_vendeur`, `mandat_expire_bientot`, `offre_sans_decision`, `offre_acceptee_sans_compromis`, `visite_j_1` — "combien de jours avant `date_prevue`", défaut produit 1 = J-1 —, `visite_sans_compte_rendu` — "combien de jours après `date_prevue`, sans CR", défaut produit 1 jour), `NULL` pour les autres. Chaque règle possède sa propre LIGNE (PK = `regle_code`) : le sens de la colonne se lit au niveau de la ligne, jamais ambigu malgré le nom générique. `CHECK > 0` si renseigné. Activer une règle à seuil sans valeur valide configurée est refusé (Server Action), jamais une valeur implicite |
 | `modifie_le` | timestamptz | non | |
 
 Lue **au moment de l'émission de l'événement**, dans la transaction métier (ADR-032 correction
@@ -2588,7 +2598,7 @@ même quand il ne trouve rien de nouveau (aucune ligne `evenements_metier` n'est
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `regle_code` | text | non | `CHECK` restreint aux règles réellement TEMPORELLES : `suivi_apres_visite`/`suivi_apres_rdv_estimation`/`preparation_apres_mandat`/`preparation_dossier_notaire_apres_compromis` (jamais utilisées ici en pratique — événementielles pures), `inactivite_prospect_vendeur`, et depuis ADR-062 `mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`. `nouveau_match_bien_acquereur`/`retour_vendeur_apres_visite` volontairement absentes : purement événementielles, aucune ligne de ce journal ne les concernera jamais |
+| `regle_code` | text | non | `CHECK` restreint aux règles réellement TEMPORELLES : `suivi_apres_visite`/`suivi_apres_rdv_estimation`/`preparation_apres_mandat`/`preparation_dossier_notaire_apres_compromis` (jamais utilisées ici en pratique — événementielles pures), `inactivite_prospect_vendeur`, depuis ADR-062 `mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, et depuis `VISIT_AUTOMATION_V1` (ADR-063) `visite_j_1`/`visite_sans_compte_rendu`. `nouveau_match_bien_acquereur`/`retour_vendeur_apres_visite` volontairement absentes : purement événementielles, aucune ligne de ce journal ne les concernera jamais |
 | `demarre_le` | timestamptz | non | posé à l'insertion, au tout début du scan |
 | `termine_le` | timestamptz | oui | posé à la complétion (succès ou échec) — absent si le process a crashé pendant le scan |
 | `nombre_candidats` | integer | oui | prospects/mandats/offres candidats analysés selon la règle |
@@ -2735,6 +2745,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0049_runs_scan_regle_code_check.sql` | ADR-062 (suite de 0047) : CHECK `regle_code` élargi sur `runs_scan_automatisation` pour les 3 nouvelles règles temporelles — sans cette extension, `demarrerRunScanAutomatisation` aurait échoué au premier scan réel les concernant |
 | `0050_visit_native_lifecycle_v1.sql` | ADR-063 (`VISIT_NATIVE_LIFECYCLE_V1`) : `visites.rendez_vous_calendar_id` rendue nullable (`UNIQUE` full → index unique partiel `WHERE ... IS NOT NULL`) ; ajout `visites.realisee_le`/`annulee_le` (timestamptz nullables) ; index unique partiel `comptes_rendus_visite_visite_id_unique` sur `comptes_rendus_visite.visite_id` ; `evenements_metier.visite_id` (FK NO ACTION) dans le CHECK « une seule cible », type `visite_annulee`, index unique partiel `(type_evenement, visite_id)`. Strictement additive (aucune table supprimée, `DROP NOT NULL` + CHECK élargis seulement), **aucun backfill** |
 | `0051_visit_signed_form_v1.sql` | ADR-063 (`VISIT_SIGNED_FORM_V1`) : nouvelles tables `bons_visite` (FK `visite_id` cascade, `CHECK` statut, `CHECK` cohérence statut, `UNIQUE(visite_id, version)`, FK `document_id` vers `documents_bien` SET NULL) et `signatures_bon_visite` (FK `bon_visite_id` cascade, FK `contact_id` NO ACTION, `CHECK` rôle, `CHECK` provider) ; `documents_bien.visite_id` (FK SET NULL, rattachement cumulatif) ; `evenements_metier.bon_visite_id` (FK NO ACTION) dans le CHECK « une seule cible », type `bon_visite_signe`, index unique partiel `(type_evenement, bon_visite_id)`. Strictement additive (2 nouvelles tables, colonnes nullables, CHECK élargis seulement), **aucun backfill** |
+| `0052_visit_automation_v1.sql` | ADR-063 (`VISIT_AUTOMATION_V1`) : `taches.visite_canonique_id` (FK `visites.id` cascade, nouvelle 8ᵉ cible) ; `evenements_metier` — 2 nouveaux types (`visite_j_1`/`visite_sans_compte_rendu`), index unique partiel dédié `(type_evenement, visite_id, ancre_cycle) WHERE type_evenement = 'visite_j_1'`, prédicat de `evenements_metier_visite_id_unique` élargi pour exclure `visite_j_1` (cyclique, comme `inactivite_prospect_vendeur`) ; CHECK `regle_code` élargis (`configurations_automatisation`, `executions_automatisation`, `runs_scan_automatisation`) pour les 2 nouvelles règles ; seed des 2 nouvelles lignes de configuration (`active = false`). Strictement additive (1 colonne nullable, CHECK/index élargis ou ajoutés seulement), **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

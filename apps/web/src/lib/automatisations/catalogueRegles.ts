@@ -7,7 +7,7 @@ import { listerSecteursPourAcquereur } from "@/lib/secteurRechercheRepository";
 import { getMandatById } from "@/lib/mandatRepository";
 import { getOffreById, listerOffresPourBien } from "@/lib/offreRepository";
 import { getCompromisParOffreId, listerCompromisPourBien } from "@/lib/compromisRepository";
-import { existeVisitePlanifieePourPaire } from "@/lib/visiteRepository";
+import { existeVisitePlanifieePourPaire, getVisiteById } from "@/lib/visiteRepository";
 import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
 import { resoudreProfilCompatibilite } from "@/lib/compatibilite/profilCompatibiliteRepository";
 import { existeExecutionAvecTacheOuvertePourPaire } from "./executionAutomatisationRepository";
@@ -378,6 +378,62 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
         type: "relance",
         priorite: "normale",
         cible: { type: "offre", id: offre.id },
+      };
+    },
+  },
+  {
+    code: "visite_j_1",
+    nom: "Visite prévue demain",
+    description: "Crée une tâche de préparation lorsqu'une Visite planifiée tombe dans la fenêtre J-1 (VISIT_AUTOMATION_V1).",
+    typeEvenement: "visite_j_1",
+    construireTache: async (evenement) => {
+      if (!evenement.visiteId) return undefined;
+      const visite = await getVisiteById(evenement.visiteId, evenement.workspaceId);
+      // Introuvable (jamais supprimée en pratique) — jamais de retry infini. Pas de revalidation
+      // "encore planifiee/encore demain" ici, même raisonnement que `mandat_expire_bientot` : le
+      // candidat vient d'être établi par le scanner à l'instant, traité quasi immédiatement ; si la
+      // Visite devait malgré tout changer entre-temps (course rare), le PROCHAIN scan la clôturera
+      // de toute façon (obsolescence, brief §3).
+      if (!visite) return undefined;
+
+      const bien = await getBienById(visite.bienId);
+      if (!bien || bien.archiveLe) return undefined;
+
+      // Jamais d'heure (ADR-040/041 : Atlas ne connaît que le jour civil prévu pour une Visite,
+      // l'heure reste la responsabilité de Calendar) — le contexte ne peut donc pas afficher
+      // "à HH:mm" pour une Visite native, contrairement à l'exemple illustratif du brief.
+      return {
+        titre: "Préparer la visite de demain",
+        contexte: `Visite prévue demain pour ${bien.titre} (${bien.reference}).`,
+        type: "relance",
+        priorite: "normale",
+        cible: { type: "visiteCanonique", id: visite.id },
+      };
+    },
+  },
+  {
+    code: "visite_sans_compte_rendu",
+    nom: "Visite sans compte rendu",
+    description: "Crée une tâche de relance lorsqu'une Visite planifiée reste sans compte rendu au-delà du seuil configuré (VISIT_AUTOMATION_V1).",
+    typeEvenement: "visite_sans_compte_rendu",
+    construireTache: async (evenement) => {
+      if (!evenement.visiteId) return undefined;
+      const visite = await getVisiteById(evenement.visiteId, evenement.workspaceId);
+      // Revalidation explicite (comme `offre_sans_decision`) : seule une Visite encore `planifiee`
+      // au moment de l'exécution produit une tâche — un CR créé entre l'émission de l'événement et
+      // son traitement (course rare, reprise après crash) ne doit jamais produire une relance
+      // obsolète.
+      if (!visite || visite.statut !== "planifiee") return undefined;
+
+      const bien = await getBienById(visite.bienId);
+      if (!bien || bien.archiveLe) return undefined;
+
+      return {
+        titre: "Compléter le compte rendu de visite",
+        contexte: "Cette visite est passée et aucun compte rendu n'a encore été complété.",
+        type: "relance",
+        priorite: "normale",
+        cible: { type: "visiteCanonique", id: visite.id },
       };
     },
   },

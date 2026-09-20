@@ -34,6 +34,7 @@ function ligneVersTache(ligne: LigneTache): Tache {
     offreId: ligne.offreId ?? undefined,
     compromisId: ligne.compromisId ?? undefined,
     remunerationId: ligne.remunerationId ?? undefined,
+    visiteCanoniqueId: ligne.visiteCanoniqueId ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
     termineeLe: ligne.termineeLe?.toISOString(),
     annuleeLe: ligne.annuleeLe?.toISOString(),
@@ -101,7 +102,18 @@ export async function getTacheById(id: string): Promise<Tache | undefined> {
 // Server Actions qui manipulent une cible choisie dynamiquement (ex. /taches/nouveau).
 export type NouvelleTache = Omit<
   Tache,
-  "id" | "creeLe" | "termineeLe" | "annuleeLe" | "bienId" | "acquereurId" | "prospectVendeurId" | "visiteId" | "offreId" | "compromisId" | "remunerationId"
+  | "id"
+  | "creeLe"
+  | "termineeLe"
+  | "annuleeLe"
+  | "bienId"
+  | "acquereurId"
+  | "prospectVendeurId"
+  | "visiteId"
+  | "offreId"
+  | "compromisId"
+  | "remunerationId"
+  | "visiteCanoniqueId"
 > & { cible?: CibleTache };
 
 // Insertion pure : la validation métier (titre non vide, au plus une cible, archivage, etc.) est
@@ -136,6 +148,7 @@ export async function creerTache(
       offreId: input.cible?.type === "offre" ? input.cible.id : null,
       compromisId: input.cible?.type === "compromis" ? input.cible.id : null,
       remunerationId: input.cible?.type === "remuneration" ? input.cible.id : null,
+      visiteCanoniqueId: input.cible?.type === "visiteCanonique" ? input.cible.id : null,
     })
     .returning();
   return ligneVersTache(ligne);
@@ -181,13 +194,19 @@ export async function annulerTache(id: string): Promise<Tache | undefined> {
 // ultérieur (politique A, brief §41) — aucune colonne ni logique dédiée n'est nécessaire.
 //
 // Une seule requête UPDATE, jamais une par tâche (brief §38).
+const COLONNES_CIBLE_OBSOLESCENCE = {
+  bienId: tachesTable.bienId,
+  offreId: tachesTable.offreId,
+  visiteCanoniqueId: tachesTable.visiteCanoniqueId,
+} as const;
+
 export async function cloturerTachesAutomatiquesObsoletes(
   regleCode: CodeRegleAutomatisation,
-  colonneCible: "bienId" | "offreId",
+  colonneCible: keyof typeof COLONNES_CIBLE_OBSOLESCENCE,
   idsCiblesValides: string[],
   executeur: Executeur = getDb()
 ): Promise<number> {
-  const colonne = colonneCible === "bienId" ? tachesTable.bienId : tachesTable.offreId;
+  const colonne = COLONNES_CIBLE_OBSOLESCENCE[colonneCible];
   const idsValides = idsCiblesValides.filter((id) => UUID_REGEX.test(id));
   const lignes = await executeur
     .update(tachesTable)

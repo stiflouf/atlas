@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lte, sql } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { acquereurs as acquereursTable, biens as biensTable, visites as visitesTable } from "@/db/schema";
 import type { Visite, StatutVisite } from "@/types/visite";
@@ -121,6 +121,41 @@ export async function existeVisitePlanifieePourPaire(
     )
     .limit(1);
   return !!ligne;
+}
+
+// VISIT_AUTOMATION_V1 (ADR-063) — candidates pour `visite_j_1` : toute Visite encore `planifiee`
+// dont `datePrevue` tombe EXACTEMENT sur la date cible (déjà un jour civil, aucune heure — ADR-040/
+// 041 : comparaison d'égalité, jamais une fenêtre "NOW + 24h", zéro ambiguïté de fuseau horaire).
+// Une seule requête, set-based (brief §20/§21) — jamais une par Visite.
+export async function visitesPlanifieesPourDate(
+  workspaceId: string,
+  dateISO: string,
+  executeur: Executeur = getDb()
+): Promise<Visite[]> {
+  const lignes = await executeur
+    .select({ visite: visitesTable })
+    .from(visitesTable)
+    .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
+    .where(and(eq(visitesTable.statut, "planifiee"), eq(visitesTable.datePrevue, dateISO), eq(biensTable.workspaceId, workspaceId)));
+  return lignes.map((l) => ligneVersVisite(l.visite));
+}
+
+// Candidates pour `visite_sans_compte_rendu` : toute Visite encore `planifiee` dont `datePrevue`
+// est déjà passée d'au moins `seuilJours` — `statut = 'planifiee'` suffit à garantir l'absence de
+// compte rendu (creerCompteRenduEtRealiserVisite fait toujours transiter vers `realisee` DANS LA
+// MÊME transaction que la création du CR, ADR-040/VISIT_NATIVE_LIFECYCLE_V1 : aucun NOT EXISTS
+// supplémentaire n'est nécessaire, l'invariant est déjà structurel).
+export async function visitesPlanifieesPasseesSeuil(
+  workspaceId: string,
+  seuilDateISO: string,
+  executeur: Executeur = getDb()
+): Promise<Visite[]> {
+  const lignes = await executeur
+    .select({ visite: visitesTable })
+    .from(visitesTable)
+    .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
+    .where(and(eq(visitesTable.statut, "planifiee"), lte(visitesTable.datePrevue, seuilDateISO), eq(biensTable.workspaceId, workspaceId)));
+  return lignes.map((l) => ligneVersVisite(l.visite));
 }
 
 // ───────────────────────────── VERROUS ─────────────────────────────
