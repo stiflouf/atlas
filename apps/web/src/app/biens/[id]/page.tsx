@@ -90,8 +90,8 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
   const dossier = getDossierByBienId(bien.id);
   const taches = await getTachesPourBien(bien.id);
   const notes = await listerNotesPourBien(bien.id);
-  const comptesRendus = await listerComptesRendusPourBien(bien.id);
-  const visites = await listerVisitesPourBien(bien.id);
+  const comptesRendus = await listerComptesRendusPourBien(bien.id, workspaceId);
+  const visites = await listerVisitesPourBien(bien.id, workspaceId);
   const documents = await listerDocumentsPourBien(bien.id);
   // ADR-061 — offres et compromis lus dans le workspace de session ; leur EXISTENCE décide du mode
   // canonique du statut commercial (jamais un retour aux jalons legacy).

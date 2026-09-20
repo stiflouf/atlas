@@ -58,7 +58,7 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
         const evenement = execution ? await getEvenementMetierById(execution.evenementId) : undefined;
         const compteRenduExact =
           evenement?.typeEvenement === "visite_realisee" && evenement.compteRenduVisiteId
-            ? await getCompteRenduVisiteById(evenement.compteRenduVisiteId)
+            ? await getCompteRenduVisiteById(evenement.compteRenduVisiteId, workspaceId)
             : undefined;
         return {
           cibleType: cible.type,
@@ -91,7 +91,7 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
     }
 
     case "visite": {
-      const visite = await getCompteRenduVisiteById(cible.id);
+      const visite = await getCompteRenduVisiteById(cible.id, workspaceId);
       if (!visite) return { cibleType: cible.type, candidats: [], faits: base };
       const [a, bien] = await Promise.all([getClientById(visite.acquereurId), getBienById(visite.bienId)]);
       return {

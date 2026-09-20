@@ -18,12 +18,15 @@ const {
   taches: tachesTable,
   compatibilitesBienAcquereurEtat,
   compatibilitesARessynchroniser,
+  visites: visitesTable,
+  comptesRendusVisite: comptesRendusVisiteTable,
 } = await import("@/db/schema");
 const { creerBien, archiverBien, desarchiverBien } = await import("@/lib/bienRepository");
 const { creerAcquereur, archiverAcquereur } = await import("@/lib/clientRepository");
 const { enregistrerOffre } = await import("@/lib/offreRepository");
 const { enregistrerCompromis, marquerCompromisAnnule } = await import("@/lib/compromisRepository");
-const { materialiserVisite, marquerVisiteRealisee, annulerVisite } = await import("@/lib/visiteRepository");
+const { materialiserVisite, annulerVisite } = await import("@/lib/visiteRepository");
+const { creerCompteRenduEtRealiserVisite } = await import("@/lib/compteRenduVisiteRepository");
 const { emettreEvenementEtPreparerExecutions } = await import("./evenementMetierRepository");
 const { traiterExecutionsEnAttente } = await import("./moteur");
 const { definirActivationAutomatisation } = await import("./configurationAutomatisationRepository");
@@ -40,7 +43,24 @@ afterAll(async () => {
   await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
 
   if (idsBiensCrees.length > 0 || idsAcquereursCrees.length > 0) {
-    const filtreEvt = or(inArray(evenementsMetier.bienId, idsBiensCrees), inArray(evenementsMetier.acquereurId, idsAcquereursCrees));
+    // VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — les événements visite_realisee/visite_annulee posés par
+    // ce fichier (describe "visite planifiée") ciblent visiteId/compteRenduVisiteId, jamais
+    // bienId/acquereurId (toujours NULL pour ces types) : capturés séparément, sinon orphelins et
+    // bloquants pour la suppression cascade des biens (evenements_metier -> visites en NO ACTION).
+    const visitesCreees = idsBiensCrees.length
+      ? await getDb().select({ id: visitesTable.id }).from(visitesTable).where(inArray(visitesTable.bienId, idsBiensCrees))
+      : [];
+    const comptesRendusCrees = idsBiensCrees.length
+      ? await getDb().select({ id: comptesRendusVisiteTable.id }).from(comptesRendusVisiteTable).where(inArray(comptesRendusVisiteTable.bienId, idsBiensCrees))
+      : [];
+    const idsVisitesCreees = visitesCreees.map((v) => v.id);
+    const idsComptesRendusCrees = comptesRendusCrees.map((c) => c.id);
+    const filtreEvt = or(
+      inArray(evenementsMetier.bienId, idsBiensCrees),
+      inArray(evenementsMetier.acquereurId, idsAcquereursCrees),
+      idsVisitesCreees.length ? inArray(evenementsMetier.visiteId, idsVisitesCreees) : undefined,
+      idsComptesRendusCrees.length ? inArray(evenementsMetier.compteRenduVisiteId, idsComptesRendusCrees) : undefined
+    );
     const sousRequeteEvts = getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(filtreEvt);
     await getDb().delete(executionsAutomatisation).where(inArray(executionsAutomatisation.evenementId, sousRequeteEvts));
     await getDb().delete(evenementsMetier).where(filtreEvt);
@@ -348,12 +368,15 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
   it("visite planifiee sur la paire : aucune tâche", async () => {
     const acquereur = await creerAcquereurDeTest("VISITE1", 400000);
     const bien = await creerBienDeTest("VISITE1", 300000);
-    await materialiserVisite({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      datePrevue: "2026-09-01",
-      rendezVousCalendarId: `test-visite-${bien.id}`,
-    });
+    await materialiserVisite(
+      {
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        datePrevue: "2026-09-01",
+        rendezVousCalendarId: `test-visite-${bien.id}`,
+      },
+      WORKSPACE_TEST
+    );
 
     const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     await expect(trouverRegle(REGLE)!.construireTache(evenement)).resolves.toBeUndefined();
@@ -362,13 +385,20 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
   it("visite realisee sur la paire : ne bloque pas indéfiniment, la tâche reste créée", async () => {
     const acquereur = await creerAcquereurDeTest("VISITE2", 400000);
     const bien = await creerBienDeTest("VISITE2", 300000);
-    const visite = await materialiserVisite({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      datePrevue: "2026-01-01",
-      rendezVousCalendarId: `test-visite-${bien.id}`,
-    });
-    await marquerVisiteRealisee(visite.id);
+    const resultatVisite = await materialiserVisite(
+      {
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        datePrevue: "2026-01-01",
+        rendezVousCalendarId: `test-visite-${bien.id}`,
+      },
+      WORKSPACE_TEST
+    );
+    if (resultatVisite.statut !== "creee") throw new Error("création de visite attendue");
+    await creerCompteRenduEtRealiserVisite(
+      { bienId: bien.id, acquereurId: acquereur.id, visiteId: resultatVisite.visite.id, dateVisite: "2026-01-01", retour: "R.", interet: "inconnu" },
+      WORKSPACE_TEST
+    );
 
     const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
@@ -378,13 +408,17 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
   it("visite annulee sur la paire : ne bloque pas, la tâche reste créée", async () => {
     const acquereur = await creerAcquereurDeTest("VISITE3", 400000);
     const bien = await creerBienDeTest("VISITE3", 300000);
-    const visite = await materialiserVisite({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      datePrevue: "2026-09-01",
-      rendezVousCalendarId: `test-visite-${bien.id}`,
-    });
-    await annulerVisite(visite.id);
+    const resultatVisite = await materialiserVisite(
+      {
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        datePrevue: "2026-09-01",
+        rendezVousCalendarId: `test-visite-${bien.id}`,
+      },
+      WORKSPACE_TEST
+    );
+    if (resultatVisite.statut !== "creee") throw new Error("création de visite attendue");
+    await annulerVisite(resultatVisite.visite.id, WORKSPACE_TEST);
 
     const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
@@ -395,12 +429,15 @@ describe("règle nouveau_match_bien_acquereur — visite planifiée (ADR-040, l�
     const acquereur = await creerAcquereurDeTest("VISITE4", 400000);
     const bien = await creerBienDeTest("VISITE4", 300000);
     const autreBien = await creerBienDeTest("VISITE4-AUTRE", 300000);
-    await materialiserVisite({
-      bienId: autreBien.id,
-      acquereurId: acquereur.id,
-      datePrevue: "2026-09-01",
-      rendezVousCalendarId: `test-visite-${autreBien.id}`,
-    });
+    await materialiserVisite(
+      {
+        bienId: autreBien.id,
+        acquereurId: acquereur.id,
+        datePrevue: "2026-09-01",
+        rendezVousCalendarId: `test-visite-${autreBien.id}`,
+      },
+      WORKSPACE_TEST
+    );
 
     const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);

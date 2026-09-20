@@ -1,6 +1,6 @@
 # ADR-063 — Maturité de la Visite : modèle canonique V1, identité Calendar facultative, bon de visite signé
 
-**Statut :** Accepté — **DECIDED / NOT YET IMPLEMENTED** (audit, 2026-09-19). Aucun code, aucune migration : ce document définit la cible avant les lots d'implémentation `VISIT_NATIVE_LIFECYCLE_V1` et `VISIT_SIGNED_FORM_V1`.
+**Statut :** Accepté — **PARTIALLY IMPLEMENTED** (`VISIT_NATIVE_LIFECYCLE_V1` livré le 2026-09-19 ; migration 0050). Lifecycle natif (création sans Calendar, workspace scoping des 10 fonctions, garde archivage, `UNIQUE` compte-rendu, `realisee_le`/`annulee_le`, `visite_annulee`) implémenté et testé. `VISIT_SIGNED_FORM_V1` (bon de visite signé) reste **non implémenté** — voir roadmap ci-dessous.
 
 **Date :** 2026-09-19
 **Décideurs :** Steven Gausset (CEO), CTO — besoin bon de visite remonté par Bérengère (terrain).
@@ -115,14 +115,18 @@ documentée par ADR-041 §8, non reprise ici), extraction complète du connecteu
 **P1** — aucun trouvé (aucun flux actuel rendu inutilisable).
 
 **P2** :
-- absence totale de scoping workspace sur `visiteRepository.ts`/`compteRenduVisiteRepository.ts` (gap le
-  plus concret et démontré de cet audit)
-- `rendez_vous_calendar_id` `NOT NULL` bloquant toute création native
-- absence de `realisee_le`/`annulee_le` (aucune date de transition persistée)
-- absence de garde d'archivage Bien/Acquéreur à la création
-- absence de `UNIQUE(visite_id)` sur `comptes_rendus_visite` (cardinalité 0..1 seulement applicative)
-- **bon de visite signé** — besoin terrain explicite (Bérengère), coût jugé raisonnable pour un lot séparé
-  (`VISIT_SIGNED_FORM_V1`) une fois la fondation lifecycle native livrée
+- ~~absence totale de scoping workspace sur `visiteRepository.ts`/`compteRenduVisiteRepository.ts`~~ — **fermé** par `VISIT_NATIVE_LIFECYCLE_V1` (2026-09-19) : les 8 fonctions destinées à être scopées le sont (`listerVisites`/`listerComptesRendus` restent volontairement non scopées, exception documentée en tête de fichier, même patron que les lecteurs globaux Today/opportunités)
+- ~~`rendez_vous_calendar_id` `NOT NULL` bloquant toute création native~~ — **fermé**, colonne nullable + index unique partiel (migration 0050)
+- ~~absence de `realisee_le`/`annulee_le`~~ — **fermé**, posées exactement une fois par `annulerVisite`/`creerCompteRenduEtRealiserVisite`
+- ~~absence de garde d'archivage Bien/Acquéreur à la création~~ — **fermé**, `creerVisiteEnBase` refuse la création (chemin natif et chemin Calendar)
+- ~~absence de `UNIQUE(visite_id)` sur `comptes_rendus_visite`~~ — **fermé**, index unique partiel (migration 0050) en défense en profondeur du verrou applicatif
+- **bon de visite signé** — toujours ouvert, besoin terrain explicite (Bérengère), lot séparé
+  (`VISIT_SIGNED_FORM_V1`), maintenant que la fondation lifecycle native est livrée
+- **`/visites/{id}/preparer` reste Calendar-id-based** — non migré vers `visite.id` en V1 (une Visite native
+  n'a pas de préparation enrichie géo/transports/écoles/marché ; elle réalise/annule/reporte directement
+  depuis `/visites/{id}`, formulaire de compte rendu inline). Limitation documentée, pas un défaut : migrer
+  `/preparer` vers `visite.id` nécessiterait de décider d'abord ce que "préparer" signifie pour une visite
+  sans Calendar — hors périmètre de ce lot (voir `docs/KNOWN_LIMITATIONS.md`).
 
 **P3** : champs CR structurés enrichis (budget, projection, points +/-), migration retour-vendeur vers
 Interaction, événements `visite_planifiee`/`retour_vendeur_effectue`, extraction complète du connecteur
@@ -142,9 +146,10 @@ compte-rendu, `realisee_le`/`annulee_le` posés exactement une fois, non-régres
 
 ## Roadmap Visite (lots futurs, non créés ici)
 
-1. **`VISIT_NATIVE_LIFECYCLE_V1`** — migration (`rendez_vous_calendar_id` nullable + index partiel,
-   `realisee_le`/`annulee_le`, `UNIQUE` compte-rendu), scoping workspace des 10 fonctions, garde archivage,
-   création native, `visite_annulee`, coexistence Calendar préservée.
+1. **`VISIT_NATIVE_LIFECYCLE_V1`** — **LIVRÉ (2026-09-19, migration 0050)** : migration
+   (`rendez_vous_calendar_id` nullable + index partiel, `realisee_le`/`annulee_le`, `UNIQUE` compte-rendu),
+   scoping workspace des fonctions destinées à l'être, garde archivage, création native, `visite_annulee`,
+   coexistence Calendar préservée (`/preparer` inchangé, Calendar-id-based).
 2. **`VISIT_SIGNED_FORM_V1`** — `bons_visite` + `signatures_bon_visite`, `documents_bien.visite_id`,
    `bon_visite_signe`, génération/capture/immutabilité. Séquencé APRÈS le lot 1 (bénéficie du scoping
    workspace ; ne dépend pas techniquement de la création Calendar-optionnelle, mais construire un nouveau

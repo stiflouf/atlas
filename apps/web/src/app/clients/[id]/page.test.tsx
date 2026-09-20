@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { eq, like } from "drizzle-orm";
+import { eq, inArray, like, or } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Test d'intégration réel (même pattern que biens/page.test.tsx et biens/[id]/page.test.tsx,
@@ -16,11 +16,19 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, acquereurs: acquereursTable } = await import("@/db/schema");
+const {
+  biens: biensTable,
+  acquereurs: acquereursTable,
+  visites: visitesTable,
+  comptesRendusVisite: comptesRendusVisiteTable,
+  evenementsMetier,
+  executionsAutomatisation,
+} = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
 const { ajouterSecteurRecherche } = await import("@/lib/secteurRechercheRepository");
-const { materialiserVisite, marquerVisiteRealisee } = await import("@/lib/visiteRepository");
+const { materialiserVisite } = await import("@/lib/visiteRepository");
+const { creerCompteRenduEtRealiserVisite } = await import("@/lib/compteRenduVisiteRepository");
 const { creerTache, terminerTache, getTacheById } = await import("@/lib/tacheRepository");
 const FicheClient = (await import("./page")).default;
 
@@ -35,6 +43,30 @@ const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 
 afterAll(async () => {
+  // evenements_metier référence visites/comptes_rendus_visite en NO ACTION (migration 0050) —
+  // purgé avant la suppression cascade des biens, même patron que
+  // catalogueRegles.nouveauMatch.test.ts.
+  if (idsBiensCrees.length) {
+    const visites = await getDb().select({ id: visitesTable.id }).from(visitesTable).where(inArray(visitesTable.bienId, idsBiensCrees));
+    const comptesRendus = await getDb()
+      .select({ id: comptesRendusVisiteTable.id })
+      .from(comptesRendusVisiteTable)
+      .where(inArray(comptesRendusVisiteTable.bienId, idsBiensCrees));
+    const idsVisites = visites.map((v) => v.id);
+    const idsComptesRendus = comptesRendus.map((c) => c.id);
+    if (idsVisites.length || idsComptesRendus.length) {
+      const filtre = or(
+        idsVisites.length ? inArray(evenementsMetier.visiteId, idsVisites) : undefined,
+        idsComptesRendus.length ? inArray(evenementsMetier.compteRenduVisiteId, idsComptesRendus) : undefined
+      );
+      const evenements = await getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(filtre);
+      const idsEvenements = evenements.map((e) => e.id);
+      if (idsEvenements.length) {
+        await getDb().delete(executionsAutomatisation).where(inArray(executionsAutomatisation.evenementId, idsEvenements));
+        await getDb().delete(evenementsMetier).where(inArray(evenementsMetier.id, idsEvenements));
+      }
+    }
+  }
   for (const id of idsBiensCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
   for (const id of idsAcquereursCrees) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
   await getDb().delete(biensTable).where(like(biensTable.reference, `${REFERENCE_PREFIX}%`));
@@ -157,12 +189,17 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
     try {
       const acquereur = await acquereurDeTest("VISITE");
       const bien = await bienDeTest("VISITE");
-      const visite = await materialiserVisite({
-        bienId: bien.id,
-        acquereurId: acquereur.id,
-        datePrevue,
-        rendezVousCalendarId: `gcal-fiche-acquereur-${bien.id}`,
-      });
+      const resultatVisite = await materialiserVisite(
+        {
+          bienId: bien.id,
+          acquereurId: acquereur.id,
+          datePrevue,
+          rendezVousCalendarId: `gcal-fiche-acquereur-${bien.id}`,
+        },
+        WORKSPACE_TEST
+      );
+      if (resultatVisite.statut !== "creee") throw new Error("création de visite attendue");
+      const visite = resultatVisite.visite;
 
       const avantRealisation = renderToStaticMarkup(
         await rendreFiche(acquereur.id)
@@ -173,7 +210,10 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
       expect(avantRealisation).not.toContain(`href="/visites/${visite.id}/preparer"`);
       expect(avantRealisation).toContain(bien.titre);
 
-      await marquerVisiteRealisee(visite.id);
+      await creerCompteRenduEtRealiserVisite(
+        { bienId: bien.id, acquereurId: acquereur.id, visiteId: visite.id, dateVisite: datePrevue, retour: "R.", interet: "inconnu" },
+        WORKSPACE_TEST
+      );
 
       const apresRealisation = renderToStaticMarkup(
         await rendreFiche(acquereur.id)

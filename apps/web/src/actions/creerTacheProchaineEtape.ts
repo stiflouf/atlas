@@ -29,11 +29,11 @@ export async function creerTacheProchaineEtapeAction(formData: FormData): Promis
   const visiteId = String(formData.get("visiteId") ?? "");
   if (!visiteId) redirect("/");
 
-  const visite = await getVisiteById(visiteId);
+  const visite = await getVisiteById(visiteId, workspaceId);
   if (!visite) redirect("/");
 
   const [compteRendu, acquereur, bien] = await Promise.all([
-    getCompteRenduVisiteParVisiteId(visite.id),
+    getCompteRenduVisiteParVisiteId(visite.id, workspaceId),
     getClientById(visite.acquereurId),
     getBienById(visite.bienId),
   ]);

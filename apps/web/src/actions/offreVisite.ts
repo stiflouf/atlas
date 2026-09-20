@@ -27,7 +27,7 @@ export async function lierVisiteAOffreAction(formData: FormData): Promise<void> 
 
   const [offre, compteRendu] = await Promise.all([
     getOffreById(offreId, workspaceId),
-    getCompteRenduVisiteById(compteRenduVisiteId),
+    getCompteRenduVisiteById(compteRenduVisiteId, workspaceId),
   ]);
   if (!offre) throw new Error("Offre introuvable.");
   if (!compteRendu) throw new Error("Visite introuvable.");

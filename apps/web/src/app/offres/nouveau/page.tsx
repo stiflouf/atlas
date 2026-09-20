@@ -57,7 +57,7 @@ export default async function NouvelleOffrePage({ searchParams }: PageProps) {
 
   const [acquereurCandidat, comptesRendus, offresDuBien] = await Promise.all([
     params.acquereurId ? getClientById(params.acquereurId) : undefined,
-    listerComptesRendusPourBien(bien.id),
+    listerComptesRendusPourBien(bien.id, workspaceId),
     listerOffresPourBien(bien.id, workspaceId),
   ]);
   const offresEnCoursDuBien = offresDuBien.filter((o) => o.statut === "en_cours");
@@ -74,7 +74,7 @@ export default async function NouvelleOffrePage({ searchParams }: PageProps) {
   // un autre.
   let compteRenduSourceId: string | undefined;
   if (acquereurValide && params.compteRenduVisiteId) {
-    const compteRendu = await getCompteRenduVisiteById(params.compteRenduVisiteId);
+    const compteRendu = await getCompteRenduVisiteById(params.compteRenduVisiteId, workspaceId);
     if (compteRendu && compteRendu.bienId === bien.id && compteRendu.acquereurId === acquereurValide.id) {
       compteRenduSourceId = compteRendu.id;
     }

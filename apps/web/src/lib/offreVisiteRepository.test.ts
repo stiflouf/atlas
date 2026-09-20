@@ -131,7 +131,7 @@ describe("offreVisiteRepository (intégration Postgres)", () => {
 
     await expect(listerLiensPourBien(bien.id)).resolves.toEqual([]);
     await expect(getOffreById(offre.id, WORKSPACE_TEST)).resolves.toBeDefined();
-    await expect(getCompteRenduVisiteById(compteRendu.id)).resolves.toBeDefined();
+    await expect(getCompteRenduVisiteById(compteRendu.id, WORKSPACE_TEST)).resolves.toBeDefined();
   });
 
   it("supprimer l'offre supprime le lien en cascade (le compte rendu, lui, survit)", async () => {
@@ -142,6 +142,6 @@ describe("offreVisiteRepository (intégration Postgres)", () => {
     idsOffresCrees.splice(idsOffresCrees.indexOf(offre.id), 1);
 
     await expect(listerLiensPourBien(bien.id)).resolves.toEqual([]);
-    await expect(getCompteRenduVisiteById(compteRendu.id)).resolves.toBeDefined();
+    await expect(getCompteRenduVisiteById(compteRendu.id, WORKSPACE_TEST)).resolves.toBeDefined();
   });
 });

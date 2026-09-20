@@ -780,22 +780,32 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   la transition `visites.statut → 'realisee'` en est aujourd'hui une conséquence systématique
   (un seul site d'appel dans tout le code, `marquerVisiteRealisee`), jamais une garantie imposée
   par une contrainte DB inter-tables (non exprimable en `CHECK` Postgres classique).
-- **Aucun scoping workspace sur le domaine Visite** — confirmé par audit (ADR-063) : les 10
-  fonctions exportées de `visiteRepository.ts`/`compteRenduVisiteRepository.ts` ne prennent aucun
-  `workspaceId` et ne joignent jamais `biens.workspace_id`, contrairement à Offre/Mandat (ADR-054
-  §7). Dormant tant qu'un seul workspace existe ; à corriger dans un futur
-  `VISIT_NATIVE_LIFECYCLE_V1`.
-- **Visite native (indépendante de Calendar) non implémentée** — `rendez_vous_calendar_id` reste
-  `NOT NULL UNIQUE` : aucune Visite ne peut aujourd'hui exister sans rendez-vous Calendar résolu.
-  ADR-063 documente la cible (colonne nullable, index unique partiel) sans l'implémenter.
+- **Scoping workspace du domaine Visite** — **livré par `VISIT_NATIVE_LIFECYCLE_V1`** (2026-09-19,
+  ADR-063) : `visiteRepository.ts`/`compteRenduVisiteRepository.ts` joignent désormais
+  `biens.workspace_id` sur les fonctions destinées à l'être. `listerVisites()`/`listerComptesRendus()`
+  restent délibérément non scopées (lecteurs globaux, même exception documentée que les lecteurs
+  Today/opportunités ailleurs dans ce dépôt) — un cross-workspace y reste possible par construction,
+  jamais utilisé pour une fiche individuelle.
+- **Visite native (indépendante de Calendar)** — **livré par `VISIT_NATIVE_LIFECYCLE_V1`** :
+  `rendez_vous_calendar_id` est désormais nullable (index unique partiel, migration 0050) ; une
+  Visite peut exister sans rendez-vous Calendar (`creerVisite`). Le chemin Calendar
+  (`materialiserVisite`) reste inchangé pour l'appelant et converge vers la même primitive de
+  création.
+- **`/visites/{id}/preparer` reste Calendar-id-based (limitation assumée)** — n'a **pas** été migré
+  vers `visite.id` par `VISIT_NATIVE_LIFECYCLE_V1` : cette page fait de la préparation enrichie
+  (géocodage, transports, écoles, marché, mémoire du dossier) qui n'a de sens démontré que pour une
+  visite planifiée via Calendar. Une Visite native se réalise/s'annule/se reporte directement depuis
+  `/visites/{id}`, qui affiche désormais un formulaire de compte rendu inline quand
+  `rendezVousCalendarId` est absent. Réévaluer seulement si un besoin de préparation enrichie pour
+  les visites natives est démontré.
 - **Bon de visite signé non implémenté** — aucune table, aucune colonne, aucun code de signature.
   Besoin produit confirmé (terrain), modèle de données décidé par ADR-063
   (`bons_visite`/`signatures_bon_visite`, snapshot signataire, immutabilité après signature,
   provider/hash conceptuels), rien construit. `documents_bien` n'a aujourd'hui aucune colonne
-  `visite_id`.
+  `visite_id`. Lot dédié : `VISIT_SIGNED_FORM_V1`.
 - **Automatisation Visite différée** — `visite_j_1`/`visite_sans_compte_rendu` restent des
-  candidates non construites (ADR-062, confirmé par ADR-063), dépendent du scoping workspace
-  ci-dessus.
+  candidates non construites (ADR-062, confirmé par ADR-063) ; le scoping workspace qui les
+  précondition est désormais livré, mais aucune des deux règles n'a été ajoutée par ce lot.
 - **Acquéreur legacy sur la Visite** — même modèle que Mandat/Offre/Compromis
   (`acquereur_id` scalaire) ; confirmé non bloquant pour la maturité du domaine (ADR-063,
   `BUYER_LEGACY_BLOCKER = NO`). Le bon de visite introduit cependant une distinction nouvelle entre
@@ -1189,7 +1199,8 @@ Limites qui en découlent, toutes assumées le temps de la transition :
   relu l'entité dans sa transaction, en conclut le refus métier. C'est exact aujourd'hui, et ce ne
   le resterait pas si un second appelant utilisait cette primitive sans relire d'abord.
 - **Trois identifiants externes antérieurs restent hors de cette couche** :
-  `visites.rendez_vous_calendar_id` (corrélation temporaire, `UNIQUE NOT NULL`),
+  `visites.rendez_vous_calendar_id` (corrélation temporaire, nullable depuis
+  `VISIT_NATIVE_LIFECYCLE_V1`, `UNIQUE` partiel `WHERE ... IS NOT NULL`),
   `envois_email.gmail_message_id` (audit technique, ADR-031-bis) et `memoire_contextuelle`
   (hypothèse scorée). Constatés et gelés (ADR-056 §10), ils ne créent aucun précédent.
 - **Aucun auteur sur un verrou** : DOMIORA sait qu'un humain a corrigé une valeur, pas lequel.

@@ -14,6 +14,9 @@ function formatDate(iso: string): string {
 // planifiee, vers la route réelle déjà existante /visites/[id]/preparer — dont le [id] est
 // l'identifiant du rendez-vous Calendar (`rendezVousCalendarId`, ADR-040), JAMAIS l'UUID interne de
 // la visite : la route résout un rendez-vous, pas une ligne `visites` (voir rendezVousContexte.ts).
+// VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — une visite native n'a structurellement aucun
+// `rendezVousCalendarId` : le lien retombe alors sur la fiche native /visites/{id} (même route de
+// repli que la fiche elle-même), jamais une URL `/visites/undefined/preparer`.
 export default function AcquereurVisites({
   visites,
   biensParId,
@@ -50,7 +53,10 @@ export default function AcquereurVisites({
         </div>
         <div className="flex items-center gap-2.5 shrink-0">
           {visite.statut === "planifiee" && (
-            <Link href={`/visites/${visite.rendezVousCalendarId}/preparer`} className="text-[12px] font-medium text-accent hover:text-accent-hover">
+            <Link
+              href={visite.rendezVousCalendarId ? `/visites/${visite.rendezVousCalendarId}/preparer` : `/visites/${visite.id}`}
+              className="text-[12px] font-medium text-accent hover:text-accent-hover"
+            >
               Préparer →
             </Link>
           )}

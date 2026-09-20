@@ -47,7 +47,7 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
     // lisibles telles quelles, aucune migration, aucune réinterprétation.
     construireTache: async (evenement) => {
       if (!evenement.compteRenduVisiteId) return undefined;
-      const compteRendu = await getCompteRenduVisiteById(evenement.compteRenduVisiteId);
+      const compteRendu = await getCompteRenduVisiteById(evenement.compteRenduVisiteId, evenement.workspaceId);
       if (!compteRendu) return undefined; // introuvable — jamais de retry infini
 
       const [bien, acquereur] = await Promise.all([
@@ -104,7 +104,7 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
     // destinataire inventé (invariant ADR-042 : destinataire vendeur certain, ou aucun effet).
     construireTache: async (evenement) => {
       if (!evenement.compteRenduVisiteId) return undefined;
-      const compteRendu = await getCompteRenduVisiteById(evenement.compteRenduVisiteId);
+      const compteRendu = await getCompteRenduVisiteById(evenement.compteRenduVisiteId, evenement.workspaceId);
       if (!compteRendu) return undefined; // introuvable — jamais de retry infini
 
       const bien = await getBienById(compteRendu.bienId);
@@ -267,7 +267,7 @@ export const CATALOGUE_REGLES_AUTOMATISATION: ReglAutomatisation[] = [
       // traitement humain par un autre chemin), exactement comme une offre "en_cours". Une visite
       // 'realisee' ou 'annulee' ne bloque en revanche jamais indéfiniment un futur cycle légitime
       // — seul le statut 'planifiee' compte ici, jamais une simple existence historique.
-      const visitePlanifiee = await existeVisitePlanifieePourPaire(bienId, acquereurId);
+      const visitePlanifiee = await existeVisitePlanifieePourPaire(bienId, acquereurId, evenement.workspaceId);
       if (visitePlanifiee) return undefined;
 
       // Anti-spam inter-cycle — distinct de l'idempotence ADR-032 (UNIQUE(regle_code,

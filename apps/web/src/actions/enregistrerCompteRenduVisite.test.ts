@@ -137,7 +137,7 @@ describe("enregistrerCompteRenduVisiteAction — garde-fou entité archivée", (
       })
     ).catch(() => {});
 
-    expect(await listerComptesRendusPourBien(bien.id)).toEqual([]);
+    expect(await listerComptesRendusPourBien(bien.id, WORKSPACE_TEST)).toEqual([]);
   });
 
   it("n'insère aucun compte rendu si l'acquéreur est archivé, même en appelant l'action directement", async () => {
@@ -158,7 +158,7 @@ describe("enregistrerCompteRenduVisiteAction — garde-fou entité archivée", (
       })
     ).catch(() => {});
 
-    expect(await listerComptesRendusPourBien(bien.id)).toEqual([]);
+    expect(await listerComptesRendusPourBien(bien.id, WORKSPACE_TEST)).toEqual([]);
   });
 });
 
@@ -169,7 +169,7 @@ describe("enregistrerCompteRenduVisiteAction — destination après succès (VAL
   const source = readFileSync(join(__dirname, "enregistrerCompteRenduVisite.ts"), "utf8");
 
   it("ramène sur la fiche de la visite traitée, jamais sur la fiche du bien quand une visite existe", () => {
-    expect(source).toContain("redirect(`/visites/${visiteValide.id}`)");
+    expect(source).toContain("redirect(`/visites/${resultat.visite.id}`)");
   });
 
   it("conserve le repli sur le bien quand aucune visite Atlas n'a pu être reliée", () => {
@@ -181,12 +181,17 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
   it("compte rendu sur une visite planifiee : la visite passe realisee, l'événement visite_realisee est émis une seule fois", async () => {
     const bien = await creerBienTest("[test réel] CR-VISITE-1");
     const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-ACQ-1");
-    const visite = await materialiserVisite({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      datePrevue: "2026-08-01",
-      rendezVousCalendarId: `gcal-cr-${bien.id}`,
-    });
+    const resultatVisite = await materialiserVisite(
+      {
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        datePrevue: "2026-08-01",
+        rendezVousCalendarId: `gcal-cr-${bien.id}`,
+      },
+      WORKSPACE_TEST
+    );
+    if (resultatVisite.statut !== "creee") throw new Error("création de visite attendue");
+    const visite = resultatVisite.visite;
 
     await enregistrerCompteRenduVisiteAction(
       formData({
@@ -199,9 +204,9 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
       })
     ).catch(() => {});
 
-    expect((await getVisiteById(visite.id))?.statut).toBe("realisee");
+    expect((await getVisiteById(visite.id, WORKSPACE_TEST))?.statut).toBe("realisee");
 
-    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
+    const [compteRendu] = await listerComptesRendusPourBien(bien.id, WORKSPACE_TEST);
     expect(compteRendu.visiteId).toBe(visite.id);
     // interet reste uniquement sur le compte rendu — jamais dupliqué sur la visite (§15 ADR-040).
     expect(compteRendu.interet).toBe("interesse");
@@ -217,12 +222,17 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
     await definirActivationAutomatisation("suivi_apres_visite", true, WORKSPACE_TEST);
     const bien = await creerBienTest("[test réel] CR-VISITE-2");
     const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-ACQ-2");
-    const visite = await materialiserVisite({
-      bienId: bien.id,
-      acquereurId: acquereur.id,
-      datePrevue: "2026-08-01",
-      rendezVousCalendarId: `gcal-cr-${bien.id}`,
-    });
+    const resultatVisite = await materialiserVisite(
+      {
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        datePrevue: "2026-08-01",
+        rendezVousCalendarId: `gcal-cr-${bien.id}`,
+      },
+      WORKSPACE_TEST
+    );
+    if (resultatVisite.statut !== "creee") throw new Error("création de visite attendue");
+    const visite = resultatVisite.visite;
 
     await enregistrerCompteRenduVisiteAction(
       formData({
@@ -260,7 +270,7 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
       })
     ).catch(() => {});
 
-    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
+    const [compteRendu] = await listerComptesRendusPourBien(bien.id, WORKSPACE_TEST);
     expect(compteRendu).toBeDefined();
     expect(compteRendu.visiteId).toBeUndefined();
   });
@@ -270,12 +280,17 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
     const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-MISMATCH-ACQ-1");
     const autreBien = await creerBienTest("[test réel] CR-VISITE-MISMATCH-AUTRE");
     const autreAcquereur = await creerAcquereurTest("[test réel] CR-VISITE-MISMATCH-AUTRE-ACQ");
-    const visiteAutrePaire = await materialiserVisite({
-      bienId: autreBien.id,
-      acquereurId: autreAcquereur.id,
-      datePrevue: "2026-08-01",
-      rendezVousCalendarId: `gcal-mismatch-${bien.id}`,
-    });
+    const resultatVisiteAutrePaire = await materialiserVisite(
+      {
+        bienId: autreBien.id,
+        acquereurId: autreAcquereur.id,
+        datePrevue: "2026-08-01",
+        rendezVousCalendarId: `gcal-mismatch-${bien.id}`,
+      },
+      WORKSPACE_TEST
+    );
+    if (resultatVisiteAutrePaire.statut !== "creee") throw new Error("création de visite attendue");
+    const visiteAutrePaire = resultatVisiteAutrePaire.visite;
 
     await enregistrerCompteRenduVisiteAction(
       formData({
@@ -288,8 +303,8 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
       })
     ).catch(() => {});
 
-    expect((await getVisiteById(visiteAutrePaire.id))?.statut).toBe("planifiee");
-    const [compteRendu] = await listerComptesRendusPourBien(bien.id);
+    expect((await getVisiteById(visiteAutrePaire.id, WORKSPACE_TEST))?.statut).toBe("planifiee");
+    const [compteRendu] = await listerComptesRendusPourBien(bien.id, WORKSPACE_TEST);
     expect(compteRendu.visiteId).toBeUndefined();
   });
 });

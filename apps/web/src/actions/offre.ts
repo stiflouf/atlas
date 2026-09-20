@@ -48,7 +48,7 @@ export async function ajouterOffreAction(formData: FormData): Promise<void> {
   if (!dateOffre) throw new Error("La date de l'offre est obligatoire.");
 
   for (const compteRenduVisiteId of compteRenduVisiteIds) {
-    const compteRendu = await getCompteRenduVisiteById(compteRenduVisiteId);
+    const compteRendu = await getCompteRenduVisiteById(compteRenduVisiteId, workspaceId);
     if (!compteRendu) throw new Error("Visite introuvable.");
     if (compteRendu.bienId !== bienId) throw new Error("Cette visite ne concerne pas ce bien.");
     if (compteRendu.acquereurId !== acquereurId) throw new Error("Cette visite ne concerne pas cet acquéreur.");

@@ -351,6 +351,13 @@
       "when": 1789836916539,
       "tag": "0049_runs_scan_regle_code_check",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1789844801607,
+      "tag": "0050_visit_native_lifecycle_v1",
+      "breakpoints": true
     }
   ]
 }

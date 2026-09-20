@@ -18,6 +18,7 @@ function ligneVersEvenementMetier(ligne: LigneEvenementMetier): EvenementMetier 
     compromisId: ligne.compromisId ?? undefined,
     offreId: ligne.offreId ?? undefined,
     mandatId: ligne.mandatId ?? undefined,
+    visiteId: ligne.visiteId ?? undefined,
     ancreCycle: ligne.ancreCycle ? ligne.ancreCycle.toISOString() : undefined,
     bienId: ligne.bienId ?? undefined,
     acquereurId: ligne.acquereurId ?? undefined,
@@ -52,6 +53,9 @@ export type NouvelEvenementMetier =
     }
   // AUTOMATION_ENGINE_GENERALIZATION_V1 — cible mandat_id ; idempotent par (type, mandat_id).
   | { typeEvenement: "mandat_expire_bientot"; mandatId: string }
+  // VISIT_NATIVE_LIFECYCLE_V1 — cible visite_id ; idempotent par (type, visite_id). Jamais confondu
+  // avec `visite_realisee` ci-dessus (cible compteRenduVisiteId, contrat inchangé ADR-041 §5).
+  | { typeEvenement: "visite_annulee"; visiteId: string }
   | { typeEvenement: "inactivite_prospect_vendeur"; prospectVendeurId: string; ancreCycle: Date }
   | {
       typeEvenement: "compatibilite_bien_acquereur_devenue_compatible";
@@ -97,6 +101,7 @@ export async function emettreEvenementEtPreparerExecutions(
     compromisId: "compromisId" in input ? input.compromisId : null,
     offreId: "offreId" in input ? input.offreId : null,
     mandatId: "mandatId" in input ? input.mandatId : null,
+    visiteId: "visiteId" in input ? input.visiteId : null,
     ancreCycle: "ancreCycle" in input ? input.ancreCycle : null,
     bienId: "bienId" in input ? input.bienId : null,
     acquereurId: "acquereurId" in input ? input.acquereurId : null,
@@ -115,6 +120,8 @@ export async function emettreEvenementEtPreparerExecutions(
           ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.offreId], where: sql`${evenementsMetier.offreId} IS NOT NULL` }
         : "mandatId" in input
           ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.mandatId], where: sql`${evenementsMetier.mandatId} IS NOT NULL` }
+        : "visiteId" in input
+          ? { colonnes: [evenementsMetier.typeEvenement, evenementsMetier.visiteId], where: sql`${evenementsMetier.visiteId} IS NOT NULL` }
         : input.typeEvenement === "compatibilite_bien_acquereur_devenue_compatible"
           ? {
               colonnes: [

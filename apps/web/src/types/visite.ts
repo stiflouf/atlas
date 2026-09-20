@@ -19,7 +19,15 @@ export type Visite = {
   datePrevue: string;
   statut: StatutVisite;
   // Référence vers la source externe (id RendezVous — Google Calendar "gcal-xxx" ou mock) : une
-  // simple traçabilité d'origine, jamais la PK métier de la visite.
-  rendezVousCalendarId: string;
+  // simple traçabilité d'origine, jamais la PK métier de la visite. VISIT_NATIVE_LIFECYCLE_V1
+  // (ADR-063) — désormais optionnel : `undefined` pour toute Visite native créée sans Calendar.
+  // Calendar reste une représentation de planification externe FACULTATIVE, jamais nécessaire à
+  // l'existence de la Visite.
+  rendezVousCalendarId?: string;
+  // ADR-063 §7 — posées UNIQUEMENT par le writer central de transition, jamais recalculées depuis
+  // `datePrevue` (une intention, pas un fait). `undefined` tant que la transition correspondante
+  // n'a jamais eu lieu (et pour tout historique antérieur à ce lot, jamais rétrodaté).
+  realiseeLe?: string;
+  annuleeLe?: string;
   creeLe: string;
 };

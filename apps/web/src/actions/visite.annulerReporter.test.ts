@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // ADR-047, §14/§25 de l'audit : annulerVisiteAction/reporterVisiteAction n'avaient jusqu'ici AUCUN
@@ -23,7 +23,13 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, acquereurs: acquereursTable, visites: visitesTable } = await import("@/db/schema");
+const {
+  biens: biensTable,
+  acquereurs: acquereursTable,
+  visites: visitesTable,
+  evenementsMetier,
+  executionsAutomatisation,
+} = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
 const { materialiserVisite, getVisiteById } = await import("@/lib/visiteRepository");
@@ -34,6 +40,16 @@ const idsAcquereurs: string[] = [];
 const idsVisites: string[] = [];
 
 afterAll(async () => {
+  // evenements_metier (visite_annulee) référence visites en NO ACTION (migration 0050) — purgé
+  // avant la suppression des visites, même patron que catalogueRegles.nouveauMatch.test.ts.
+  if (idsVisites.length) {
+    const evenements = await getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(inArray(evenementsMetier.visiteId, idsVisites));
+    const idsEvenements = evenements.map((e) => e.id);
+    if (idsEvenements.length) {
+      await getDb().delete(executionsAutomatisation).where(inArray(executionsAutomatisation.evenementId, idsEvenements));
+      await getDb().delete(evenementsMetier).where(inArray(evenementsMetier.id, idsEvenements));
+    }
+  }
   for (const id of idsVisites) await getDb().delete(visitesTable).where(eq(visitesTable.id, id));
   for (const id of idsAcquereurs) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
   for (const id of idsBiens) await getDb().delete(biensTable).where(eq(biensTable.id, id));
@@ -71,14 +87,18 @@ async function creerVisitePlanifieeTest(rendezVousCalendarId: string) {
   }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
 
-  const visite = await materialiserVisite({
-    bienId: bien.id,
-    acquereurId: acquereur.id,
-    datePrevue: "2026-03-01",
-    rendezVousCalendarId,
-  });
-  idsVisites.push(visite.id);
-  return visite;
+  const resultat = await materialiserVisite(
+    {
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-03-01",
+      rendezVousCalendarId,
+    },
+    WORKSPACE_TEST
+  );
+  if (resultat.statut !== "creee") throw new Error("création de visite attendue");
+  idsVisites.push(resultat.visite.id);
+  return resultat.visite;
 }
 
 function formulaireAnnulation(id: string, rendezVousCalendarId: string): FormData {
@@ -101,7 +121,7 @@ describe("annulerVisiteAction — comportement", () => {
     const visite = await creerVisitePlanifieeTest("rdv-annulation-test-1");
     await annulerVisiteAction(formulaireAnnulation(visite.id, "rdv-annulation-test-1")).catch(() => {});
 
-    const relue = await getVisiteById(visite.id);
+    const relue = await getVisiteById(visite.id, WORKSPACE_TEST);
     expect(relue?.statut).toBe("annulee");
   });
 
@@ -110,7 +130,7 @@ describe("annulerVisiteAction — comportement", () => {
     await annulerVisiteAction(formulaireAnnulation(visite.id, "rdv-annulation-test-2")).catch(() => {});
     await annulerVisiteAction(formulaireAnnulation(visite.id, "rdv-annulation-test-2")).catch(() => {});
 
-    const relue = await getVisiteById(visite.id);
+    const relue = await getVisiteById(visite.id, WORKSPACE_TEST);
     expect(relue?.statut).toBe("annulee");
   });
 });
@@ -120,7 +140,7 @@ describe("reporterVisiteAction — comportement", () => {
     const visite = await creerVisitePlanifieeTest("rdv-report-test-1");
     await reporterVisiteAction(formulaireReport(visite.id, "rdv-report-test-1", "2026-04-15")).catch(() => {});
 
-    const relue = await getVisiteById(visite.id);
+    const relue = await getVisiteById(visite.id, WORKSPACE_TEST);
     expect(relue?.id).toBe(visite.id);
     expect(relue?.datePrevue).toBe("2026-04-15");
   });
@@ -130,7 +150,7 @@ describe("reporterVisiteAction — comportement", () => {
     await annulerVisiteAction(formulaireAnnulation(visite.id, "rdv-report-test-2")).catch(() => {});
     await reporterVisiteAction(formulaireReport(visite.id, "rdv-report-test-2", "2026-04-15")).catch(() => {});
 
-    const relue = await getVisiteById(visite.id);
+    const relue = await getVisiteById(visite.id, WORKSPACE_TEST);
     expect(relue?.statut).toBe("annulee");
     expect(relue?.datePrevue).not.toBe("2026-04-15");
   });

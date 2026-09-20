@@ -8,8 +8,9 @@ import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { getCompteRenduVisiteParVisiteId } from "@/lib/compteRenduVisiteRepository";
 import { annulerVisiteAction, reporterVisiteAction } from "@/actions/visite";
+import { enregistrerCompteRenduVisiteAction } from "@/actions/enregistrerCompteRenduVisite";
 import { LABEL_STATUT_VISITE } from "@/types/visite";
-import { LABEL_INTERET } from "@/types/compteRenduVisite";
+import { LABEL_INTERET, type Interet } from "@/types/compteRenduVisite";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import ButtonLink from "@/components/ui/ButtonLink";
@@ -19,6 +20,8 @@ import { listerConfigurationsAutomatisation } from "@/lib/automatisations/config
 import { construireSuiteVisite } from "@/lib/visites/suiteVisite";
 import { creerTacheProchaineEtapeAction } from "@/actions/creerTacheProchaineEtape";
 import { nomComplet } from "@/lib/identite/nomPersonne";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { formatDateISO } from "@/lib/temps";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -52,13 +55,14 @@ function formatDateCourte(iso: string): string {
 // encore `planifiee` uniquement) — jamais une condition d'existence de la fiche elle-même.
 export default async function VisitePage({ params }: PageProps) {
   const { id } = await params;
-  const visite = await getVisiteById(id);
+  const workspaceId = await exigerWorkspaceCourant();
+  const visite = await getVisiteById(id, workspaceId);
   if (!visite) notFound();
 
   const [bien, acquereur, compteRendu] = await Promise.all([
     getBienById(visite.bienId),
     getClientById(visite.acquereurId),
-    getCompteRenduVisiteParVisiteId(visite.id),
+    getCompteRenduVisiteParVisiteId(visite.id, workspaceId),
   ]);
   // Théoriquement impossible (FK CASCADE, biens.id/acquereurs.id) : une visite ne peut pas
   // survivre à la suppression de son bien ou de son acquéreur.
@@ -125,21 +129,27 @@ export default async function VisitePage({ params }: PageProps) {
       {/* Actions — dépendent uniquement du statut persisté, jamais de la disponibilité de
           Calendar. "Préparer la visite" reste le seul point d'entrée vers l'enrichissement
           Calendar-dépendant (transports/écoles/patrimoine/marché + formulaire de compte rendu,
-          ADR-040) — secondaire, jamais bloquant pour cette fiche. */}
+          ADR-040) — secondaire, jamais bloquant pour cette fiche. VISIT_NATIVE_LIFECYCLE_V1
+          (ADR-063) — absent quand `rendezVousCalendarId` est undefined (visite native, aucun
+          rendez-vous Calendar à préparer) : le compte rendu s'enregistre alors directement ici,
+          via le formulaire minimal ci-dessous (NATIVE_PREPARATION = DEFERRED — pas
+          d'enrichissement contextuel pour une visite native en V1, mais un cycle de vie complet). */}
       {visite.statut === "planifiee" && (
         <section className="mb-8">
-          <div className="flex flex-wrap items-center gap-3 mb-4">
-            <Link
-              href={`/visites/${visite.rendezVousCalendarId}/preparer`}
-              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
-            >
-              {compteRendu ? "Ouvrir la préparation" : "Préparer / renseigner le compte rendu"}
-            </Link>
-          </div>
+          {visite.rendezVousCalendarId && (
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <Link
+                href={`/visites/${visite.rendezVousCalendarId}/preparer`}
+                className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-3.5 py-2 rounded-lg"
+              >
+                {compteRendu ? "Ouvrir la préparation" : "Préparer / renseigner le compte rendu"}
+              </Link>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <form action={reporterVisiteAction} className="flex items-center gap-2">
               <input type="hidden" name="id" value={visite.id} />
-              <input type="hidden" name="rendezVousCalendarId" value={visite.rendezVousCalendarId} />
+              <input type="hidden" name="rendezVousCalendarId" value={visite.rendezVousCalendarId ?? ""} />
               <input type="hidden" name="redirectTo" value={`/visites/${visite.id}`} />
               <input
                 type="date"
@@ -153,13 +163,77 @@ export default async function VisitePage({ params }: PageProps) {
             </form>
             <form action={annulerVisiteAction}>
               <input type="hidden" name="id" value={visite.id} />
-              <input type="hidden" name="rendezVousCalendarId" value={visite.rendezVousCalendarId} />
+              <input type="hidden" name="rendezVousCalendarId" value={visite.rendezVousCalendarId ?? ""} />
               <input type="hidden" name="redirectTo" value={`/visites/${visite.id}`} />
               <button type="submit" className="text-[13px] font-medium text-text-2 hover:text-danger transition-colors">
                 Annuler la visite
               </button>
             </form>
           </div>
+
+          {/* Compte rendu natif (ADR-063) — seul chemin d'écriture pour une visite sans
+              rendez-vous Calendar : mêmes champs que le formulaire de /preparer, sans
+              l'enrichissement contextuel (Calendar-dépendant). */}
+          {!visite.rendezVousCalendarId && (
+            <form action={enregistrerCompteRenduVisiteAction} className="flex flex-col gap-4 mt-6 border-t border-border pt-6">
+              <input type="hidden" name="bienId" value={bien.id} />
+              <input type="hidden" name="acquereurId" value={acquereur.id} />
+              <input type="hidden" name="visiteId" value={visite.id} />
+
+              <div>
+                <label className="text-[12px] font-medium text-text-2 mb-1 block">Date de la visite</label>
+                <input
+                  type="date"
+                  name="dateVisite"
+                  defaultValue={visite.datePrevue || formatDateISO(new Date())}
+                  required
+                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="text-[12px] font-medium text-text-2 mb-1 block">Intérêt de l'acquéreur</label>
+                <div className="flex flex-wrap gap-3">
+                  {(Object.keys(LABEL_INTERET) as Interet[]).map((valeur) => (
+                    <label key={valeur} className="inline-flex items-center gap-1.5 text-[13px] text-text-1">
+                      <input type="radio" name="interet" value={valeur} defaultChecked={valeur === "inconnu"} />
+                      {LABEL_INTERET[valeur]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[12px] font-medium text-text-2 mb-1 block">Retour libre</label>
+                <textarea
+                  name="retour"
+                  rows={4}
+                  required
+                  placeholder="Ce que vous avez observé, ce que l'acquéreur a dit..."
+                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="text-[12px] font-medium text-text-2 mb-1 block">
+                  Prochaine étape (optionnel)
+                </label>
+                <textarea
+                  name="prochaineEtape"
+                  rows={2}
+                  placeholder="Ex. Envoyer une contre-proposition, relancer dans une semaine..."
+                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
+              >
+                Enregistrer le compte rendu
+              </button>
+            </form>
+          )}
         </section>
       )}
 

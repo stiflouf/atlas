@@ -132,6 +132,10 @@ export default async function PreparerVisite({ params }: PageProps) {
   const acquereur = await getClientById(contexte.client.clientId);
   if (!bien || !acquereur) notFound();
 
+  // ADR-054 — résolu une seule fois, réutilisé par toutes les lectures scoped ci-dessous (Visite,
+  // comptes rendus du bien, mandat).
+  const workspaceId = await exigerWorkspaceCourant();
+
   // Lecture seule (ADR-041, correction du défaut GET-mutant d'ADR-040) : cette page ne matérialise
   // plus jamais de Visite Atlas dans son propre rendu — un GET (navigation, rafraîchissement,
   // aperçu de lien, prefetch éventuel) reste sans aucun effet de bord métier. Aucun fallback mock :
@@ -139,7 +143,7 @@ export default async function PreparerVisite({ params }: PageProps) {
   // pour ce rendez-vous — comportement identique à avant ADR-040 dans ce cas.
   const visite: Visite | undefined =
     UUID_REGEX.test(bien.id) && UUID_REGEX.test(acquereur.id)
-      ? await getVisiteParRendezVousCalendarId(rdv.id)
+      ? await getVisiteParRendezVousCalendarId(rdv.id, workspaceId)
       : undefined;
 
   // Aucune Visite Atlas matérialisée pour ce rendez-vous pourtant résolu sans ambiguïté : plutôt
@@ -183,7 +187,7 @@ export default async function PreparerVisite({ params }: PageProps) {
     getTachesPourBien(bien.id),
     getTachesPourAcquereur(acquereur.id),
     listerNotesPourBien(bien.id),
-    listerComptesRendusPourBien(bien.id),
+    listerComptesRendusPourBien(bien.id, workspaceId),
   ]);
   const notesRecentes = notesDuBien.slice(0, 3);
   const tachesEnCours = selectionnerActionsEnCours(tachesDuBien, tachesDeLAcquereur);
@@ -245,7 +249,7 @@ export default async function PreparerVisite({ params }: PageProps) {
   // ADR-060 §1 — le point d'attention « mandat non actif » lit le statut EFFECTIF du mandat
   // (canonique dès qu'il existe : un canonique résilié ou expiré est « non actif » même si le
   // legacy du bien dit encore « actif »), tranché par le read model dans le workspace de session.
-  const mandat = statutMandatEffectif(await chargerPresentationMandatBien(bien, await exigerWorkspaceCourant()));
+  const mandat = statutMandatEffectif(await chargerPresentationMandatBien(bien, workspaceId));
   const pointsAttention = produirePointsAttention({ bien, acquereur, transports, velib, mandat });
   const pointsForts = produirePointsForts({ bien, acquereur });
 

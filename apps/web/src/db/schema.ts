@@ -1047,12 +1047,26 @@ export const visites = pgTable(
     // d'affichage Calendar éphémère, jamais persistée ici.
     datePrevue: date("date_prevue").notNull(),
     statut: text("statut").notNull().default("planifiee"),
-    rendezVousCalendarId: text("rendez_vous_calendar_id").notNull(),
+    // VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — NULLABLE : Calendar devient une représentation de
+    // planification externe FACULTATIVE, jamais l'identité métier primaire. Une Visite native créée
+    // sans rendez-vous Calendar a cette colonne à NULL en permanence, pas seulement transitoirement.
+    // L'unicité (ci-dessous) devient un index partiel : NULL n'est jamais comparé à NULL par
+    // Postgres, donc plusieurs Visites natives sans Calendar coexistent librement.
+    rendezVousCalendarId: text("rendez_vous_calendar_id"),
+    // ADR-063 §7 — aucune des deux transitions terminales ne datait jusqu'ici son propre
+    // franchissement (seul `creeLe` existait). Postées UNIQUEMENT par le writer central de
+    // transition, jamais recalculées depuis `datePrevue` (qui reste une intention, pas un fait).
+    realiseeLe: timestamp("realisee_le", { withTimezone: true }),
+    annuleeLe: timestamp("annulee_le", { withTimezone: true }),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     check("visites_statut_check", sql`${table.statut} IN ('planifiee','realisee','annulee')`),
-    unique("visites_rendez_vous_calendar_id_unique").on(table.rendezVousCalendarId),
+    // Partiel (ADR-063 §4) : remplace l'ancien `unique(...)` NOT NULL — un même rendez-vous
+    // Calendar ne matérialise toujours jamais deux Visites, mais NULL n'est plus contraint.
+    uniqueIndex("visites_rendez_vous_calendar_id_unique")
+      .on(table.rendezVousCalendarId)
+      .where(sql`${table.rendezVousCalendarId} IS NOT NULL`),
   ]
 );
 
@@ -1087,6 +1101,13 @@ export const comptesRendusVisite = pgTable(
       "comptes_rendus_visite_interet_check",
       sql`${table.interet} IN ('interesse','a_reflechir','pas_interesse','inconnu')`
     ),
+    // ADR-063 §"ACCOUNT_REPORT_CARDINALITY" — 0..1 compte rendu par Visite, désormais garanti en
+    // base (défense en profondeur, même discipline que compromis_bien_id_en_cours_unique,
+    // ADR-047) : jusqu'ici seul l'unique chemin d'écriture applicatif le garantissait. Partiel :
+    // `visite_id` reste NULL pour tout compte rendu antérieur à ADR-040, jamais contraint.
+    uniqueIndex("comptes_rendus_visite_visite_id_unique")
+      .on(table.visiteId)
+      .where(sql`${table.visiteId} IS NOT NULL`),
   ]
 );
 
@@ -2095,6 +2116,12 @@ export const evenementsMetier = pgTable(
     // lot), cet événement porte l'identité du mandat lui-même : un renouvellement crée une nouvelle
     // ligne `mandats` (`remplace_mandat_id`), donc une occurrence authentiquement nouvelle.
     mandatId: uuid("mandat_id").references(() => mandats.id),
+    // VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — cible ponctuelle de `visite_annulee` (NO ACTION, même
+    // raisonnement append-only que `offreId`/`mandatId` : aucune Visite n'est jamais supprimée).
+    // `visite_realisee` continue de cibler `compteRenduVisiteId`, contrat inchangé (ADR-041 §5) :
+    // cette colonne ne sert qu'au NOUVEAU type `visite_annulee`, jamais aux deux ensemble sur la
+    // même ligne (le CHECK « une seule cible » l'interdirait de toute façon).
+    visiteId: uuid("visite_id").references(() => visites.id),
     ancreCycle: timestamp("ancre_cycle", { withTimezone: true }),
     bienId: uuid("bien_id").references(() => biens.id),
     acquereurId: uuid("acquereur_id").references(() => acquereurs.id),
@@ -2109,7 +2136,8 @@ export const evenementsMetier = pgTable(
         'inactivite_prospect_vendeur','compatibilite_bien_acquereur_devenue_compatible',
         'offre_recue','offre_acceptee','offre_refusee','offre_retiree','offre_caduque',
         'compromis_realise','compromis_annule',
-        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis'
+        'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis',
+        'visite_annulee'
       )`
     ),
     // Étendu par ADR-036 : le couple (bien_id, acquereur_id), posé ENSEMBLE, compte désormais comme
@@ -2126,6 +2154,7 @@ export const evenementsMetier = pgTable(
         (case when ${table.compromisId} is not null then 1 else 0 end) +
         (case when ${table.offreId} is not null then 1 else 0 end) +
         (case when ${table.mandatId} is not null then 1 else 0 end) +
+        (case when ${table.visiteId} is not null then 1 else 0 end) +
         (case when ${table.bienId} is not null and ${table.acquereurId} is not null then 1 else 0 end)
       ) = 1`
     ),
@@ -2136,6 +2165,12 @@ export const evenementsMetier = pgTable(
     uniqueIndex("evenements_metier_visite_unique")
       .on(table.typeEvenement, table.compteRenduVisiteId)
       .where(sql`${table.compteRenduVisiteId} IS NOT NULL`),
+    // VISIT_NATIVE_LIFECYCLE_V1 — dédié à `visite_id` (distinct de l'index ci-dessus, qui porte sur
+    // `compte_rendu_visite_id` malgré son nom hérité) : une occurrence par (type, visite), pour
+    // `visite_annulee`.
+    uniqueIndex("evenements_metier_visite_id_unique")
+      .on(table.typeEvenement, table.visiteId)
+      .where(sql`${table.visiteId} IS NOT NULL`),
     // Réservé aux types PONCTUELS sur prospectVendeurId (rdv_estimation_realise, mandat_signe) —
     // exclut explicitement 'inactivite_prospect_vendeur' (ADR-033), cyclique par nature : sans
     // cette exclusion, cet index bloquerait à vie toute deuxième occurrence de silence pour le

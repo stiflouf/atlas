@@ -1466,7 +1466,7 @@ synchronisation.
 
 | Existant | Nature réelle | Pourquoi il n'est pas converti |
 |---|---|---|
-| `visites.rendez_vous_calendar_id` | corrélation temporaire avec un événement d'agenda | `UNIQUE` et `NOT NULL` aujourd'hui ; une conversion changerait des invariants du tunnel visite |
+| `visites.rendez_vous_calendar_id` | corrélation temporaire avec un événement d'agenda | nullable, `UNIQUE` partiel depuis `VISIT_NATIVE_LIFECYCLE_V1` ; une conversion vers `references_externes` changerait des invariants du tunnel visite |
 | `envois_email.gmail_message_id` | audit **technique** d'un envoi sortant (ADR-031-bis) | ce n'est pas un fait CRM, et il n'a pas d'entité canonique à désigner |
 | `memoire_contextuelle.source` + `identifiant_externe` | **hypothèse** scorée, cibles en texte sans FK | une confiance n'a aucun sens sur un `id` d'API ; ADR-056 §2 refuse explicitement la fusion |
 
@@ -1702,16 +1702,32 @@ fait métier) et de `comptes_rendus_visite` (le fait qualitatif après-coup, jam
 | `acquereur_id` | uuid (FK → `acquereurs.id`, cascade) | non | idem |
 | `date_prevue` | date | non | jour civil prévu, jamais un `timestamptz` (même convention que `date_visite`/`date_offre`) |
 | `statut` | text | non | défaut `"planifiee"`, `CHECK` |
-| `rendez_vous_calendar_id` | text | non | référence externe (`RendezVous.id`, ex. `"gcal-xxxx"`) — **jamais la PK métier**, `UNIQUE` |
+| `rendez_vous_calendar_id` | text | oui | référence externe (`RendezVous.id`, ex. `"gcal-xxxx"`) — **jamais la PK métier**. Nullable depuis `VISIT_NATIVE_LIFECYCLE_V1` (migration 0050, ADR-063) : `NULL` pour une Visite créée nativement (`creerVisite`, sans Calendar) |
+| `realisee_le` | timestamptz | oui | posée exactement une fois, à la transition `planifiee → realisee` (`VISIT_NATIVE_LIFECYCLE_V1`) |
+| `annulee_le` | timestamptz | oui | posée exactement une fois, à la transition `planifiee → annulee` (`VISIT_NATIVE_LIFECYCLE_V1`) |
 | `cree_le` | timestamptz | non | instant de matérialisation |
 
 **Contrainte `CHECK`** : `statut IN ('planifiee','realisee','annulee')`.
-**Contrainte `UNIQUE`** : `rendez_vous_calendar_id` — garantit qu'un même rendez-vous Calendar ne
-matérialise jamais deux visites (idempotence au niveau DB, pas seulement applicative).
+**Contrainte `UNIQUE` (partielle)** : `rendez_vous_calendar_id WHERE rendez_vous_calendar_id IS NOT
+NULL` — garantit qu'un même rendez-vous Calendar ne matérialise jamais deux visites (idempotence au
+niveau DB, pas seulement applicative) ; une Visite native (sans Calendar) n'est pas contrainte par cet
+index (même idiome que `evenements_metier`, ADR-032/033/061/062).
 
 Relation fonctionnelle : alimente l'onglet "Visites → À venir" de la fiche bien (statut
 `planifiee`, ADR-040) et le signal `existeVisitePlanifieePourPaire()` exploité par la règle
 `nouveau_match_bien_acquereur` (ADR-037/040) — voir `docs/BUSINESS_RULES.md`.
+
+**Workspace scoping** (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) : `visites` n'a pas de colonne
+`workspace_id` propre (même modèle que `mandats`/`offres`) — le workspace se dérive par jointure
+`bien_id → biens.workspace_id`. Toutes les fonctions de `visiteRepository.ts` destinées à être
+scopées le sont désormais ; `listerVisites()` reste une exception documentée (lecteur global, même
+patron que les lecteurs Today/opportunités).
+
+**Verrou/transitions** : `verrouillerVisite()` verrouille la ligne `FOR UPDATE` (après verrou du Bien
+parent via `verrouillerBienPourVisites`), puis effectue un `UPDATE ... WHERE statut = 'planifiee'`
+conditionnel — même patron que `verrouillerMandat`/`deciderOffre`. Ceci rend `realisee → annulee`
+(et toute autre transition hors matrice) structurellement impossible et fait gagner exactement un
+côté d'une course réalisation/annulation concurrente.
 
 ## `comptes_rendus_visite`
 
@@ -1731,6 +1747,9 @@ qu'une variante de `notes_bien` (justification complète dans ADR-011).
 | `cree_le` | timestamptz | non | instant de saisie |
 
 **Contrainte `CHECK`** : `interet IN ('interesse','a_reflechir','pas_interesse','inconnu')`.
+**Contrainte `UNIQUE` (partielle)** : `visite_id WHERE visite_id IS NOT NULL` (`VISIT_NATIVE_LIFECYCLE_V1`,
+migration 0050) — garantit en DB la cardinalité 0..1 compte rendu par Visite, en défense en profondeur
+du verrou applicatif (`verrouillerVisite`, même transaction que la transition `realisee`).
 
 Relation fonctionnelle : alimente l'historique dérivé du bien (`"Visite effectuée — {label}"`,
 jamais le texte de `retour`) et la "Mémoire du dossier" de la page de préparation, filtrée sur le
@@ -1738,21 +1757,24 @@ couple `(bien_id, acquereur_id)` exact — voir `docs/BUSINESS_RULES.md`. L'enre
 compte rendu sur une visite `planifiee` fait transiter cette visite vers `realisee`, dans la même
 transaction (ADR-040) — `visites.statut` et `comptesRendusVisite.interet` restent deux notions
 séparées : le premier répond à "que s'est-il passé ?", le second à "quel est le retour de
-l'acquéreur ?".
+l'acquéreur ?". Depuis `VISIT_NATIVE_LIFECYCLE_V1`, l'INSERT du compte rendu et l'UPDATE de la
+Visite (`creerCompteRenduEtRealiserVisite`, `compteRenduVisiteRepository.ts`) sont posés sous le même
+verrou de ligne Visite que `annulerVisite` — un double compte rendu concurrent ou une course
+réalisation/annulation ne peut produire qu'un seul gagnant (contrat testé,
+`visiteRepository.test.ts`).
 
-### État actuel vs. cible décidée (ADR-063, `ADR063_VISIT_MATURITY_V1` — DECIDED / NOT YET IMPLEMENTED)
+### ADR-063 — `VISIT_NATIVE_LIFECYCLE_V1` livré (2026-09-19, migration 0050)
 
-Le modèle ci-dessus est **l'état actuel réel**, inchangé par ADR-063 (audit seul, aucun code, aucune
-migration). ADR-063 documente une cible pour un futur lot `VISIT_NATIVE_LIFECYCLE_V1`, notamment :
-`rendez_vous_calendar_id` nullable (index unique **partiel** au lieu de `NOT NULL UNIQUE`, création
-native possible sans Calendar), ajout de `realisee_le`/`annulee_le` (aucune date de transition n'est
-aujourd'hui persistée au-delà de `cree_le`), `UNIQUE(visite_id) WHERE visite_id IS NOT NULL` sur
-`comptes_rendus_visite` (la cardinalité 0..1 par visite n'est aujourd'hui garantie que par l'unique
-chemin d'écriture applicatif, jamais par une contrainte DB), et un scoping workspace actuellement
-**totalement absent** sur `visiteRepository.ts`/`compteRenduVisiteRepository.ts` (aucune des 10
-fonctions exportées ne prend de `workspaceId`). Un second lot futur, `VISIT_SIGNED_FORM_V1`,
-documenterait un bon de visite signé (`bons_visite` + `signatures_bon_visite`, nouvelle colonne
-`documents_bien.visite_id`) — voir ADR-063 pour le détail complet. Rien de tout cela n'est implémenté.
+Le modèle ci-dessus reflète **l'état actuel réel, désormais aligné avec la cible V1 d'ADR-063** :
+`rendez_vous_calendar_id` nullable (index unique partiel), création native sans Calendar
+(`creerVisite`, convergeant avec `materialiserVisite` sur la même primitive
+`creerVisiteEnBase`), `realisee_le`/`annulee_le` posées exactement une fois, `UNIQUE(visite_id)`
+partiel sur `comptes_rendus_visite`, garde d'archivage Bien/Acquéreur à la création (chemin natif et
+chemin Calendar), scoping workspace (`biens.workspace_id`) sur les fonctions destinées à l'être.
+`/visites/{id}/preparer` reste volontairement Calendar-id-based (non migré vers `visite.id` — voir
+`docs/KNOWN_LIMITATIONS.md`). Second lot futur, `VISIT_SIGNED_FORM_V1` (non livré ici) : bon de
+visite signé (`bons_visite` + `signatures_bon_visite`, nouvelle colonne `documents_bien.visite_id`)
+— voir ADR-063 pour le détail complet.
 
 ## `documents_bien`
 
@@ -2383,12 +2405,13 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `type_evenement` | text | non | `CHECK`, 15 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) + 7 types Offre/Compromis (ADR-061) + 3 types temporels ponctuels (`mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, ADR-062) |
-| `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | |
+| `type_evenement` | text | non | `CHECK`, 16 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) + 7 types Offre/Compromis (ADR-061) + 3 types temporels ponctuels (`mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, ADR-062) + `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) |
+| `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | cible de `visite_realisee` — contrat inchangé (`compteRenduVisiteId`, jamais `visiteId`), ADR-041 §5 |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, **`NO ACTION`**) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, **`NO ACTION`**) | oui | |
 | `offre_id` | uuid (FK → `offres.id`, **`NO ACTION`**) | oui | ADR-061 — cible des 5 types `offre_*` ; réutilisée telle quelle par `offre_sans_decision`/`offre_acceptee_sans_compromis` (ADR-062, même index d'idempotence générique, aucun nouveau) |
 | `mandat_id` | uuid (FK → `mandats.id`, **`NO ACTION`**) | oui | ADR-062 — cible de `mandat_expire_bientot`. Un renouvellement crée une nouvelle ligne `mandats` (`remplace_mandat_id`) : identité d'occurrence authentiquement nouvelle, jamais un rejeu |
+| `visite_id` | uuid (FK → `visites.id`, **`NO ACTION`**) | oui | `VISIT_NATIVE_LIFECYCLE_V1` (ADR-063, migration 0050) — cible de `visite_annulee`. Colonne dédiée plutôt que de réutiliser `(bien_id, acquereur_id)` : deux Visites distinctes pour la même paire auraient sinon collapsé leur idempotence |
 | `ancre_cycle` | timestamptz | oui | ADR-033 — `NULL` pour tous les types ponctuels ; pour `inactivite_prospect_vendeur`, `dernierContactLe` (ou `creeLe` si aucun contact n'a jamais eu lieu) au moment du franchissement du seuil. Voir index dédié ci-dessous |
 | `bien_id` | uuid (FK → `biens.id`, **`NO ACTION`**) | oui | ADR-036 — toujours posé avec `acquereur_id` (jamais l'un sans l'autre) |
 | `acquereur_id` | uuid (FK → `acquereurs.id`, **`NO ACTION`**) | oui | ADR-036 — idem |
@@ -2397,9 +2420,9 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 
 **Contraintes** :
 - `evenements_metier_une_seule_cible_check` — exactement une cible logique est renseignée (`= 1`,
-  pas `<= 1`) : `compte_rendu_visite_id`/`prospect_vendeur_id`/`compromis_id`/`offre_id`/`mandat_id`
+  pas `<= 1`) : `compte_rendu_visite_id`/`prospect_vendeur_id`/`compromis_id`/`offre_id`/`mandat_id`/`visite_id`
   comptent chacune pour une cible, et le couple `(bien_id, acquereur_id)` posé **ensemble**
-  (ADR-036) compte pour une sixième — jamais deux. `ancre_cycle`/`cycle_compatibilite` n'entrent
+  (ADR-036) compte pour une septième — jamais deux. `ancre_cycle`/`cycle_compatibilite` n'entrent
   jamais dans ce calcul (ce ne sont pas des cibles).
 - `evenements_metier_bien_acquereur_ensemble_check` (ADR-036) — `bien_id` et `acquereur_id` sont
   soit tous deux `NULL`, soit tous deux renseignés : jamais l'un sans l'autre.
@@ -2427,6 +2450,8 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
   offre).
 - Index unique partiel `(type_evenement, mandat_id) WHERE mandat_id IS NOT NULL` (ADR-062) — une
   occurrence par mandat pour `mandat_expire_bientot`.
+- Index unique partiel `(type_evenement, visite_id) WHERE visite_id IS NOT NULL`
+  (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) — une occurrence par Visite pour `visite_annulee`.
 
 **Aucun `ON DELETE CASCADE` depuis les entités source** (volontaire, ADR-032 correction n°5, étendu
 sans exception à `biens`/`acquereurs` par ADR-036) : supprimer un compte rendu de visite, un
@@ -2644,6 +2669,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0047_automation_engine_generalization.sql` | ADR-062 : `evenements_metier.mandat_id` (FK NO ACTION) dans le CHECK « une seule cible », 3 nouveaux types d'événements temporels, index unique partiel `(type_evenement, mandat_id)` ; CHECK `regle_code` élargis (`configurations_automatisation`, `executions_automatisation`) pour les 3 nouvelles règles ; seed des 3 nouvelles lignes de configuration (`active = false`, `workspace_id = 'default'` explicite). Strictement additive, **aucun backfill** |
 | `0048_rename_seuil_jours.sql` | ADR-062 : renommage PUR `configurations_automatisation.seuil_jours_inactivite` → `seuil_jours` (généralisation du seuil produit — colonne réutilisée par toute règle temporelle à seuil, un sens par ligne). Aucune valeur modifiée, aucune ligne réécrite |
 | `0049_runs_scan_regle_code_check.sql` | ADR-062 (suite de 0047) : CHECK `regle_code` élargi sur `runs_scan_automatisation` pour les 3 nouvelles règles temporelles — sans cette extension, `demarrerRunScanAutomatisation` aurait échoué au premier scan réel les concernant |
+| `0050_visit_native_lifecycle_v1.sql` | ADR-063 (`VISIT_NATIVE_LIFECYCLE_V1`) : `visites.rendez_vous_calendar_id` rendue nullable (`UNIQUE` full → index unique partiel `WHERE ... IS NOT NULL`) ; ajout `visites.realisee_le`/`annulee_le` (timestamptz nullables) ; index unique partiel `comptes_rendus_visite_visite_id_unique` sur `comptes_rendus_visite.visite_id` ; `evenements_metier.visite_id` (FK NO ACTION) dans le CHECK « une seule cible », type `visite_annulee`, index unique partiel `(type_evenement, visite_id)`. Strictement additive (aucune table supprimée, `DROP NOT NULL` + CHECK élargis seulement), **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

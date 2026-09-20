@@ -1,12 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getDb } from "@/db/client";
-import { enregistrerCompteRenduVisite } from "@/lib/compteRenduVisiteRepository";
+import { creerCompteRenduEtRealiserVisite } from "@/lib/compteRenduVisiteRepository";
 import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
-import { getVisiteById, marquerVisiteRealisee } from "@/lib/visiteRepository";
-import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { Interet } from "@/types/compteRenduVisite";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -33,6 +30,13 @@ function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefi
 // Visite Atlas (bien/acquéreur mockés — non réels, cas déjà impossible en pratique dès qu'au
 // moins un bien réel existe, voir bienRepository.getBienById) — le compte rendu s'enregistre
 // alors exactement comme avant ADR-040, sans transition de statut associée.
+//
+// VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — la validation "cette Visite existe / cible bien ce couple
+// bien-acquéreur / est encore planifiee" est désormais posée SOUS LE VERROU, à l'intérieur de la
+// même transaction que l'INSERT du compte rendu et l'UPDATE de la Visite
+// (`creerCompteRenduEtRealiserVisite`, compteRenduVisiteRepository.ts) — jamais relue ici hors
+// transaction, ce qui exposait une fenêtre de course avec une annulation/un second compte rendu
+// concurrent (§17/§18 du brief).
 export async function enregistrerCompteRenduVisiteAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
   // ADR-054 — appartenance explicite de l'événement métier (table racine).
@@ -47,50 +51,37 @@ export async function enregistrerCompteRenduVisiteAction(formData: FormData): Pr
   if (bienId && acquereurId && dateVisite && retour && interet) {
     const [bien, acquereur] = await Promise.all([getBienById(bienId), getClientById(acquereurId)]);
     if (bien && !bien.archiveLe && acquereur && !acquereur.archiveLe) {
-      // La visite n'est reliée que si elle existe réellement, cible bien ce même couple
-      // bien/acquéreur, et est encore 'planifiee' — jamais une transition sur une visite déjà
-      // réalisée/annulée par ailleurs (contournement de formulaire, double soumission).
-      const visite = visiteIdSoumis ? await getVisiteById(visiteIdSoumis) : undefined;
-      const visiteValide =
-        visite && visite.bienId === bienId && visite.acquereurId === acquereurId && visite.statut === "planifiee"
-          ? visite
-          : undefined;
+      const resultat = await creerCompteRenduEtRealiserVisite(
+        {
+          bienId,
+          acquereurId,
+          visiteId: visiteIdSoumis || undefined,
+          dateVisite,
+          retour,
+          interet,
+          prochaineEtape: parseTexteOptionnel(formData.get("prochaineEtape")),
+        },
+        workspaceId
+      );
 
-      // Transaction unique (ADR-032/040) : le compte rendu, la transition éventuelle de la visite
-      // vers 'realisee' et l'événement métier `visite_realisee` (+ le snapshot des exécutions à
-      // traiter selon l'activation en vigueur MAINTENANT) sont aussi durables les uns que les
-      // autres — jamais un trou entre "visite enregistrée" et "événement émis". Le traitement
-      // effectif (création éventuelle d'une tâche) reste synchrone juste après le COMMIT, jamais
-      // à l'intérieur : son échec ne doit jamais faire échouer l'enregistrement du compte rendu.
-      const { idsExecutionsATraiter } = await getDb().transaction(async (tx) => {
-        const compteRendu = await enregistrerCompteRenduVisite(
-          {
-            bienId,
-            acquereurId,
-            visiteId: visiteValide?.id,
-            dateVisite,
-            retour,
-            interet,
-            prochaineEtape: parseTexteOptionnel(formData.get("prochaineEtape")),
-          },
-          tx
-        );
-        if (visiteValide) {
-          await marquerVisiteRealisee(visiteValide.id, tx);
-        }
-        return emettreEvenementEtPreparerExecutions(
-          { typeEvenement: "visite_realisee", compteRenduVisiteId: compteRendu.id },
-          workspaceId,
-          tx
-        );
-      });
-      await traiterExecutionsEnAttente(idsExecutionsATraiter);
+      // Le perdant d'une course réalisation/annulation (§17/§18 du brief) — la Visite visée a déjà
+      // été tranchée par un autre geste au moment du verrou — n'enregistre jamais un second compte
+      // rendu orphelin : retour direct sur la fiche du bien, message honnête, jamais une écriture
+      // silencieuse.
+      if (resultat.statut === "visite_deja_finalisee") {
+        redirect(`/biens/${bienId}`);
+      }
+
+      // Traitement effectif (création éventuelle d'une tâche) synchrone juste après le COMMIT,
+      // jamais à l'intérieur de la transaction : son échec ne doit jamais faire échouer
+      // l'enregistrement du compte rendu déjà durable.
+      await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
 
       // VALUE-02 — retour sur la fiche de la visite qui vient d'être traitée, jamais sur la fiche
       // du bien : le conseiller y voit immédiatement la suite recommandée et les suivis déjà
       // planifiés. Repli sur le bien quand aucune Visite Atlas n'a pu être reliée (compte rendu
       // enregistré hors cycle ADR-040) — il n'existe alors aucune fiche visite où atterrir.
-      if (visiteValide) redirect(`/visites/${visiteValide.id}`);
+      if (resultat.visite) redirect(`/visites/${resultat.visite.id}`);
     }
   }
 

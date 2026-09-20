@@ -7,6 +7,8 @@ import { getBienById } from "@/lib/bienRepository";
 import { getClientById } from "@/lib/clientRepository";
 import { formatDateISO } from "@/lib/temps";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,6 +22,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // `rendez_vous_calendar_id`, `materialiserVisite`) : un double submit ne crée jamais deux visites.
 export async function materialiserVisiteAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
 
   if (rendezVousCalendarId) {
@@ -32,12 +35,15 @@ export async function materialiserVisiteAction(formData: FormData): Promise<void
       // Aucun fallback mock : seuls de vrais UUID persistés matérialisent une visite (même garde
       // que l'ancien comportement ADR-040, jamais régressée).
       if (bien && acquereur && UUID_REGEX.test(bien.id) && UUID_REGEX.test(acquereur.id)) {
-        await materialiserVisite({
-          bienId: bien.id,
-          acquereurId: acquereur.id,
-          datePrevue: resultat.rdv.date ?? formatDateISO(new Date()),
-          rendezVousCalendarId,
-        });
+        await materialiserVisite(
+          {
+            bienId: bien.id,
+            acquereurId: acquereur.id,
+            datePrevue: resultat.rdv.date ?? formatDateISO(new Date()),
+            rendezVousCalendarId,
+          },
+          workspaceId
+        );
       }
     }
     redirect(`/visites/${rendezVousCalendarId}/preparer`);
@@ -54,15 +60,22 @@ export async function materialiserVisiteAction(formData: FormData): Promise<void
 // depuis l'UI normale.
 export async function annulerVisiteAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
   // redirectTo optionnel (ADR-041, même patron que terminerTacheAction) : la fiche Visite
   // (/visites/{idAtlas}) redirige vers elle-même ; la page de préparation garde son comportement
-  // par défaut inchangé si le champ est absent.
-  const redirectTo = String(formData.get("redirectTo") ?? "") || `/visites/${rendezVousCalendarId}/preparer`;
+  // par défaut inchangé si le champ est absent. Repli sur la fiche native (jamais
+  // `/visites/${rendezVousCalendarId}/preparer`) quand aucun calendarId n'existe — VISIT_NATIVE_LIFECYCLE_V1
+  // (ADR-063) : une visite native n'a structurellement aucune page de préparation à rejoindre.
+  const redirectTo =
+    String(formData.get("redirectTo") ?? "") || (rendezVousCalendarId ? `/visites/${rendezVousCalendarId}/preparer` : `/visites/${id}`);
 
   if (id) {
-    await annulerVisite(id);
+    const resultat = await annulerVisite(id, workspaceId);
+    if (resultat.statut === "annulee") {
+      await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
+    }
   }
 
   redirect(redirectTo);
@@ -73,13 +86,15 @@ export async function annulerVisiteAction(formData: FormData): Promise<void> {
 // réalisée ou annulée n'a pas de sens métier, silencieusement sans effet dans ce cas.
 export async function reporterVisiteAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
   const nouvelleDatePrevue = String(formData.get("nouvelleDatePrevue") ?? "").trim();
-  const redirectTo = String(formData.get("redirectTo") ?? "") || `/visites/${rendezVousCalendarId}/preparer`;
+  const redirectTo =
+    String(formData.get("redirectTo") ?? "") || (rendezVousCalendarId ? `/visites/${rendezVousCalendarId}/preparer` : `/visites/${id}`);
 
   if (id && nouvelleDatePrevue) {
-    await modifierDatePrevueVisite(id, nouvelleDatePrevue);
+    await modifierDatePrevueVisite(id, nouvelleDatePrevue, workspaceId);
   }
 
   redirect(redirectTo);

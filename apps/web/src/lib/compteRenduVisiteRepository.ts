@@ -1,7 +1,10 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
-import { comptesRendusVisite as comptesRendusVisiteTable } from "@/db/schema";
+import { biens as biensTable, comptesRendusVisite as comptesRendusVisiteTable, visites as visitesTable } from "@/db/schema";
 import type { CompteRenduVisite, Interet } from "@/types/compteRenduVisite";
+import type { Visite } from "@/types/visite";
+import { verrouillerVisite, ligneVersVisitePublique } from "@/lib/visiteRepository";
+import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,8 +24,8 @@ function ligneVersCompteRendu(ligne: LigneCompteRendu): CompteRenduVisite {
   };
 }
 
-// Lecture globale (VALUE-01), même rationale que listerVisites() : le moteur d'opportunités croise
-// visites et comptes rendus sur tout le portefeuille en une seule passe.
+// Lecture globale (VALUE-01), même exception documentée que listerVisites() (visiteRepository.ts) :
+// volontairement NON scopée, mêmes appelants déjà globalement non scopés aujourd'hui.
 export async function listerComptesRendus(): Promise<CompteRenduVisite[]> {
   try {
     const lignes = await getDb()
@@ -36,49 +39,61 @@ export async function listerComptesRendus(): Promise<CompteRenduVisite[]> {
   }
 }
 
-// Pas de repli mock : un compte rendu n'existe que pour un bien réel (FK uuid), il n'y a pas de
-// dataset de démonstration équivalent à fabriquer. Un id non-UUID (bien mocké) ne peut
-// correspondre à aucune ligne réelle : liste vide plutôt qu'une erreur de cast Postgres.
-export async function listerComptesRendusPourBien(bienId: string): Promise<CompteRenduVisite[]> {
+export async function listerComptesRendusPourBien(
+  bienId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<CompteRenduVisite[]> {
   if (!UUID_REGEX.test(bienId)) return [];
   try {
-    const lignes = await getDb()
-      .select()
+    const lignes = await executeur
+      .select({ compteRendu: comptesRendusVisiteTable })
       .from(comptesRendusVisiteTable)
-      .where(eq(comptesRendusVisiteTable.bienId, bienId))
+      .innerJoin(biensTable, eq(comptesRendusVisiteTable.bienId, biensTable.id))
+      .where(and(eq(comptesRendusVisiteTable.bienId, bienId), eq(biensTable.workspaceId, workspaceId)))
       .orderBy(desc(comptesRendusVisiteTable.dateVisite));
-    return lignes.map(ligneVersCompteRendu);
+    return lignes.map((l) => ligneVersCompteRendu(l.compteRendu));
   } catch (erreur) {
     console.error("[comptes-rendus-visite] lecture Postgres indisponible :", erreur);
     return [];
   }
 }
 
-// Résolution directe, jamais filtrée par archivage — nécessaire pour valider un lien offre <->
-// visite (ADR-019) même si le bien/acquéreur a depuis été archivé.
-export async function getCompteRenduVisiteById(id: string): Promise<CompteRenduVisite | undefined> {
+export async function getCompteRenduVisiteById(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<CompteRenduVisite | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb().select().from(comptesRendusVisiteTable).where(eq(comptesRendusVisiteTable.id, id));
-  return ligne ? ligneVersCompteRendu(ligne) : undefined;
+  const [ligne] = await executeur
+    .select({ compteRendu: comptesRendusVisiteTable })
+    .from(comptesRendusVisiteTable)
+    .innerJoin(biensTable, eq(comptesRendusVisiteTable.bienId, biensTable.id))
+    .where(and(eq(comptesRendusVisiteTable.id, id), eq(biensTable.workspaceId, workspaceId)))
+    .limit(1);
+  return ligne ? ligneVersCompteRendu(ligne.compteRendu) : undefined;
 }
 
-// Lecture pour la fiche Visite (ADR-041) : un compte rendu créé sur une visite planifiee la
-// référence via visite_id (ADR-040) — au plus un compte rendu par visite dans tous les chemins
-// d'écriture actuels (une visite ne transite vers 'realisee' qu'une seule fois, gardée). `undefined`
-// si aucun compte rendu n'a encore été créé (visite planifiee/annulee) ou si visiteId n'est pas un
-// vrai UUID.
-export async function getCompteRenduVisiteParVisiteId(visiteId: string): Promise<CompteRenduVisite | undefined> {
+export async function getCompteRenduVisiteParVisiteId(
+  visiteId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<CompteRenduVisite | undefined> {
   if (!UUID_REGEX.test(visiteId)) return undefined;
-  const [ligne] = await getDb().select().from(comptesRendusVisiteTable).where(eq(comptesRendusVisiteTable.visiteId, visiteId));
-  return ligne ? ligneVersCompteRendu(ligne) : undefined;
+  const [ligne] = await executeur
+    .select({ compteRendu: comptesRendusVisiteTable })
+    .from(comptesRendusVisiteTable)
+    .innerJoin(biensTable, eq(comptesRendusVisiteTable.bienId, biensTable.id))
+    .where(and(eq(comptesRendusVisiteTable.visiteId, visiteId), eq(biensTable.workspaceId, workspaceId)))
+    .limit(1);
+  return ligne ? ligneVersCompteRendu(ligne.compteRendu) : undefined;
 }
 
-// Validation (retour non vide après trim, interet dans le vocabulaire contrôlé) déjà faite par
-// l'appelant (server action) — insertion pure ici, même principe que les autres repositories.
 export type NouveauCompteRendu = Omit<CompteRenduVisite, "id" | "creeLe">;
 
-// `executeur` optionnel (ADR-032) : permet d'émettre l'événement métier `visite_realisee` dans la
-// même transaction que cet enregistrement.
+// PRIMITIVE BASSE d'insertion pure, réservée à la composition de `creerCompteRenduEtRealiserVisite`
+// ci-dessous et aux fixtures de test — jamais un chemin produit direct (même garde structurelle que
+// enregistrerOffre/enregistrerCompromis, ADR-061).
 export async function enregistrerCompteRenduVisite(
   input: NouveauCompteRendu,
   executeur: Executeur = getDb()
@@ -96,4 +111,61 @@ export async function enregistrerCompteRenduVisite(
     })
     .returning();
   return ligneVersCompteRendu(ligne);
+}
+
+export type ResultatCreationCompteRendu =
+  | { statut: "cree"; compteRendu: CompteRenduVisite; visite: Visite | undefined; idsExecutionsATraiter: string[] }
+  | { statut: "visite_deja_finalisee" };
+
+// Writer central (§16/§17/§18 du brief) : la création du compte rendu ET la transition éventuelle
+// planifiee → realisee sont UNE seule transaction, sous le MÊME verrou que toute autre transition
+// Visite (`verrouillerVisite`, visiteRepository.ts — jamais une seconde implémentation).
+//
+// `visiteId` optionnel (ADR-040, inchangé) : absent ou non résolu → compte rendu enregistré sans
+// lien, exactement comme si aucune Visite Atlas n'existait pour ce cycle (aucune régression du
+// chemin historique). Résolu MAIS déjà tranchée (`realisee`/`annulee`) au moment du verrou — que ce
+// soit par un geste antérieur ou par une VRAIE course concurrente (§17/§18) — retourne
+// `visite_deja_finalisee` SANS créer de second compte rendu : le perdant d'une double soumission
+// n'obtient jamais un compte rendu orphelin dupliqué, un résultat typé contrôlé, jamais une erreur
+// SQL brute (la contrainte `UNIQUE(visite_id)` reste un filet de défense en profondeur, jamais la
+// garantie elle-même — c'est ce verrou qui la porte).
+export async function creerCompteRenduEtRealiserVisite(
+  input: NouveauCompteRendu,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ResultatCreationCompteRendu> {
+  return executeur.transaction(async (tx) => {
+    type VisiteVerrouilleeTrouvee = Extract<Awaited<ReturnType<typeof verrouillerVisite>>, { statut: "verrouille" }>;
+    let visiteValide: VisiteVerrouilleeTrouvee["ligne"] | undefined;
+
+    if (input.visiteId) {
+      const verrou = await verrouillerVisite(input.visiteId, workspaceId, tx);
+      if (verrou.statut === "verrouille" && verrou.ligne.bienId === input.bienId && verrou.ligne.acquereurId === input.acquereurId) {
+        if (verrou.ligne.statut !== "planifiee") return { statut: "visite_deja_finalisee" };
+        visiteValide = verrou.ligne;
+      }
+      // introuvable (autre workspace/id inconnu) ou bien/acquéreur non correspondant : garde
+      // défensive silencieuse inchangée (ADR-040) — le compte rendu s'enregistre sans lien.
+    }
+
+    const compteRendu = await enregistrerCompteRenduVisite({ ...input, visiteId: visiteValide?.id }, tx);
+
+    let visite: Visite | undefined;
+    if (visiteValide) {
+      const [ligneMaj] = await tx
+        .update(visitesTable)
+        .set({ statut: "realisee", realiseeLe: new Date() })
+        .where(and(eq(visitesTable.id, visiteValide.id), eq(visitesTable.statut, "planifiee")))
+        .returning();
+      if (ligneMaj) visite = ligneVersVisitePublique(ligneMaj);
+    }
+
+    const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
+      { typeEvenement: "visite_realisee", compteRenduVisiteId: compteRendu.id },
+      workspaceId,
+      tx
+    );
+
+    return { statut: "cree", compteRendu, visite, idsExecutionsATraiter };
+  });
 }

@@ -99,7 +99,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   const compromis = (await listerCompromisPourAcquereur(client.id, workspaceId)).sort((a, b) =>
     a.dateSignature < b.dateSignature ? 1 : -1
   );
-  const visites = await listerVisitesPourAcquereur(client.id);
+  const visites = await listerVisitesPourAcquereur(client.id, workspaceId);
 
   const bienIds = [
     ...new Set([...offres.map((o) => o.bienId), ...compromis.map((c) => c.bienId), ...visites.map((v) => v.bienId)]),

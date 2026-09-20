@@ -134,7 +134,7 @@ async function resoudreDepuisAcquereur(acquereurId: string, workspaceId: string)
   if (!acquereur || acquereur.archiveLe) return undefined;
 
   const [visites, tousComptesRendus, offres, compromis, compatibilites, biens] = await Promise.all([
-    listerVisitesPourAcquereur(acquereur.id),
+    listerVisitesPourAcquereur(acquereur.id, workspaceId),
     listerComptesRendus(),
     listerOffresPourAcquereur(acquereur.id, workspaceId),
     listerCompromisPourAcquereur(acquereur.id, workspaceId),

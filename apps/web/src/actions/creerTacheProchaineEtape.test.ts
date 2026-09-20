@@ -81,22 +81,27 @@ async function dossier(suffixe: string, prochaineEtape: string | null = PROCHAIN
     datePremiereContact: "2026-01-01",
   }, WORKSPACE_TEST);
   idsAcquereurs.push(acquereur.id);
-  const visite = await materialiserVisite({
-    bienId: bien.id,
-    acquereurId: acquereur.id,
-    datePrevue: "2026-08-01",
-    rendezVousCalendarId: `gcal-value02-${bien.id}`,
-  });
+  const resultatVisite = await materialiserVisite(
+    {
+      bienId: bien.id,
+      acquereurId: acquereur.id,
+      datePrevue: "2026-08-01",
+      rendezVousCalendarId: `gcal-value02-${bien.id}`,
+    },
+    WORKSPACE_TEST
+  );
+  if (resultatVisite.statut !== "creee") throw new Error("création de visite attendue");
+  const visite = resultatVisite.visite;
   await enregistrerCompteRenduVisite({
     bienId: bien.id,
     acquereurId: acquereur.id,
-    visiteId: visite!.id,
+    visiteId: visite.id,
     dateVisite: "2026-08-01",
     retour: "Retour de visite.",
     interet: "interesse",
     prochaineEtape: prochaineEtape ?? undefined,
   });
-  return { bien, acquereur, visite: visite! };
+  return { bien, acquereur, visite };
 }
 
 function formData(champs: Record<string, string>): FormData {
