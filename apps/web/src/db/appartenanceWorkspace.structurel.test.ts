@@ -79,6 +79,12 @@ const TABLES_FEUILLES = [
   "photos_bien",
   "visites",
   "comptes_rendus_visite",
+  // ADR-063 (VISIT_SIGNED_FORM_V1) — FEUILLE de `visites` (donc de `biens`) : le périmètre d'un bon
+  // de visite est celui de la Visite pour laquelle il a été préparé.
+  "bons_visite",
+  // ADR-063 (VISIT_SIGNED_FORM_V1) — FEUILLE de `bons_visite` (donc de `visites`/`biens`) : une
+  // signature n'a aucun sens hors du bon qu'elle signe.
+  "signatures_bon_visite",
   "offres",
   "offre_visites",
   "compromis",

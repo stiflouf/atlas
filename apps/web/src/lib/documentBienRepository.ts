@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { getDb } from "@/db/client";
+import { getDb, type Executeur } from "@/db/client";
 import { documentsBien as documentsBienTable } from "@/db/schema";
 import type {
   CategorieDocument,
@@ -31,6 +31,7 @@ function ligneVersDocumentBien(ligne: LigneDocumentBien): DocumentBien {
     compromisId: ligne.compromisId ?? undefined,
     acquereurId: ligne.acquereurId ?? undefined,
     prospectVendeurId: ligne.prospectVendeurId ?? undefined,
+    visiteId: ligne.visiteId ?? undefined,
     coproprieteDeclaree: ligne.coproprieteDeclaree ?? undefined,
     adresseDeclaree: ligne.adresseDeclaree ?? undefined,
     provenance: ligne.provenance ?? undefined,
@@ -77,8 +78,14 @@ export async function getDocumentBienById(id: string): Promise<DocumentBien | un
 // principe que les autres repositories.
 export type NouveauDocumentBien = Omit<DocumentBien, "id" | "creeLe" | "modifieLe">;
 
-export async function enregistrerDocumentBien(input: NouveauDocumentBien): Promise<DocumentBien> {
-  const [ligne] = await getDb()
+// VISIT_SIGNED_FORM_V1 — `executeur` optionnel (défaut `getDb()`, comportement inchangé pour tous
+// les appelants existants) : signerBonVisite() doit pouvoir insérer cette ligne DANS la même
+// transaction que le bon/la signature/l'événement, même patron que le reste du domaine Visite.
+export async function enregistrerDocumentBien(
+  input: NouveauDocumentBien,
+  executeur: Executeur = getDb()
+): Promise<DocumentBien> {
+  const [ligne] = await executeur
     .insert(documentsBienTable)
     .values({
       bienId: input.bienId,
@@ -95,6 +102,7 @@ export async function enregistrerDocumentBien(input: NouveauDocumentBien): Promi
       compromisId: input.compromisId ?? null,
       acquereurId: input.acquereurId ?? null,
       prospectVendeurId: input.prospectVendeurId ?? null,
+      visiteId: input.visiteId ?? null,
       coproprieteDeclaree: input.coproprieteDeclaree ?? null,
       adresseDeclaree: input.adresseDeclaree ?? null,
       provenance: input.provenance ?? null,

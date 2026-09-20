@@ -88,6 +88,14 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 - **Liste blanche de types de fichiers volontairement restreinte** (`application/pdf`,
   `image/jpeg`, `image/png`) — pas de Word/Excel, pas d'archives ZIP, pas de scans TIFF.
 - **Un seul fichier par soumission** — pas d'upload multiple en une fois.
+- **`/api/documents/[id]` (téléchargement générique) n'est pas scopé workspace** — `getDocumentBienById`
+  résout par id seul, sans vérifier `biens.workspace_id` ; une session valide peut télécharger
+  n'importe quel document dont elle devine l'UUID, y compris d'un autre workspace. Gap pré-existant,
+  confirmé par audit (`VISIT_SIGNED_FORM_V1`, 2026-09-20), non corrigé par ce lot (hors périmètre —
+  corriger `documentBienRepository.ts`/la route générique toucherait tout le domaine Documents, pas
+  seulement le bon de visite). Contournement local pour le bon de visite signé uniquement : son
+  téléchargement passe par une route DÉDIÉE et workspace-safe (`/api/bons-visite/{id}/document`,
+  `getDocumentBonVisitePourTelechargement`), jamais par cette route générique.
 
 ## Dossier documentaire (ADR-029)
 
@@ -798,23 +806,38 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   `/visites/{id}`, qui affiche désormais un formulaire de compte rendu inline quand
   `rendezVousCalendarId` est absent. Réévaluer seulement si un besoin de préparation enrichie pour
   les visites natives est démontré.
-- **Bon de visite signé non implémenté** — aucune table, aucune colonne, aucun code de signature.
-  Besoin produit confirmé (terrain), modèle de données décidé par ADR-063
-  (`bons_visite`/`signatures_bon_visite`, snapshot signataire, immutabilité après signature,
-  provider/hash conceptuels), rien construit. `documents_bien` n'a aujourd'hui aucune colonne
-  `visite_id`. Lot dédié : `VISIT_SIGNED_FORM_V1`.
+- **Bon de visite signé** — **livré par `VISIT_SIGNED_FORM_V1`** (2026-09-20, migration 0051) :
+  `bons_visite`/`signatures_bon_visite`, signature tactile native (canvas, provider `"domiora"`),
+  document PDF final immuable + hash SHA-256, `documents_bien.visite_id`, versioning (v1/v2...),
+  téléchargement dédié workspace-safe (`/api/bons-visite/{id}/document`). Le texte du bon (V1,
+  `src/lib/bonVisite/templateBonVisite.ts`) est une configuration produit minimale, volontairement
+  neutre juridiquement — **à faire relire par un juriste avant tout usage au-delà de ce lot**, aucune
+  affirmation eIDAS/signature qualifiée n'est faite.
+- **Fichier orphelin possible sur signature perdante (dette P3, non bloquante)** — `signerBonVisite`
+  écrit le PDF final et l'image de signature sur disque **avant** d'ouvrir la transaction DB
+  (filesystem et transaction Postgres ne sont pas atomiques ensemble). Le côté perdant d'une double
+  signature concurrente (§22, ADR-063) a donc pu écrire ses fichiers sans qu'aucune ligne
+  `signatures_bon_visite`/`documents_bien` ne les référence jamais. Conséquence bornée et sans
+  danger fonctionnel : dans le chemin normal, aucune ligne `bons_visite.statut = 'signe'` ne peut
+  pointer vers un fichier absent (le document est posé dans la MÊME transaction que le passage à
+  `'signe'`) et aucun fichier orphelin n'est jamais exposé (le téléchargement résout uniquement via
+  une ligne `documents_bien` réellement rattachée). Aucun nettoyage automatique de ces octets morts
+  n'existe — même dette, non retraitée, que celle déjà documentée pour l'upload générique
+  (`ADR-050`, section Documents ci-dessus). Hors périmètre de ce lot.
 - **Automatisation Visite différée** — `visite_j_1`/`visite_sans_compte_rendu` restent des
   candidates non construites (ADR-062, confirmé par ADR-063) ; le scoping workspace qui les
-  précondition est désormais livré, mais aucune des deux règles n'a été ajoutée par ce lot.
+  précondition est désormais livré, mais aucune des deux règles n'a été ajoutée par ce lot. Aucune
+  règle ne consomme non plus l'événement `bon_visite_signe` (posé pour un futur lot uniquement).
 - **Acquéreur legacy sur la Visite** — même modèle que Mandat/Offre/Compromis
   (`acquereur_id` scalaire) ; confirmé non bloquant pour la maturité du domaine (ADR-063,
   `BUYER_LEGACY_BLOCKER = NO`). Le bon de visite introduit cependant une distinction nouvelle entre
   le projet acquéreur (Visite) et le(s) signataire(s) effectivement présent(s) (bon de visite),
-  jamais fusionnés dans une seule colonne.
-- **Prestataire de signature non choisi** — le niveau de signature V1 (manuscrite tactile,
-  checkbox, OTP, prestataire externe) reste une décision produit ouverte, volontairement non
-  tranchée par ADR-063 : le contrat de données (`provider`/`external_signature_id`) doit rester
-  compatible avec n'importe lequel sans redesign.
+  jamais fusionnés dans une seule colonne : `signatures_bon_visite` porte son propre snapshot
+  identité (`contact_id` nullable), indépendant de `acquereurs.id`.
+- **Prestataire de signature externe non intégré** — V1 livre uniquement la signature tactile
+  native (`provider = "domiora"`, `CHECK` fermé à cette seule valeur). Le schéma
+  (`external_signature_id` nullable) accueille un futur fournisseur (OTP, e-signature qualifiée)
+  sans redesign, mais aucun n'est câblé — décision produit volontairement différée.
 
 ## Retour vendeur après visite (ADR-042)
 

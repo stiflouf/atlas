@@ -1,6 +1,6 @@
 # ADR-063 — Maturité de la Visite : modèle canonique V1, identité Calendar facultative, bon de visite signé
 
-**Statut :** Accepté — **PARTIALLY IMPLEMENTED** (`VISIT_NATIVE_LIFECYCLE_V1` livré le 2026-09-19 ; migration 0050). Lifecycle natif (création sans Calendar, workspace scoping des 10 fonctions, garde archivage, `UNIQUE` compte-rendu, `realisee_le`/`annulee_le`, `visite_annulee`) implémenté et testé. `VISIT_SIGNED_FORM_V1` (bon de visite signé) reste **non implémenté** — voir roadmap ci-dessous.
+**Statut :** Accepté — **PARTIALLY IMPLEMENTED** (`VISIT_NATIVE_LIFECYCLE_V1` livré le 2026-09-19, migration 0050 ; `VISIT_SIGNED_FORM_V1` livré le 2026-09-20, migration 0051). Lifecycle natif ET bon de visite signé implémentés et testés. Restent **non implémentés**, volontairement : `VISIT_AUTOMATION_V1` (`visite_j_1`/`visite_sans_compte_rendu`), la migration du retour vendeur vers une Interaction, l'extraction complète du connecteur Calendar, et l'acquéreur legacy sur la Visite (modèle inchangé, non bloquant) — voir roadmap ci-dessous.
 
 **Date :** 2026-09-19
 **Décideurs :** Steven Gausset (CEO), CTO — besoin bon de visite remonté par Bérengère (terrain).
@@ -58,7 +58,7 @@ discipline que ADR-060/061 avant leurs lots respectifs.
 | `ACCOUNT_REPORT_CARDINALITY` | cible **0..1** compte rendu canonique par visite — déjà l'invariant voulu, mais **actuellement garanti seulement par l'unique chemin d'écriture applicatif** : `comptes_rendus_visite.visite_id` est nullable et n'a **aucune contrainte `UNIQUE`** en base. Cible : `UNIQUE(visite_id) WHERE visite_id IS NOT NULL`, en défense en profondeur — même discipline que `compromis_bien_id_en_cours_unique` (ADR-047). Si plusieurs "versions" de compte rendu sont un jour nécessaires : préférer un modèle audit/versionné plutôt que plusieurs comptes rendus actifs simultanés (ADR-011, append-only). |
 | `ACCOUNT_REPORT_STRUCTURED_FIELDS` | les champs actuels (`retour` libre, `interet` à 4 valeurs, `prochaineEtape` libre) restent **suffisants pour V1**. Budget/perception prix, niveau de projection, points positifs/négatifs structurés : **pas construits maintenant**, aucun consommateur downstream démontré aujourd'hui (ADR-008 : données structurées seulement quand un besoin réel existe, jamais par anticipation). Reclassés P3, à réévaluer si le matching ou une automatisation concrète en a explicitement besoin. |
 | `SELLER_FEEDBACK_MODEL` | aujourd'hui, "retour vendeur effectué" = **une Tâche cochée**, rien d'autre — aucune Interaction créée, aucune donnée structurée sur le CR. `interactions` existe déjà, porte déjà le type `'rendez_vous'`, et un commentaire de code anticipe explicitement *"une visite POURRA produire une interaction ; elle n'en devient pas une par changement de nom"* — cible confirmée : le retour vendeur (et la création de CR) devraient à terme écrire une Interaction, pour ne pas laisser une simple case cochée être l'unique source de vérité métier alors qu'un journal générique existe. Non implémenté ici — P3, candidat pour `VISIT_AUTOMATION_V1` ou un lot dédié. |
-| `VISIT_EVENTS_V1` | actuel : `visite_realisee` uniquement, ciblant `compteRenduVisiteId` (jamais `visiteId` directement) — définition retenue par ADR-041 §5 : *"un compte rendu vient d'être créé"*, la transition de statut en est une conséquence, pas une garantie DB indépendante. **Ajouts retenus, valeur downstream démontrée** : `visite_annulee` (alimente une future automatisation/nettoyage, symétrique de `visite_realisee`) — à ajouter avec `VISIT_NATIVE_LIFECYCLE_V1`. `bon_visite_signe` — à ajouter avec `VISIT_SIGNED_FORM_V1` (déclencheur naturel pour générer/notifier/figer). **Rejetés explicitement** : `compte_rendu_visite_complete` (strictement redondant avec `visite_realisee`, qui porte déjà exactement ce sens) ; `visite_planifiee` (aucune règle temporelle n'en a besoin — le patron `mandat_expire_bientot`/ADR-062 scanne directement la table, pas un événement de création ; réévaluer seulement si un besoin événementiel distinct apparaît) ; `retour_vendeur_effectue` (aujourd'hui redondant avec l'achèvement de la Tâche existante — n'a de sens qu'une fois `SELLER_FEEDBACK_MODEL` migré vers une vraie Interaction). |
+| `VISIT_EVENTS_V1` | actuel : `visite_realisee` uniquement, ciblant `compteRenduVisiteId` (jamais `visiteId` directement) — définition retenue par ADR-041 §5 : *"un compte rendu vient d'être créé"*, la transition de statut en est une conséquence, pas une garantie DB indépendante. **Ajouts livrés** : `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, symétrique de `visite_realisee`) ; `bon_visite_signe` (`VISIT_SIGNED_FORM_V1`, cible `bonVisiteId` dédiée — aucune règle d'automatisation ne le consomme encore, réservé aux futurs `VISIT_AUTOMATION_V1`/notification). **Rejetés explicitement** : `compte_rendu_visite_complete` (strictement redondant avec `visite_realisee`, qui porte déjà exactement ce sens) ; `visite_planifiee` (aucune règle temporelle n'en a besoin — le patron `mandat_expire_bientot`/ADR-062 scanne directement la table, pas un événement de création ; réévaluer seulement si un besoin événementiel distinct apparaît) ; `retour_vendeur_effectue` (aujourd'hui redondant avec l'achèvement de la Tâche existante — n'a de sens qu'une fois `SELLER_FEEDBACK_MODEL` migré vers une vraie Interaction). |
 | `VISIT_AUTOMATION_CANDIDATES` | `visite_j_1` — scanner temporel sur `datePrevue`, même patron que `mandat_expire_bientot` (ADR-062), aucun événement requis. Précondition : lectures workspace-scoped (`VISIT_NATIVE_LIFECYCLE_V1`). `visite_sans_compte_rendu` — scanner sur `statut = 'planifiee' AND date_prevue < aujourd'hui - seuil`, surface exactement l'état qu'ADR-040 a délibérément choisi de ne jamais auto-transitionner. Même précondition. `compte_rendu_sans_retour_vendeur` — **probablement redondant** avec le mécanisme événementiel déjà existant : la tâche produite par `retour_vendeur_apres_visite` EST déjà ce signal (tâche ouverte = retour non fait) ; une règle temporelle séparée redétecterait la même chose sans valeur ajoutée démontrée, sauf si `SELLER_FEEDBACK_MODEL` évolue vers une Interaction et que le signal de "tâche ouverte" disparaît. Aucune de ces règles n'est implémentée ici. |
 | `TODAY_VISIT_INTEGRATION` | aujourd'hui, Today (`getAgendaSemaine`) est **100 % sourcé Google Calendar**, zéro lecture de la table `visites` — écart confirmé, distinct du gap workspace. Cible future (pas une refonte) : une fois `VISIT_NATIVE_LIFECYCLE_V1`/`VISIT_AUTOMATION_V1` livrés, Today pourra afficher visite aujourd'hui/demain, visite passée sans CR, CR sans retour vendeur, bon non signé si attendu — capacités, pas un chantier de cet ADR. |
 | `OFFER_VISIT_LINK` | une Offre ne DOIT jamais référencer une Visite obligatoirement. Le lien existant (`offre_visites`, `offreId` ↔ `compteRenduVisiteId`, jamais `visiteId`) reste optionnel, source d'information seulement — aucune contrainte artificielle introduite. |
@@ -66,7 +66,7 @@ discipline que ADR-060/061 avant leurs lots respectifs.
 | `WORKSPACE_MODEL` | gap réel et total, confirmé par audit : **aucune** des 10 fonctions exportées de `visiteRepository.ts` ni de `compteRenduVisiteRepository.ts` ne prend de `workspaceId` ni ne scope par `biens.workspace_id` — contrairement à Offre/Mandat (ADR-054 §7). Cible : `Visite → Bien → workspace`, acquéreur du même workspace vérifié à la création (même patron que `acquereurDuWorkspace`, ADR-061 §14). Cross-workspace = introuvable. Jamais un `workspaceId` issu du FormData. |
 | `ARCHIVE_POLICY` | historique conservé indéfiniment (fusion Contact, changement de mandat, vente, archivage Bien, suppression de l'événement Calendar d'origine — jamais de cascade destructive depuis Calendar, qui n'a de toute façon aucun chemin d'écriture vers Atlas aujourd'hui). Création : interdite sur Bien/Acquéreur archivé (gap actuel confirmé, aucune garde n'existe — à corriger dans `VISIT_NATIVE_LIFECYCLE_V1`). |
 | `DELETE_POLICY` | pas de `DELETE` physique en production métier pour une Visite canonique — annulation/statut terminal seulement. Les fixtures de test peuvent supprimer (convention déjà établie partout ailleurs dans ce dépôt). |
-| `CONCURRENCY_MODEL` | réaliser vs annuler, réaliser deux fois : déjà sûrs (`UPDATE … WHERE statut = 'planifiee'`, testé). Création double compte rendu : **non gardée en base aujourd'hui** (voir `ACCOUNT_REPORT_CARDINALITY`) — à durcir. Signature bon de visite double soumission : exigence pour `VISIT_SIGNED_FORM_V1`, même famille de patron que le verrou Bien déjà établi pour Offre/Compromis (ADR-061) — probablement un verrou de la Visite avant toute création/signature de bon. |
+| `CONCURRENCY_MODEL` | réaliser vs annuler, réaliser deux fois : déjà sûrs (`UPDATE … WHERE statut = 'planifiee'`, testé). Création double compte rendu : gardée en base (`UNIQUE(visite_id)` partiel, `VISIT_NATIVE_LIFECYCLE_V1`). Signature bon de visite double soumission : gardée par un verrou de ligne du Bon (`FOR UPDATE`) avant toute écriture, même famille de patron que le verrou Bien déjà établi pour Offre/Compromis (ADR-061) — testé par une course réelle (`VISIT_SIGNED_FORM_V1`). |
 | `LEGACY_CALENDAR_COEXISTENCE` | `/visites/{id}/preparer` continue de fonctionner exactement comme aujourd'hui jusqu'à la livraison de `VISIT_NATIVE_LIFECYCLE_V1` — aucune route existante cassée par cet ADR (qui ne change aucun code). |
 
 ## Bon de visite — objet métier (détail du modèle)
@@ -120,8 +120,9 @@ documentée par ADR-041 §8, non reprise ici), extraction complète du connecteu
 - ~~absence de `realisee_le`/`annulee_le`~~ — **fermé**, posées exactement une fois par `annulerVisite`/`creerCompteRenduEtRealiserVisite`
 - ~~absence de garde d'archivage Bien/Acquéreur à la création~~ — **fermé**, `creerVisiteEnBase` refuse la création (chemin natif et chemin Calendar)
 - ~~absence de `UNIQUE(visite_id)` sur `comptes_rendus_visite`~~ — **fermé**, index unique partiel (migration 0050) en défense en profondeur du verrou applicatif
-- **bon de visite signé** — toujours ouvert, besoin terrain explicite (Bérengère), lot séparé
-  (`VISIT_SIGNED_FORM_V1`), maintenant que la fondation lifecycle native est livrée
+- ~~bon de visite signé~~ — **fermé** par `VISIT_SIGNED_FORM_V1` (2026-09-20, migration 0051) : besoin
+  terrain (Bérengère) livré — `bons_visite`/`signatures_bon_visite`, signature tactile native,
+  document PDF final immuable + hash SHA-256, `documents_bien.visite_id`, événement `bon_visite_signe`
 - **`/visites/{id}/preparer` reste Calendar-id-based** — non migré vers `visite.id` en V1 (une Visite native
   n'a pas de préparation enrichie géo/transports/écoles/marché ; elle réalise/annule/reporte directement
   depuis `/visites/{id}`, formulaire de compte rendu inline). Limitation documentée, pas un défaut : migrer
@@ -131,7 +132,8 @@ documentée par ADR-041 §8, non reprise ici), extraction complète du connecteu
 **P3** : champs CR structurés enrichis (budget, projection, points +/-), migration retour-vendeur vers
 Interaction, événements `visite_planifiee`/`retour_vendeur_effectue`, extraction complète du connecteur
 Calendar / support multi-fournisseur, import Calendar automatique, Today enrichi, `participants_visite`
-générique, hash du document signé (recommandé mais non bloquant), co-acquéreurs/BuyerProject.
+générique, co-acquéreurs/BuyerProject, prestataire de signature externe (OTP/e-signature qualifiée),
+`VISIT_AUTOMATION_V1` (`visite_j_1`/`visite_sans_compte_rendu`).
 
 ## Tests attendus (futurs lots, non écrits ici)
 
@@ -140,9 +142,12 @@ avec Calendar, workspace isolation sur les 10 fonctions de lecture/écriture, ga
 compte-rendu, `realisee_le`/`annulee_le` posés exactement une fois, non-régression complète des 14+ cas
 `visiteRepository.test.ts` existants et de `visite.annulerReporter.test.ts`.
 
-`VISIT_SIGNED_FORM_V1` : idempotence de signature (double soumission), immutabilité après signature (aucun
-`UPDATE` du contenu figé possible), snapshot signataire conservé après fusion/modification du Contact,
-événement `bon_visite_signe` exact-once, document final rattaché et retrouvable depuis la Visite.
+`VISIT_SIGNED_FORM_V1` — **LIVRÉ ET TESTÉ (2026-09-20)** : idempotence de signature (double soumission,
+course réelle testée), immutabilité après signature (aucun `UPDATE` du contenu figé possible, testé),
+snapshot signataire conservé après modification du Contact (testé), snapshot Bien conservé après
+modification du Bien (testé), événement `bon_visite_signe` exact-once (index unique partiel + testé),
+document final PDF rattaché et retrouvable depuis la Visite (`documents_bien.visite_id`), téléchargement
+workspace-safe dédié (testé, isolation cross-workspace).
 
 ## Roadmap Visite (lots futurs, non créés ici)
 
@@ -150,10 +155,11 @@ compte-rendu, `realisee_le`/`annulee_le` posés exactement une fois, non-régres
    (`rendez_vous_calendar_id` nullable + index partiel, `realisee_le`/`annulee_le`, `UNIQUE` compte-rendu),
    scoping workspace des fonctions destinées à l'être, garde archivage, création native, `visite_annulee`,
    coexistence Calendar préservée (`/preparer` inchangé, Calendar-id-based).
-2. **`VISIT_SIGNED_FORM_V1`** — `bons_visite` + `signatures_bon_visite`, `documents_bien.visite_id`,
-   `bon_visite_signe`, génération/capture/immutabilité. Séquencé APRÈS le lot 1 (bénéficie du scoping
-   workspace ; ne dépend pas techniquement de la création Calendar-optionnelle, mais construire un nouveau
-   sous-système sur une fondation encore non scopée serait imprudent).
+2. **`VISIT_SIGNED_FORM_V1`** — **LIVRÉ (2026-09-20, migration 0051)** : `bons_visite` +
+   `signatures_bon_visite`, `documents_bien.visite_id`, `bon_visite_signe`, signature tactile native
+   (canvas, provider `"domiora"`), génération PDF (`pdf-lib`), hash SHA-256, versioning (v1/v2...),
+   téléchargement dédié workspace-safe (`/api/bons-visite/{id}/document`). Provider externe,
+   OTP, valeur eIDAS/qualifiée : hors périmètre, schéma extensible sans redesign (P3).
 3. **`VISIT_AUTOMATION_V1`** — `visite_j_1`, `visite_sans_compte_rendu`, migration retour-vendeur vers
    Interaction.
 4. **`CALENDAR_CONNECTOR_HARDENING_V1`** — découplage complet de Google Calendar derrière un connecteur

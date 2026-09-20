@@ -35,6 +35,7 @@ describe("ADR-059 §10 — gardes d'écriture sur contact_id", () => {
     // normalisés en `/` UNIQUEMENT pour la comparaison structurelle ci-dessous.
     expect(writers.map((c) => c.replaceAll("\\", "/").replace(SRC.replaceAll("\\", "/") + "/", "")).sort()).toEqual(
       [
+        "lib/bonVisiteRepository.ts",
         "lib/clientRepository.ts",
         "lib/fusionContactRepository.ts",
         "lib/interactionRepository.ts",

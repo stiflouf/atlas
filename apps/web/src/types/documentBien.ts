@@ -84,6 +84,10 @@ export type TypeDocument =
   | "offre_achat"
   | "compromis"
   | "avenant"
+  // VISIT_SIGNED_FORM_V1 (ADR-063) — document final immuable produit par la signature d'un bon de
+  // visite (bonsVisite/signaturesBonVisite, src/lib/bonVisiteRepository.ts). Famille "transaction" :
+  // même nature qu'offre_achat/compromis, une pièce du parcours commercial.
+  | "bon_visite"
   // Financement
   | "attestation_financement"
   | "offre_pret"
@@ -120,6 +124,7 @@ export const FAMILLE_PAR_TYPE_DOCUMENT: Record<TypeDocument, FamilleDocument> = 
   offre_achat: "transaction",
   compromis: "transaction",
   avenant: "transaction",
+  bon_visite: "transaction",
   attestation_financement: "financement",
   offre_pret: "financement",
   courrier_notaire: "notaire",
@@ -156,6 +161,7 @@ export const LABEL_TYPE_DOCUMENT: Record<TypeDocument, string> = {
   offre_achat: "Offre d'achat",
   compromis: "Compromis",
   avenant: "Avenant",
+  bon_visite: "Bon de visite signé",
   attestation_financement: "Attestation de financement",
   offre_pret: "Offre de prêt",
   courrier_notaire: "Courrier du notaire",
@@ -204,6 +210,8 @@ export type DocumentBien = {
   compromisId?: string;
   acquereurId?: string;
   prospectVendeurId?: string;
+  // VISIT_SIGNED_FORM_V1 (ADR-063) — rattachement cumulatif, même patron que les trois ci-dessus.
+  visiteId?: string;
   coproprieteDeclaree?: string;
   adresseDeclaree?: string;
   provenance?: string;

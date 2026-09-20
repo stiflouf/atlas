@@ -46,7 +46,9 @@ export type TypeEvenementMetier =
   | "offre_acceptee_sans_compromis"
   // VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — ponctuel, cible `visiteId` (nouvelle colonne). Jamais
   // `compteRenduVisiteId` : `visite_realisee` garde son contrat exact (ADR-041 §5), inchangé.
-  | "visite_annulee";
+  | "visite_annulee"
+  // VISIT_SIGNED_FORM_V1 (ADR-063) — ponctuel, cible `bonVisiteId` (nouvelle colonne dédiée).
+  | "bon_visite_signe";
 
 export type EvenementMetier = {
   id: string;
@@ -69,6 +71,8 @@ export type EvenementMetier = {
   // VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — cible de `visite_annulee` uniquement. `visite_realisee`
   // continue de cibler `compteRenduVisiteId` ci-dessus, contrat inchangé.
   visiteId?: string;
+  // VISIT_SIGNED_FORM_V1 (ADR-063) — cible de `bon_visite_signe` uniquement.
+  bonVisiteId?: string;
   // Ancre du cycle temporel (ADR-033) — le dernierContactLe (ou creeLe si aucun contact n'a
   // jamais eu lieu) qui a servi de base au calcul du seuil franchi. Distincte de `survenuLe` : ici
   // le moment où le FAIT a été établi (le dernier contact réel), pas le moment où Atlas l'a

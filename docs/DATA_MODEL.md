@@ -1772,9 +1772,68 @@ Le modèle ci-dessus reflète **l'état actuel réel, désormais aligné avec la
 partiel sur `comptes_rendus_visite`, garde d'archivage Bien/Acquéreur à la création (chemin natif et
 chemin Calendar), scoping workspace (`biens.workspace_id`) sur les fonctions destinées à l'être.
 `/visites/{id}/preparer` reste volontairement Calendar-id-based (non migré vers `visite.id` — voir
-`docs/KNOWN_LIMITATIONS.md`). Second lot futur, `VISIT_SIGNED_FORM_V1` (non livré ici) : bon de
-visite signé (`bons_visite` + `signatures_bon_visite`, nouvelle colonne `documents_bien.visite_id`)
-— voir ADR-063 pour le détail complet.
+`docs/KNOWN_LIMITATIONS.md`).
+
+## `bons_visite` / `signatures_bon_visite` (ADR-063, `VISIT_SIGNED_FORM_V1`, migration 0051)
+
+**Rôle** : le BON est l'instance/version de document préparée pour une Visite (0..N par Visite,
+`UNIQUE(visite_id, version)`) ; la SIGNATURE est l'acte de signature individuel, objet enfant
+distinct et potentiellement multiple (schéma multi-signataire dès V1, parcours UI V1 concentré sur
+un signataire principal — voir ADR-063 `VISIT_SINGLE_OR_MULTI_SIGNER_V1`).
+
+### `bons_visite`
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `visite_id` | uuid (FK → `visites.id`, cascade) | non | un bon sans sa Visite n'a structurellement aucun sens (contrairement à `comptes_rendus_visite.visite_id`, jamais un rattachement "hérité") |
+| `version` | integer | non | 1, 2, ... — calculé sous verrou de la Visite (`verrouillerVisite`, réutilisé tel quel, jamais un second mécanisme) |
+| `statut` | text | non | défaut `"brouillon"`, `CHECK` |
+| `template_version` | text | non | ex. `"domiora-v1"` — voir `src/lib/bonVisite/templateBonVisite.ts` |
+| `contenu_snapshot` | jsonb (`SnapshotBonVisite`) | non | figé à la création (Visite/Bien/Conseiller/texte du template déjà substitué) — jamais recalculé après coup, même si Visite/Bien changent ensuite (testé) |
+| `document_id` | uuid (FK → `documents_bien.id`, `SET NULL`) | oui | posé uniquement à la signature |
+| `hash_document` | text | oui | SHA-256 hexadécimal du PDF final exact, posé uniquement à la signature |
+| `cree_le` | timestamptz | non | |
+| `signe_le` | timestamptz | oui | posé exactement une fois |
+| `annule_le` | timestamptz | oui | posé exactement une fois, brouillon uniquement (§34) |
+
+**Contraintes** : `CHECK statut IN ('brouillon','signe','annule')` ; `CHECK` de cohérence
+(`bons_visite_coherence_statut_check`) — un `brouillon` n'a aucun de `document_id`/`hash_document`/
+`signe_le`/`annule_le` ; un `signe` a exactement `document_id`+`hash_document`+`signe_le` (jamais
+`annule_le`) ; un `annule` a exactement `annule_le` (jamais les trois autres) ; `UNIQUE(visite_id,
+version)`.
+
+**Immutabilité** (§11 du brief) : aucun writer ne modifie `contenu_snapshot`/`document_id`/
+`hash_document` une fois `statut = 'signe'` — toute correction crée une nouvelle version (`version`
+suivante), la précédente reste accessible, inchangée (testé).
+
+### `signatures_bon_visite`
+
+| Colonne | Type | Nullable | Notes |
+|---|---|---|---|
+| `id` | uuid (PK) | non | |
+| `bon_visite_id` | uuid (FK → `bons_visite.id`, cascade) | non | |
+| `contact_id` | uuid (FK → `contacts.id`, `NO ACTION`) | oui | le signataire peut ne pas encore être un Contact canonique (même patron que `acquereurs.contact_id`) |
+| `role_signataire` | text | non | défaut `"principal"`, `CHECK IN ('principal','secondaire')` |
+| `nom_snapshot` / `prenom_snapshot` / `email_snapshot` | text | nom non, reste oui | figés au moment de la signature — jamais reconstruits depuis le Contact courant, même après fusion/modification (testé) |
+| `provider` | text | non | défaut `"domiora"`, `CHECK IN ('domiora')` — V1 signature tactile native uniquement ; schéma extensible sans redesign |
+| `external_signature_id` | text | oui | réservé à un futur fournisseur externe, non câblé |
+| `signature_cle_stockage` | text | non | image PNG de la signature, stockée via `stockageDocuments.ts` (même mécanisme que `documents_bien`, jamais un second système de fichiers, jamais un data URL persisté en base) |
+| `consentement_confirme_le` | timestamptz | non | fait daté, jamais précoché, jamais déduit |
+| `signe_le` | timestamptz | non | |
+| `cree_le` | timestamptz | non | |
+
+**Concurrence** (§22 du brief) : une double signature réellement concurrente sur le même bon est
+tranchée par le verrou `FOR UPDATE` de la ligne `bons_visite` (posé AVANT toute écriture) — un seul
+gagnant, une seule ligne `signatures_bon_visite`, un seul `documents_bien`, un seul événement
+`bon_visite_signe` (testé par une course réelle, `Promise.all`).
+
+**Génération du document final** (§14/§15/§21) : PDF sobre (`pdf-lib`, aucune dépendance native)
+contenant le texte du template déjà substitué, le nom du signataire, l'image de signature et
+l'horodatage — écrit sur disque (`ecrireDocument`) **avant** l'ouverture de la transaction DB
+(filesystem et transaction Postgres ne sont pas atomiques ensemble) : un fichier écrit puis jamais
+référencé (transaction perdante d'une course) reste un octet mort et inerte, jamais exposé — c'est
+le seul des deux échecs possibles qui reste sans danger.
 
 ## `documents_bien`
 
@@ -1800,6 +1859,7 @@ ADR-029, sépare explicitement le **fichier** (immuable, ADR-013 — jamais de r
 | `compromis_id` | uuid (FK → `compromis.id`, `ON DELETE SET NULL`) | **oui** | ADR-029 — rattachement cumulable, cohérence avec `bien_id` vérifiée en Server Action (jamais en `CHECK`) |
 | `acquereur_id` | uuid (FK → `acquereurs.id`, `ON DELETE SET NULL`) | **oui** | ADR-029 — idem, cohérence avec le compromis rattaché si présent |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, `ON DELETE SET NULL`) | **oui** | ADR-029 — cohérence avec `bien_id` (doit être le vendeur ayant converti ce bien) |
+| `visite_id` | uuid (FK → `visites.id`, `ON DELETE SET NULL`) | **oui** | ADR-063 (`VISIT_SIGNED_FORM_V1`) — rattachement cumulatif, même patron que les trois ci-dessus ; posé par `signerBonVisite` pour le bon de visite signé (`type_document = 'bon_visite'`) |
 | `copropriete_declaree` | text | **oui** | ADR-029 — déclaratif, terrain de comparaison humaine future avec `biens.nom_copropriete` |
 | `adresse_declaree` | text | **oui** | ADR-029 — idem, comparaison future avec `biens.adresse` |
 | `provenance` | text | **oui** | ADR-029 — texte libre, vocabulaire non figé |
@@ -1808,7 +1868,7 @@ ADR-029, sépare explicitement le **fichier** (immuable, ADR-013 — jamais de r
 
 **Contraintes `CHECK`** :
 - `categorie IN ('mandat','diagnostic','copropriete','technique','commercial','compromis','autre')`
-- `type_document IS NULL OR type_document IN (...)` — 28 valeurs, voir `TYPES_DOCUMENT`
+- `type_document IS NULL OR type_document IN (...)` — 29 valeurs (+ `bon_visite`, ADR-063), voir `TYPES_DOCUMENT`
 - `etat_verification IN ('non_verifie','confirme','a_verifier','rejete')`
 
 `ON DELETE CASCADE` sur `bien_id` nettoie la ligne si un bien était supprimé, mais **ne nettoie
@@ -2405,13 +2465,14 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
 | `id` | uuid (PK) | non | |
-| `type_evenement` | text | non | `CHECK`, 16 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) + 7 types Offre/Compromis (ADR-061) + 3 types temporels ponctuels (`mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, ADR-062) + `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) |
+| `type_evenement` | text | non | `CHECK`, 17 valeurs : les 4 d'ADR-032 + `inactivite_prospect_vendeur` (ADR-033) + `compatibilite_bien_acquereur_devenue_compatible` (ADR-036) + 7 types Offre/Compromis (ADR-061) + 3 types temporels ponctuels (`mandat_expire_bientot`/`offre_sans_decision`/`offre_acceptee_sans_compromis`, ADR-062) + `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) + `bon_visite_signe` (`VISIT_SIGNED_FORM_V1`, ADR-063) |
 | `compte_rendu_visite_id` | uuid (FK → `comptes_rendus_visite.id`, **`NO ACTION`**) | oui | cible de `visite_realisee` — contrat inchangé (`compteRenduVisiteId`, jamais `visiteId`), ADR-041 §5 |
 | `prospect_vendeur_id` | uuid (FK → `prospects_vendeurs.id`, **`NO ACTION`**) | oui | |
 | `compromis_id` | uuid (FK → `compromis.id`, **`NO ACTION`**) | oui | |
 | `offre_id` | uuid (FK → `offres.id`, **`NO ACTION`**) | oui | ADR-061 — cible des 5 types `offre_*` ; réutilisée telle quelle par `offre_sans_decision`/`offre_acceptee_sans_compromis` (ADR-062, même index d'idempotence générique, aucun nouveau) |
 | `mandat_id` | uuid (FK → `mandats.id`, **`NO ACTION`**) | oui | ADR-062 — cible de `mandat_expire_bientot`. Un renouvellement crée une nouvelle ligne `mandats` (`remplace_mandat_id`) : identité d'occurrence authentiquement nouvelle, jamais un rejeu |
 | `visite_id` | uuid (FK → `visites.id`, **`NO ACTION`**) | oui | `VISIT_NATIVE_LIFECYCLE_V1` (ADR-063, migration 0050) — cible de `visite_annulee`. Colonne dédiée plutôt que de réutiliser `(bien_id, acquereur_id)` : deux Visites distinctes pour la même paire auraient sinon collapsé leur idempotence |
+| `bon_visite_id` | uuid (FK → `bons_visite.id`, **`NO ACTION`**) | oui | `VISIT_SIGNED_FORM_V1` (ADR-063, migration 0051) — cible de `bon_visite_signe`. Colonne dédiée plutôt que `visite_id` : une Visite pouvant porter plusieurs bons/versions, réutiliser `visite_id` aurait collapsé leur idempotence |
 | `ancre_cycle` | timestamptz | oui | ADR-033 — `NULL` pour tous les types ponctuels ; pour `inactivite_prospect_vendeur`, `dernierContactLe` (ou `creeLe` si aucun contact n'a jamais eu lieu) au moment du franchissement du seuil. Voir index dédié ci-dessous |
 | `bien_id` | uuid (FK → `biens.id`, **`NO ACTION`**) | oui | ADR-036 — toujours posé avec `acquereur_id` (jamais l'un sans l'autre) |
 | `acquereur_id` | uuid (FK → `acquereurs.id`, **`NO ACTION`**) | oui | ADR-036 — idem |
@@ -2420,9 +2481,9 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
 
 **Contraintes** :
 - `evenements_metier_une_seule_cible_check` — exactement une cible logique est renseignée (`= 1`,
-  pas `<= 1`) : `compte_rendu_visite_id`/`prospect_vendeur_id`/`compromis_id`/`offre_id`/`mandat_id`/`visite_id`
+  pas `<= 1`) : `compte_rendu_visite_id`/`prospect_vendeur_id`/`compromis_id`/`offre_id`/`mandat_id`/`visite_id`/`bon_visite_id`
   comptent chacune pour une cible, et le couple `(bien_id, acquereur_id)` posé **ensemble**
-  (ADR-036) compte pour une septième — jamais deux. `ancre_cycle`/`cycle_compatibilite` n'entrent
+  (ADR-036) compte pour une huitième — jamais deux. `ancre_cycle`/`cycle_compatibilite` n'entrent
   jamais dans ce calcul (ce ne sont pas des cibles).
 - `evenements_metier_bien_acquereur_ensemble_check` (ADR-036) — `bien_id` et `acquereur_id` sont
   soit tous deux `NULL`, soit tous deux renseignés : jamais l'un sans l'autre.
@@ -2452,6 +2513,9 @@ un échec net (qui suppose une réponse HTTP effectivement reçue de Google).
   occurrence par mandat pour `mandat_expire_bientot`.
 - Index unique partiel `(type_evenement, visite_id) WHERE visite_id IS NOT NULL`
   (`VISIT_NATIVE_LIFECYCLE_V1`, ADR-063) — une occurrence par Visite pour `visite_annulee`.
+- Index unique partiel `(type_evenement, bon_visite_id) WHERE bon_visite_id IS NOT NULL`
+  (`VISIT_SIGNED_FORM_V1`, ADR-063) — une occurrence par bon pour `bon_visite_signe` (un bon ne peut
+  être signé qu'une fois, statut terminal `signe`).
 
 **Aucun `ON DELETE CASCADE` depuis les entités source** (volontaire, ADR-032 correction n°5, étendu
 sans exception à `biens`/`acquereurs` par ADR-036) : supprimer un compte rendu de visite, un
@@ -2670,6 +2734,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0048_rename_seuil_jours.sql` | ADR-062 : renommage PUR `configurations_automatisation.seuil_jours_inactivite` → `seuil_jours` (généralisation du seuil produit — colonne réutilisée par toute règle temporelle à seuil, un sens par ligne). Aucune valeur modifiée, aucune ligne réécrite |
 | `0049_runs_scan_regle_code_check.sql` | ADR-062 (suite de 0047) : CHECK `regle_code` élargi sur `runs_scan_automatisation` pour les 3 nouvelles règles temporelles — sans cette extension, `demarrerRunScanAutomatisation` aurait échoué au premier scan réel les concernant |
 | `0050_visit_native_lifecycle_v1.sql` | ADR-063 (`VISIT_NATIVE_LIFECYCLE_V1`) : `visites.rendez_vous_calendar_id` rendue nullable (`UNIQUE` full → index unique partiel `WHERE ... IS NOT NULL`) ; ajout `visites.realisee_le`/`annulee_le` (timestamptz nullables) ; index unique partiel `comptes_rendus_visite_visite_id_unique` sur `comptes_rendus_visite.visite_id` ; `evenements_metier.visite_id` (FK NO ACTION) dans le CHECK « une seule cible », type `visite_annulee`, index unique partiel `(type_evenement, visite_id)`. Strictement additive (aucune table supprimée, `DROP NOT NULL` + CHECK élargis seulement), **aucun backfill** |
+| `0051_visit_signed_form_v1.sql` | ADR-063 (`VISIT_SIGNED_FORM_V1`) : nouvelles tables `bons_visite` (FK `visite_id` cascade, `CHECK` statut, `CHECK` cohérence statut, `UNIQUE(visite_id, version)`, FK `document_id` vers `documents_bien` SET NULL) et `signatures_bon_visite` (FK `bon_visite_id` cascade, FK `contact_id` NO ACTION, `CHECK` rôle, `CHECK` provider) ; `documents_bien.visite_id` (FK SET NULL, rattachement cumulatif) ; `evenements_metier.bon_visite_id` (FK NO ACTION) dans le CHECK « une seule cible », type `bon_visite_signe`, index unique partiel `(type_evenement, bon_visite_id)`. Strictement additive (2 nouvelles tables, colonnes nullables, CHECK élargis seulement), **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.

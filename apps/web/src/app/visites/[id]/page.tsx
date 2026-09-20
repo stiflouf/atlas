@@ -9,6 +9,9 @@ import { getClientById } from "@/lib/clientRepository";
 import { getCompteRenduVisiteParVisiteId } from "@/lib/compteRenduVisiteRepository";
 import { annulerVisiteAction, reporterVisiteAction } from "@/actions/visite";
 import { enregistrerCompteRenduVisiteAction } from "@/actions/enregistrerCompteRenduVisite";
+import { creerBonVisiteAction } from "@/actions/bonVisite";
+import { listerBonsVisitePourVisite } from "@/lib/bonVisiteRepository";
+import { LABEL_STATUT_BON_VISITE } from "@/types/bonVisite";
 import { LABEL_STATUT_VISITE } from "@/types/visite";
 import { LABEL_INTERET, type Interet } from "@/types/compteRenduVisite";
 import Card from "@/components/ui/Card";
@@ -30,6 +33,8 @@ const VARIANT_BADGE_STATUT_VISITE = {
   realisee: "success",
   annulee: "muted",
 } as const;
+
+const VARIANT_BADGE_STATUT_BON = { brouillon: "accent", signe: "success", annule: "muted" } as const;
 
 const VARIANT_BADGE_INTERET = {
   interesse: "success",
@@ -59,14 +64,21 @@ export default async function VisitePage({ params }: PageProps) {
   const visite = await getVisiteById(id, workspaceId);
   if (!visite) notFound();
 
-  const [bien, acquereur, compteRendu] = await Promise.all([
+  const [bien, acquereur, compteRendu, bonsVisite] = await Promise.all([
     getBienById(visite.bienId),
     getClientById(visite.acquereurId),
     getCompteRenduVisiteParVisiteId(visite.id, workspaceId),
+    listerBonsVisitePourVisite(visite.id, workspaceId),
   ]);
   // Théoriquement impossible (FK CASCADE, biens.id/acquereurs.id) : une visite ne peut pas
   // survivre à la suppression de son bien ou de son acquéreur.
   if (!bien || !acquereur) notFound();
+
+  // §25 du brief VISIT_SIGNED_FORM_V1 — le bon COURANT est le plus récent (listerBonsVisitePourVisite
+  // trie déjà par version décroissante) ; l'historique complet (versions antérieures) reste
+  // consultable en ouvrant chacune depuis son propre lien, jamais affiché en boucle ici (§59, borné :
+  // un seul bon rendu sur cette fiche, jamais N+1 sur l'historique complet).
+  const bonCourant = bonsVisite[0];
 
   // VALUE-02 — tout ce qui suit sert uniquement à RENDRE VISIBLE l'orchestration post-visite déjà
   // en place (ADR-041/042/044). Chargé seulement quand un compte rendu existe : une visite encore
@@ -236,6 +248,51 @@ export default async function VisitePage({ params }: PageProps) {
           )}
         </section>
       )}
+
+      {/* Bon de visite (§25 du brief VISIT_SIGNED_FORM_V1, ADR-063) — jamais couplé au compte
+          rendu/au statut de la Visite (§38 : indépendants) : un bon peut être créé/signé sur une
+          visite planifiée ou réalisée (§36/§37), jamais sur une visite annulée (garde côté writer,
+          creerBonVisite). Quatre états : aucun bon, brouillon, signé, annulé. */}
+      <section className="mb-8 border-t border-border pt-6">
+        <SectionTitle>Bon de visite</SectionTitle>
+        {!bonCourant && visite.statut !== "annulee" && (
+          <form action={creerBonVisiteAction}>
+            <input type="hidden" name="visiteId" value={visite.id} />
+            <Button type="submit" variant="secondary" size="md">
+              Créer le bon de visite
+            </Button>
+          </form>
+        )}
+        {!bonCourant && visite.statut === "annulee" && (
+          <p className="text-[13px] text-text-3">Aucun bon de visite n'a été créé pour cette visite annulée.</p>
+        )}
+        {bonCourant && (
+          <div className="bg-surface rounded-lg border border-border p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Badge variant={VARIANT_BADGE_STATUT_BON[bonCourant.statut]}>{LABEL_STATUT_BON_VISITE[bonCourant.statut]}</Badge>
+              <span className="text-[12px] text-text-3">Version {bonCourant.version}</span>
+            </div>
+            {bonCourant.statut === "brouillon" && (
+              <ButtonLink href={`/visites/${visite.id}/bon-de-visite/${bonCourant.id}`} variant="primary" size="sm">
+                Ouvrir / faire signer
+              </ButtonLink>
+            )}
+            {bonCourant.statut === "signe" && (
+              <ButtonLink href={`/api/bons-visite/${bonCourant.id}/document`} variant="secondary" size="sm">
+                Télécharger le document signé
+              </ButtonLink>
+            )}
+            {bonCourant.statut === "annule" && visite.statut !== "annulee" && (
+              <form action={creerBonVisiteAction}>
+                <input type="hidden" name="visiteId" value={visite.id} />
+                <Button type="submit" variant="secondary" size="sm">
+                  Créer un nouveau bon
+                </Button>
+              </form>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Compte rendu — lecture seule ici (ADR-041, §7) : la création reste exclusivement sur la
           page de préparation, jamais un second formulaire dupliqué. */}

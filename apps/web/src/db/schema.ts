@@ -1,6 +1,7 @@
 import { pgTable, text, real, integer, bigint, boolean, date, timestamp, uuid, unique, uniqueIndex, index, check, primaryKey, jsonb, type AnyPgColumn } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { ChoixFusionParChamp, IdentiteContactSnapshot, IdsDeplacesFusionContact } from "../types/contactFusion";
+import type { SnapshotBonVisite } from "../types/bonVisite";
 
 // ADR-054 — périmètre PROPRIÉTAIRE des données métier (OWNERSHIP). Une ligne métier appartient à
 // exactement un workspace, pour toute sa vie ; aucun transfert d'un workspace à un autre n'existe.
@@ -924,6 +925,11 @@ export const documentsBien = pgTable(
     prospectVendeurId: uuid("prospect_vendeur_id").references(() => prospectsVendeurs.id, {
       onDelete: "set null",
     }),
+    // VISIT_SIGNED_FORM_V1 (ADR-063) — rattachement cumulatif au même patron que les trois ci-dessus
+    // (SET NULL, jamais un CASCADE : le document reste plus fondamental que ce lien). Permet au bon
+    // de visite signé d'apparaître dans l'onglet Documents du bien ET d'être retrouvable directement
+    // par visite_id, sans dupliquer le fichier ni introduire un second système de stockage.
+    visiteId: uuid("visite_id").references(() => visites.id, { onDelete: "set null" }),
     // Déclaratif, texte libre (ADR-029) : ce que le document prétend concerner, jamais extrait
     // automatiquement (aucun OCR/LLM dans cette passe). Terrain de comparaison humaine future avec
     // biens.nomCopropriete/biens.adresse (anti-mauvais-dossier — retour terrain : documents reçus
@@ -958,6 +964,7 @@ export const documentsBien = pgTable(
         'mandat','offre_achat','compromis','avenant',
         'attestation_financement','offre_pret',
         'courrier_notaire','projet_acte',
+        'bon_visite',
         'autre'
       )`
     ),
@@ -1108,6 +1115,98 @@ export const comptesRendusVisite = pgTable(
     uniqueIndex("comptes_rendus_visite_visite_id_unique")
       .on(table.visiteId)
       .where(sql`${table.visiteId} IS NOT NULL`),
+  ]
+);
+
+// VISIT_SIGNED_FORM_V1 (ADR-063) — le BON est l'instance/version de document, distincte de l'ACTE de
+// signature (signaturesBonVisite ci-dessous). Une Visite peut porter 0..N bons (une correction crée
+// une nouvelle version, jamais un UPDATE du contenu figé une fois signé — §11/§12/§33 du brief) :
+// CASCADE depuis visites (comme comptesRendusVisite.bienId/acquereurId ci-dessus, jamais SET NULL —
+// contrairement à comptesRendusVisite.visiteId, un bon sans sa Visite n'a structurellement aucun
+// sens, il n'existe pas de bon "hérité" d'avant cette table).
+export const bonsVisite = pgTable(
+  "bons_visite",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    visiteId: uuid("visite_id")
+      .notNull()
+      .references(() => visites.id, { onDelete: "cascade" }),
+    // Versionnement (§12) : v1, v2... pour une même Visite. `UNIQUE(visite_id, version)` ci-dessous.
+    // Le suivant est calculé sous verrou de la Visite (verrouillerVisite, visiteRepository.ts) —
+    // jamais une course entre deux créations concurrentes de version.
+    version: integer("version").notNull(),
+    statut: text("statut").notNull().default("brouillon"),
+    templateVersion: text("template_version").notNull(),
+    // Snapshot figé (§5) : Visite/Bien/Conseiller/texte du template RÉELLEMENT présenté — jamais
+    // recalculé après coup. Éditable tant que `statut = 'brouillon'` (modifierBrouillonBonVisite),
+    // gelé définitivement à la signature (aucun writer ne le touche plus après `statut = 'signe'`).
+    contenuSnapshot: jsonb("contenu_snapshot").$type<SnapshotBonVisite>().notNull(),
+    // Document PDF final, posé UNIQUEMENT à la signature (jamais pour un brouillon, §19). SET NULL
+    // (comme documentsBien.compromisId) : le bon reste le fait historique même si sa ligne
+    // documents_bien venait un jour à disparaître.
+    documentId: uuid("document_id").references(() => documentsBien.id, { onDelete: "set null" }),
+    // SHA-256 hexadécimal du PDF final exact (§16) — lie immuablement la preuve au fichier. NULL
+    // tant qu'aucun document final n'existe (brouillon).
+    hashDocument: text("hash_document"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    signeLe: timestamp("signe_le", { withTimezone: true }),
+    annuleLe: timestamp("annule_le", { withTimezone: true }),
+  },
+  (table) => [
+    check("bons_visite_statut_check", sql`${table.statut} IN ('brouillon','signe','annule')`),
+    // §11 — cohérence structurelle des trois états : un bon signé a exactement documentId + hash +
+    // signeLe posés, jamais annuleLe ; un bon annulé a annuleLe posé, jamais documentId/hash/signeLe
+    // (§34 — seul un brouillon peut être annulé) ; un brouillon n'a aucun des quatre.
+    check(
+      "bons_visite_coherence_statut_check",
+      sql`(
+        (${table.statut} = 'brouillon' AND ${table.documentId} IS NULL AND ${table.hashDocument} IS NULL AND ${table.signeLe} IS NULL AND ${table.annuleLe} IS NULL)
+        OR (${table.statut} = 'signe' AND ${table.documentId} IS NOT NULL AND ${table.hashDocument} IS NOT NULL AND ${table.signeLe} IS NOT NULL AND ${table.annuleLe} IS NULL)
+        OR (${table.statut} = 'annule' AND ${table.documentId} IS NULL AND ${table.hashDocument} IS NULL AND ${table.signeLe} IS NULL AND ${table.annuleLe} IS NOT NULL)
+      )`
+    ),
+    unique("bons_visite_visite_version_unique").on(table.visiteId, table.version),
+  ]
+);
+
+// Acte de signature individuel (§3, multi-signataire dès V1 — schéma seulement, le parcours UI V1
+// ne collecte qu'un signataire principal, §23). CASCADE depuis bonsVisite : une signature n'a aucun
+// sens sans son bon, contrairement à documentsBien (rattachement cumulatif indépendant).
+export const signaturesBonVisite = pgTable(
+  "signatures_bon_visite",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bonVisiteId: uuid("bon_visite_id")
+      .notNull()
+      .references(() => bonsVisite.id, { onDelete: "cascade" }),
+    // Nullable (§4) : le signataire peut ne pas encore être un Contact canonique. NO ACTION (comme
+    // acquereurs.contactId) : aucun Contact n'est jamais supprimé physiquement (ADR-012).
+    contactId: uuid("contact_id").references(() => contacts.id),
+    roleSignataire: text("role_signataire").notNull().default("principal"),
+    // Snapshot figé au moment de la signature (§5/§31) — jamais reconstruit depuis Contact courant,
+    // même si le Contact change/fusionne ensuite (testé, §51).
+    nomSnapshot: text("nom_snapshot").notNull(),
+    prenomSnapshot: text("prenom_snapshot"),
+    emailSnapshot: text("email_snapshot"),
+    // V1 : une seule valeur possible ("domiora", signature tactile native, §9) — le schéma accepte
+    // structurellement un futur fournisseur externe (externalSignatureId ci-dessous), sans
+    // affirmation eIDAS/qualifiée (§7/§21 ADR-063).
+    provider: text("provider").notNull().default("domiora"),
+    externalSignatureId: text("external_signature_id"),
+    // Image de la signature tactile, stockée via le même mécanisme que documentsBien
+    // (stockageDocuments.ts) — jamais un data URL en base, jamais un second système de fichiers.
+    signatureCleStockage: text("signature_cle_stockage").notNull(),
+    // Consentement explicite (§10) conservé comme fait daté, jamais précoché, jamais déduit.
+    consentementConfirmeLe: timestamp("consentement_confirme_le", { withTimezone: true }).notNull(),
+    signeLe: timestamp("signe_le", { withTimezone: true }).notNull().defaultNow(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      "signatures_bon_visite_role_check",
+      sql`${table.roleSignataire} IN ('principal','secondaire')`
+    ),
+    check("signatures_bon_visite_provider_check", sql`${table.provider} IN ('domiora')`),
   ]
 );
 
@@ -2122,6 +2221,11 @@ export const evenementsMetier = pgTable(
     // cette colonne ne sert qu'au NOUVEAU type `visite_annulee`, jamais aux deux ensemble sur la
     // même ligne (le CHECK « une seule cible » l'interdirait de toute façon).
     visiteId: uuid("visite_id").references(() => visites.id),
+    // VISIT_SIGNED_FORM_V1 (ADR-063) — cible ponctuelle de `bon_visite_signe` (NO ACTION, même
+    // raisonnement append-only que les autres cibles ci-dessus). Colonne DÉDIÉE plutôt que de
+    // réutiliser `visiteId` : un même bon signé doit rester identifiable indépendamment du fait
+    // qu'une Visite puisse un jour porter plusieurs bons/versions (§24 du brief).
+    bonVisiteId: uuid("bon_visite_id").references(() => bonsVisite.id),
     ancreCycle: timestamp("ancre_cycle", { withTimezone: true }),
     bienId: uuid("bien_id").references(() => biens.id),
     acquereurId: uuid("acquereur_id").references(() => acquereurs.id),
@@ -2137,7 +2241,7 @@ export const evenementsMetier = pgTable(
         'offre_recue','offre_acceptee','offre_refusee','offre_retiree','offre_caduque',
         'compromis_realise','compromis_annule',
         'mandat_expire_bientot','offre_sans_decision','offre_acceptee_sans_compromis',
-        'visite_annulee'
+        'visite_annulee','bon_visite_signe'
       )`
     ),
     // Étendu par ADR-036 : le couple (bien_id, acquereur_id), posé ENSEMBLE, compte désormais comme
@@ -2155,6 +2259,7 @@ export const evenementsMetier = pgTable(
         (case when ${table.offreId} is not null then 1 else 0 end) +
         (case when ${table.mandatId} is not null then 1 else 0 end) +
         (case when ${table.visiteId} is not null then 1 else 0 end) +
+        (case when ${table.bonVisiteId} is not null then 1 else 0 end) +
         (case when ${table.bienId} is not null and ${table.acquereurId} is not null then 1 else 0 end)
       ) = 1`
     ),
@@ -2171,6 +2276,11 @@ export const evenementsMetier = pgTable(
     uniqueIndex("evenements_metier_visite_id_unique")
       .on(table.typeEvenement, table.visiteId)
       .where(sql`${table.visiteId} IS NOT NULL`),
+    // VISIT_SIGNED_FORM_V1 — une occurrence par bon pour `bon_visite_signe` (§24) : un bon ne peut
+    // être signé qu'une fois (statut terminal `signe`, §11), donc au plus un événement par bon.
+    uniqueIndex("evenements_metier_bon_visite_id_unique")
+      .on(table.typeEvenement, table.bonVisiteId)
+      .where(sql`${table.bonVisiteId} IS NOT NULL`),
     // Réservé aux types PONCTUELS sur prospectVendeurId (rdv_estimation_realise, mandat_signe) —
     // exclut explicitement 'inactivite_prospect_vendeur' (ADR-033), cyclique par nature : sans
     // cette exclusion, cet index bloquerait à vie toute deuxième occurrence de silence pour le
