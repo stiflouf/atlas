@@ -12,6 +12,10 @@ import { enregistrerCompteRenduVisiteAction } from "@/actions/enregistrerCompteR
 import { creerBonVisiteAction } from "@/actions/bonVisite";
 import { listerBonsVisitePourVisite } from "@/lib/bonVisiteRepository";
 import { LABEL_STATUT_BON_VISITE } from "@/types/bonVisite";
+import { enregistrerRetourVendeurVisiteAction } from "@/actions/retourVendeurVisite";
+import { vendeursCanoniquesDuBien } from "@/lib/retourVendeurVisiteRepository";
+import { listerInteractionsPourVisite } from "@/lib/interactionRepository";
+import { LABEL_TYPE_INTERACTION, type TypeInteraction } from "@/types/interaction";
 import { LABEL_STATUT_VISITE } from "@/types/visite";
 import { LABEL_INTERET, type Interet } from "@/types/compteRenduVisite";
 import Card from "@/components/ui/Card";
@@ -95,6 +99,19 @@ export default async function VisitePage({ params }: PageProps) {
   const suite = compteRendu
     ? construireSuiteVisite({ acquereur, prospectVendeur, compteRendu, tachesAcquereur, tachesVendeur })
     : undefined;
+
+  // SELLER_FEEDBACK_INTERACTION_V1 (ADR-063) — chargé uniquement pour une Visite realisee (§21 :
+  // le retour vendeur post-visite n'a de sens que là). `interactionsRetourVendeur` filtre déjà en
+  // base sur `nature_metier` — jamais un filtrage en mémoire sur toutes les interactions de la Visite.
+  const [vendeursCanoniques, interactionsRetourVendeur] =
+    visite.statut === "realisee"
+      ? await Promise.all([
+          vendeursCanoniquesDuBien(bien.id, workspaceId),
+          listerInteractionsPourVisite(visite.id, workspaceId).then((liste) =>
+            liste.filter((i) => i.natureMetier === "retour_vendeur_post_visite")
+          ),
+        ])
+      : [[], []];
 
   // Information secondaire, jamais un avertissement : si ces règles sont inactives, aucune tâche
   // automatique n'a pu être créée après cette visite — le dire évite de laisser croire à un oubli
@@ -407,6 +424,75 @@ export default async function VisitePage({ params }: PageProps) {
               </p>
             )}
           </Card>
+        </section>
+      )}
+
+      {/* Retour vendeur (SELLER_FEEDBACK_INTERACTION_V1, ADR-063) — le retour vendeur devient un
+          fait CRM canonique (Interaction), jamais seulement une tâche cochée. Visible uniquement
+          sur une Visite realisee (§21) : la tâche `retour_vendeur_apres_visite` reste "travail à
+          faire" (Suite recommandée ci-dessus), l'Interaction ci-dessous en est la preuve/l'historique. */}
+      {visite.statut === "realisee" && (
+        <section className="mb-8 border-t border-border pt-6">
+          <SectionTitle>Retour vendeur</SectionTitle>
+          {interactionsRetourVendeur.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {interactionsRetourVendeur.map((interaction) => {
+                const vendeur = vendeursCanoniques.find((v) => v.contactId === interaction.contactId);
+                return (
+                  <div key={interaction.id} className="bg-surface rounded-lg border border-border p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="success">Retour effectué</Badge>
+                      <span className="text-[11px] text-text-3">
+                        {new Date(interaction.survenuLe).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
+                        {" · "}
+                        {LABEL_TYPE_INTERACTION[interaction.type]}
+                        {vendeur && ` · ${[vendeur.prenom, vendeur.nom].filter(Boolean).join(" ")}`}
+                      </span>
+                    </div>
+                    {interaction.contenu && <p className="text-[13.5px] text-text-1 whitespace-pre-wrap">{interaction.contenu}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          ) : vendeursCanoniques.length === 0 ? (
+            <p className="text-[13px] text-text-3">
+              Aucun vendeur canonique identifié pour ce bien (mandat/parties non renseignés) — le retour
+              vendeur ne peut pas être enregistré tant qu'aucun mandant n'est rattaché.
+            </p>
+          ) : (
+            <form action={enregistrerRetourVendeurVisiteAction} className="flex flex-col gap-3">
+              <input type="hidden" name="visiteId" value={visite.id} />
+              <p className="text-[12px] text-text-3">
+                Destinataire(s) : {vendeursCanoniques.map((v) => [v.prenom, v.nom].filter(Boolean).join(" ")).join(", ")}
+              </p>
+              <div>
+                <label className="text-[12px] font-medium text-text-2 mb-1 block">Canal</label>
+                <select
+                  name="canal"
+                  defaultValue="appel"
+                  className="border border-border-md rounded-lg px-2 py-1.5 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                >
+                  {(Object.keys(LABEL_TYPE_INTERACTION) as TypeInteraction[]).map((canal) => (
+                    <option key={canal} value={canal}>
+                      {LABEL_TYPE_INTERACTION[canal]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[12px] font-medium text-text-2 mb-1 block">Note (optionnel)</label>
+                <textarea
+                  name="note"
+                  rows={3}
+                  placeholder="Ex. Retour effectué au vendeur après la visite. Acquéreur intéressé mais réserve sur la cuisine."
+                  className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                />
+              </div>
+              <Button type="submit" variant="primary" size="md" className="self-start">
+                Enregistrer le retour vendeur
+              </Button>
+            </form>
+          )}
         </section>
       )}
     </div>

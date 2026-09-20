@@ -158,9 +158,14 @@ export async function creerTache(
 // marquerRemunerationEncaissee, ADR-016/021) : termineeLe et annuleeLe ne sont jamais posés si
 // l'autre l'est déjà — la clause WHERE fait échouer l'UPDATE (0 ligne, retour undefined) plutôt que
 // d'écraser silencieusement une transition déjà actée.
-export async function terminerTache(id: string): Promise<Tache | undefined> {
+//
+// SELLER_FEEDBACK_INTERACTION_V1 — `executeur` optionnel (défaut `getDb()`, comportement inchangé
+// pour tous les appelants existants) : `enregistrerRetourVendeurVisite` doit pouvoir clôturer la
+// tâche DANS la même transaction que la création de l'Interaction (brief §8 — éviter une Interaction
+// créée sans tâche clôturée, ou l'inverse).
+export async function terminerTache(id: string, executeur: Executeur = getDb()): Promise<Tache | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb()
+  const [ligne] = await executeur
     .update(tachesTable)
     .set({ termineeLe: new Date() })
     .where(and(eq(tachesTable.id, id), isNull(tachesTable.termineeLe), isNull(tachesTable.annuleeLe)))

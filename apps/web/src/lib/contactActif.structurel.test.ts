@@ -42,6 +42,7 @@ describe("ADR-059 §10 — gardes d'écriture sur contact_id", () => {
         "lib/partieMandatRepository.ts",
         "lib/partieProjetRepository.ts",
         "lib/prospectVendeurRepository.ts",
+        "lib/retourVendeurVisiteRepository.ts",
         "lib/provenance/champVerrouilleRepository.ts",
         "lib/provenance/referenceExterneRepository.ts",
         "lib/rattachementContact.ts",

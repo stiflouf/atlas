@@ -1885,6 +1885,17 @@ export const interactions = pgTable(
     projetAcquereurId: uuid("projet_acquereur_id").references(() => projetsAcquereur.id),
     projetVendeurId: uuid("projet_vendeur_id").references(() => projetsVendeur.id),
     bienId: uuid("bien_id").references(() => biens.id),
+    // SELLER_FEEDBACK_INTERACTION_V1 (ADR-063) — 4e contexte possible, mutuellement exclusif avec
+    // les trois ci-dessus. SET NULL (comme `bienId`/`projetVendeurId` ci-dessus n'ont pas de CASCADE
+    // non plus, et pour la même raison qu'eux implicitement) : l'échange reste un fait même si la
+    // Visite qui l'entourait venait à disparaître (jamais en production, ADR-012, mais les fixtures
+    // de test suppriment).
+    visiteId: uuid("visite_id").references(() => visites.id, { onDelete: "set null" }),
+    // NATURE MÉTIER, distincte du CANAL (`type` ci-dessus) — un même fait ("retour vendeur fait")
+    // peut survenir par appel, email ou SMS ; le canal ne dit jamais QUEL fait a eu lieu. Nullable :
+    // la grande majorité des interactions n'affirment aucun fait métier durable au-delà de
+    // l'échange lui-même. Jamais déduit du texte de `contenu` (ADR-008).
+    natureMetier: text("nature_metier"),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
@@ -1894,15 +1905,27 @@ export const interactions = pgTable(
     // une par changement de nom.
     check("interactions_type_check", sql`${table.type} IN ('appel','email','sms','rendez_vous','message','note')`),
     check("interactions_sens_check", sql`${table.sens} IS NULL OR ${table.sens} IN ('entrant','sortant','interne')`),
+    check(
+      "interactions_nature_metier_check",
+      sql`${table.natureMetier} IS NULL OR ${table.natureMetier} IN ('retour_vendeur_post_visite')`
+    ),
     // AU PLUS une cible — somme d'indicatrices, comme `taches_une_seule_cible_check`.
     check(
       "interactions_un_seul_contexte_check",
       sql`(
         (case when ${table.projetAcquereurId} is not null then 1 else 0 end) +
         (case when ${table.projetVendeurId} is not null then 1 else 0 end) +
-        (case when ${table.bienId} is not null then 1 else 0 end)
+        (case when ${table.bienId} is not null then 1 else 0 end) +
+        (case when ${table.visiteId} is not null then 1 else 0 end)
       ) <= 1`
     ),
+    // SELLER_FEEDBACK_INTERACTION_V1 — protège l'ACTION INITIALE (§9/§10 du brief) contre un double
+    // submit : au plus une interaction "officielle" (nature_metier = retour_vendeur_post_visite) par
+    // (visite, destinataire). N'empêche jamais un échange manuel ULTÉRIEUR légitime sur la même
+    // Visite/le même contact — celui-là n'a simplement pas cette nature marquée (§10/§37).
+    uniqueIndex("interactions_visite_retour_vendeur_unique")
+      .on(table.visiteId, table.contactId)
+      .where(sql`${table.natureMetier} = 'retour_vendeur_post_visite'`),
   ]
 );
 

@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { exigerContactActif } from "@/lib/contactActif";
 import {
@@ -6,8 +6,9 @@ import {
   interactions as interactionsTable,
   projetsAcquereur as projetsAcquereurTable,
   projetsVendeur as projetsVendeurTable,
+  visites as visitesTable,
 } from "@/db/schema";
-import type { Interaction, SensInteraction, TypeInteraction } from "@/types/interaction";
+import type { Interaction, NatureMetierInteraction, SensInteraction, TypeInteraction } from "@/types/interaction";
 
 // ADR-055 §G — accès aux interactions canoniques. Volontairement réduit à créer, relire, et
 // parcourir la chronologie d'un contact. Aucune fonction d'agrégation, aucune « mémoire
@@ -31,17 +32,21 @@ function ligneVersInteraction(ligne: LigneInteraction): Interaction {
     projetAcquereurId: ligne.projetAcquereurId ?? undefined,
     projetVendeurId: ligne.projetVendeurId ?? undefined,
     bienId: ligne.bienId ?? undefined,
+    visiteId: ligne.visiteId ?? undefined,
+    natureMetier: (ligne.natureMetier as NatureMetierInteraction | null) ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
   };
 }
 
-// AU PLUS un contexte, garanti par le type comme il l'est par le `CHECK` en base : les trois
-// cibles sont mutuellement exclusives, et aucune n'est obligatoire.
+// AU PLUS un contexte, garanti par le type comme il l'est par le `CHECK` en base : les quatre
+// cibles sont mutuellement exclusives, et aucune n'est obligatoire. `visiteId` ajouté par
+// SELLER_FEEDBACK_INTERACTION_V1 (ADR-063).
 export type ContexteInteraction =
-  | { projetAcquereurId: string; projetVendeurId?: never; bienId?: never }
-  | { projetVendeurId: string; projetAcquereurId?: never; bienId?: never }
-  | { bienId: string; projetAcquereurId?: never; projetVendeurId?: never }
-  | { projetAcquereurId?: never; projetVendeurId?: never; bienId?: never };
+  | { projetAcquereurId: string; projetVendeurId?: never; bienId?: never; visiteId?: never }
+  | { projetVendeurId: string; projetAcquereurId?: never; bienId?: never; visiteId?: never }
+  | { bienId: string; projetAcquereurId?: never; projetVendeurId?: never; visiteId?: never }
+  | { visiteId: string; projetAcquereurId?: never; projetVendeurId?: never; bienId?: never }
+  | { projetAcquereurId?: never; projetVendeurId?: never; bienId?: never; visiteId?: never };
 
 export type NouvelleInteraction = {
   contactId: string;
@@ -51,6 +56,9 @@ export type NouvelleInteraction = {
   // futur enregistrera des faits vieux de six mois, et c'est leur date qui compte.
   survenuLe: string;
   contenu?: string;
+  // SELLER_FEEDBACK_INTERACTION_V1 — orthogonal au contexte : QUEL fait métier durable cet échange
+  // affirme, jamais QUEL canal l'a porté. `undefined` pour la grande majorité des interactions.
+  natureMetier?: NatureMetierInteraction;
 } & ContexteInteraction;
 
 // Lit le périmètre du contexte visé, quel qu'il soit. Retourne undefined si la cible n'existe pas.
@@ -79,6 +87,17 @@ async function workspaceDuContexte(
       .select({ workspaceId: biensTable.workspaceId })
       .from(biensTable)
       .where(eq(biensTable.id, input.bienId))
+      .limit(1);
+    return { trouve: cible !== undefined, workspaceId: cible?.workspaceId };
+  }
+  if (input.visiteId !== undefined) {
+    // Visite -> Bien -> workspace (ADR-054 §7, même patron que `visiteRepository.ts` : `visites`
+    // n'a pas de colonne `workspace_id` propre).
+    const [cible] = await executeur
+      .select({ workspaceId: biensTable.workspaceId })
+      .from(visitesTable)
+      .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
+      .where(eq(visitesTable.id, input.visiteId))
       .limit(1);
     return { trouve: cible !== undefined, workspaceId: cible?.workspaceId };
   }
@@ -124,6 +143,8 @@ export async function creerInteraction(
       projetAcquereurId: input.projetAcquereurId ?? null,
       projetVendeurId: input.projetVendeurId ?? null,
       bienId: input.bienId ?? null,
+      visiteId: input.visiteId ?? null,
+      natureMetier: input.natureMetier ?? null,
     })
     .returning();
   return ligneVersInteraction(ligne);
@@ -152,4 +173,24 @@ export async function listerInteractionsDuContact(contactId: string): Promise<In
     .where(eq(interactionsTable.contactId, contactId))
     .orderBy(desc(interactionsTable.survenuLe), desc(interactionsTable.creeLe), asc(interactionsTable.id));
   return lignes.map(ligneVersInteraction);
+}
+
+// SELLER_FEEDBACK_INTERACTION_V1 (ADR-063 §15/§42) — historique accessible depuis la fiche Visite
+// elle-même, workspace-safe (Visite -> Bien -> workspace, même patron que `visiteRepository.ts`) —
+// jamais un nouveau silo : ce lecteur ne fait que filtrer les MÊMES lignes déjà visibles via
+// `listerInteractionsDuContact`, sur `visite_id` plutôt que `contact_id`.
+export async function listerInteractionsPourVisite(
+  visiteId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Interaction[]> {
+  if (!UUID_REGEX.test(visiteId)) return [];
+  const lignes = await executeur
+    .select({ interaction: interactionsTable })
+    .from(interactionsTable)
+    .innerJoin(visitesTable, eq(interactionsTable.visiteId, visitesTable.id))
+    .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
+    .where(and(eq(interactionsTable.visiteId, visiteId), eq(biensTable.workspaceId, workspaceId)))
+    .orderBy(desc(interactionsTable.survenuLe), desc(interactionsTable.creeLe), asc(interactionsTable.id));
+  return lignes.map((l) => ligneVersInteraction(l.interaction));
 }

@@ -14,6 +14,16 @@ export type TypeInteraction = "appel" | "email" | "sms" | "rendez_vous" | "messa
 // ni interne.
 export type SensInteraction = "entrant" | "sortant" | "interne";
 
+// SELLER_FEEDBACK_INTERACTION_V1 (ADR-063) — NATURE MÉTIER, distincte du CANAL (`TypeInteraction`
+// ci-dessus) : un même fait ("retour vendeur fait") peut survenir par appel, email ou SMS. Vocabulaire
+// fermé, volontairement réduit à une seule valeur en V1 — jamais déduit du texte de `contenu`
+// (ADR-008).
+export type NatureMetierInteraction = "retour_vendeur_post_visite";
+
+export const LABEL_NATURE_METIER_INTERACTION: Record<NatureMetierInteraction, string> = {
+  retour_vendeur_post_visite: "Retour vendeur après visite",
+};
+
 export type Interaction = {
   id: string;
   contactId: string;
@@ -28,6 +38,10 @@ export type Interaction = {
   projetAcquereurId?: string;
   projetVendeurId?: string;
   bienId?: string;
+  // SELLER_FEEDBACK_INTERACTION_V1 — 4e contexte possible, mutuellement exclusif avec les trois
+  // ci-dessus.
+  visiteId?: string;
+  natureMetier?: NatureMetierInteraction;
   creeLe: string;
 };
 

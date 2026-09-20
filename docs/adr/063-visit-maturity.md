@@ -1,6 +1,6 @@
 # ADR-063 — Maturité de la Visite : modèle canonique V1, identité Calendar facultative, bon de visite signé
 
-**Statut :** Accepté — **PARTIALLY IMPLEMENTED** (`VISIT_NATIVE_LIFECYCLE_V1` livré le 2026-09-19, migration 0050 ; `VISIT_SIGNED_FORM_V1` livré le 2026-09-20, migration 0051 ; `VISIT_AUTOMATION_V1` livré le 2026-09-20, migration 0052). Lifecycle natif, bon de visite signé ET automatisation (`visite_j_1`/`visite_sans_compte_rendu`) implémentés et testés. Restent **non implémentés**, volontairement : la migration du retour vendeur vers une Interaction (le mécanisme actuel — tâche automatique déterministe câblée sur `visite_realisee` — est certifié idempotent et conservé tel quel), l'extraction complète du connecteur Calendar, et l'acquéreur legacy sur la Visite (modèle inchangé, non bloquant) — voir roadmap ci-dessous.
+**Statut :** Accepté — **PARTIALLY IMPLEMENTED** (`VISIT_NATIVE_LIFECYCLE_V1` livré le 2026-09-19, migration 0050 ; `VISIT_SIGNED_FORM_V1` livré le 2026-09-20, migration 0051 ; `VISIT_AUTOMATION_V1` livré le 2026-09-20, migration 0052 ; `SELLER_FEEDBACK_INTERACTION_V1` livré le 2026-09-20, migration 0053). Lifecycle natif, bon de visite signé, automatisation (`visite_j_1`/`visite_sans_compte_rendu`) ET retour vendeur canonique (Interaction, plus une simple tâche cochée) implémentés et testés. Cœur du domaine **mature** — voir `VISIT_MATURITY_STATUS` en fin de document. Restent **non implémentés**, volontairement : l'extraction complète du connecteur Calendar et l'acquéreur legacy sur la Visite (modèle inchangé, non bloquant) — voir roadmap ci-dessous.
 
 **Date :** 2026-09-19
 **Décideurs :** Steven Gausset (CEO), CTO — besoin bon de visite remonté par Bérengère (terrain).
@@ -57,8 +57,8 @@ discipline que ADR-060/061 avant leurs lots respectifs.
 | `GDPR_SCOPE` | données personnelles nouvelles : contenu de signature (image dessinée intégrée au document — jamais extraite ni utilisée pour une reconnaissance biométrique), identité snapshot du signataire (nom/prénom/email). **Aucune IP, aucun fingerprint device stocké en V1** — non démontré nécessaire, principe de minimisation ; réévaluable seulement si un prestataire/une exigence légale future l'impose explicitement. Aucune biométrie : une signature dessinée est une donnée du document, point final. |
 | `ACCOUNT_REPORT_CARDINALITY` | cible **0..1** compte rendu canonique par visite — déjà l'invariant voulu, mais **actuellement garanti seulement par l'unique chemin d'écriture applicatif** : `comptes_rendus_visite.visite_id` est nullable et n'a **aucune contrainte `UNIQUE`** en base. Cible : `UNIQUE(visite_id) WHERE visite_id IS NOT NULL`, en défense en profondeur — même discipline que `compromis_bien_id_en_cours_unique` (ADR-047). Si plusieurs "versions" de compte rendu sont un jour nécessaires : préférer un modèle audit/versionné plutôt que plusieurs comptes rendus actifs simultanés (ADR-011, append-only). |
 | `ACCOUNT_REPORT_STRUCTURED_FIELDS` | les champs actuels (`retour` libre, `interet` à 4 valeurs, `prochaineEtape` libre) restent **suffisants pour V1**. Budget/perception prix, niveau de projection, points positifs/négatifs structurés : **pas construits maintenant**, aucun consommateur downstream démontré aujourd'hui (ADR-008 : données structurées seulement quand un besoin réel existe, jamais par anticipation). Reclassés P3, à réévaluer si le matching ou une automatisation concrète en a explicitement besoin. |
-| `SELLER_FEEDBACK_MODEL` | aujourd'hui, "retour vendeur effectué" = **une Tâche cochée**, rien d'autre — aucune Interaction créée, aucune donnée structurée sur le CR. `interactions` existe déjà, porte déjà le type `'rendez_vous'`, et un commentaire de code anticipe explicitement *"une visite POURRA produire une interaction ; elle n'en devient pas une par changement de nom"* — cible confirmée : le retour vendeur (et la création de CR) devraient à terme écrire une Interaction, pour ne pas laisser une simple case cochée être l'unique source de vérité métier alors qu'un journal générique existe. **Décision `VISIT_AUTOMATION_V1` (2026-09-20)** : le mécanisme existant (`retour_vendeur_apres_visite`, câblé sur `visite_realisee`) a été audité et **certifié** — idempotence déjà garantie (index unique de l'événement + `UNIQUE(regle_code, evenement_id)`), un CR réel produit exactement une tâche, jamais un doublon (`catalogueRegles.retourVendeur.test.ts`, tests "double traitement"/"traitement concurrent"). Aucune nouvelle automation ajoutée (`compte_rendu_sans_retour_vendeur` explicitement écarté, §ci-dessous — redondant). Migration vers Interaction : non implémentée, reste P3. |
-| `VISIT_EVENTS_V1` | actuel : `visite_realisee` uniquement, ciblant `compteRenduVisiteId` (jamais `visiteId` directement) — définition retenue par ADR-041 §5 : *"un compte rendu vient d'être créé"*, la transition de statut en est une conséquence, pas une garantie DB indépendante. **Ajouts livrés** : `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, symétrique de `visite_realisee`) ; `bon_visite_signe` (`VISIT_SIGNED_FORM_V1`, cible `bonVisiteId` dédiée — aucune règle d'automatisation ne le consomme encore, réservé aux futurs `VISIT_AUTOMATION_V1`/notification). **Rejetés explicitement** : `compte_rendu_visite_complete` (strictement redondant avec `visite_realisee`, qui porte déjà exactement ce sens) ; `visite_planifiee` (aucune règle temporelle n'en a besoin — le patron `mandat_expire_bientot`/ADR-062 scanne directement la table, pas un événement de création ; réévaluer seulement si un besoin événementiel distinct apparaît) ; `retour_vendeur_effectue` (aujourd'hui redondant avec l'achèvement de la Tâche existante — n'a de sens qu'une fois `SELLER_FEEDBACK_MODEL` migré vers une vraie Interaction). |
+| `SELLER_FEEDBACK_MODEL` | **IMPLEMENTED** (`SELLER_FEEDBACK_INTERACTION_V1`, 2026-09-20, migration 0053). Le retour vendeur est désormais un fait CRM canonique : `enregistrerRetourVendeurVisite` (`retourVendeurVisiteRepository.ts`) crée une **Interaction** réelle par vendeur canonique (`interactions.visite_id` + `nature_metier = 'retour_vendeur_post_visite'`, 5ᵉ variante mutuellement exclusive de `ContexteInteraction`), et clôture — dans la **même transaction** — la tâche `retour_vendeur_apres_visite` si elle est encore ouverte (jointure tâche → exécution → événement, jamais une seconde colonne de rattachement). La tâche reste "travail à faire" ; l'Interaction devient la preuve/l'historique. Idempotence par index unique **partiel** `interactions_visite_retour_vendeur_unique` sur `(visite_id, contact_id) WHERE nature_metier = 'retour_vendeur_post_visite'` : un double submit ne crée jamais une deuxième ligne "officielle", mais une Interaction manuelle ultérieure authentique (visite_id posé, sans le marqueur de nature) reste possible — testé. Résolution vendeur **strictement canonique** (`parties_mandat` du mandat courant, rôle `mandant` uniquement, jamais `representant`), multi-mandants nativement supportés (une Interaction par mandant), **aucun repli** vers le modèle legacy `prospects_vendeurs` (son type de lecture `ProspectVendeur` n'expose délibérément pas `contactId` — confirmé par audit, voir `KNOWN_LIMITATIONS.md`). Fusion Contact (ADR-059) respectée : écriture refusée vers un mandant absorbé, testé. Aucune nouvelle règle d'automatisation ajoutée — `retour_vendeur_apres_visite` (existante) reste le seul mécanisme de tâche. |
+| `VISIT_EVENTS_V1` | actuel : `visite_realisee` uniquement, ciblant `compteRenduVisiteId` (jamais `visiteId` directement) — définition retenue par ADR-041 §5 : *"un compte rendu vient d'être créé"*, la transition de statut en est une conséquence, pas une garantie DB indépendante. **Ajouts livrés** : `visite_annulee` (`VISIT_NATIVE_LIFECYCLE_V1`, symétrique de `visite_realisee`) ; `bon_visite_signe` (`VISIT_SIGNED_FORM_V1`, cible `bonVisiteId` dédiée — aucune règle d'automatisation ne le consomme encore, réservé aux futurs `VISIT_AUTOMATION_V1`/notification). **Rejetés explicitement** : `compte_rendu_visite_complete` (strictement redondant avec `visite_realisee`, qui porte déjà exactement ce sens) ; `visite_planifiee` (aucune règle temporelle n'en a besoin — le patron `mandat_expire_bientot`/ADR-062 scanne directement la table, pas un événement de création ; réévaluer seulement si un besoin événementiel distinct apparaît) ; `retour_vendeur_effectue` — **réévalué et toujours écarté** après livraison de `SELLER_FEEDBACK_INTERACTION_V1` (2026-09-20) : la création de l'Interaction canonique est déjà persistée et interrogeable directement (`listerInteractionsPourVisite`), aucun consommateur downstream démontré n'a besoin d'un événement dédié ; à réévaluer seulement si une automatisation ou une notification a explicitement besoin de réagir à ce fait précis. |
 | `VISIT_AUTOMATION_CANDIDATES` | `visite_j_1` — **LIVRÉ** (`VISIT_AUTOMATION_V1`) : scanner temporel sur `datePrevue`, même patron que `mandat_expire_bientot` (ADR-062). Occurrence CYCLIQUE (`ancreCycle` = date prévue concernée, même mécanisme qu'`inactivite_prospect_vendeur`) — un report ouvre légitimement une nouvelle occurrence, testé. `visite_sans_compte_rendu` — **LIVRÉ** : scanner sur `statut = 'planifiee' AND date_prevue <= aujourd'hui - seuil`, surface exactement l'état qu'ADR-040 a délibérément choisi de ne jamais auto-transitionner ; occurrence ponctuelle (`visiteId` seul, la condition ne redevient jamais vraie une fois un CR créé). `compte_rendu_sans_retour_vendeur` — **non livré, confirmé redondant** : le mécanisme événementiel existant (`retour_vendeur_apres_visite`) produit déjà ce signal de façon déterministe et certifiée (voir `SELLER_FEEDBACK_MODEL`) ; une règle temporelle séparée n'ajouterait aucune valeur démontrée. |
 | `TODAY_VISIT_INTEGRATION` | le widget agenda (`getAgendaSemaine`) reste **100 % sourcé Google Calendar**, zéro lecture de la table `visites` — inchangé, hors périmètre de `VISIT_AUTOMATION_V1` (§27 du brief : "ne pas refonder Today"). En revanche, la LISTE DE TÂCHES de Today affiche désormais nativement les tâches `visite_j_1`/`visite_sans_compte_rendu` (mécanisme générique déjà existant pour toute tâche sans `bien_id`, aucun code Today modifié) avec un lien direct vers `/visites/{id}` (`ROUTE_FICHE_PAR_TYPE_CIBLE.visiteCanonique`, jamais une route Calendar). |
 | `OFFER_VISIT_LINK` | une Offre ne DOIT jamais référencer une Visite obligatoirement. Le lien existant (`offre_visites`, `offreId` ↔ `compteRenduVisiteId`, jamais `visiteId`) reste optionnel, source d'information seulement — aucune contrainte artificielle introduite. |
@@ -123,17 +123,23 @@ documentée par ADR-041 §8, non reprise ici), extraction complète du connecteu
 - ~~bon de visite signé~~ — **fermé** par `VISIT_SIGNED_FORM_V1` (2026-09-20, migration 0051) : besoin
   terrain (Bérengère) livré — `bons_visite`/`signatures_bon_visite`, signature tactile native,
   document PDF final immuable + hash SHA-256, `documents_bien.visite_id`, événement `bon_visite_signe`
+- ~~"retour vendeur" seulement une Tâche cochée~~ — **fermé** par `SELLER_FEEDBACK_INTERACTION_V1`
+  (2026-09-20, migration 0053) : Interaction canonique liée à la Visite, clôture atomique de la tâche
+  existante, idempotence par index unique partiel, fusion Contact respectée
 - **`/visites/{id}/preparer` reste Calendar-id-based** — non migré vers `visite.id` en V1 (une Visite native
   n'a pas de préparation enrichie géo/transports/écoles/marché ; elle réalise/annule/reporte directement
   depuis `/visites/{id}`, formulaire de compte rendu inline). Limitation documentée, pas un défaut : migrer
   `/preparer` vers `visite.id` nécessiterait de décider d'abord ce que "préparer" signifie pour une visite
   sans Calendar — hors périmètre de ce lot (voir `docs/KNOWN_LIMITATIONS.md`).
 
-**P3** : champs CR structurés enrichis (budget, projection, points +/-), migration retour-vendeur vers
-Interaction, événements `visite_planifiee`/`retour_vendeur_effectue`, `compte_rendu_sans_retour_vendeur`
-(confirmé redondant), extraction complète du connecteur Calendar / support multi-fournisseur, import
-Calendar automatique, Today enrichi (widget agenda toujours Calendar-sourcé), `participants_visite`
-générique, co-acquéreurs/BuyerProject, prestataire de signature externe (OTP/e-signature qualifiée).
+**P3** : champs CR structurés enrichis (budget, projection, points +/-), événements
+`visite_planifiee`/`retour_vendeur_effectue` (réévalués et toujours écartés, aucun consommateur
+démontré), `compte_rendu_sans_retour_vendeur` (confirmé redondant), résolution vendeur canonique sans
+repli legacy — un Bien dont le mandat courant n'a encore aucune partie `mandant` renseignée ne peut pas
+encore recevoir de retour vendeur Interaction (gap réel documenté, `KNOWN_LIMITATIONS.md`), extraction
+complète du connecteur Calendar / support multi-fournisseur, import Calendar automatique, Today enrichi
+(widget agenda toujours Calendar-sourcé), `participants_visite` générique, co-acquéreurs/BuyerProject,
+prestataire de signature externe (OTP/e-signature qualifiée).
 
 ## Tests attendus (futurs lots, non écrits ici)
 
@@ -149,6 +155,14 @@ modification du Bien (testé), événement `bon_visite_signe` exact-once (index 
 document final PDF rattaché et retrouvable depuis la Visite (`documents_bien.visite_id`), téléchargement
 workspace-safe dédié (testé, isolation cross-workspace).
 
+`SELLER_FEEDBACK_INTERACTION_V1` — **LIVRÉ ET TESTÉ (2026-09-20)** : cas simple (Interaction créée,
+liée Visite/Bien/vendeur, tâche clôturée), sans tâche préexistante (succès quand même), Visite non
+réalisée refusée (`planifiee` et `annulee`), double submit concurrent réel (une seule Interaction
+"officielle", `Promise.all`), second retour manuel légitime après le premier (testé), multi-mandants
+(une Interaction par vendeur, tâche clôturée une seule fois), contact fusionné refusé (ADR-059, aucune
+écriture), isolation cross-workspace, résolution vendeur canonique (mandant retenu, representant
+exclu, liste vide si aucun mandat courant).
+
 ## Roadmap Visite (lots futurs, non créés ici)
 
 1. **`VISIT_NATIVE_LIFECYCLE_V1`** — **LIVRÉ (2026-09-19, migration 0050)** : migration
@@ -162,12 +176,41 @@ workspace-safe dédié (testé, isolation cross-workspace).
    OTP, valeur eIDAS/qualifiée : hors périmètre, schéma extensible sans redesign (P3).
 3. **`VISIT_AUTOMATION_V1`** — **LIVRÉ (2026-09-20, migration 0052)** : `visite_j_1` (cyclique,
    J-1 configurable), `visite_sans_compte_rendu` (ponctuel, seuil configurable), intégration Today
-   (liste de tâches, lien canonique `/visites/{id}`), mécanisme retour vendeur audité et certifié
-   (conservé tel quel, aucun doublon). Migration retour-vendeur vers Interaction : non livrée,
-   reste P3.
-4. **`CALENDAR_CONNECTOR_HARDENING_V1`** — découplage complet de Google Calendar derrière un connecteur
+   (liste de tâches, lien canonique `/visites/{id}`), mécanisme retour vendeur (tâche) audité et
+   certifié (conservé tel quel, aucun doublon).
+4. **`SELLER_FEEDBACK_INTERACTION_V1`** — **LIVRÉ (2026-09-20, migration 0053)** : retour vendeur devenu
+   un fait CRM canonique (Interaction liée à la Visite, `nature_metier` dédiée), clôture atomique de la
+   tâche `retour_vendeur_apres_visite` existante, résolution vendeur strictement canonique
+   (`parties_mandat`, rôle `mandant`), multi-mandants natif, idempotence par index unique partiel,
+   fusion Contact respectée, aucune nouvelle automation. Section "Retour vendeur" sur `/visites/{id}`.
+5. **`CALENDAR_CONNECTOR_HARDENING_V1`** — découplage complet de Google Calendar derrière un connecteur
    générique (retry, erreurs, éventuel multi-fournisseur), réévaluation de `EXTERNAL_IDENTITY_MODEL` à ce
    moment-là seulement.
+
+## Maturité du domaine Visite (réévaluation post `SELLER_FEEDBACK_INTERACTION_V1`, 2026-09-20)
+
+Reclassification explicite demandée en clôture de `SELLER_FEEDBACK_INTERACTION_V1`, pour ne pas laisser
+le domaine "ouvert" artificiellement une fois son cœur devenu mature :
+
+- **`P0_VISIT` = 0** — aucun flux cassé ou exploitable.
+- **`P1_VISIT` = 0** — aucun flux actuel rendu inutilisable.
+- **`P2_VISIT` = 1** — uniquement `/visites/{id}/preparer` resté Calendar-id-based (§ ci-dessus,
+  **documenté comme volontaire, pas un défaut** : une Visite native n'a pas encore de préparation
+  enrichie géo/transports/écoles/marché indépendante de Calendar). Aucune régression, aucun flux
+  bloqué — dépend structurellement de `CALENDAR_CONNECTOR_HARDENING_V1`, jamais d'un oubli de ce lot.
+- **`P3_VISIT` = 8** — champs CR structurés enrichis, événements `visite_planifiee`/
+  `retour_vendeur_effectue` (écartés faute de consommateur), `compte_rendu_sans_retour_vendeur`
+  (redondant), résolution vendeur sans repli legacy (gap réel mais non bloquant, documenté), connecteur
+  Calendar complet, Today enrichi, `participants_visite` générique, co-acquéreurs/BuyerProject,
+  prestataire de signature externe.
+
+**`VISIT_MATURITY_STATUS` = CLOSED** (pour le cœur canonique du domaine : lifecycle, bon de visite
+signé, automatisation temporelle, retour vendeur canonique). Le seul `P2_VISIT` restant est une
+dépendance externe explicitement gelée (ADR-056 §10, confirmée ici), non un travail oublié — le garder
+listé comme "P2" plutôt que de le reclasser en P3 par confort documente honnêtement qu'il touche un
+chemin utilisateur réel (`/preparer`), sans pour autant justifier de garder tout le domaine "OPEN".
+Tout travail futur sur Visite part désormais de `CALENDAR_CONNECTOR_HARDENING_V1` (roadmap #5) ou d'un
+item `P3_VISIT` explicitement priorisé — jamais d'une redécouverte des questions déjà tranchées ici.
 
 ## Conséquences
 

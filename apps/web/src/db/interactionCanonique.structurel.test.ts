@@ -168,22 +168,28 @@ describe("ADR-055 §G — aucune table existante n'est fusionnée ni remplacée"
   });
 });
 
-describe("ADR-055 §G — rien ne lit encore les interactions", () => {
+describe("ADR-055 §G — au-delà de la fondation, seuls des flux délibérés lisent/écrivent", () => {
   const FICHIERS = listerFichiersSource("src").filter((chemin) => !/\.test\.tsx?$/.test(chemin));
   const REFERENCES = /interactionRepository|interactions as |from "@\/types\/interaction"|interactionsTable/;
 
-  it("aucun écran ne lit interactions directement", () => {
-    // ADR-058 — une seule exception : la fiche Contact affiche les `interactionsRecentes` de son
-    // read model (contactDetailRepository) et n'importe de `@/types/interaction` que des libellés.
-    // Qu'elle n'importe ni table, ni repository d'interactions est verrouillé par
+  it("aucun écran ne lit interactions directement, hors exceptions nommées", () => {
+    // ADR-058 — la fiche Contact affiche les `interactionsRecentes` de son read model
+    // (contactDetailRepository) et n'importe de `@/types/interaction` que des libellés. Qu'elle
+    // n'importe ni table, ni repository d'interactions est verrouillé par
     // src/app/contacts/[id]/page.structurel.test.ts.
-    const ecransReadModel = [join("src", "app", "contacts", "[id]", "page.tsx")];
+    // SELLER_FEEDBACK_INTERACTION_V1 (ADR-063, 2026-09-20) — la fiche Visite affiche désormais les
+    // retours vendeur déjà enregistrés (`listerInteractionsPourVisite`, même rangées que le lecteur
+    // Contact — aucun nouveau silo) : deuxième exception délibérée, pas une régression du principe.
+    const ecransReadModel = [
+      join("src", "app", "contacts", "[id]", "page.tsx"),
+      join("src", "app", "visites", "[id]", "page.tsx"),
+    ];
     const fautifs = FICHIERS.filter(
       (chemin) => chemin.includes(join("src", "app")) || chemin.includes(join("src", "components"))
     )
       .filter((chemin) => !ecransReadModel.some((exception) => chemin.endsWith(exception)))
       .filter((chemin) => REFERENCES.test(readFileSync(chemin, "utf8")));
-    expect(fautifs, "l'interaction canonique est une fondation, pas une lecture").toEqual([]);
+    expect(fautifs, "l'interaction canonique reste une fondation hors des exceptions nommées").toEqual([]);
   });
 
   it("aucun moteur pur ne dépend des interactions", () => {
@@ -200,13 +206,16 @@ describe("ADR-055 §G — rien ne lit encore les interactions", () => {
     expect(fautifs, "les moteurs purs restent sur les sources historiques").toEqual([]);
   });
 
-  it("aucun flux existant n'écrit d'interaction canonique", () => {
-    // Décision du lot : ni les notes vendeur, ni les envois d'email ne créent de miroir. Une note
-    // vendeur A déjà un foyer, et `envois_email` n'a ni contact ni contenu — un miroir y serait
-    // fabriqué, pas constaté.
-    const fautifs = FICHIERS.filter((chemin) => chemin.includes(join("src", "actions"))).filter((chemin) =>
-      REFERENCES.test(readFileSync(chemin, "utf8"))
-    );
+  it("aucun flux existant n'écrit d'interaction canonique, hors exceptions nommées", () => {
+    // Décision du lot d'origine : ni les notes vendeur, ni les envois d'email ne créent de miroir.
+    // Une note vendeur a déjà un foyer, et `envois_email` n'a ni contact ni contenu — un miroir y
+    // serait fabriqué, pas constaté. SELLER_FEEDBACK_INTERACTION_V1 (ADR-063, 2026-09-20) ajoute une
+    // exception délibérée : le retour vendeur après visite devient un fait CRM canonique constaté,
+    // jamais un miroir d'un fait qui vivrait ailleurs.
+    const actionsAutorisees = [join("src", "actions", "retourVendeurVisite.ts")];
+    const fautifs = FICHIERS.filter((chemin) => chemin.includes(join("src", "actions")))
+      .filter((chemin) => !actionsAutorisees.some((exception) => chemin.endsWith(exception)))
+      .filter((chemin) => REFERENCES.test(readFileSync(chemin, "utf8")));
     expect(fautifs).toEqual([]);
   });
 });

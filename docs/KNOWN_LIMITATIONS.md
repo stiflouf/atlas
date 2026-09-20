@@ -852,27 +852,41 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   (`external_signature_id` nullable) accueille un futur fournisseur (OTP, e-signature qualifiée)
   sans redesign, mais aucun n'est câblé — décision produit volontairement différée.
 
-## Retour vendeur après visite (ADR-042)
+## Retour vendeur après visite (ADR-042, ADR-063)
 
-- **Mécanisme audité et certifié par `VISIT_AUTOMATION_V1`** (2026-09-20, ADR-063) : `retour_vendeur_apres_visite`
-  reste câblé sur `visite_realisee` (contrat inchangé) et produit exactement une tâche par compte
-  rendu réel, jamais un doublon — déjà garanti par l'idempotence structurelle du domaine (index
-  unique de l'événement + `UNIQUE(regle_code, evenement_id)`) et vérifié explicitement par
-  `catalogueRegles.retourVendeur.test.ts` ("double traitement", "traitement concurrent"). Aucune
-  automation supplémentaire (`compte_rendu_sans_retour_vendeur`) n'a été ajoutée : le signal
-  "tâche ouverte = retour non fait" est déjà exactement ce qu'une règle temporelle séparée
-  redétecterait, sans valeur ajoutée démontrée.
-- **Aucune tâche vendeur si le vendeur n'est pas structurellement identifié** : un bien créé
-  directement (`/biens/nouveau`, hors conversion d'un prospect vendeur) n'a aucun vendeur
-  résolvable — `retour_vendeur_apres_visite` ne produit alors jamais de tâche, jamais de fallback
-  vers l'acquéreur, jamais d'erreur. Limite V1 assumée : aucun mécanisme de rattachement a
-  posteriori d'un vendeur à un bien existant n'a été ajouté par cette ADR.
+- **Fait CRM canonique depuis `SELLER_FEEDBACK_INTERACTION_V1`** (2026-09-20, migration 0053,
+  ADR-063) : `enregistrerRetourVendeurVisite` crée une **Interaction** réelle (`interactions.visite_id`
+  + `nature_metier = 'retour_vendeur_post_visite'`) par vendeur canonique et clôture — dans la même
+  transaction — la tâche `retour_vendeur_apres_visite` si elle est encore ouverte. La tâche n'est
+  **plus** l'unique preuve que le retour a eu lieu ; elle reste "travail à faire", l'Interaction devient
+  l'historique. `retour_vendeur_apres_visite` (ADR-042) reste par ailleurs câblée sur `visite_realisee`
+  (contrat inchangé), certifiée idempotente (`catalogueRegles.retourVendeur.test.ts`), inchangée par
+  ce lot.
+- **Résolution vendeur strictement canonique, aucun repli legacy** : `vendeursCanoniquesDuBien` résout
+  exclusivement via le mandat **courant** du bien et ses parties de rôle `mandant` (`parties_mandat`,
+  ADR-060) — jamais via `prospects_vendeurs` (le modèle legacy que la RÈGLE DE TÂCHE
+  `retour_vendeur_apres_visite` continue, elle, d'utiliser). **Un bien dont le mandat courant n'a
+  encore aucune partie `mandant` renseignée ne peut donc pas recevoir de retour vendeur Interaction**
+  (`aucun_vendeur_canonique`), même si la tâche legacy, elle, a bien été créée. Décision délibérée :
+  le type de lecture `ProspectVendeur` (`getProspectVendeurParBien`) n'expose pas `contactId` — seul le
+  type d'écriture le porte — inventer un pont que la couche de lecture ne surface pas aurait été un
+  raccourci non fiable. Reclassé P3 (ADR-063) ; se résorbe naturellement à mesure que `parties_mandat`
+  se généralise.
+- **Idempotence par index unique partiel, pas par tâche** : un double submit ne crée jamais deux
+  Interactions "officielles" pour le même (visite, vendeur) — mais une Interaction manuelle
+  authentique et ultérieure sur la même Visite reste possible et n'est jamais bloquée (testé).
+- **Aucun événement métier `retour_vendeur_effectue`** : réévalué lors de ce lot et toujours écarté —
+  aucun consommateur downstream démontré aujourd'hui (l'Interaction elle-même est déjà persistée et
+  interrogeable, `listerInteractionsPourVisite`). Voir ADR-063 `VISIT_EVENTS_V1`.
 - **Aucun nettoyage automatique de la tâche** si une offre ou un compromis survient ensuite sur le
   même bien — le conseiller la termine manuellement s'il la juge dépassée, même choix que pour les
   tâches `nouveau_match_bien_acquereur` (ADR-041).
 - **Plusieurs visites du même bien produisent chacune leur propre tâche vendeur** : aucune
   déduplication au-delà de l'idempotence standard ADR-032 (`UNIQUE(regle_code, evenement_id)`) —
   chaque `visite_realisee` est un fait métier distinct légitimement porteur de son propre retour.
+- **Aucune garde d'archivage explicite** : `enregistrerRetourVendeurVisite` n'exclut pas un Bien
+  archivé après la visite — cohérent avec la politique déjà assumée ailleurs dans ce domaine
+  (historique conservé, jamais bloqué par un archivage ultérieur), pas une garde oubliée.
 
 ## Provenance des communications automatiques (ADR-043)
 

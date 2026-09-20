@@ -1166,8 +1166,9 @@ table Organisation (`LEGAL_ENTITY_REQUIRED_V1 = NO`).
 **Rôle** : un **échange humain** avec une personne. Cette table comble un **vide réel** — il
 n'existait aucune table d'interaction côté contact/acquéreur — elle ne généralise rien.
 
-**État : fondation, aucun écrivain en production.** Aucun flux existant n'en crée ; le repository
-est la surface d'écriture prête pour le lot qui saisira les interactions.
+**État : écrite en production.** `finaliserEnvoiGmail` (envois Gmail réussis) et
+`enregistrerRetourVendeurVisite` (`SELLER_FEEDBACK_INTERACTION_V1`, 2026-09-20, migration 0053, retour
+vendeur après visite) écrivent réellement cette table aujourd'hui.
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
@@ -1177,8 +1178,16 @@ est la surface d'écriture prête pour le lot qui saisira les interactions.
 | `sens` | text | **oui** | `CHECK` NULL ou `('entrant','sortant','interne')` |
 | `survenu_le` | timestamptz | non | **date métier du fait**, sans `DEFAULT` |
 | `contenu` | text | oui | texte libre, **jamais lu par un moteur** (ADR-008) |
-| `projet_acquereur_id` / `projet_vendeur_id` / `bien_id` | uuid | oui | contexte, **au plus un** |
+| `projet_acquereur_id` / `projet_vendeur_id` / `bien_id` / `visite_id` | uuid | oui | contexte, **au plus un** (`CHECK`, 4 indicateurs) |
+| `nature_metier` | text | oui | `CHECK` NULL ou `('retour_vendeur_post_visite')` — marqueur de **fait métier durable**, orthogonal au `type` (canal). Jamais déduit du texte libre `contenu` (ADR-008) |
 | `cree_le` | timestamptz | non | quand DOMIORA l'a enregistré |
+
+**`visite_id`** (migration 0053, `SELLER_FEEDBACK_INTERACTION_V1`) : FK → `visites.id`, `ON DELETE SET
+NULL`, 4ᵉ variante mutuellement exclusive du `CHECK` « au plus un contexte » (`interactions_un_seul_contexte_check`
+élargi). Un index unique **partiel** `interactions_visite_retour_vendeur_unique` sur
+`(visite_id, contact_id) WHERE nature_metier = 'retour_vendeur_post_visite'` protège uniquement
+l'« acte officiel » retour-vendeur d'un double submit — une Interaction manuelle supplémentaire sur la
+même Visite (sans le marqueur `nature_metier`) reste possible et n'est jamais bloquée par cet index.
 
 **Le contact est obligatoire** : une interaction sans personne ne décrit aucune relation. Une note
 libre sur un bien sans interlocuteur est une `notes_bien`, qui existe déjà.
@@ -1194,9 +1203,11 @@ des échanges vieux de six mois, et les dater d'aujourd'hui inventerait une chro
 **Contexte : cibles dédiées + `CHECK` « au plus une »**, patron `taches` — jamais un couple
 polymorphe `{contexte_type, contexte_id}`, qui remplacerait l'intégrité référentielle par une
 convention. « Au plus » et non « exactement » : un appel de courtoisie sans dossier reste un fait
-relationnel valide. **Trois cibles** là où ADR-055 §G en énumère six : visite, offre et mandat se
-rejoignent depuis leur bien ou leur projet, et les poser maintenant ferait trois colonnes que
-personne n'écrirait. Les ajouter est une migration additive.
+relationnel valide. **Quatre cibles** là où ADR-055 §G en énumère six : `visite_id` a été ajoutée
+(`SELLER_FEEDBACK_INTERACTION_V1`, migration 0053) — un besoin d'écriture réel et démontré (le retour
+vendeur doit être lié à SA Visite, jamais seulement déduit du texte libre) ; offre et mandat restent
+non ajoutées, ils se rejoignent toujours depuis leur bien ou leur projet, et les poser sans écrivain
+démontré ferait des colonnes que personne n'écrirait. Les ajouter reste une migration additive.
 
 **Chronologie déterministe** : `listerInteractionsDuContact()` trie par `survenu_le DESC`, puis
 `cree_le DESC`, puis `id ASC`. Deux interactions peuvent partager `survenu_le` à la seconde près
@@ -2746,6 +2757,7 @@ toute notion de résolution définitive pour ce handoff technique.
 | `0050_visit_native_lifecycle_v1.sql` | ADR-063 (`VISIT_NATIVE_LIFECYCLE_V1`) : `visites.rendez_vous_calendar_id` rendue nullable (`UNIQUE` full → index unique partiel `WHERE ... IS NOT NULL`) ; ajout `visites.realisee_le`/`annulee_le` (timestamptz nullables) ; index unique partiel `comptes_rendus_visite_visite_id_unique` sur `comptes_rendus_visite.visite_id` ; `evenements_metier.visite_id` (FK NO ACTION) dans le CHECK « une seule cible », type `visite_annulee`, index unique partiel `(type_evenement, visite_id)`. Strictement additive (aucune table supprimée, `DROP NOT NULL` + CHECK élargis seulement), **aucun backfill** |
 | `0051_visit_signed_form_v1.sql` | ADR-063 (`VISIT_SIGNED_FORM_V1`) : nouvelles tables `bons_visite` (FK `visite_id` cascade, `CHECK` statut, `CHECK` cohérence statut, `UNIQUE(visite_id, version)`, FK `document_id` vers `documents_bien` SET NULL) et `signatures_bon_visite` (FK `bon_visite_id` cascade, FK `contact_id` NO ACTION, `CHECK` rôle, `CHECK` provider) ; `documents_bien.visite_id` (FK SET NULL, rattachement cumulatif) ; `evenements_metier.bon_visite_id` (FK NO ACTION) dans le CHECK « une seule cible », type `bon_visite_signe`, index unique partiel `(type_evenement, bon_visite_id)`. Strictement additive (2 nouvelles tables, colonnes nullables, CHECK élargis seulement), **aucun backfill** |
 | `0052_visit_automation_v1.sql` | ADR-063 (`VISIT_AUTOMATION_V1`) : `taches.visite_canonique_id` (FK `visites.id` cascade, nouvelle 8ᵉ cible) ; `evenements_metier` — 2 nouveaux types (`visite_j_1`/`visite_sans_compte_rendu`), index unique partiel dédié `(type_evenement, visite_id, ancre_cycle) WHERE type_evenement = 'visite_j_1'`, prédicat de `evenements_metier_visite_id_unique` élargi pour exclure `visite_j_1` (cyclique, comme `inactivite_prospect_vendeur`) ; CHECK `regle_code` élargis (`configurations_automatisation`, `executions_automatisation`, `runs_scan_automatisation`) pour les 2 nouvelles règles ; seed des 2 nouvelles lignes de configuration (`active = false`). Strictement additive (1 colonne nullable, CHECK/index élargis ou ajoutés seulement), **aucun backfill** |
+| `0053_seller_feedback_interaction_v1.sql` | ADR-063 (`SELLER_FEEDBACK_INTERACTION_V1`) : `interactions.visite_id` (FK `visites.id` SET NULL, 4ᵉ variante du CHECK « au plus un contexte », élargi) ; `interactions.nature_metier` (`CHECK` NULL ou `'retour_vendeur_post_visite'`) ; index unique partiel `interactions_visite_retour_vendeur_unique` sur `(visite_id, contact_id) WHERE nature_metier = 'retour_vendeur_post_visite'`. Strictement additive (2 colonnes nullables, CHECK/index élargis ou ajoutés seulement), **aucun backfill** |
 
 Générées par `pnpm db:generate` (Drizzle Kit) après modification de `src/db/schema.ts`, appliquées
 par `pnpm db:migrate`. Voir `apps/web/README.md` pour la procédure complète.
