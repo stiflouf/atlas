@@ -40,6 +40,12 @@ const TABLES_A_NETTOYER = [
   "photos_bien",
   "prospects_vendeurs",
   "acquereurs",
+  // ADR-060 — `parties_mandat.mandat_id` référence `mandats` sans CASCADE (NOT NULL, NO ACTION) :
+  // à vider avant `mandats`, sinon la purge échoue dès qu'une ligne existe (créée par une autre
+  // suite contre la même base `atlas_test` partagée — seed-demo lui-même n'écrit jamais dans cette
+  // table). TEST_SEED_DEMO_HYGIENE_V1 : absente ici depuis l'introduction de `parties_mandat`
+  // (ADR-060), c'était la cause exacte du FK `parties_mandat_mandat_id_mandats_id_fk`.
+  "parties_mandat",
   // ADR-055 §F — `mandats` référence `biens` sans CASCADE : à vider avant lui, sinon la purge
   // échoue sur la clé étrangère.
   "mandats",
