@@ -901,6 +901,16 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   le vendeur est alors résolu automatiquement, sans ajout manuel. Restent sans partie : les mandats
   antérieurs à ce lot (aucun backfill), les biens créés directement (`/biens/nouveau`, sans prospect)
   et les prospects legacy sans Contact.
+- **Seed de démonstration canonique — livré par `DEMO_SEED_CANONICAL_V1`** (2026-09-21,
+  `scripts/seed-demo.mjs`, aucun code produit modifié) : Contacts, projets vendeur, mandats + parties
+  `mandant`, visites natives (aujourd'hui / demain / passée sans CR / réalisées), bon signé avec PDF et
+  hash réels, retour vendeur en Interaction, offres, compromis, documents, photo, états de
+  compatibilité confirmés par le moteur, règles activées, rejouable (périmètre ciblé). Limites :
+  aucune tâche automatique seedée (elles naissent d'un scan réel, `POST /api/automatisations/scan`),
+  aucune connexion Google, aucune donnée fiscale ; le texte du bon signé est reproduit dans le
+  script (le `.mjs` ne peut pas importer `templateBonVisite.ts`) — à faire évoluer ensemble.
+  `seed-demo.test.ts` purge désormais `compatibilites_bien_acquereur_etat` et
+  `compatibilites_a_resynchroniser` (dette observée lors de `VISIT_NATIVE_ENTRY_V1`, fermée).
 - **Idempotence par index unique partiel, pas par tâche** : un double submit ne crée jamais deux
   Interactions "officielles" pour le même (visite, vendeur) — mais une Interaction manuelle
   authentique et ultérieure sur la même Visite reste possible et n'est jamais bloquée (testé).

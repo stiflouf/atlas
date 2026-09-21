@@ -100,48 +100,71 @@ Drizzle (`src/db/schema.ts`), qui fait foi du schéma physique**. Après une mod
 pnpm db:generate
 ```
 
-### 4. Seed de démonstration — instance de démo uniquement (DEMO-02)
+### 4. Seed de démonstration — instance de démo uniquement (DEMO-02, `DEMO_SEED_CANONICAL_V1`)
 
-Peuple une base **vierge** avec un univers fictif cohérent (5 prospects vendeurs — dont 2 déjà
-convertis, un par bien —, 4 acquéreurs, 2 biens, 2 visites, 1 offre acceptée, 1 compromis en cours,
-1 rémunération prévisionnelle, 7 tâches, 2 notes, 2 événements `mandat_signe`). Destiné à une
-instance de démonstration dédiée — jamais à une base portant de vraies données.
+Peuple une base avec **la journée d'un conseiller DOMIORA**, sur le modèle canonique réellement lu
+par la V1 : 12 Contacts, 6 projets vendeur, 6 prospects vendeurs (mandat proposé / estimation /
+perdu / 3 convertis), 3 biens avec **mandat canonique et partie `mandant`**, 6 acquéreurs avec
+secteurs INSEE réels et **18 états de compatibilité** (compatible / à vérifier / incompatible,
+confirmés par le vrai moteur), 6 **visites natives** (aujourd'hui, demain, passée sans compte rendu,
+3 réalisées), 3 comptes rendus, 1 **bon de visite signé** (PDF réel, signature PNG, hash SHA-256),
+3 documents, 1 photo principale, 3 interactions (dont un retour vendeur), 2 offres (en cours /
+acceptée), 1 compromis, 1 rémunération prévisionnelle, 6 tâches, 7 règles d'automatisation activées.
+Destiné à une instance de démonstration dédiée — jamais à une base portant de vraies données.
 
 ```bash
-DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA pnpm db:seed:demo
+DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA DATABASE_URL=... pnpm db:seed:demo
 ```
 
 `DOMIORA_DEMO_SEED_CONFIRM` est une confirmation **ponctuelle**, à passer sur la ligne de commande
 au moment de l'exécution. **Ne jamais la définir durablement dans les variables d'environnement de
-la plateforme d'hébergement** : sa raison d'être est qu'elle ne puisse pas être fournie par
-accident.
-
-Le script refuse d'écrire dans quatre situations, sans jamais rien supprimer :
+la plateforme d'hébergement.** Les fichiers (PDF, signature, photo) sont écrits dans le stockage
+documentaire de l'instance (`ATLAS_DOCUMENT_STORAGE_DIR`, sinon `./stockage-documents` hors
+production), sous des clés déterministes `demo-seed-*`, dans l'arborescence lue par l'application.
 
 | Situation | Comportement |
 |---|---|
 | Confirmation absente ou différente | Refus, sortie en erreur, aucune écriture |
-| La base contient **une seule** ligne métier étrangère au dataset | Refus explicite, la ligne existante est laissée intacte |
-| Dataset de démonstration déjà complet | `Dataset de démonstration déjà présent.`, sortie 0, aucun doublon |
-| Dataset de démonstration **partiel** | Refus — aucune réparation automatique, recréer une base vierge |
+| Plusieurs workspaces en base | Refus (produit mono-conseiller, ADR-054) |
+| La base contient **une seule** ligne métier étrangère au périmètre du seed | Refus explicite, rien n'est supprimé ni écrit |
+| Dataset déjà présent — complet, partiel, ou enrichi par l'usage de la démo (visites/CR/bons créés en direct, tâches automatiques, événements, états de compatibilité, prospect converti en direct) | **Rejeu** : le périmètre du seed est retiré (entités déterministes + dépendances directes + fichiers), puis recréé — même état final à chaque run |
 
-Il n'existe **aucune** commande de purge, de reset ni de `--force` : ce script ne sait qu'ajouter.
-Repartir d'un état propre signifie recréer la base, jamais vider celle-ci depuis l'application.
+Le « périmètre » est calculé en SQL depuis les identifiants déterministes du seed et leurs
+dépendances directes (jamais une purge par workspace) : tout ce qui n'y appartient pas est étranger
+et bloque le seed. Les 7 règles d'automatisation (`visite_j_1`, `visite_sans_compte_rendu`,
+`retour_vendeur_apres_visite`, `offre_sans_decision`, `offre_acceptee_sans_compromis`,
+`mandat_expire_bientot`, `nouveau_match_bien_acquereur`) sont activées avec leur seuil pour
+l'unique workspace de la base — les valeurs par défaut du produit ne changent pas. Toutes les
+dates sont relatives (aujourd'hui, demain, J-6, J+75…) : le scénario reste vivant quel que soit le
+jour du rejeu.
 
-Le seed ne crée **ni donnée fiscale personnelle** (`/fiscal` reste vide, hors du parcours de
-démonstration) **ni connexion Google** (Calendar et Gmail restent à connecter manuellement, ou
-pas du tout — l'application fonctionne sans).
+Le seed ne crée **ni donnée fiscale personnelle** ni **connexion Google** : Calendar et Gmail ne
+sont pas nécessaires au parcours de démonstration, toutes les visites sont natives (aucun
+identifiant Calendar, aucune page `/preparer` dans le parcours).
 
-**Documents et photos ne sont pas seedés** : aucune ligne ne doit jamais pointer vers un fichier
-absent du stockage. À charger manuellement via l'interface avant une démonstration si besoin —
-quelques PDF fictifs sur l'onglet Documents d'un bien, deux photos sur la galerie.
+#### Scénario de démonstration V1 (10 à 15 minutes)
 
-Une limite à connaître avant de faire une démonstration : les visites seedées portent un
-identifiant de rendez-vous de seed, pas un identifiant Google Calendar. La fiche visite
-(`/visites/[id]`, atteinte depuis l'onglet Visites d'un bien) est pleinement consultable — elle ne
-lit que Postgres. En revanche `/visites/[id]/preparer`, proposé par le CTA « Préparer » de la fiche
-acquéreur, ne peut pas résoudre un rendez-vous Calendar inexistant et rend une page « Page
-introuvable ».
+1. **Aujourd'hui** — la visite de Camille Ferrand (aujourd'hui, Houilles), la relance en retard
+   d'Hélène Vasseur, les opportunités (match Julien Nguyen ↔ Sartrouville, information manquante
+   sur l'ascenseur de Houilles). Après un scan d'automatisation (`POST /api/automatisations/scan`),
+   les tâches automatiques J-1 (visite de demain), visite sans compte rendu, offre sans décision et
+   mandat à échéance s'ajoutent.
+2. **Acquéreur + matching** — fiche de Camille Ferrand : biens compatibles, « Planifier une visite ».
+3. **Bien** — Houilles (DEMO-2026-001) : vendeur Martine Delcourt, acquéreurs compatibles /
+   à vérifier / incompatibles, photo, documents (DPE, mandat, bon signé).
+4. **Mandat** — panneau Mandat : mandat exclusif M-2026-014, partie mandant Martine Delcourt.
+5. **Visite demain / native** — onglet Visites : Inès Lemoine demain, Julien Nguyen passée sans
+   compte rendu ; ouvrir une fiche Visite (aucun Calendar requis).
+6. **Visite réalisée** — Yanis Delaunay : compte rendu, suite recommandée.
+7. **Bon signé** — signé par Yanis Delaunay, PDF téléchargeable.
+8. **Compte rendu** — intérêt « à réfléchir », prochaine étape.
+9. **Retour vendeur** — historique « Retour effectué » vers Martine Delcourt.
+10. **Offre** — Sartrouville (DEMO-2026-003) : offre en cours d'Inès Lemoine (300 000 €).
+11. **Compromis** — Maisons-Laffitte (DEMO-2026-002) : offre acceptée de Théo Marchand, compromis en
+    cours, acte dans 75 jours, rémunération prévisionnelle.
+12. **Contact** — fiche de Martine Delcourt : projet vendeur, mandat, interactions.
+13. **En direct** — convertir Hélène Vasseur (« Signer le mandat ») : bien + mandat + mandant créés
+    automatiquement. Un rejeu du seed remet ensuite le scénario à zéro.
 
 ## Variables d'environnement
 

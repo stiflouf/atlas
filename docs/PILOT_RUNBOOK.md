@@ -143,6 +143,13 @@ Seed (confirmation **ponctuelle**, jamais enregistrée comme variable Railway) �
 DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA pnpm db:seed:demo
 ```
 
+Depuis `DEMO_SEED_CANONICAL_V1` (2026-09-21), le seed écrit aussi des fichiers (PDF du bon signé,
+signature, documents, photo) dans `ATLAS_DOCUMENT_STORAGE_DIR` — le volume documentaire doit donc
+être monté avant de seeder — et se **rejoue** par-dessus lui-même (périmètre ciblé, jamais une purge
+par workspace) : rafraîchir le showroom après une démonstration = relancer la même commande. Aucune
+exécution sur la démo distante n'a été faite dans ce lot : elle relève d'un lot de déploiement
+contrôlé, après application des migrations.
+
 ### 1 ter. Build Railpack — commandes de build/start
 
 Depuis Railpack 0.38.0, les champs `buildCommand`/`startCommand` du service ne suffisent plus : la
