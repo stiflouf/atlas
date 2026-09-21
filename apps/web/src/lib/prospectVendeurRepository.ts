@@ -7,6 +7,8 @@ import type { NavigationContactDossier } from "@/types/contact";
 import { prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { creerBien, type NouveauBien } from "@/lib/bienRepository";
 import { creerMandat, type FaitsMandat } from "@/lib/mandatRepository";
+import { ajouterPartieMandat } from "@/lib/partieMandatRepository";
+import type { PartieMandat } from "@/types/partieMandat";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import {
   filtreIdentiteEffective,
@@ -410,11 +412,41 @@ export async function proposerMandatProspectVendeur(id: string): Promise<Prospec
 // Le bien créé, le jalon, le mandat canonique et l'événement `mandat_signe` (ADR-032) existent tous
 // ou aucun. Le mandat reçoit les FAITS saisis par l'humain (`FaitsMandat`, type obligatoire) et la
 // prise d'effet `donneesBien.dateMandat` ; rien n'est inventé.
+//
+// VISIT_NATIVE_ENTRY_V1 (sous-lot MANDATE_PARTIES_AUTOFILL_V1) — `partieMandant` : la partie
+// `mandant` posée automatiquement sur le mandat créé, quand le prospect porte un Contact canonique.
+// `undefined` pour un prospect legacy sans Contact (le mandat existe alors sans partie, comme
+// avant) ou si le Contact n'est plus actif au moment de la signature.
 export type ResultatSignatureMandat =
-  | { statut: "signe"; prospect: ProspectVendeur; bien: Bien; mandat: Mandat; idsExecutionsATraiter: string[] }
+  | {
+      statut: "signe";
+      prospect: ProspectVendeur;
+      bien: Bien;
+      mandat: Mandat;
+      partieMandant?: PartieMandat;
+      idsExecutionsATraiter: string[];
+    }
   | { statut: "introuvable" }
   | { statut: "deja_signe" }
   | { statut: "perdu" };
+
+// Le moteur de fusion repointe déjà `prospects_vendeurs.contact_id` vers le survivant (sous verrou
+// des deux contacts) : le pont lu sous le verrou du prospect est l'état canonique, écrit tel quel.
+// ADR-059 §10 — un writer ne réécrit JAMAIS une cible absorbée vers son survivant : si une fusion
+// s'intercale entre cette lecture et la pose de la partie, `ajouterPartieMandat` répond
+// `contact_fusionne` (verrou FOR UPDATE du contact) et le mandat reste sans partie — jamais une
+// partie vers l'absorbé, jamais une signature valide mise en échec. Le conseiller ajoute alors la
+// personne depuis la fiche Bien, comme pour tout mandat sans partie.
+async function poserMandantDepuisProspect(
+  mandatId: string,
+  contactId: string | null,
+  workspaceId: string,
+  tx: Executeur
+): Promise<PartieMandat | undefined> {
+  if (!contactId) return undefined;
+  const resultat = await ajouterPartieMandat(mandatId, { contactId, role: "mandant" }, workspaceId, tx);
+  return resultat.statut === "ajoutee" || resultat.statut === "deja_partie" ? resultat.partie : undefined;
+}
 
 export async function signerMandatProspectVendeur(
   id: string,
@@ -463,13 +495,22 @@ export async function signerMandatProspectVendeur(
       tx
     );
 
+    // VISIT_NATIVE_ENTRY_V1 (MANDATE_PARTIES_AUTOFILL_V1) — le vendeur connu de ce flux devient
+    // partie `mandant` du mandat qu'il vient de signer, DANS LA MÊME transaction : sans cette partie,
+    // `vendeursCanoniquesDuBien` (retour vendeur post-visite) ne résout personne et le conseiller
+    // devait ré-ajouter la personne à la main. Réutilise `ajouterPartieMandat` (verrous mandat →
+    // contact, garde Contact actif ADR-059 §10, UNIQUE(mandat, contact)) — jamais une seconde
+    // logique. Seul le Contact que le prospect porte réellement est posé, jamais un co-vendeur
+    // deviné ; un prospect legacy sans Contact garde un mandat sans partie.
+    const partieMandant = await poserMandantDepuisProspect(mandat.id, verrouille.contactId, workspaceId, tx);
+
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
       { typeEvenement: "mandat_signe", prospectVendeurId: id },
       workspaceId,
       tx
     );
     const [prospect] = await appliquerIdentiteEffective([ligneVersProspectVendeur(ligne)], tx);
-    return { statut: "signe", prospect, bien, mandat, idsExecutionsATraiter };
+    return { statut: "signe", prospect, bien, mandat, partieMandant, idsExecutionsATraiter };
   });
 }
 

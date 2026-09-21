@@ -1134,6 +1134,12 @@ contrainte « au moins un mandant »** : un mandat importé, legacy ou en cours 
 sans partie ; l'exigence, si elle vient, sera celle d'un workflow. Aucune personne morale, aucune
 table Organisation (`LEGAL_ENTITY_REQUIRED_V1 = NO`).
 
+**Écriture automatique (`VISIT_NATIVE_ENTRY_V1` / `MANDATE_PARTIES_AUTOFILL_V1`, 2026-09-21, aucune
+migration)** : `signerMandatProspectVendeur` pose une ligne `role = 'mandant'` pour
+`prospects_vendeurs.contact_id` dans la transaction de signature, via `ajouterPartieMandat` (jamais un
+second writer). Sans Contact sur le prospect : aucune ligne, comme avant. Aucun backfill des mandats
+antérieurs.
+
 - **Writers** (`lib/partieMandatRepository.ts`, seul module à écrire la table hors moteur de
   fusion), tous transactionnels, scoped par le workspace de **session**, autre workspace =
   introuvable : `ajouterPartieMandat(mandatId, { contactId, role }, workspaceId)` — verrou du
@@ -1785,6 +1791,14 @@ partiel sur `comptes_rendus_visite`, garde d'archivage Bien/Acquéreur à la cr�
 chemin Calendar), scoping workspace (`biens.workspace_id`) sur les fonctions destinées à l'être.
 `/visites/{id}/preparer` reste volontairement Calendar-id-based (non migré vers `visite.id` — voir
 `docs/KNOWN_LIMITATIONS.md`).
+
+### `VISIT_NATIVE_ENTRY_V1` livré (2026-09-21, aucune migration)
+
+Aucun changement de schéma. `creerVisite` a désormais un appelant de production natif
+(`creerVisiteAction`, `/visites/nouvelle`, entrées Bien / Acquéreur / matching) ; Aujourd'hui lit les
+Visites du jour par une requête jointe (`visitesDuJour`) et déduplique l'événement Calendar d'une Visite
+matérialisée. Côté Mandat : la signature Prospect → Mandat pose la partie `mandant` (voir
+`parties_mandat`).
 
 ## `bons_visite` / `signatures_bon_visite` (ADR-063, `VISIT_SIGNED_FORM_V1`, migration 0051)
 

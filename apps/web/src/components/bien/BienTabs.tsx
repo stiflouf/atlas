@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Users, Building2, ShieldCheck, Landmark, Handshake, Scale, FileText } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
 import Input from "@/components/ui/Input";
@@ -399,6 +400,17 @@ export default function BienTabs({
       >
       {active === "visites" && (
         <div className="flex flex-col gap-6">
+          {/* VISIT_NATIVE_ENTRY_V1 — planifier une Visite DOMIORA depuis le bien, sans Calendar
+              (route unique /visites/nouvelle, bien préfixé, acquéreur choisi sur la page). Pour un
+              bien réel uniquement : un bien mocké n'a pas d'UUID à faire visiter. */}
+          {!dossier && (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <p className="text-[13px] text-text-muted">Les visites DOMIORA de ce bien, planifiées ici ou depuis un rendez-vous préparé.</p>
+              <ButtonLink href={`/visites/nouvelle?bienId=${bien.id}&retour=bien`} variant="primary" size="md" className="min-h-11 sm:min-h-0">
+                Planifier une visite
+              </ButtonLink>
+            </div>
+          )}
           <div>
             <SectionTitle>À venir</SectionTitle>
             {dossier ? (
@@ -415,7 +427,12 @@ export default function BienTabs({
                 </div>
               )
             ) : visitesAVenirReelles.length === 0 ? (
-              <p className="text-[14px] text-text-muted">Aucune visite à venir enregistrée pour ce bien.</p>
+              <p className="text-[14px] text-text-muted">
+                Aucune visite à venir pour ce bien.{" "}
+                <Link href={`/visites/nouvelle?bienId=${bien.id}&retour=bien`} className="font-medium text-action-primary hover:text-action-primary-hover">
+                  Planifier une visite →
+                </Link>
+              </p>
             ) : (
               <div className="flex flex-col gap-2">
                 {visitesAVenirReelles.map((v) => {

@@ -1,5 +1,6 @@
 import { CalendarCheck, Building2, ListChecks, AlertCircle } from "lucide-react";
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
+import VisiteJourCard from "@/components/aujourd-hui/VisiteJourCard";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
 import DossierActionCard from "@/components/aujourd-hui/DossierActionCard";
 import OpportuniteCard from "@/components/aujourd-hui/OpportuniteCard";
@@ -29,6 +30,9 @@ import { chargerContexteAlertes } from "@/lib/alertes/contexte";
 import { chargerContexteOpportunites } from "@/lib/opportunites/contexte";
 import { detecterOpportunites } from "@/lib/opportunites/moteur";
 import { produireAlertes } from "@/lib/alertes/moteur";
+import { visitesDuJour } from "@/lib/visiteRepository";
+import { fusionnerAgendaDuJour } from "@/lib/visites/agendaDuJour";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Alertes affichées directement — au-delà, "Afficher les autres" les développe localement (ADR-026,
 // pas de nouvelle route /alertes). Le plan vise "3 à 5" : 5 est le plafond, moins s'il y en a moins.
@@ -64,10 +68,21 @@ export default async function AujourdHui() {
 
   const { rendezVous, source } = await getAgendaSemaine();
   const { gmailAutorise } = await chargerCapacitesGoogle();
+  // VISIT_NATIVE_ENTRY_V1 — les Visites DOMIORA du jour (workspace de session, une seule requête
+  // set-based), fusionnées avec l'agenda Calendar : une Visite matérialisée remplace son événement
+  // Calendar (jamais deux fois le même rendez-vous), une Visite native apparaît même sans Google
+  // Calendar connecté, une Visite annulée/réalisée n'est plus un rendez-vous actif.
+  const workspaceId = await exigerWorkspaceCourant();
+  const visitesDomioraDuJour = await visitesDuJour(workspaceId, aujourdHuiISO);
   // La fenêtre de lecture couvre 7 jours (utile aux prochains sprints) ; cet écran ne montre
   // que le jour courant. Les rendez-vous mockés n'ont pas de `date` : ils sont toujours
   // considérés comme "aujourd'hui".
-  const rendezVousDuJour = rendezVous.filter((rdv) => !rdv.date || rdv.date === aujourdHuiISO);
+  const agendaDuJour = fusionnerAgendaDuJour(
+    rendezVous.filter((rdv) => !rdv.date || rdv.date === aujourdHuiISO),
+    visitesDomioraDuJour
+  );
+  const rendezVousDuJour = agendaDuJour.rendezVous;
+  const visitesPlanifieesDuJour = agendaDuJour.visites;
   // getAgendaSemaine() garantit déjà une fenêtre de 7 jours : pas besoin de la recalculer ici.
   const rdvAVenir = rendezVousAVenir(rendezVous, aujourdHuiISO);
 
@@ -98,6 +113,9 @@ export default async function AujourdHui() {
   }));
   const rdvActifs = rdvAvecStatut.filter(({ statut }) => statut !== "termine");
   const rdvTermines = rdvAvecStatut.length - rdvActifs.length;
+  // Une Visite planifiée reste un rendez-vous du jour tant qu'elle n'est pas réalisée/annulée
+  // (aucune heure pour la déclarer « terminée ») : comptée avec les rendez-vous Calendar actifs.
+  const nbRendezVousRestants = visitesPlanifieesDuJour.length + rdvActifs.length;
 
   const rdvAVenirAvecContexte = rdvAVenir.map((rdv) => ({
     rdv,
@@ -187,7 +205,7 @@ export default async function AujourdHui() {
           listerBiens() (ligne Promise.all), les trois autres des dérivations déjà en place. */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-7">
         <StatTile icon={AlertCircle} valeur={dossiersAttention.length} libelle="Dossiers à traiter" taille="lead" />
-        <StatTile icon={CalendarCheck} valeur={rdvActifs.length} libelle="RDV restants" taille="kpi" />
+        <StatTile icon={CalendarCheck} valeur={nbRendezVousRestants} libelle="RDV restants" taille="kpi" />
         <StatTile icon={ListChecks} valeur={tachesActives.length} libelle="Tâches actives" taille="kpi" />
         <StatTile icon={Building2} valeur={biens.length} libelle="Biens actifs" taille="kpi" />
       </div>
@@ -200,13 +218,22 @@ export default async function AujourdHui() {
           {/* Rendez-vous */}
           <section>
             <SectionTitle>
-              {rdvActifs.length > 0
-                ? `${rdvActifs.length} rendez-vous restant${rdvActifs.length > 1 ? "s" : ""}`
+              {nbRendezVousRestants > 0
+                ? `${nbRendezVousRestants} rendez-vous restant${nbRendezVousRestants > 1 ? "s" : ""}`
                 : "Aucun rendez-vous restant aujourd'hui"}
             </SectionTitle>
 
-            {rdvActifs.length > 0 && (
+            {nbRendezVousRestants > 0 && (
               <div className="flex flex-col">
+                {/* Visites DOMIORA d'abord (jour civil, sans heure — comme un événement « journée
+                    entière »), puis les rendez-vous Calendar horodatés. */}
+                {visitesPlanifieesDuJour.map((visite, i) => (
+                  <VisiteJourCard
+                    key={visite.id}
+                    visite={visite}
+                    dernier={rdvActifs.length === 0 && i === visitesPlanifieesDuJour.length - 1}
+                  />
+                ))}
                 {rdvActifs.map(({ rdv, statut, contexte }, i) => (
                   <AgendaCard
                     key={rdv.id}
@@ -218,7 +245,7 @@ export default async function AujourdHui() {
                 ))}
               </div>
             )}
-            {rdvActifs.length === 0 && (
+            {nbRendezVousRestants === 0 && (
               <Card className="p-4">
                 <div className="flex items-center gap-3">
                   <IconTile icon={CalendarCheck} tone="champagne" size={34} iconSize={16} />

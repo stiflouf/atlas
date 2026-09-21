@@ -64,8 +64,15 @@ export default function AcquereurHero({ client, contactActifId }: { client: Prof
       </div>
 
       <div className="flex flex-wrap gap-2.5 mt-4 pt-4 border-t border-border">
+        {actif && clientReel && (
+          // VISIT_NATIVE_ENTRY_V1 — planifier une Visite DOMIORA pour cet acquéreur (bien choisi sur
+          // la page, compatibles d'abord), sans Calendar.
+          <ButtonLink href={`/visites/nouvelle?acquereurId=${client.id}&retour=acquereur`} variant="primary" size="md">
+            Planifier une visite
+          </ButtonLink>
+        )}
         {actif && (
-          <ButtonLink href={`/taches/nouveau?acquereurId=${client.id}`} variant="primary" size="md">
+          <ButtonLink href={`/taches/nouveau?acquereurId=${client.id}`} variant={clientReel ? "secondary" : "primary"} size="md">
             + Ajouter une tâche
           </ButtonLink>
         )}

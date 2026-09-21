@@ -537,3 +537,16 @@ passe (`DISTINCT ON (bien_id)` après filtrage), jamais par bien. Aucun impact �
 Aucune dépendance fournisseur nouvelle. Migration purement additive et réversible par `DROP COLUMN`
 sans perte d'un fait antérieur ; les colonnes legacy de `biens` sont conservées intactes, donc un
 retour à la lecture legacy est une décision d'application, pas une migration de données.
+
+## Addendum — `MANDATE_PARTIES_AUTOFILL_V1` (sous-lot de `VISIT_NATIVE_ENTRY_V1`, 2026-09-21)
+
+§16 disait : « la signature ne crée aucune partie ». État réel depuis ce sous-lot, sans migration :
+`signerMandatProspectVendeur` pose, dans sa transaction et via `ajouterPartieMandat`, une partie
+`mandant` pour le Contact canonique porté par le prospect (`prospects_vendeurs.contact_id`) — le seul
+vendeur réellement connu de ce flux, jamais un co-vendeur deviné, jamais un Contact absorbé (garde
+ADR-059 §10 ; si une fusion s'intercale, `contact_fusionne` laisse le mandat sans partie, sans
+réécriture vers le survivant). Un
+prospect sans Contact garde un mandat sans partie ; `creerBienAction` et `enregistrerMandatExistant`
+sont inchangés. Motivation produit : `vendeursCanoniquesDuBien` (retour vendeur post-visite,
+ADR-063) ne résout que les parties `mandant` — sans cette pose automatique, le retour vendeur restait
+inatteignable par défaut sur tout bien issu d'un prospect.

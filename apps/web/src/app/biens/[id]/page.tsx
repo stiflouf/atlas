@@ -264,7 +264,11 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
       </div>
 
       <div className="mb-8">
-        <BienAcquereursCompatibles compatibilites={compatibilites} acquereursActifs={acquereursActifs} />
+        <BienAcquereursCompatibles
+          compatibilites={compatibilites}
+          acquereursActifs={acquereursActifs}
+          planifiable={!dossier && !bien.archiveLe}
+        />
       </div>
 
       {/* Onglets — Contexte, Notes, Visites, Documents et Tâches sont tous réels (voir BienTabs,

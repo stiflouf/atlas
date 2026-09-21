@@ -46,6 +46,8 @@ import {
 } from "@/lib/relations/memoireAcquereur";
 import { construireRepriseContactAcquereur } from "@/lib/communications/repriseContactAcquereur";
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function formatPrix(prix: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(prix);
 }
@@ -238,8 +240,12 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
             reperesArchives={reperesRelationnelsArchives}
             archive={!!client.archiveLe}
           />
-          <AcquereurBiensCompatibles compatibilites={compatibilites} biensActifs={biensActifs} />
-          <AcquereurVisites visites={visites} biensParId={biensParId} />
+          <AcquereurBiensCompatibles
+            compatibilites={compatibilites}
+            biensActifs={biensActifs}
+            planifiable={!client.archiveLe && UUID_REGEX.test(client.id)}
+          />
+          <AcquereurVisites visites={visites} biensParId={biensParId} acquereurId={!client.archiveLe && UUID_REGEX.test(client.id) ? client.id : undefined} />
         </div>
 
         {/* Rail — brief stable, notes/critères libres, tâches, offres, compromis : contexte de

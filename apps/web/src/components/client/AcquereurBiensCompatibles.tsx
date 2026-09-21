@@ -43,9 +43,13 @@ function extraitExplication(resultat: ResultatCompatibilite): string | undefined
 export default function AcquereurBiensCompatibles({
   compatibilites,
   biensActifs,
+  planifiable = false,
 }: {
   compatibilites: ResultatCompatibilite[];
   biensActifs: BienAvecPhotoPrincipale[];
+  // VISIT_NATIVE_ENTRY_V1 — vrai pour un acquéreur réel et actif : affiche « Planifier une visite »
+  // sur chaque bien compatible / à vérifier.
+  planifiable?: boolean;
 }) {
   const biensParId = new Map(biensActifs.map((b) => [b.id, b]));
   const tries = [...compatibilites].sort(
@@ -111,10 +115,21 @@ export default function AcquereurBiensCompatibles({
         )}
 
         {bien && (
-          <div className="border-t border-border px-3 py-2">
+          <div className="border-t border-border px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1">
             <Link href={`/biens/${bien.id}`} className="text-[12px] font-medium text-accent hover:text-accent-hover">
               Voir la fiche →
             </Link>
+            {/* VISIT_NATIVE_ENTRY_V1 — action produit directe depuis un match (compatible ou à
+                vérifier, jamais incompatible) : même formulaire natif, couple préempli, sans
+                Calendar. Le statut reste affiché au-dessus, jamais masqué par le CTA. */}
+            {planifiable && resultat.statutGlobal !== "incompatible" && (
+              <Link
+                href={`/visites/nouvelle?bienId=${bien.id}&acquereurId=${resultat.acquereurId}&retour=acquereur`}
+                className="text-[12px] font-medium text-accent hover:text-accent-hover"
+              >
+                Planifier une visite →
+              </Link>
+            )}
           </div>
         )}
       </div>

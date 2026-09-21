@@ -187,10 +187,18 @@ describe("ADR-060 §16 — hors périmètre du lot parties", () => {
     expect(codeSeul(join(SRC, "components", "mandat", "MandatBienPanel.tsx"))).not.toMatch(/partieMandatRepository|@\/db\//);
   });
 
-  it("aucune copie automatique ni backfill : signature, création directe, enregistrement et successeur n'écrivent aucune partie", () => {
-    for (const chemin of ["lib/prospectVendeurRepository.ts", "lib/mandatRepository.ts", "lib/bienRepository.ts", "actions/creerBien.ts", "actions/prospectVendeur.ts"]) {
+  it("aucune copie ni backfill : création directe, enregistrement et successeur n'écrivent aucune partie ; la signature Prospect → Mandat pose le mandant UNIQUEMENT via ajouterPartieMandat", () => {
+    for (const chemin of ["lib/mandatRepository.ts", "lib/bienRepository.ts", "actions/creerBien.ts", "actions/prospectVendeur.ts"]) {
       expect(codeSeul(join(SRC, chemin)), chemin).not.toMatch(/partiesMandat|partieMandatRepository|ajouterPartieMandat/);
     }
+    // VISIT_NATIVE_ENTRY_V1 (sous-lot MANDATE_PARTIES_AUTOFILL_V1, addendum ADR-060) — la signature
+    // pose le mandant connu du prospect, mais jamais en écrivant la table elle-même : le seul writer
+    // reste ajouterPartieMandat (verrous, garde Contact actif, UNIQUE). Rien n'est copié depuis
+    // parties_projet.
+    const signature = codeSeul(join(SRC, "lib", "prospectVendeurRepository.ts"));
+    expect(signature).toContain("ajouterPartieMandat(");
+    expect(signature).not.toMatch(/partiesMandat(Table)?\b/);
+    expect(signature).not.toMatch(/partiesProjet|partieProjet/);
     // Le repository des parties ne lit jamais parties_projet : suggestion future, jamais source de vérité.
     expect(codeSeul(REPO)).not.toMatch(/partiesProjet|partieProjet/);
   });

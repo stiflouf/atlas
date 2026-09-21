@@ -17,13 +17,20 @@ function formatDate(iso: string): string {
 // VISIT_NATIVE_LIFECYCLE_V1 (ADR-063) — une visite native n'a structurellement aucun
 // `rendezVousCalendarId` : le lien retombe alors sur la fiche native /visites/{id} (même route de
 // repli que la fiche elle-même), jamais une URL `/visites/undefined/preparer`.
+// VISIT_NATIVE_ENTRY_V1 — `acquereurId` : acquéreur réel et actif pour lequel une Visite native peut
+// être planifiée (état vide → CTA vers /visites/nouvelle, jamais un texte muet) ; absent pour un
+// acquéreur archivé ou mocké.
 export default function AcquereurVisites({
   visites,
   biensParId,
+  acquereurId,
 }: {
   visites: Visite[];
   biensParId: Map<string, Bien | undefined>;
+  acquereurId?: string;
 }) {
+  const lienPlanifier = acquereurId ? `/visites/nouvelle?acquereurId=${acquereurId}&retour=acquereur` : undefined;
+
   if (visites.length === 0) {
     return (
       <section>
@@ -31,7 +38,17 @@ export default function AcquereurVisites({
           <IconTile icon={CalendarCheck} tone="champagne" size={28} iconSize={14} />
           <p className="text-[15px] font-semibold text-text-1">Visites</p>
         </div>
-        <p className="text-[13px] text-text-3">Aucune visite enregistrée pour cet acquéreur.</p>
+        <p className="text-[13px] text-text-3">
+          Aucune visite enregistrée pour cet acquéreur.
+          {lienPlanifier && (
+            <>
+              {" "}
+              <Link href={lienPlanifier} className="font-medium text-accent hover:text-accent-hover">
+                Planifier une visite →
+              </Link>
+            </>
+          )}
+        </p>
       </section>
     );
   }
@@ -77,7 +94,19 @@ export default function AcquereurVisites({
         <p className="text-[15px] font-semibold text-text-1">Visites</p>
       </div>
       {aVenir.length > 0 && <div className="border border-border rounded-lg overflow-hidden mb-2.5">{aVenir.map(ligne)}</div>}
-      {aVenir.length === 0 && <p className="text-[13px] text-text-3 mb-2.5">Aucune visite à venir.</p>}
+      {aVenir.length === 0 && (
+        <p className="text-[13px] text-text-3 mb-2.5">
+          Aucune visite à venir.
+          {lienPlanifier && (
+            <>
+              {" "}
+              <Link href={lienPlanifier} className="font-medium text-accent hover:text-accent-hover">
+                Planifier une visite →
+              </Link>
+            </>
+          )}
+        </p>
+      )}
       {passees.length > 0 && (
         <details>
           <summary className="text-[12px] text-text-3 hover:text-text-2 cursor-pointer select-none">

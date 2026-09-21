@@ -754,15 +754,29 @@ choix faits — chaque limite listée correspond à une décision de scope assum
 
 ## Cycle de vie d'une visite (ADR-040/041)
 
-- **Aucune création native indépendante de Calendar** : une visite Atlas naît uniquement via
-  `materialiserVisiteAction` (Server Action, ADR-041), déclenchée depuis `/visites/[id]/preparer`
-  pour un rendez-vous Calendar déjà résolu — aucun formulaire « Nouvelle visite » indépendant.
-  Documenté comme limite V1 assumée, pas un oubli.
+- **Création native depuis l'UI — livrée par `VISIT_NATIVE_ENTRY_V1`** (2026-09-21, aucune
+  migration) : `creerVisiteAction` (`src/actions/creerVisite.ts`, seul appelant de production de
+  `creerVisite`) + formulaire unique `PlanifierVisiteForm` hébergé par `/visites/nouvelle`
+  (`?bienId=&acquereurId=&retour=`), atteint depuis la fiche Bien (onglet Visites, CTA et état vide),
+  la fiche Acquéreur (hero, section Visites) et les deux surfaces de matching (« Planifier une
+  visite » sur chaque match compatible / à vérifier, jamais sur un incompatible — moteur inchangé).
+  La Visite créée est `planifiee`, `rendez_vous_calendar_id = NULL`, workspace-safe et refusée sur
+  Bien/acquéreur archivé (message local, jamais une page d'erreur) ; redirection vers
+  `/visites/{id}` (jamais `/preparer`). `retour` est un enum fermé `bien | acquereur` (retour
+  contextuel de la fiche Visite), jamais une URL relue. Les listes de choix et le préremplissage
+  passent par des lecteurs SCOPÉS workspace dédiés (`listerBiensActifsDuWorkspace`/
+  `getBienDuWorkspace`, `listerAcquereursActifsDuWorkspace`/`getAcquereurDuWorkspace` — filtrage SQL,
+  aucun repli mock) : un bien ou un acquéreur d'un autre workspace n'y est jamais rendu, pas même par
+  un id préempli dans l'URL. `listerBiens()`/`listerClients()` (lecteurs globaux à repli démo)
+  restent inchangés pour leurs appelants legacy (Today, dashboard, matching). Ce qui reste : aucune
+  préparation enrichie pour une Visite native (`/preparer` toujours Calendar-id-based, voir
+  ci-dessous), aucune page liste `/visites`.
 - **Aucune heure/durée persistée** : `visites.date_prevue` est un simple jour civil (`date` SQL),
   jamais un instant précis — décision assumée en ADR-041 (Calendar reste seul détenteur de
-  l'heure/durée précises en V1). La fiche `/visites/{id}` n'affiche donc jamais d'heure. À
-  réévaluer si Atlas devient un jour propriétaire de la planification ou permet une création
-  native de visites.
+  l'heure/durée précises en V1). La fiche `/visites/{id}` n'affiche donc jamais d'heure, et le
+  formulaire natif (`VISIT_NATIVE_ENTRY_V1`) ne propose qu'une « Date de visite » — aucun faux champ
+  heure/durée qui serait perdu. Sur Aujourd'hui, une Visite DOMIORA du jour est présentée comme un
+  événement de la journée (« Journée »), avant les rendez-vous Calendar horodatés.
 - **`taches.visite_id` référence toujours un compte rendu, jamais `visites.id`, pour les tâches
   créées avant ADR-041** : la règle `suivi_apres_visite` cible désormais l'**acquéreur** pour toute
   nouvelle tâche (ADR-041) — mais les tâches déjà créées par son ancienne version restent inchangées,
@@ -809,7 +823,18 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   visite planifiée via Calendar. Une Visite native se réalise/s'annule/se reporte directement depuis
   `/visites/{id}`, qui affiche désormais un formulaire de compte rendu inline quand
   `rendezVousCalendarId` est absent. Réévaluer seulement si un besoin de préparation enrichie pour
-  les visites natives est démontré.
+  les visites natives est démontré. **Inchangé par `VISIT_NATIVE_ENTRY_V1`** : la création native
+  contourne cette route (jamais de redirection vers `/preparer`), qui reste réservée aux rendez-vous
+  Calendar.
+- **Visites DOMIORA sur Aujourd'hui — livré par `VISIT_NATIVE_ENTRY_V1`** : `/` lit désormais les
+  Visites du jour du workspace de session (`visitesDuJour`, une seule requête jointe visites ⋈ biens
+  ⋈ acquereurs ⟕ contacts, jamais un getById par Visite) et les fusionne avec l'agenda Calendar
+  (`fusionnerAgendaDuJour`) : une Visite matérialisée depuis Calendar remplace son événement (jamais
+  deux fois le même rendez-vous, lien `/visites/{id}` préféré à `/preparer`), une Visite native
+  apparaît même sans Google Calendar connecté, une Visite `annulee`/`realisee` n'est plus un
+  rendez-vous actif et son événement Calendar ne réapparaît pas pour autant. Limites : seules les
+  Visites du **jour** sont lues (pas de « à venir » natif sur 7 jours, la section « à venir » reste
+  100 % Calendar) ; le widget agenda Calendar lui-même (`getAgendaSemaine`) est inchangé.
 - **Bon de visite signé** — **livré par `VISIT_SIGNED_FORM_V1`** (2026-09-20, migration 0051) :
   `bons_visite`/`signatures_bon_visite`, signature tactile native (canvas, provider `"domiora"`),
   document PDF final immuable + hash SHA-256, `documents_bien.visite_id`, versioning (v1/v2...),
@@ -870,8 +895,12 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   (`aucun_vendeur_canonique`), même si la tâche legacy, elle, a bien été créée. Décision délibérée :
   le type de lecture `ProspectVendeur` (`getProspectVendeurParBien`) n'expose pas `contactId` — seul le
   type d'écriture le porte — inventer un pont que la couche de lecture ne surface pas aurait été un
-  raccourci non fiable. Reclassé P3 (ADR-063) ; se résorbe naturellement à mesure que `parties_mandat`
-  se généralise.
+  raccourci non fiable. **Cas résorbé par défaut depuis `VISIT_NATIVE_ENTRY_V1` (sous-lot
+  `MANDATE_PARTIES_AUTOFILL_V1`, 2026-09-21)** : la signature d'un prospect vendeur porteur d'un
+  Contact canonique pose la partie `mandant` dans la même transaction (voir « Mandat » ci-dessous) ;
+  le vendeur est alors résolu automatiquement, sans ajout manuel. Restent sans partie : les mandats
+  antérieurs à ce lot (aucun backfill), les biens créés directement (`/biens/nouveau`, sans prospect)
+  et les prospects legacy sans Contact.
 - **Idempotence par index unique partiel, pas par tâche** : un double submit ne crée jamais deux
   Interactions "officielles" pour le même (visite, vendeur) — mais une Interaction manuelle
   authentique et ultérieure sur la même Visite reste possible et n'est jamais bloquée (testé).
@@ -1196,11 +1225,23 @@ Limites qui en découlent, toutes assumées le temps de la transition :
   `MANDATE_CANONICAL_UI_V1`) : ajout par recherche Contact, deux rôles `mandant` / `representant`,
   changement de rôle, retrait ; parties affichées pour le mandat courant seulement (celles des
   mandats historiques ne sont pas chargées — un read model batch sans consommateur). Ce qui reste
-  non livré : la proposition depuis `parties_projet` (**rien n'est copié automatiquement**, un mandat
-  signé n'a aucune partie tant qu'un humain n'en ajoute pas), toute **personne morale** (une SCI ou une indivision est représentée par un Contact humain
+  non livré : la proposition depuis `parties_projet` (rien n'est copié depuis le projet), toute
+  **personne morale** (une SCI ou une indivision est représentée par un Contact humain
   `representant`, aucune entité Organisation), tout rôle au-delà des deux valeurs, et toute règle
   « au moins un mandant » (workflow futur, jamais une contrainte de base). Aucun backfill : les
   mandats antérieurs n'ont aucune partie.
+- **Mandant principal posé automatiquement à la signature Prospect → Mandat — livré par
+  `VISIT_NATIVE_ENTRY_V1` (sous-lot `MANDATE_PARTIES_AUTOFILL_V1`, 2026-09-21, aucune migration)** :
+  `signerMandatProspectVendeur` pose, DANS sa transaction et via `ajouterPartieMandat` (verrous
+  mandat → contact, garde Contact actif ADR-059 §10, `UNIQUE(mandat, contact)`), une partie
+  `mandant` pour le Contact canonique que le prospect porte (`prospects_vendeurs.contact_id`, déjà
+  repointé vers le survivant par le moteur de fusion ; si une fusion s'intercale, `contact_fusionne`
+  laisse simplement le mandat sans partie — ADR-059 §10, jamais une réécriture vers le survivant,
+  jamais une partie vers l'absorbé). Seul le vendeur réellement connu de ce
+  flux est posé — aucun co-vendeur deviné ; un prospect legacy sans Contact garde un mandat sans
+  partie ; l'idempotence vient de la signature elle-même (« une signature par prospect à vie »).
+  Résultat enrichi (`partieMandant`). Non couvert : `creerBienAction` (`/biens/nouveau`, aucun
+  vendeur connu) et `enregistrerMandatExistant`.
 - **`mandat_signe` cible toujours le prospect** (idempotence « une signature par prospect à vie ») :
   un renouvellement ne pourra pas ré-émettre l'événement avant que la cible `mandat_id` existe (lot
   automatisations).

@@ -29,8 +29,11 @@ import { creerTacheProchaineEtapeAction } from "@/actions/creerTacheProchaineEta
 import { nomComplet } from "@/lib/identite/nomPersonne";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { formatDateISO } from "@/lib/temps";
+import { lienRetourFicheVisite, retourVisiteValide } from "@/lib/visites/retourVisite";
 
-type PageProps = { params: Promise<{ id: string }> };
+// `retour` (VISIT_NATIVE_ENTRY_V1) : provenance d'ouverture, enum fermé (bien | acquereur) — toute
+// autre valeur retombe sur le retour historique vers Aujourd'hui.
+type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<{ retour?: string }> };
 
 const VARIANT_BADGE_STATUT_VISITE = {
   planifiee: "accent",
@@ -62,11 +65,12 @@ function formatDateCourte(iso: string): string {
 // expiré, ou l'événement d'origine supprimé côté Google. Calendar n'intervient plus qu'en
 // enrichissement secondaire, via le lien conditionnel "Préparer la visite" ci-dessous (visite
 // encore `planifiee` uniquement) — jamais une condition d'existence de la fiche elle-même.
-export default async function VisitePage({ params }: PageProps) {
+export default async function VisitePage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const workspaceId = await exigerWorkspaceCourant();
   const visite = await getVisiteById(id, workspaceId);
   if (!visite) notFound();
+  const lienRetour = lienRetourFicheVisite(retourVisiteValide((await searchParams)?.retour), visite);
 
   const [bien, acquereur, compteRendu, bonsVisite] = await Promise.all([
     getBienById(visite.bienId),
@@ -123,11 +127,11 @@ export default async function VisitePage({ params }: PageProps) {
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
       <Link
-        href="/"
+        href={lienRetour.href}
         className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
-        Aujourd'hui
+        {lienRetour.label}
       </Link>
 
       <div className="mb-8">

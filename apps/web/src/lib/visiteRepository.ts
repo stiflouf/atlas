@@ -1,6 +1,7 @@
-import { and, eq, lte, sql } from "drizzle-orm";
+import { and, asc, eq, lte, sql } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { acquereurs as acquereursTable, biens as biensTable, visites as visitesTable } from "@/db/schema";
+import { identiteEffectiveSql, joindreContactCanonique } from "@/lib/identiteContactEffective";
 import type { Visite, StatutVisite } from "@/types/visite";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 
@@ -138,6 +139,42 @@ export async function visitesPlanifieesPourDate(
     .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
     .where(and(eq(visitesTable.statut, "planifiee"), eq(visitesTable.datePrevue, dateISO), eq(biensTable.workspaceId, workspaceId)));
   return lignes.map((l) => ligneVersVisite(l.visite));
+}
+
+// VISIT_NATIVE_ENTRY_V1 — lecteur Today : les Visites d'un jour civil avec le minimum du Bien et de
+// l'acquéreur à afficher, en UNE requête set-based (visites ⋈ biens ⋈ acquereurs ⟕ contacts) —
+// jamais un getById par Visite. TOUS les statuts du jour sont rendus, avec `rendezVousCalendarId` :
+// l'appelant (agendaDuJour.ts) en a besoin pour dédupliquer l'événement Calendar d'une Visite
+// matérialisée, y compris quand celle-ci est déjà `realisee`/`annulee` (l'événement ne doit alors
+// plus réapparaître comme rendez-vous actif). Le filtrage d'affichage est SON affaire, pas celle
+// du reader. Identité de l'acquéreur : règle ADR-057 écrite une seule fois (`identiteEffectiveSql`).
+export type VisiteDuJour = Visite & {
+  bien: { id: string; titre: string; adresse: string; codePostal: string; ville: string };
+  acquereur: { id: string; nom: string; prenom?: string };
+};
+
+export async function visitesDuJour(workspaceId: string, dateISO: string, executeur: Executeur = getDb()): Promise<VisiteDuJour[]> {
+  const identite = identiteEffectiveSql(acquereursTable.contactId, acquereursTable);
+  const lignes = await joindreContactCanonique(
+    executeur
+      .select({
+        visite: visitesTable,
+        bien: { id: biensTable.id, titre: biensTable.titre, adresse: biensTable.adresse, codePostal: biensTable.codePostal, ville: biensTable.ville },
+        acquereur: { id: acquereursTable.id, nom: identite.nom, prenom: identite.prenom },
+      })
+      .from(visitesTable)
+      .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
+      .innerJoin(acquereursTable, eq(visitesTable.acquereurId, acquereursTable.id))
+      .$dynamic(),
+    acquereursTable.contactId
+  )
+    .where(and(eq(visitesTable.datePrevue, dateISO), eq(biensTable.workspaceId, workspaceId)))
+    .orderBy(asc(visitesTable.creeLe), asc(visitesTable.id));
+  return lignes.map((l) => ({
+    ...ligneVersVisite(l.visite),
+    bien: l.bien,
+    acquereur: { id: l.acquereur.id, nom: l.acquereur.nom, prenom: l.acquereur.prenom ?? undefined },
+  }));
 }
 
 // Candidates pour `visite_sans_compte_rendu` : toute Visite encore `planifiee` dont `datePrevue`

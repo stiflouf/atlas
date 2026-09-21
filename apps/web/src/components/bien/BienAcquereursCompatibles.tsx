@@ -29,8 +29,11 @@ function extraitExplication(resultat: ResultatCompatibilite): string | undefined
 export default function BienAcquereursCompatibles({
   compatibilites,
   acquereursActifs,
+  planifiable = false,
 }: {
   compatibilites: ResultatCompatibilite[];
+  // VISIT_NATIVE_ENTRY_V1 — vrai pour un bien réel et actif : « Planifier une visite » par ligne.
+  planifiable?: boolean;
   // Même population que celle sur laquelle evaluerCompatibiliteBien() a itéré côté serveur
   // (listerClients()) — reconstruite ici uniquement pour résoudre le nom affiché, jamais pour
   // recalculer la compatibilité elle-même. Distincte de l'acquereursParId de BienTabs (limité aux
@@ -69,13 +72,23 @@ export default function BienAcquereursCompatibles({
             {explication && <p className="text-[12px] text-text-muted truncate">{explication}</p>}
           </div>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-x-2.5 gap-y-1 shrink-0">
           <Badge variant={VARIANT_PAR_STATUT_COMPATIBILITE[resultat.statutGlobal]}>
             {LABEL_STATUT_COMPATIBILITE[resultat.statutGlobal]}
           </Badge>
           {acquereur && (
             <Link href={`/clients/${acquereur.id}`} className="text-[12px] text-action-primary hover:text-action-primary-hover">
               Ouvrir →
+            </Link>
+          )}
+          {/* VISIT_NATIVE_ENTRY_V1 — planifier directement depuis un match compatible / à vérifier
+              (jamais incompatible) : couple préempli, formulaire natif, sans Calendar. */}
+          {acquereur && planifiable && resultat.statutGlobal !== "incompatible" && (
+            <Link
+              href={`/visites/nouvelle?bienId=${resultat.bienId}&acquereurId=${acquereur.id}&retour=bien`}
+              className="text-[12px] font-medium text-action-primary hover:text-action-primary-hover whitespace-nowrap"
+            >
+              Planifier une visite →
             </Link>
           )}
         </div>

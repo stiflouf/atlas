@@ -219,3 +219,15 @@ item `P3_VISIT` explicitement priorisé — jamais d'une redécouverte des quest
   décidée, et référencer cet ADR — sans jamais prétendre que le modèle cible est implémenté.
 - `NEXT_REQUIRED_OFFER_FOUNDATION_LOT`-style : le prochain lot de code pour ce domaine est
   `VISIT_NATIVE_LIFECYCLE_V1`, seulement quand décidé explicitement — cet ADR ne l'engage pas.
+
+## Addendum — `VISIT_NATIVE_ENTRY_V1` (2026-09-21)
+
+État réel modifié, sans migration : `creerVisite` possède désormais un appelant de production natif
+(`creerVisiteAction`, formulaire unique `PlanifierVisiteForm` sur `/visites/nouvelle`, entrées fiche
+Bien / fiche Acquéreur / matching compatible ou à vérifier), la Visite native s'ouvre sur
+`/visites/{id}` avec un retour contextuel (`retour` = enum fermé `bien | acquereur`), et Aujourd'hui
+affiche les Visites DOMIORA du jour (reader set-based `visitesDuJour`, fusion `fusionnerAgendaDuJour`
+qui préfère la Visite canonique à son événement Calendar et retire l'événement d'une Visite
+annulée/réalisée). `/visites/{id}/preparer` reste Calendar-id-based — le `P2_VISIT` documenté
+ci-dessus est inchangé, la création native le contourne simplement. `VISIT_MATURITY_STATUS` reste
+CLOSED ; ce lot est un lot produit (entrée UI), pas une réouverture du domaine.

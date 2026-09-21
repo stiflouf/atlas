@@ -1,9 +1,15 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToPipeableStream } from "react-dom/server";
 import { Writable } from "node:stream";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { ReactElement } from "react";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+
+// VISIT_NATIVE_ENTRY_V1 — le cockpit lit désormais les Visites DOMIORA du jour dans le workspace de
+// session (ADR-054), mocké ici sur le workspace de test — même patron que visites/[id]/page.test.tsx.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
 
 // Test d'intégration réel (ADR-039) : vraie base Postgres, comme le reste du projet — la page
 // d'accueil orchestre plusieurs repositories réels, un mock partiel romprait la couverture de
@@ -13,20 +19,40 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, acquereurs: acquereursTable, taches: tachesTable } = await import("@/db/schema");
+const {
+  biens: biensTable,
+  acquereurs: acquereursTable,
+  taches: tachesTable,
+  visites: visitesTable,
+  evenementsMetier,
+  executionsAutomatisation,
+} = await import("@/db/schema");
 const { creerBien, archiverBien, desarchiverBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
 const { creerTache, terminerTache } = await import("@/lib/tacheRepository");
+const { creerVisite, annulerVisite } = await import("@/lib/visiteRepository");
+const { formatDateISO } = await import("@/lib/temps");
 const AujourdHui = (await import("./page")).default;
 
 const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 const idsTachesCreees: string[] = [];
+const idsVisitesCreees: string[] = [];
 
 afterAll(async () => {
   if (idsTachesCreees.length > 0) {
     await getDb().delete(tachesTable).where(eq(tachesTable.id, idsTachesCreees[0]));
     for (const id of idsTachesCreees) await getDb().delete(tachesTable).where(eq(tachesTable.id, id));
+  }
+  if (idsVisitesCreees.length > 0) {
+    // evenements_metier référence visites en NO ACTION (annulation) : purgé avant les visites.
+    const evts = await getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(inArray(evenementsMetier.visiteId, idsVisitesCreees));
+    const idsEvts = evts.map((e) => e.id);
+    if (idsEvts.length > 0) {
+      await getDb().delete(executionsAutomatisation).where(inArray(executionsAutomatisation.evenementId, idsEvts));
+      await getDb().delete(evenementsMetier).where(inArray(evenementsMetier.id, idsEvts));
+    }
+    await getDb().delete(visitesTable).where(inArray(visitesTable.id, idsVisitesCreees));
   }
   for (const id of idsBiensCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
   for (const id of idsAcquereursCrees) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
@@ -200,6 +226,34 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
 
     const html = await rendreCockpit();
     expect(html).toContain(tache.titre);
+  });
+
+  // VISIT_NATIVE_ENTRY_V1 — sans Google Calendar (aucune connexion dans cet environnement de test),
+  // une Visite DOMIORA planifiée aujourd'hui figure dans l'agenda du cockpit, avec son lien canonique.
+  it("Visite native du jour visible dans l'agenda, sans Calendar, lien /visites/{id}", async () => {
+    const bien = await creerBienDeTest("VISITE-NATIVE");
+    const acquereur = await creerAcquereurDeTest("VISITE-NATIVE");
+    const resultat = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: formatDateISO(new Date()) }, WORKSPACE_TEST);
+    if (resultat.statut !== "creee") throw new Error("visite attendue");
+    idsVisitesCreees.push(resultat.visite.id);
+
+    const html = await rendreCockpit();
+    expect(html).toContain(`href="/visites/${resultat.visite.id}"`);
+    expect(html).toContain(bien.titre);
+    expect(html).toContain("rendez-vous restant");
+    expect(html).not.toContain(`/visites/${resultat.visite.id}/preparer`);
+  });
+
+  it("Visite annulée du jour : absente de l'agenda", async () => {
+    const bien = await creerBienDeTest("VISITE-ANNULEE");
+    const acquereur = await creerAcquereurDeTest("VISITE-ANNULEE");
+    const resultat = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: formatDateISO(new Date()) }, WORKSPACE_TEST);
+    if (resultat.statut !== "creee") throw new Error("visite attendue");
+    idsVisitesCreees.push(resultat.visite.id);
+    await annulerVisite(resultat.visite.id, WORKSPACE_TEST);
+
+    const html = await rendreCockpit();
+    expect(html).not.toContain(`href="/visites/${resultat.visite.id}"`);
   });
 
   it("état vide : le message n'apparaît que si aucune tâche active ne subsiste réellement en base", async () => {

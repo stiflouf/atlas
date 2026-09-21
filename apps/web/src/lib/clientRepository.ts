@@ -129,6 +129,31 @@ export async function listerClientsActifsPersistes(): Promise<ProfilAcquereur[]>
   return lignes.filter((l) => !l.archiveLe).map(ligneVersAcquereur);
 }
 
+// VISIT_NATIVE_ENTRY_V1 — lecteurs SCOPÉS WORKSPACE (ADR-054), même contrat que
+// `listerBiensActifsDuWorkspace`/`getBienDuWorkspace` (bienRepository.ts) : filtrage SQL direct,
+// aucun repli mock, archivés exclus, identité et critères effectifs (ADR-055/057) appliqués comme
+// partout. `listerClients()` (lecteur global à repli démo) reste inchangé pour ses appelants legacy.
+export async function listerAcquereursActifsDuWorkspace(workspaceId: string, executeur: Executeur = getDb()): Promise<ProfilAcquereur[]> {
+  const lignes = await executeur
+    .select()
+    .from(acquereursTable)
+    .where(and(eq(acquereursTable.workspaceId, workspaceId), isNull(acquereursTable.archiveLe)))
+    .orderBy(desc(acquereursTable.creeLe), desc(acquereursTable.id));
+  return appliquerCriteresEffectifs(lignes.map(ligneVersAcquereur), executeur);
+}
+
+export async function getAcquereurDuWorkspace(id: string, workspaceId: string, executeur: Executeur = getDb()): Promise<ProfilAcquereur | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await executeur
+    .select()
+    .from(acquereursTable)
+    .where(and(eq(acquereursTable.id, id), eq(acquereursTable.workspaceId, workspaceId)))
+    .limit(1);
+  if (!ligne) return undefined;
+  const [acquereur] = await appliquerCriteresEffectifs([ligneVersAcquereur(ligne)], executeur);
+  return acquereur;
+}
+
 // Réservé aux acquéreurs réels archivés — aucun repli mock.
 export async function listerClientsArchives(): Promise<ProfilAcquereur[]> {
   try {

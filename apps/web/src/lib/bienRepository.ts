@@ -92,6 +92,32 @@ export async function listerBiensActifsPersistes(): Promise<Bien[]> {
   return lignes.filter((l) => !l.archiveLe).map(ligneVersBien);
 }
 
+// VISIT_NATIVE_ENTRY_V1 — lecteurs SCOPÉS WORKSPACE (ADR-054), réservés aux nouvelles surfaces
+// qui ne doivent jamais révéler une entité d'un autre workspace (formulaire de planification de
+// visite). Filtrage SQL direct (jamais une liste globale filtrée en JS), une requête, aucun repli
+// mock, archivés exclus. `listerBiens()` (lecteur global à repli démo) reste inchangé pour ses
+// appelants legacy.
+export async function listerBiensActifsDuWorkspace(workspaceId: string, executeur: Executeur = getDb()): Promise<Bien[]> {
+  const lignes = await executeur
+    .select()
+    .from(biensTable)
+    .where(and(eq(biensTable.workspaceId, workspaceId), isNull(biensTable.archiveLe)))
+    .orderBy(desc(biensTable.creeLe), desc(biensTable.id));
+  return lignes.map(ligneVersBien);
+}
+
+// Un bien du workspace de session, par id — un id inconnu ou d'un autre workspace est INTROUVABLE,
+// indistinguable : rien de l'autre périmètre n'est jamais rendu (pas même l'existence).
+export async function getBienDuWorkspace(id: string, workspaceId: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await executeur
+    .select()
+    .from(biensTable)
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
+    .limit(1);
+  return ligne ? ligneVersBien(ligne) : undefined;
+}
+
 // Réservé aux biens réels archivés — aucun repli mock (un bien mocké ne peut pas être archivé).
 export async function listerBiensArchives(): Promise<Bien[]> {
   try {
