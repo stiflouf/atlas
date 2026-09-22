@@ -32,6 +32,7 @@ vi.mock("@/lib/compromisRepository", async (importOriginal) => {
 
 import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -147,7 +148,7 @@ describe("ajouterCompromisAction — défense en profondeur DB (ADR-047, garde a
     // le second INSERT, et la Server Action doit traduire la violation en le même message métier
     // que la garde applicative normale.
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -156,7 +157,7 @@ describe("ajouterCompromisAction — défense en profondeur DB (ADR-047, garde a
           dateSignature: "2026-08-06",
         })
       )
-    ).rejects.toThrow(/déjà associée à un compromis/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà associée à un compromis/) });
 
     const restants = await getDb().select().from(compromisTable).where(eq(compromisTable.offreId, offre.id));
     expect(restants).toHaveLength(1);
@@ -177,7 +178,7 @@ describe("ajouterCompromisAction — défense en profondeur DB (ADR-047, garde a
     // compromis en_cours à cause d'une course. compromis_bien_id_en_cours_unique doit malgré tout
     // empêcher le second INSERT.
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -185,7 +186,7 @@ describe("ajouterCompromisAction — défense en profondeur DB (ADR-047, garde a
           dateSignature: "2026-08-02",
         })
       )
-    ).rejects.toThrow(/déjà en cours/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà en cours/) });
 
     const restants = await getDb().select().from(compromisTable).where(eq(compromisTable.bienId, bien.id));
     expect(restants).toHaveLength(1);

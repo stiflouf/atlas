@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, like } from "drizzle-orm";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-047, §14/§25 de l'audit : creerAcquereurAction n'avait jusqu'ici AUCUN test (confirmé par
 // recherche exhaustive). Comportement métier ici, session Atlas mockée comme valide — le refus
@@ -60,7 +61,7 @@ function formulaireValide(): FormData {
 
 describe("creerAcquereurAction — comportement", () => {
   it("crée l'acquéreur avec les champs soumis", async () => {
-    await creerAcquereurAction(formulaireValide()).catch(() => {}); // redirect() attendu (NEXT_REDIRECT)
+    await creerAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaireValide()).catch(() => {}); // redirect() attendu (NEXT_REDIRECT)
 
     const [cree] = await getDb().select().from(acquereursTable).where(eq(acquereursTable.nom, REFERENCE_TEST));
     expect(cree).toBeDefined();
@@ -73,6 +74,6 @@ describe("creerAcquereurAction — comportement", () => {
     formData.set("budgetMin", "500000");
     formData.set("budgetMax", "400000");
 
-    await expect(creerAcquereurAction(formData)).rejects.toThrow(/budget minimum/i);
+    await expect(creerAcquereurAction(ETAT_FORMULAIRE_INITIAL, formData)).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/budget minimum/i) });
   });
 });

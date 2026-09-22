@@ -9,6 +9,8 @@ import {
   marquerRdvEstimationRealiseProspectVendeurAction,
   proposerMandatProspectVendeurAction,
 } from "@/actions/prospectVendeur";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const inputSurNavyCls =
   "w-full bg-white/10 border border-white/25 rounded-lg px-3 py-2 text-[13px] text-white placeholder:text-white/45 focus:outline-none focus:ring-2 focus:ring-champagne/50 focus:border-champagne [color-scheme:dark]";
@@ -102,19 +104,16 @@ export default function ProspectVendeurProchaineEtape({
         {/* --- action primaire (+ appui éventuel) --- */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           {etape.action === "qualifier" && (
-            <form action={qualifierProspectVendeurAction}>
+            <FormulaireAvecEtat action={qualifierProspectVendeurAction}>
               {idCache}
-              <button type="submit" className={boutonPrimaireCls}>
-                Marquer comme qualifié
-              </button>
-            </form>
+              <BoutonSoumettre classeBrute={boutonPrimaireCls} libelleAttente="Enregistrement…">Marquer comme qualifié</BoutonSoumettre>
+            </FormulaireAvecEtat>
           )}
 
           {etape.action === "marquer_rdv_realise" && (
             <details className="relative">
               <summary className={`list-none cursor-pointer select-none ${boutonPrimaireCls}`}>Marquer réalisé</summary>
-              <form
-                action={marquerRdvEstimationRealiseProspectVendeurAction}
+              <FormulaireAvecEtat action={marquerRdvEstimationRealiseProspectVendeurAction}
                 className="absolute right-0 z-10 mt-2 w-[280px] flex flex-col gap-3 bg-navy-hover border border-white/20 rounded-lg p-3.5 shadow-lg"
               >
                 {idCache}
@@ -126,10 +125,8 @@ export default function ProspectVendeurProchaineEtape({
                   defaultValue={defautRendezVousTenu(prospect)}
                   className={inputSurNavyCls}
                 />
-                <button type="submit" className={boutonJalonCls}>
-                  Enregistrer
-                </button>
-              </form>
+                <BoutonSoumettre classeBrute={boutonJalonCls} libelleAttente="Enregistrement…">Enregistrer</BoutonSoumettre>
+              </FormulaireAvecEtat>
             </details>
           )}
 
@@ -138,8 +135,7 @@ export default function ProspectVendeurProchaineEtape({
               <summary className={`list-none cursor-pointer select-none ${boutonPrimaireCls}`}>
                 Enregistrer l&apos;estimation
               </summary>
-              <form
-                action={enregistrerEstimationProspectVendeurAction}
+              <FormulaireAvecEtat action={enregistrerEstimationProspectVendeurAction}
                 className="absolute right-0 z-10 mt-2 w-[280px] flex flex-col gap-3 bg-navy-hover border border-white/20 rounded-lg p-3.5 shadow-lg"
               >
                 {idCache}
@@ -153,20 +149,16 @@ export default function ProspectVendeurProchaineEtape({
                   defaultValue={aujourdHui}
                   className={inputSurNavyCls}
                 />
-                <button type="submit" className={boutonJalonCls}>
-                  Enregistrer
-                </button>
-              </form>
+                <BoutonSoumettre classeBrute={boutonJalonCls} libelleAttente="Enregistrement…">Enregistrer</BoutonSoumettre>
+              </FormulaireAvecEtat>
             </details>
           )}
 
           {etape.action === "proposer_mandat" && (
-            <form action={proposerMandatProspectVendeurAction}>
+            <FormulaireAvecEtat action={proposerMandatProspectVendeurAction}>
               {idCache}
-              <button type="submit" className={boutonPrimaireCls}>
-                Marquer le mandat proposé
-              </button>
-            </form>
+              <BoutonSoumettre classeBrute={boutonPrimaireCls} libelleAttente="Enregistrement…">Marquer le mandat proposé</BoutonSoumettre>
+            </FormulaireAvecEtat>
           )}
 
           {/* La conversion vit sur sa page dédiée (/signer-mandat) : formulaire de création de bien
@@ -180,17 +172,14 @@ export default function ProspectVendeurProchaineEtape({
           {etape.appui === "planifier_rdv" && (
             <details className="relative">
               <summary className={`list-none cursor-pointer select-none ${boutonAppuiCls}`}>Planifier le RDV</summary>
-              <form
-                action={planifierRdvEstimationProspectVendeurAction}
+              <FormulaireAvecEtat action={planifierRdvEstimationProspectVendeurAction}
                 className="absolute right-0 z-10 mt-2 w-[280px] flex flex-col gap-3 bg-navy-hover border border-white/20 rounded-lg p-3.5 shadow-lg"
               >
                 {idCache}
                 <label className="text-[12px] font-medium text-white/75">Date et heure prévues</label>
                 <input name="rdvEstimationPrevuLe" type="datetime-local" required className={inputSurNavyCls} />
-                <button type="submit" className={boutonJalonCls}>
-                  Planifier
-                </button>
-              </form>
+                <BoutonSoumettre classeBrute={boutonJalonCls} libelleAttente="Enregistrement…">Planifier</BoutonSoumettre>
+              </FormulaireAvecEtat>
             </details>
           )}
 
@@ -199,8 +188,7 @@ export default function ProspectVendeurProchaineEtape({
               <summary className={`list-none cursor-pointer select-none ${boutonAppuiCls}`}>
                 Mettre à jour l&apos;estimation
               </summary>
-              <form
-                action={enregistrerEstimationProspectVendeurAction}
+              <FormulaireAvecEtat action={enregistrerEstimationProspectVendeurAction}
                 className="absolute right-0 z-10 mt-2 w-[280px] flex flex-col gap-3 bg-navy-hover border border-white/20 rounded-lg p-3.5 shadow-lg"
               >
                 {idCache}
@@ -214,10 +202,8 @@ export default function ProspectVendeurProchaineEtape({
                   defaultValue={prospect.estimationProposeeLe ?? aujourdHui}
                   className={inputSurNavyCls}
                 />
-                <button type="submit" className={boutonJalonCls}>
-                  Enregistrer
-                </button>
-              </form>
+                <BoutonSoumettre classeBrute={boutonJalonCls} libelleAttente="Enregistrement…">Enregistrer</BoutonSoumettre>
+              </FormulaireAvecEtat>
             </details>
           )}
         </div>
@@ -230,15 +216,13 @@ export default function ProspectVendeurProchaineEtape({
         </summary>
         <div className="mt-3.5 grid grid-cols-1 md:grid-cols-2 gap-4">
           {!prospect.qualifieLe && (
-            <form action={qualifierProspectVendeurAction} className="flex flex-col gap-2">
+            <FormulaireAvecEtat action={qualifierProspectVendeurAction} className="flex flex-col gap-2">
               <span className="text-[12px] font-medium text-white/75">Qualification</span>
-              <button type="submit" className={`${boutonJalonCls} self-start`}>
-                Marquer comme qualifié
-              </button>
-            </form>
+              <BoutonSoumettre classeBrute={`${boutonJalonCls} self-start`} libelleAttente="Enregistrement…">Marquer comme qualifié</BoutonSoumettre>
+            </FormulaireAvecEtat>
           )}
 
-          <form action={planifierRdvEstimationProspectVendeurAction} className="flex flex-col gap-2">
+          <FormulaireAvecEtat action={planifierRdvEstimationProspectVendeurAction} className="flex flex-col gap-2">
             <label className="text-[12px] font-medium text-white/75">
               {prospect.rdvEstimationPrevuLe ? "Replanifier le rendez-vous" : "Planifier le rendez-vous"}
             </label>
@@ -249,12 +233,10 @@ export default function ProspectVendeurProchaineEtape({
               </span>
             )}
             {idCache}
-            <button type="submit" className={`${boutonJalonCls} self-start`}>
-              Enregistrer
-            </button>
-          </form>
+            <BoutonSoumettre classeBrute={`${boutonJalonCls} self-start`} libelleAttente="Enregistrement…">Enregistrer</BoutonSoumettre>
+          </FormulaireAvecEtat>
 
-          <form action={marquerRdvEstimationRealiseProspectVendeurAction} className="flex flex-col gap-2">
+          <FormulaireAvecEtat action={marquerRdvEstimationRealiseProspectVendeurAction} className="flex flex-col gap-2">
             <label className="text-[12px] font-medium text-white/75">
               {prospect.rdvEstimationRealiseLe ? "Corriger la date du rendez-vous tenu" : "Marquer le rendez-vous réalisé"}
             </label>
@@ -266,12 +248,10 @@ export default function ProspectVendeurProchaineEtape({
               className={inputSurNavyCls}
             />
             {idCache}
-            <button type="submit" className={`${boutonJalonCls} self-start`}>
-              Enregistrer
-            </button>
-          </form>
+            <BoutonSoumettre classeBrute={`${boutonJalonCls} self-start`} libelleAttente="Enregistrement…">Enregistrer</BoutonSoumettre>
+          </FormulaireAvecEtat>
 
-          <form action={enregistrerEstimationProspectVendeurAction} className="flex flex-col gap-2">
+          <FormulaireAvecEtat action={enregistrerEstimationProspectVendeurAction} className="flex flex-col gap-2">
             <label className="text-[12px] font-medium text-white/75">
               {prospect.estimationProposeeLe ? "Corriger l'estimation" : "Enregistrer une estimation"}
             </label>
@@ -289,18 +269,14 @@ export default function ProspectVendeurProchaineEtape({
               className={inputSurNavyCls}
             />
             {idCache}
-            <button type="submit" className={`${boutonJalonCls} self-start`}>
-              Enregistrer
-            </button>
-          </form>
+            <BoutonSoumettre classeBrute={`${boutonJalonCls} self-start`} libelleAttente="Enregistrement…">Enregistrer</BoutonSoumettre>
+          </FormulaireAvecEtat>
 
           {!prospect.mandatProposeLe && (
-            <form action={proposerMandatProspectVendeurAction} className="flex flex-col gap-2">
+            <FormulaireAvecEtat action={proposerMandatProspectVendeurAction} className="flex flex-col gap-2">
               <span className="text-[12px] font-medium text-white/75">Mandat</span>
-              <button type="submit" className={`${boutonJalonCls} self-start`}>
-                Marquer le mandat proposé
-              </button>
-            </form>
+              <BoutonSoumettre classeBrute={`${boutonJalonCls} self-start`} libelleAttente="Enregistrement…">Marquer le mandat proposé</BoutonSoumettre>
+            </FormulaireAvecEtat>
           )}
 
           <div className="flex flex-col gap-2">

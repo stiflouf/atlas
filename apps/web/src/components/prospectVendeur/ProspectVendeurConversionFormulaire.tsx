@@ -1,5 +1,7 @@
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 import MandatFaitsChamps from "@/components/mandat/MandatFaitsChamps";
+import FormulaireAvecEtat, { type ActionFormulaire } from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -19,13 +21,13 @@ export default function ProspectVendeurConversionFormulaire({
   action,
 }: {
   prospect: ProspectVendeur;
-  action: (formData: FormData) => Promise<void>;
+  action: ActionFormulaire;
 }) {
   const prixSuggere =
     prospect.estimationProposeeCentimes !== undefined ? Math.round(prospect.estimationProposeeCentimes / 100) : "";
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <FormulaireAvecEtat action={action} className="flex flex-col gap-4" positionErreur="haut">
       <input type="hidden" name="id" value={prospect.id} />
       {/* Un mandat qui vient d'être signé est actif par définition — pas une valeur inventée. */}
       <input type="hidden" name="statutMandat" value="actif" />
@@ -35,7 +37,7 @@ export default function ProspectVendeurConversionFormulaire({
         de créer le bien. Les autres restent vides et obligatoires.
       </p>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Référence *</label>
           <input name="reference" required className={inputCls} placeholder="ATL-2026-001" />
@@ -74,7 +76,7 @@ export default function ProspectVendeurConversionFormulaire({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Ville *</label>
           <input name="ville" required defaultValue={prospect.ville ?? ""} className={inputCls} />
@@ -112,12 +114,9 @@ export default function ProspectVendeurConversionFormulaire({
       {/* ADR-060 §16 — les faits du mandat canonique créé par la signature : type obligatoire. */}
       <MandatFaitsChamps />
 
-      <button
-        type="submit"
-        className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
-      >
+      <BoutonSoumettre classeBrute="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg" libelleAttente="Signature…">
         Signer le mandat et créer le bien
-      </button>
-    </form>
+      </BoutonSoumettre>
+    </FormulaireAvecEtat>
   );
 }

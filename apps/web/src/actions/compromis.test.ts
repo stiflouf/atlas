@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration + garde-fous : ajouterCompromisAction/changerStatutCompromisAction doivent
 // refuser explicitement (throw) sur bien/acquéreur invalides ou archivés, sur une offre liée
@@ -126,7 +127,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -134,7 +135,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
           dateSignature: "2026-08-01",
         })
       )
-    ).rejects.toThrow(/bien archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/bien archivé/) });
 
     await expect(listerCompromisPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
@@ -144,7 +145,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     await archiverAcquereur(acquereur.id);
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -152,7 +153,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
           dateSignature: "2026-08-01",
         })
       )
-    ).rejects.toThrow(/acquéreur archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/acquéreur archivé/) });
 
     await expect(listerCompromisPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
@@ -161,10 +162,10 @@ describe("ajouterCompromisAction — garde-fous", () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("PRIX-INVALIDE");
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: "0", dateSignature: "2026-08-01" })
       )
-    ).rejects.toThrow(/prix convenu/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/prix convenu/) });
   });
 
   it("refuse explicitement (throw) si un compromis est déjà en_cours pour ce bien", async () => {
@@ -178,7 +179,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     idsCompromisCrees.push(premier.id);
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -186,7 +187,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
           dateSignature: "2026-08-02",
         })
       )
-    ).rejects.toThrow(/déjà en cours/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà en cours/) });
 
     await expect(listerCompromisPourBien(bien.id, WORKSPACE_TEST)).resolves.toHaveLength(1);
   });
@@ -195,7 +196,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("OFFRE-INTROUVABLE");
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -204,7 +205,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
           dateSignature: "2026-08-01",
         })
       )
-    ).rejects.toThrow(/[Oo]ffre introuvable/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/[Oo]ffre introuvable/) });
   });
 
   it("refuse explicitement (throw) une offre liée d'un autre bien", async () => {
@@ -220,7 +221,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -229,7 +230,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
           dateSignature: "2026-08-01",
         })
       )
-    ).rejects.toThrow(/ne concerne pas ce bien/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/ne concerne pas ce bien/) });
   });
 
   it("refuse explicitement (throw) une offre liée d'un autre acquéreur", async () => {
@@ -245,7 +246,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -254,7 +255,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
           dateSignature: "2026-08-01",
         })
       )
-    ).rejects.toThrow(/ne concerne pas cet acquéreur/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/ne concerne pas cet acquéreur/) });
   });
 
   it("refuse explicitement (throw) une offre liée qui n'est pas acceptee", async () => {
@@ -268,7 +269,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     idsOffresCrees.push(offre.id);
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -277,7 +278,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
           dateSignature: "2026-08-01",
         })
       )
-    ).rejects.toThrow(/n'est pas acceptée/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/n'est pas acceptée/) });
   });
 
   it("pose compromisSigneLe sur le bien et accepte une offre liée cohérente", async () => {
@@ -291,7 +292,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
     idsOffresCrees.push(offre.id);
     await accepterOffre(offre.id, "2026-08-02", WORKSPACE_TEST);
 
-    await ajouterCompromisAction(
+    await ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
       formData({
         bienId: bien.id,
         acquereurId: acquereur.id,
@@ -333,7 +334,7 @@ describe("ajouterCompromisAction — offre déjà utilisée par un compromis (AD
     await marquerCompromisRealise(premierCompromis.id, "2026-09-01");
 
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -342,7 +343,7 @@ describe("ajouterCompromisAction — offre déjà utilisée par un compromis (AD
           dateSignature: "2026-08-06",
         })
       )
-    ).rejects.toThrow(/déjà associée à un compromis/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà associée à un compromis/) });
 
     // Un seul compromis référence cette offre — aucun second créé.
     const compromisListe = await listerCompromisPourBien(bien.id, WORKSPACE_TEST);
@@ -369,7 +370,7 @@ describe("ajouterCompromisAction — offre déjà utilisée par un compromis (AD
     // Le compromis annulé ne bloque plus la garde "en_cours par bien", mais l'offre reste
     // structurellement déjà utilisée — garde distincte, toujours appliquée.
     await expect(
-      ajouterCompromisAction(
+      ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           bienId: bien.id,
           acquereurId: acquereur.id,
@@ -378,17 +379,17 @@ describe("ajouterCompromisAction — offre déjà utilisée par un compromis (AD
           dateSignature: "2026-08-08",
         })
       )
-    ).rejects.toThrow(/déjà associée à un compromis/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà associée à un compromis/) });
   });
 });
 
 describe("changerStatutCompromisAction — garde-fous", () => {
   it("refuse explicitement (throw) sur un compromis introuvable", async () => {
     await expect(
-      changerStatutCompromisAction(
+      changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: "00000000-0000-0000-0000-000000000000", statut: "realise", dateActeReelle: "2026-09-01" })
       )
-    ).rejects.toThrow(/introuvable/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/introuvable/) });
   });
 
   it("refuse explicitement (throw) sur un bien archivé", async () => {
@@ -403,8 +404,8 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" }))
-    ).rejects.toThrow(/archivé/);
+      changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/archivé/) });
   });
 
   it("refuse explicitement (throw) un deuxième changement de statut", async () => {
@@ -417,15 +418,15 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    await changerStatutCompromisAction(
+    await changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" })
     ).catch(() => {});
 
     await expect(
-      changerStatutCompromisAction(
+      changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromisCree.id, statut: "annule", dateAnnulation: "2026-09-02", motifAnnulation: "autre" })
       )
-    ).rejects.toThrow(/statut final/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/statut final/) });
   });
 
   it("ne modifie jamais compromisSigneLe lors d'un changement de statut", async () => {
@@ -441,7 +442,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     const bienAvant = await getBienById(bien.id);
     expect(bienAvant?.compromisSigneLe).toBeUndefined();
 
-    await changerStatutCompromisAction(
+    await changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" })
     ).catch(() => {});
 
@@ -460,8 +461,8 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     idsCompromisCrees.push(compromisCree.id);
 
     await expect(
-      changerStatutCompromisAction(formData({ compromisId: compromisCree.id, statut: "realise" }))
-    ).rejects.toThrow(/date réelle/);
+      changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, statut: "realise" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/date réelle/) });
 
     const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.statut).toBe("en_cours");
@@ -479,7 +480,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    await changerStatutCompromisAction(
+    await changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-10-08" })
     ).catch(() => {});
 
@@ -500,10 +501,10 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     idsCompromisCrees.push(compromisCree.id);
 
     await expect(
-      changerStatutCompromisAction(
+      changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromisCree.id, statut: "annule", motifAnnulation: "autre" })
       )
-    ).rejects.toThrow(/date d'annulation/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/date d'annulation/) });
 
     const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.statut).toBe("en_cours");
@@ -521,10 +522,10 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     idsCompromisCrees.push(compromisCree.id);
 
     await expect(
-      changerStatutCompromisAction(
+      changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromisCree.id, statut: "annule", dateAnnulation: "2026-08-15" })
       )
-    ).rejects.toThrow(/motif/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/motif/) });
 
     const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.statut).toBe("en_cours");
@@ -541,7 +542,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    await changerStatutCompromisAction(
+    await changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
       formData({
         compromisId: compromisCree.id,
         statut: "annule",
@@ -597,7 +598,7 @@ describe("statut commercial du Bien — priorité au modèle structuré (ADR-046
     const bienAvantAnnulation = await getBienById(bien.id);
     expect(bienAvantAnnulation?.compromisSigneLe).toBeDefined();
 
-    await changerStatutCompromisAction(
+    await changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, statut: "annule", dateAnnulation: "2026-08-10", motifAnnulation: "desaccord_prix" })
     ).catch(() => {});
 
@@ -618,7 +619,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     idsCompromisCrees.push(compromisCree.id);
     expect(compromisCree.dateActe).toBeUndefined();
 
-    await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-10-15" })).catch(() => {});
+    await modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "2026-10-15" })).catch(() => {});
 
     const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.dateActe).toBe("2026-10-15");
@@ -631,7 +632,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-11-02" })).catch(() => {});
+    await modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "2026-11-02" })).catch(() => {});
 
     const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.dateActe).toBe("2026-11-02");
@@ -644,7 +645,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     });
     idsCompromisCrees.push(compromisCree.id);
 
-    await modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "" })).catch(() => {});
+    await modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "" })).catch(() => {});
 
     const apres = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(apres?.dateActe).toBeUndefined();
@@ -659,8 +660,8 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     await marquerCompromisRealise(compromisCree.id, "2026-10-16");
 
     await expect(
-      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
-    ).rejects.toThrow(/en cours/);
+      modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/en cours/) });
 
     const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.dateActe).toBe("2026-10-15");
@@ -675,8 +676,8 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     await marquerCompromisAnnule(compromisCree.id, "2026-09-01", "desaccord_prix");
 
     await expect(
-      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
-    ).rejects.toThrow(/en cours/);
+      modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/en cours/) });
 
     const inchange = await getCompromisById(compromisCree.id, WORKSPACE_TEST);
     expect(inchange?.dateActe).toBe("2026-10-15");
@@ -693,8 +694,8 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     await marquerCompromisRealise(compromisCree.id, "2026-09-01");
 
     await expect(
-      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
-    ).rejects.toThrow(/en cours/);
+      modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/en cours/) });
   });
 
   it("refuse explicitement (throw) sur un bien archivé", async () => {
@@ -704,7 +705,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     await archiverBien(bien.id);
 
     await expect(
-      modifierDateActeAction(formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
-    ).rejects.toThrow(/archivé/);
+      modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/archivé/) });
   });
 });

@@ -39,6 +39,8 @@ import {
   desarchiverProspectVendeurAction,
   marquerProspectVendeurPerduAction,
 } from "@/actions/prospectVendeur";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -273,7 +275,7 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
                 <summary className="list-none cursor-pointer select-none text-[13px] font-medium text-text-2 hover:text-danger transition-colors">
                   Marquer comme perdu
                 </summary>
-                <form action={marquerProspectVendeurPerduAction} className="flex flex-col gap-2.5 mt-2.5">
+                <FormulaireAvecEtat action={marquerProspectVendeurPerduAction} className="flex flex-col gap-2.5 mt-2.5">
                   <input type="hidden" name="id" value={prospect.id} />
                   <select name="motifPerte" defaultValue="" required className={inputCls}>
                     <option value="" disabled>
@@ -292,13 +294,8 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
                     defaultValue={new Date().toISOString().slice(0, 10)}
                     className={inputCls}
                   />
-                  <button
-                    type="submit"
-                    className="self-start text-[12.5px] font-medium text-danger bg-surface border border-border-md hover:border-danger transition-colors px-3 py-1.5 rounded-lg"
-                  >
-                    Confirmer la perte
-                  </button>
-                </form>
+                  <BoutonSoumettre classeBrute="self-start text-[12.5px] font-medium text-danger bg-surface border border-border-md hover:border-danger transition-colors px-3 py-1.5 rounded-lg" libelleAttente="Enregistrement…">Confirmer la perte</BoutonSoumettre>
+                </FormulaireAvecEtat>
               </details>
             )}
 

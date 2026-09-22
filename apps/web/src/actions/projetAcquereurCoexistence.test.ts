@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, like } from "drizzle-orm";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-055 §B — COEXISTENCE : une création réelle alimente désormais le modèle canonique complet
 // (personne, projet, participation) sans que rien du comportement historique ne change. Ces tests
@@ -69,7 +70,7 @@ function formulaire(nom: string, surcharges: Record<string, string> = {}): FormD
 describe("ADR-055 §B — une création acquéreur alimente le modèle canonique complet", () => {
   it("crée Contact + BuyerProject + partie + ligne historique, tous reliés", async () => {
     const nom = `${MARQUEUR} NOMINAL`;
-    await creerAcquereurAction(formulaire(nom)).catch(() => {}); // redirect() attendu
+    await creerAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaire(nom)).catch(() => {}); // redirect() attendu
 
     // 1. Comportement historique intact : la ligne `acquereurs` existe avec exactement les champs
     //    soumis. C'est elle qui pilote encore matching, visites, offres et UI.
@@ -115,7 +116,7 @@ describe("ADR-055 §B — une création acquéreur alimente le modèle canonique
     // partie ont déjà été écrits dans la transaction. C'est exactement le scénario où une
     // implémentation en plusieurs transactions laisserait une personne sans dossier.
     const nom = `${MARQUEUR} ROLLBACK`;
-    await expect(creerAcquereurAction(formulaire(nom, { datePremiereContact: "pas-une-date" }))).rejects.toThrow();
+    await expect(creerAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaire(nom, { datePremiereContact: "pas-une-date" }))).rejects.toThrow();
 
     expect(await getDb().select().from(acquereursTable).where(eq(acquereursTable.nom, nom))).toEqual([]);
     expect(await getDb().select().from(contactsTable).where(eq(contactsTable.nom, nom))).toEqual([]);

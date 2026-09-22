@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-055 §B — L'ÉCRITURE HUMAINE, alignée sur la lecture canonique du moteur. Ce fichier ne vérifie
 // pas qu'un repository sait écrire une table : il ferme la boucle « un conseiller modifie un budget
@@ -100,7 +101,7 @@ function formulaire(id: string, overrides: Record<string, string> = {}): FormDat
 }
 
 // `redirect()` lève par conception (Next.js) : l'attraper est la seule façon d'observer l'effet.
-const enregistrer = (formData: FormData) => modifierAcquereurAction(formData).catch(() => {});
+const enregistrer = (formData: FormData) => modifierAcquereurAction(ETAT_FORMULAIRE_INITIAL, formData).catch(() => {});
 
 // Reproduit EXACTEMENT le graphe que creerAcquereurAction écrit : contact + projet + partie +
 // dossier rattaché. `surchargeProjet` permet de faire diverger volontairement les deux copies.
@@ -356,8 +357,8 @@ describe("modifierAcquereurAction — anomalies", () => {
     const { projet, dossier } = await unAcquereurCanonique("invariant");
 
     await expect(
-      modifierAcquereurAction(formulaire(dossier.id, { budgetMin: "500000", budgetMax: "100000" }))
-    ).rejects.toThrow();
+      modifierAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaire(dossier.id, { budgetMin: "500000", budgetMax: "100000" }))
+    ).resolves.toMatchObject({ statut: "erreur" });
 
     // Le formulaire refuse déjà cette combinaison en amont ; la garde du Core est la seconde
     // barrière. Dans les deux cas, l'abandon est TOTAL : ni le projet ni le dossier ne bougent.

@@ -24,7 +24,7 @@ const bien: Bien = {
   description: "",
   creeLe: "2026-01-01T00:00:00.000Z",
 };
-const action = async () => {};
+const action = async () => ({ statut: "idle" as const });
 
 describe("BienFormulaire — champs legacy de mandat", () => {
   it("A. bien à mandat canonique : aucun champ statutMandat / dateMandat, renvoi vers la fiche", () => {

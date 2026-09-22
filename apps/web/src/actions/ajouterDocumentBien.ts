@@ -18,6 +18,7 @@ import {
   type TypeDocument,
 } from "@/types/documentBien";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { ErreurSaisie, avecFeedbackFormulaire, type EtatFormulaire } from "@/lib/formulaires/etatFormulaire";
 
 const CATEGORIES_VALIDES: CategorieDocument[] = [
   "mandat",
@@ -64,60 +65,62 @@ function parseTexteOuNull(valeur: FormDataEntryValue | null): string | null {
 // acquereurId/prospectVendeurId) est incohérent avec le bien (ADR-029 — des FK valides séparément
 // ne suffisent pas). Le fichier n'est écrit sur disque qu'après validation complète — jamais
 // avant, jamais si l'insertion DB qui suit pourrait échouer sur un bien/rattachement invalide.
-export async function ajouterDocumentBienAction(formData: FormData): Promise<void> {
+export async function ajouterDocumentBienAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const bienId = String(formData.get("bienId") ?? "");
-  const nom = String(formData.get("nom") ?? "").trim();
-  const categorie = parseCategorie(formData.get("categorie"));
-  const fichier = formData.get("fichier");
+  return avecFeedbackFormulaire(async () => {
+    const bienId = String(formData.get("bienId") ?? "");
+    const nom = String(formData.get("nom") ?? "").trim();
+    const categorie = parseCategorie(formData.get("categorie"));
+    const fichier = formData.get("fichier");
 
-  if (!bienId) throw new Error("Bien introuvable.");
-  if (!nom) throw new Error("Le nom du document est obligatoire.");
-  if (!(fichier instanceof File) || fichier.size === 0) {
-    throw new Error("Un fichier est obligatoire.");
-  }
-  if (fichier.size > TAILLE_MAX_OCTETS) {
-    throw new Error("Le fichier dépasse la taille maximale autorisée (10 Mo).");
-  }
-  if (!TYPES_MIME_AUTORISES.includes(fichier.type)) {
-    throw new Error("Type de fichier non autorisé (PDF, JPEG ou PNG uniquement).");
-  }
+    if (!bienId) throw new ErreurSaisie("Bien introuvable.");
+    if (!nom) throw new ErreurSaisie("Le nom du document est obligatoire.");
+    if (!(fichier instanceof File) || fichier.size === 0) {
+      throw new ErreurSaisie("Un fichier est obligatoire.");
+    }
+    if (fichier.size > TAILLE_MAX_OCTETS) {
+      throw new ErreurSaisie("Le fichier dépasse la taille maximale autorisée (10 Mo).");
+    }
+    if (!TYPES_MIME_AUTORISES.includes(fichier.type)) {
+      throw new ErreurSaisie("Type de fichier non autorisé (PDF, JPEG ou PNG uniquement).");
+    }
 
-  const bien = await getBienById(bienId);
-  if (!bien) throw new Error("Bien introuvable.");
-  if (bien.archiveLe) throw new Error("Impossible d'ajouter un document sur un bien archivé.");
+    const bien = await getBienById(bienId);
+    if (!bien) throw new ErreurSaisie("Bien introuvable.");
+    if (bien.archiveLe) throw new ErreurSaisie("Impossible d'ajouter un document sur un bien archivé.");
 
-  const compromisId = parseTexteOptionnel(formData.get("compromisId"));
-  const acquereurId = parseTexteOptionnel(formData.get("acquereurId"));
-  const prospectVendeurId = parseTexteOptionnel(formData.get("prospectVendeurId"));
+    const compromisId = parseTexteOptionnel(formData.get("compromisId"));
+    const acquereurId = parseTexteOptionnel(formData.get("acquereurId"));
+    const prospectVendeurId = parseTexteOptionnel(formData.get("prospectVendeurId"));
 
-  await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
+    await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
 
-  const cleStockage = genererCleStockage();
-  const octets = Buffer.from(await fichier.arrayBuffer());
-  await ecrireDocument(cleStockage, octets);
-  await enregistrerDocumentBien({
-    bienId,
-    nom,
-    categorie,
-    nomFichierOriginal: fichier.name,
-    cleStockage,
-    tailleOctets: fichier.size,
-    typeMime: fichier.type,
-    typeDocument: parseTypeDocumentOptionnel(formData.get("typeDocument")),
-    typeDocumentDetail: parseTexteOptionnel(formData.get("typeDocumentDetail")),
-    dateDocument: parseTexteOptionnel(formData.get("dateDocument")),
-    dateFinValidite: parseTexteOptionnel(formData.get("dateFinValidite")),
-    compromisId,
-    acquereurId,
-    prospectVendeurId,
-    coproprieteDeclaree: parseTexteOptionnel(formData.get("coproprieteDeclaree")),
-    adresseDeclaree: parseTexteOptionnel(formData.get("adresseDeclaree")),
-    provenance: parseTexteOptionnel(formData.get("provenance")),
-    etatVerification: "non_verifie",
+    const cleStockage = genererCleStockage();
+    const octets = Buffer.from(await fichier.arrayBuffer());
+    await ecrireDocument(cleStockage, octets);
+    await enregistrerDocumentBien({
+      bienId,
+      nom,
+      categorie,
+      nomFichierOriginal: fichier.name,
+      cleStockage,
+      tailleOctets: fichier.size,
+      typeMime: fichier.type,
+      typeDocument: parseTypeDocumentOptionnel(formData.get("typeDocument")),
+      typeDocumentDetail: parseTexteOptionnel(formData.get("typeDocumentDetail")),
+      dateDocument: parseTexteOptionnel(formData.get("dateDocument")),
+      dateFinValidite: parseTexteOptionnel(formData.get("dateFinValidite")),
+      compromisId,
+      acquereurId,
+      prospectVendeurId,
+      coproprieteDeclaree: parseTexteOptionnel(formData.get("coproprieteDeclaree")),
+      adresseDeclaree: parseTexteOptionnel(formData.get("adresseDeclaree")),
+      provenance: parseTexteOptionnel(formData.get("provenance")),
+      etatVerification: "non_verifie",
+    });
+
+    redirect(`/biens/${bienId}?onglet=documents`);
   });
-
-  redirect(`/biens/${bienId}?onglet=documents`);
 }
 
 // Correction de classement (ADR-029) : remplacement complet des champs corrigibles, jamais un
@@ -125,46 +128,48 @@ export async function ajouterDocumentBienAction(formData: FormData): Promise<voi
 // au fichier physique (immuable, ADR-013). Refus explicite si le document est introuvable, si le
 // bien cible est introuvable/archivé, ou si un rattachement renseigné est incohérent avec le bien
 // cible.
-export async function corrigerClassementDocumentBienAction(formData: FormData): Promise<void> {
+export async function corrigerClassementDocumentBienAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const id = String(formData.get("id") ?? "");
-  const documentActuel = await getDocumentBienById(id);
-  if (!documentActuel) throw new Error("Document introuvable.");
+  return avecFeedbackFormulaire(async () => {
+    const id = String(formData.get("id") ?? "");
+    const documentActuel = await getDocumentBienById(id);
+    if (!documentActuel) throw new ErreurSaisie("Document introuvable.");
 
-  const bienId = String(formData.get("bienId") ?? "").trim();
-  const nom = String(formData.get("nom") ?? "").trim();
-  if (!bienId) throw new Error("Le bien est obligatoire.");
-  if (!nom) throw new Error("Le nom du document est obligatoire.");
+    const bienId = String(formData.get("bienId") ?? "").trim();
+    const nom = String(formData.get("nom") ?? "").trim();
+    if (!bienId) throw new ErreurSaisie("Le bien est obligatoire.");
+    if (!nom) throw new ErreurSaisie("Le nom du document est obligatoire.");
 
-  const bien = await getBienById(bienId);
-  if (!bien) throw new Error("Bien introuvable.");
-  if (bien.archiveLe) throw new Error("Impossible de rattacher un document à un bien archivé.");
+    const bien = await getBienById(bienId);
+    if (!bien) throw new ErreurSaisie("Bien introuvable.");
+    if (bien.archiveLe) throw new ErreurSaisie("Impossible de rattacher un document à un bien archivé.");
 
-  const compromisId = parseTexteOuNull(formData.get("compromisId"));
-  const acquereurId = parseTexteOuNull(formData.get("acquereurId"));
-  const prospectVendeurId = parseTexteOuNull(formData.get("prospectVendeurId"));
+    const compromisId = parseTexteOuNull(formData.get("compromisId"));
+    const acquereurId = parseTexteOuNull(formData.get("acquereurId"));
+    const prospectVendeurId = parseTexteOuNull(formData.get("prospectVendeurId"));
 
-  await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
+    await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
 
-  const champs: ChampsCorrectionDocumentBien = {
-    bienId,
-    nom,
-    categorie: parseCategorie(formData.get("categorie")),
-    typeDocument: parseTypeDocumentOptionnel(formData.get("typeDocument")) ?? null,
-    typeDocumentDetail: parseTexteOuNull(formData.get("typeDocumentDetail")),
-    dateDocument: parseTexteOuNull(formData.get("dateDocument")),
-    dateFinValidite: parseTexteOuNull(formData.get("dateFinValidite")),
-    compromisId,
-    acquereurId,
-    prospectVendeurId,
-    coproprieteDeclaree: parseTexteOuNull(formData.get("coproprieteDeclaree")),
-    adresseDeclaree: parseTexteOuNull(formData.get("adresseDeclaree")),
-    provenance: parseTexteOuNull(formData.get("provenance")),
-    etatVerification: parseEtatVerification(formData.get("etatVerification")),
-  };
+    const champs: ChampsCorrectionDocumentBien = {
+      bienId,
+      nom,
+      categorie: parseCategorie(formData.get("categorie")),
+      typeDocument: parseTypeDocumentOptionnel(formData.get("typeDocument")) ?? null,
+      typeDocumentDetail: parseTexteOuNull(formData.get("typeDocumentDetail")),
+      dateDocument: parseTexteOuNull(formData.get("dateDocument")),
+      dateFinValidite: parseTexteOuNull(formData.get("dateFinValidite")),
+      compromisId,
+      acquereurId,
+      prospectVendeurId,
+      coproprieteDeclaree: parseTexteOuNull(formData.get("coproprieteDeclaree")),
+      adresseDeclaree: parseTexteOuNull(formData.get("adresseDeclaree")),
+      provenance: parseTexteOuNull(formData.get("provenance")),
+      etatVerification: parseEtatVerification(formData.get("etatVerification")),
+    };
 
-  const resultat = await corrigerClassementDocumentBien(id, champs);
-  if (!resultat) throw new Error("Document introuvable.");
+    const resultat = await corrigerClassementDocumentBien(id, champs);
+    if (!resultat) throw new ErreurSaisie("Document introuvable.");
 
-  redirect(`/biens/${bienId}?onglet=documents`);
+    redirect(`/biens/${bienId}?onglet=documents`);
+  });
 }

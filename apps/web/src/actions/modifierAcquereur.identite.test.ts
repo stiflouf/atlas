@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-057 — L'IDENTITÉ CANONIQUE EFFECTIVE, de bout en bout. Ce fichier ne vérifie pas qu'un
 // repository sait écrire `contacts` : il ferme la boucle « un conseiller corrige une adresse, et
@@ -93,7 +94,7 @@ function formulaire(id: string, identite = IDENTITE_B): FormData {
 }
 
 // `redirect()` lève par conception (Next.js) : l'attraper est la seule façon d'observer l'effet.
-const enregistrer = (formData: FormData) => modifierAcquereurAction(formData).catch(() => {});
+const enregistrer = (formData: FormData) => modifierAcquereurAction(ETAT_FORMULAIRE_INITIAL, formData).catch(() => {});
 
 async function unAcquereurRattache(suffixe: string, surchargeContact: Record<string, unknown> = {}) {
   const contact = await creerContact(

@@ -7,6 +7,8 @@ import Select from "@/components/ui/Select";
 import type { ProfilAcquereur } from "@/types/client";
 import type { Offre } from "@/types/offre";
 import { nomComplet } from "@/lib/identite/nomPersonne";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 function formatPrix(montant: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(montant);
@@ -35,7 +37,7 @@ export default function CompromisFormulaire(props: Props) {
   const acquereursParId = !props.verrouille ? new Map(props.acquereurs.map((a) => [a.id, a])) : undefined;
 
   return (
-    <form action={ajouterCompromisAction} className="flex flex-col gap-2">
+    <FormulaireAvecEtat action={ajouterCompromisAction} className="flex flex-col gap-2">
       <input type="hidden" name="bienId" value={props.bienId} />
 
       {props.verrouille ? (
@@ -91,9 +93,7 @@ export default function CompromisFormulaire(props: Props) {
         Date d&apos;acte prévue (optionnelle)
         <Input type="date" name="dateActe" className="mt-1" />
       </label>
-      <Button type="submit" variant="primary" size="md" className="self-start">
-        Ajouter le compromis
-      </Button>
-    </form>
+      <BoutonSoumettre variant="primary" size="md" className="self-start" libelleAttente="Création…">Ajouter le compromis</BoutonSoumettre>
+    </FormulaireAvecEtat>
   );
 }

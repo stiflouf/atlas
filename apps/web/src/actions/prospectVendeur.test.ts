@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Garde-fous des Server Actions (ADR-027) : aucune séquence stricte entre jalons, mais perte et
 // signature restent terminales — même style que actions/compromis.test.ts (seul le chemin de
@@ -134,10 +135,10 @@ describe("marquerRdvEstimationRealiseProspectVendeurAction — aucun jalon franc
     await planifierRdvEstimationProspectVendeur(prospect.id, demain);
 
     await expect(
-      marquerRdvEstimationRealiseProspectVendeurAction(
+      marquerRdvEstimationRealiseProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
         formData({ id: prospect.id, rdvEstimationRealiseLe: demain.toISOString() })
       )
-    ).rejects.toThrow(/date future/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/date future/) });
 
     // La donnée reste intacte : ni jalon franchi, ni dernier contact avancé par une action refusée.
     const apres = await getProspectVendeurById(prospect.id);
@@ -151,10 +152,10 @@ describe("marquerRdvEstimationRealiseProspectVendeurAction — aucun jalon franc
     const dansUneHeure = new Date(Date.now() + 60 * 60 * 1000);
 
     await expect(
-      marquerRdvEstimationRealiseProspectVendeurAction(
+      marquerRdvEstimationRealiseProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
         formData({ id: prospect.id, rdvEstimationRealiseLe: dansUneHeure.toISOString() })
       )
-    ).rejects.toThrow(/date future/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/date future/) });
   });
 
   it("accepte un rendez-vous réellement tenu, même enregistré longtemps après", async () => {
@@ -163,7 +164,7 @@ describe("marquerRdvEstimationRealiseProspectVendeurAction — aucun jalon franc
 
     // redirect() lève NEXT_REDIRECT sur le chemin de succès (même style que les autres actions).
     await expect(
-      marquerRdvEstimationRealiseProspectVendeurAction(
+      marquerRdvEstimationRealiseProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
         formData({ id: prospect.id, rdvEstimationRealiseLe: ilYaDeuxMois.toISOString() })
       )
     ).rejects.toThrow(/NEXT_REDIRECT/);
@@ -183,7 +184,7 @@ describe("marquerRdvEstimationRealiseProspectVendeurAction — aucun jalon franc
     const dansDeuxMinutes = new Date(Date.now() + 2 * 60 * 1000);
 
     await expect(
-      marquerRdvEstimationRealiseProspectVendeurAction(
+      marquerRdvEstimationRealiseProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
         formData({ id: prospect.id, rdvEstimationRealiseLe: dansDeuxMinutes.toISOString() })
       )
     ).rejects.toThrow(/NEXT_REDIRECT/);
@@ -195,39 +196,37 @@ describe("prospectVendeur Server Actions — gardes de transition", () => {
     const prospect = await creerProspectDeTest("001");
     await marquerProspectVendeurPerdu(prospect.id, "autre", "2026-09-01");
 
-    await expect(qualifierProspectVendeurAction(formData({ id: prospect.id }))).rejects.toThrow(/perdu/);
+    await expect(qualifierProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formData({ id: prospect.id }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/perdu/) });
   });
 
   it("qualifierProspectVendeurAction rejette un prospect dont le mandat est déjà signé", async () => {
     const prospect = await creerProspectSigneDeTest("002");
 
-    await expect(qualifierProspectVendeurAction(formData({ id: prospect.id }))).rejects.toThrow(/déjà signé/);
+    await expect(qualifierProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formData({ id: prospect.id }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà signé/) });
   });
 
   it("enregistrerEstimationProspectVendeurAction rejette un montant invalide", async () => {
     const prospect = await creerProspectDeTest("003");
 
     await expect(
-      enregistrerEstimationProspectVendeurAction(
+      enregistrerEstimationProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
         formData({ id: prospect.id, estimationProposeeCentimes: "pas-un-nombre", estimationProposeeLe: "2026-09-01" })
       )
-    ).rejects.toThrow(/montant/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/montant/) });
   });
 
   it("marquerProspectVendeurPerduAction rejette un mandat déjà signé", async () => {
     const prospect = await creerProspectSigneDeTest("004");
 
     await expect(
-      marquerProspectVendeurPerduAction(formData({ id: prospect.id, motifPerte: "autre", datePerte: "2026-09-01" }))
-    ).rejects.toThrow(/déjà signé/);
+      marquerProspectVendeurPerduAction(ETAT_FORMULAIRE_INITIAL, formData({ id: prospect.id, motifPerte: "autre", datePerte: "2026-09-01" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà signé/) });
   });
 
   it("marquerProspectVendeurPerduAction rejette un motif manquant", async () => {
     const prospect = await creerProspectDeTest("005");
 
-    await expect(marquerProspectVendeurPerduAction(formData({ id: prospect.id, datePerte: "2026-09-01" }))).rejects.toThrow(
-      /motif/
-    );
+    await expect(marquerProspectVendeurPerduAction(ETAT_FORMULAIRE_INITIAL, formData({ id: prospect.id, datePerte: "2026-09-01" }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/motif/) });
   });
 
   it("signerMandatProspectVendeurAction rejette un prospect déjà perdu", async () => {
@@ -235,7 +234,7 @@ describe("prospectVendeur Server Actions — gardes de transition", () => {
     await marquerProspectVendeurPerdu(prospect.id, "autre", "2026-09-01");
 
     await expect(
-      signerMandatProspectVendeurAction(
+      signerMandatProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           id: prospect.id,
           reference: "REF",
@@ -252,22 +251,22 @@ describe("prospectVendeur Server Actions — gardes de transition", () => {
           typeMandat: "simple",
         })
       )
-    ).rejects.toThrow(/perdu/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/perdu/) });
   });
 
   it("ajouterNoteProspectVendeurAction rejette un type de note invalide", async () => {
     const prospect = await creerProspectDeTest("007");
 
     await expect(
-      ajouterNoteProspectVendeurAction(formData({ id: prospect.id, type: "sms-groupe", contenu: "Contenu valide" }))
-    ).rejects.toThrow(/[Tt]ype de note/);
+      ajouterNoteProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formData({ id: prospect.id, type: "sms-groupe", contenu: "Contenu valide" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/[Tt]ype de note/) });
   });
 
   it("ajouterNoteProspectVendeurAction rejette un contenu vide", async () => {
     const prospect = await creerProspectDeTest("008");
 
     await expect(
-      ajouterNoteProspectVendeurAction(formData({ id: prospect.id, type: "note_interne", contenu: "   " }))
-    ).rejects.toThrow(/vide/);
+      ajouterNoteProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formData({ id: prospect.id, type: "note_interne", contenu: "   " }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/vide/) });
   });
 });

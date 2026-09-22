@@ -9,6 +9,7 @@ import { enqueuerResynchronisationBien } from "@/lib/compatibilite/resynchronisa
 import { traiterDemandeResynchronisation } from "@/lib/compatibilite/traitementResynchronisation";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { ErreurSaisie, avecFeedbackFormulaire, type EtatFormulaire } from "@/lib/formulaires/etatFormulaire";
 
 // id absent/invalide/inexistant -> notFound(), jamais une redirection de succès après une
 // modification qui n'a en réalité touché aucune ligne.
@@ -22,24 +23,26 @@ import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 //
 // Modification + enqueue de resynchronisation dans LA MÊME transaction (ADR-036) — voir
 // creerBienAction pour le raisonnement complet (handoff durable, addendum de l'audit §6).
-export async function modifierBienAction(formData: FormData): Promise<void> {
+export async function modifierBienAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  // ADR-054 — appartenance explicite de la demande de resynchronisation (table racine).
-  const workspaceId = await exigerWorkspaceCourant();
-  const id = String(formData.get("id") ?? "");
-  if (!id) notFound();
+  return avecFeedbackFormulaire(async () => {
+    // ADR-054 — appartenance explicite de la demande de resynchronisation (table racine).
+    const workspaceId = await exigerWorkspaceCourant();
+    const id = String(formData.get("id") ?? "");
+    if (!id) notFound();
 
-  const donnees = parseBienFormData(formData);
-  const commune = await resoudreCommuneBien(donnees.adresse, donnees.ville, donnees.codePostal);
+    const donnees = parseBienFormData(formData);
+    const commune = await resoudreCommuneBien(donnees.adresse, donnees.ville, donnees.codePostal);
 
-  const resultat = await getDb().transaction(async (tx) => {
-    const bien = await modifierBien(id, { ...donnees, codeInseeCommune: commune?.citycode }, tx);
-    if (!bien) return undefined;
-    const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, workspaceId, tx);
-    return { bien, idDemandeResynchronisation };
+    const resultat = await getDb().transaction(async (tx) => {
+      const bien = await modifierBien(id, { ...donnees, codeInseeCommune: commune?.citycode }, tx);
+      if (!bien) return undefined;
+      const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, workspaceId, tx);
+      return { bien, idDemandeResynchronisation };
+    });
+    if (!resultat) notFound();
+
+    await traiterDemandeResynchronisation(resultat.idDemandeResynchronisation);
+    redirect(`/biens/${resultat.bien.id}`);
   });
-  if (!resultat) notFound();
-
-  await traiterDemandeResynchronisation(resultat.idDemandeResynchronisation);
-  redirect(`/biens/${resultat.bien.id}`);
 }

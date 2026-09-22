@@ -18,6 +18,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
   exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
 }));
 import { eq } from "drizzle-orm";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration : base Postgres réelle, IGN mocké (ADR-035, section 19 — les tests
 // automatisés principaux ne doivent jamais dépendre du réseau IGN réel ; une validation réelle a
@@ -88,7 +89,7 @@ describe("creerBienAction — résolution IGN non bloquante (ADR-035, section 5)
   it("persiste codeInseeCommune quand la résolution IGN est fiable", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => reponseIgn(0.95)));
 
-    await creerBienAction(formData(CHAMPS_BASE)).catch(() => {});
+    await creerBienAction(ETAT_FORMULAIRE_INITIAL, formData(CHAMPS_BASE)).catch(() => {});
 
     const biens = await getDb().select().from(biensTable).where(eq(biensTable.reference, CHAMPS_BASE.reference));
     expect(biens).toHaveLength(1);
@@ -104,7 +105,7 @@ describe("creerBienAction — résolution IGN non bloquante (ADR-035, section 5)
       })
     );
 
-    await creerBienAction(formData({ ...CHAMPS_BASE, reference: "[test réel] CREER-BIEN-002" })).catch(() => {});
+    await creerBienAction(ETAT_FORMULAIRE_INITIAL, formData({ ...CHAMPS_BASE, reference: "[test réel] CREER-BIEN-002" })).catch(() => {});
 
     const biens = await getDb()
       .select()
@@ -118,7 +119,7 @@ describe("creerBienAction — résolution IGN non bloquante (ADR-035, section 5)
   it("crée le bien normalement (codeInseeCommune NULL) si le score IGN est insuffisant", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => reponseIgn(0.3)));
 
-    await creerBienAction(formData({ ...CHAMPS_BASE, reference: "[test réel] CREER-BIEN-003" })).catch(() => {});
+    await creerBienAction(ETAT_FORMULAIRE_INITIAL, formData({ ...CHAMPS_BASE, reference: "[test réel] CREER-BIEN-003" })).catch(() => {});
 
     const biens = await getDb()
       .select()

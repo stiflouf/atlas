@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-060 §13 et §16 — SIGNATURE_ATOMICITY_TARGET : le prospect est relu FOR UPDATE dans le
 // workspace de SESSION, les faits du mandat sont exigés, tout existe (bien, jalon, mandat,
@@ -112,8 +113,9 @@ function formulaireSignature(prospectId: string, extra: Record<string, string> =
 
 async function soumettre(fd: FormData): Promise<string> {
   try {
-    await signerMandatProspectVendeurAction(fd);
-    return "aucune";
+    const etat = await signerMandatProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, fd);
+    // FORM_FEEDBACK_V1 — un refus de saisie revient comme état, jamais comme exception.
+    return etat.statut === "erreur" ? etat.message : "aucune";
   } catch (erreur) {
     return String((erreur as { digest?: string }).digest ?? (erreur as Error).message);
   }

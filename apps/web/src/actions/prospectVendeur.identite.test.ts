@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-057 — L'IDENTITÉ CANONIQUE CÔTÉ VENDEUR, et surtout la preuve que Contact tient sa promesse :
 // une personne, une identité, quel que soit le rôle sous lequel on la regarde. Les deux tests
@@ -81,7 +82,7 @@ function formulaire(id: string, identite = IDENTITE_D): FormData {
 }
 
 // `redirect()` lève par conception (Next.js) : l'attraper est la seule façon d'observer l'effet.
-const enregistrer = (formData: FormData) => modifierProspectVendeurAction(formData).catch(() => {});
+const enregistrer = (formData: FormData) => modifierProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formData).catch(() => {});
 
 async function unContact(suffixe: string, surcharge: Record<string, unknown> = {}) {
   const contact = await creerContact({ ...IDENTITE_A, nom: `${IDENTITE_A.nom} ${suffixe}`, ...surcharge }, WORKSPACE_TEST);
@@ -236,7 +237,7 @@ describe("ADR-057 vendeur — écriture", () => {
 
     // L'action tourne avec le workspace `default` : la ligne n'est pas dans son périmètre, donc
     // aucune ligne ne correspond et l'action rend notFound() plutôt que d'écrire.
-    await expect(modifierProspectVendeurAction(formulaire(prospect.id))).rejects.toThrow();
+    await expect(modifierProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formulaire(prospect.id))).rejects.toThrow();
     expect((await ligneProspect(prospect.id)).email).toBe(IDENTITE_A.email);
   });
 });

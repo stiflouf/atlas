@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq, inArray, or } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration réel (ADR-044 §25/§39/§44) : la création d'une Offre depuis le parcours
 // contextuel Visite ne doit JAMAIS terminer automatiquement la tâche `suivi_apres_visite` déjà
@@ -138,7 +139,7 @@ describe("ajouterOffreAction — non-régression tâche suivi_apres_visite (ADR-
 
     const fd = formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" });
     fd.append("compteRenduVisiteIds", cr.id);
-    await ajouterOffreAction(fd).catch(() => {});
+    await ajouterOffreAction(ETAT_FORMULAIRE_INITIAL, fd).catch(() => {});
 
     const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.map((o) => o.id));

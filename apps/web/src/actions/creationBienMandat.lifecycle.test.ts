@@ -1,6 +1,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL, type EtatFormulaire } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-060 §14 — DIRECT_PROPERTY_CREATION_POLICY (B avec réserve) : un bien créé « actif » naît avec
 // son mandat canonique dans la même transaction, à partir des seuls faits saisis ; créé
@@ -61,11 +62,12 @@ function champsBien(extra: Record<string, string> = {}) {
   };
 }
 
-async function soumettre(action: (fd: FormData) => Promise<void>, fd: FormData): Promise<string> {
+async function soumettre(action: (etat: EtatFormulaire, fd: FormData) => Promise<EtatFormulaire>, fd: FormData): Promise<string> {
   vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("IGN indisponible (simulé)"); }));
   try {
-    await action(fd);
-    return "aucune";
+    const etat = await action(ETAT_FORMULAIRE_INITIAL, fd);
+    // FORM_FEEDBACK_V1 — un refus de saisie revient désormais comme état, jamais comme exception.
+    return etat.statut === "erreur" ? etat.message : "aucune";
   } catch (erreur) {
     return String((erreur as { digest?: string }).digest ?? (erreur as Error).message);
   }

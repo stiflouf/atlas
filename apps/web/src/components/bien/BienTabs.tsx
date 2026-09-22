@@ -65,6 +65,8 @@ import {
 import { deriverHistoriqueBien, type EvenementHistorique } from "@/lib/historiqueBien";
 import type { TransmissionDossierNotaire } from "@/types/transmissionDossierNotaire";
 import { nomComplet } from "@/lib/identite/nomPersonne";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const CATEGORIES_DOCUMENT: CategorieDocument[] = [
   "mandat",
@@ -588,7 +590,7 @@ export default function BienTabs({
               Ce bien est archivé — impossible d'ajouter un nouveau document.
             </p>
           ) : (
-            <form action={ajouterDocumentBienAction} className="flex flex-col gap-2 max-w-xl">
+            <FormulaireAvecEtat action={ajouterDocumentBienAction} className="flex flex-col gap-2 max-w-xl">
               <input type="hidden" name="bienId" value={bien.id} />
               <Input
                 type="text"
@@ -699,10 +701,8 @@ export default function BienTabs({
               <p id="document-file-help" className="text-[11px] text-text-muted">
                 PDF, JPEG ou PNG — 10 Mo maximum.
               </p>
-              <Button type="submit" variant="primary" size="md" className="self-start">
-                Ajouter le document
-              </Button>
-            </form>
+              <BoutonSoumettre variant="primary" size="md" className="self-start" libelleAttente="Ajout…">Ajouter le document</BoutonSoumettre>
+            </FormulaireAvecEtat>
           )}
 
           {documents.length === 0 ? (
@@ -733,8 +733,7 @@ export default function BienTabs({
 
                   <details className="text-[12px]">
                     <summary className="text-text-muted cursor-pointer select-none">Corriger le classement</summary>
-                    <form
-                      action={corrigerClassementDocumentBienAction}
+                    <FormulaireAvecEtat action={corrigerClassementDocumentBienAction}
                       aria-label={`Corriger le classement de ${doc.nom}`}
                       className="flex flex-col gap-3 mt-2 pt-3 border-t border-border-subtle"
                     >
@@ -892,10 +891,8 @@ export default function BienTabs({
                           ))}
                         </Select>
                       </label>
-                      <Button type="submit" variant="primary" size="sm" className="self-start">
-                        Enregistrer la correction
-                      </Button>
-                    </form>
+                      <BoutonSoumettre variant="primary" size="sm" className="self-start" libelleAttente="Enregistrement…">Enregistrer la correction</BoutonSoumettre>
+                    </FormulaireAvecEtat>
                   </details>
                 </Card>
               ))}
@@ -973,7 +970,7 @@ export default function BienTabs({
                     {offre.statut === "en_cours" && !bien.archiveLe && (
                       <div className="flex flex-col gap-3 mt-3 pt-3 border-t border-border-subtle">
                         {(["acceptee", "refusee", "retiree"] as const).map((statut) => (
-                          <form
+                          <FormulaireAvecEtat
                             key={statut}
                             action={changerStatutOffreAction}
                             className="flex flex-wrap items-center gap-2"
@@ -1005,10 +1002,8 @@ export default function BienTabs({
                                 ))}
                               </select>
                             )}
-                            <Button type="submit" variant={statut === "acceptee" ? "primary" : "secondary"} size="sm">
-                              {statut === "acceptee" ? "Accepter" : statut === "refusee" ? "Refuser" : "Retirer"}
-                            </Button>
-                          </form>
+                            <BoutonSoumettre variant={statut === "acceptee" ? "primary" : "secondary"} size="sm" libelleAttente="Enregistrement…">{statut === "acceptee" ? "Accepter" : statut === "refusee" ? "Refuser" : "Retirer"}</BoutonSoumettre>
+                          </FormulaireAvecEtat>
                         ))}
                       </div>
                     )}
@@ -1025,7 +1020,7 @@ export default function BienTabs({
                           <summary className="cursor-pointer text-[12px] font-medium text-text-secondary hover:text-text-primary select-none">
                             Rendre l&apos;acceptation caduque
                           </summary>
-                          <form action={changerStatutOffreAction} className="flex flex-wrap items-center gap-2 mt-2">
+                          <FormulaireAvecEtat action={changerStatutOffreAction} className="flex flex-wrap items-center gap-2 mt-2">
                             <input type="hidden" name="offreId" value={offre.id} />
                             <input type="hidden" name="bienId" value={bien.id} />
                             <input type="hidden" name="statut" value="caduque" />
@@ -1045,10 +1040,8 @@ export default function BienTabs({
                                 </option>
                               ))}
                             </select>
-                            <Button type="submit" variant="destructive" size="sm">
-                              Confirmer la caducité
-                            </Button>
-                          </form>
+                            <BoutonSoumettre variant="destructive" size="sm" libelleAttente="Enregistrement…">Confirmer la caducité</BoutonSoumettre>
+                          </FormulaireAvecEtat>
                         </details>
                       )}
 
@@ -1100,21 +1093,16 @@ export default function BienTabs({
                                   <span className="text-text-secondary">
                                     {formatDate(visite.dateVisite)} — {LABEL_INTERET[visite.interet]}
                                   </span>
-                                  <form action={delierVisiteAction}>
+                                  <FormulaireAvecEtat action={delierVisiteAction}>
                                     <input type="hidden" name="lienId" value={lienId} />
-                                    <button
-                                      type="submit"
-                                      className="text-[11px] font-medium text-text-secondary hover:text-status-danger transition-colors"
-                                    >
-                                      Retirer le lien
-                                    </button>
-                                  </form>
+                                    <BoutonSoumettre classeBrute="text-[11px] font-medium text-text-secondary hover:text-status-danger transition-colors" libelleAttente="Retrait…">Retirer le lien</BoutonSoumettre>
+                                  </FormulaireAvecEtat>
                                 </div>
                               ))}
                             </div>
                           )}
                           {visitesDisponibles.length > 0 && (
-                            <form action={lierVisiteAOffreAction} className="flex items-center gap-2">
+                            <FormulaireAvecEtat action={lierVisiteAOffreAction} className="flex items-center gap-2">
                               <input type="hidden" name="offreId" value={offre.id} />
                               <select
                                 name="compteRenduVisiteId"
@@ -1131,13 +1119,8 @@ export default function BienTabs({
                                   </option>
                                 ))}
                               </select>
-                              <button
-                                type="submit"
-                                className="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors shrink-0"
-                              >
-                                Lier
-                              </button>
-                            </form>
+                              <BoutonSoumettre classeBrute="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors shrink-0" libelleAttente="Liaison…">Lier</BoutonSoumettre>
+                            </FormulaireAvecEtat>
                           )}
                         </div>
                       );
@@ -1217,7 +1200,7 @@ export default function BienTabs({
                         {!c.dateActe && (
                           <p className="text-[13px] text-text-3">Date d&apos;acte à définir</p>
                         )}
-                        <form action={modifierDateActeAction} className="flex items-end gap-2 mt-1">
+                        <FormulaireAvecEtat action={modifierDateActeAction} className="flex items-end gap-2 mt-1">
                           <input type="hidden" name="compromisId" value={c.id} />
                           <input
                             type="date"
@@ -1225,10 +1208,8 @@ export default function BienTabs({
                             defaultValue={c.dateActe ?? ""}
                             className="border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                           />
-                          <Button type="submit" variant="secondary" size="sm">
-                            {c.dateActe ? "Modifier la date" : "Renseigner la date"}
-                          </Button>
-                        </form>
+                          <BoutonSoumettre variant="secondary" size="sm" libelleAttente="Enregistrement…">{c.dateActe ? "Modifier la date" : "Renseigner la date"}</BoutonSoumettre>
+                        </FormulaireAvecEtat>
                       </div>
                     )}
                     {c.dateActeReelle && (
@@ -1242,7 +1223,7 @@ export default function BienTabs({
                     )}
                     {c.statut === "en_cours" && !bien.archiveLe && (
                       <div className="flex flex-wrap items-end gap-3 mt-3 pt-3 border-t border-border">
-                        <form action={changerStatutCompromisAction} className="flex items-end gap-2">
+                        <FormulaireAvecEtat action={changerStatutCompromisAction} className="flex items-end gap-2">
                           <input type="hidden" name="compromisId" value={c.id} />
                           <input type="hidden" name="statut" value="realise" />
                           <label className="text-[11px] text-text-3">
@@ -1255,11 +1236,9 @@ export default function BienTabs({
                               className="block mt-1 border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                             />
                           </label>
-                          <Button type="submit" variant="primary" size="sm">
-                            Marquer réalisé
-                          </Button>
-                        </form>
-                        <form action={changerStatutCompromisAction} className="flex items-end gap-2">
+                          <BoutonSoumettre variant="primary" size="sm" libelleAttente="Enregistrement…">Marquer réalisé</BoutonSoumettre>
+                        </FormulaireAvecEtat>
+                        <FormulaireAvecEtat action={changerStatutCompromisAction} className="flex items-end gap-2">
                           <input type="hidden" name="compromisId" value={c.id} />
                           <input type="hidden" name="statut" value="annule" />
                           <label className="text-[11px] text-text-3">
@@ -1287,10 +1266,8 @@ export default function BienTabs({
                               </option>
                             ))}
                           </select>
-                          <Button type="submit" variant="danger" size="sm">
-                            Annuler
-                          </Button>
-                        </form>
+                          <BoutonSoumettre variant="danger" size="sm" libelleAttente="Enregistrement…">Annuler</BoutonSoumettre>
+                        </FormulaireAvecEtat>
                       </div>
                     )}
                     {(() => {
@@ -1309,8 +1286,7 @@ export default function BienTabs({
 
                       if (!remuneration) {
                         return eligibleMalgreArchivage ? (
-                          <form
-                            action={ajouterRemunerationAction}
+                          <FormulaireAvecEtat action={ajouterRemunerationAction}
                             className="flex flex-col gap-2 mt-3 pt-3 border-t border-border-subtle"
                           >
                             <input type="hidden" name="compromisId" value={c.id} />
@@ -1332,10 +1308,8 @@ export default function BienTabs({
                               Date d'encaissement prévue (optionnelle)
                               <Input type="date" name="dateEncaissementPrevue" className="mt-1" />
                             </label>
-                            <Button type="submit" variant="primary" size="md" className="self-start">
-                              Ajouter la rémunération
-                            </Button>
-                          </form>
+                            <BoutonSoumettre variant="primary" size="md" className="self-start" libelleAttente="Enregistrement…">Ajouter la rémunération</BoutonSoumettre>
+                          </FormulaireAvecEtat>
                         ) : null;
                       }
 
@@ -1363,7 +1337,7 @@ export default function BienTabs({
                             </p>
                           )}
                           {!remuneration.dateEncaissementReelle && eligibleMalgreArchivage && (
-                            <form action={modifierRemunerationAction} className="flex flex-col gap-2">
+                            <FormulaireAvecEtat action={modifierRemunerationAction} className="flex flex-col gap-2">
                               <input type="hidden" name="compromisId" value={c.id} />
                               <Input
                                 type="text"
@@ -1388,16 +1362,11 @@ export default function BienTabs({
                                 name="dateEncaissementPrevue"
                                 defaultValue={remuneration.dateEncaissementPrevue ?? ""}
                               />
-                              <button
-                                type="submit"
-                                className="self-start text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors"
-                              >
-                                Corriger la rémunération
-                              </button>
-                            </form>
+                              <BoutonSoumettre classeBrute="self-start text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors" libelleAttente="Enregistrement…">Corriger la rémunération</BoutonSoumettre>
+                            </FormulaireAvecEtat>
                           )}
                           {!remuneration.dateEncaissementReelle && encaissementDisponible && (
-                            <form action={marquerRemunerationEncaisseeAction} className="flex items-end gap-2">
+                            <FormulaireAvecEtat action={marquerRemunerationEncaisseeAction} className="flex items-end gap-2">
                               <input type="hidden" name="compromisId" value={c.id} />
                               <label className="text-[11px] text-text-muted">
                                 Date d'encaissement réelle
@@ -1408,13 +1377,8 @@ export default function BienTabs({
                                   className="block mt-1 border border-border-default rounded-lg px-2 py-1.5 text-[13px] text-text-primary focus:outline-2 focus:outline-offset-2 focus:outline-focus-ring"
                                 />
                               </label>
-                              <button
-                                type="submit"
-                                className="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors pb-1.5"
-                              >
-                                Marquer encaissée
-                              </button>
-                            </form>
+                              <BoutonSoumettre classeBrute="text-[12px] font-medium text-action-primary hover:text-action-primary-hover transition-colors pb-1.5" libelleAttente="Enregistrement…">Marquer encaissée</BoutonSoumettre>
+                            </FormulaireAvecEtat>
                           )}
                         </div>
                       );

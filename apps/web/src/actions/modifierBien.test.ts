@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration : base Postgres réelle, IGN mocké. Couvre en particulier le scénario "très
 // important" ADR-035 section 6 : un codeInseeCommune périmé ne doit jamais survivre à une édition
@@ -106,7 +107,7 @@ describe("modifierBienAction — jamais de codeInseeCommune périmé (ADR-035, s
     const bien = await creerBienDeTest("001");
     vi.stubGlobal("fetch", vi.fn(async () => reponseIgn(0.95, "Sartrouville", "78575")));
 
-    await modifierBienAction(
+    await modifierBienAction(ETAT_FORMULAIRE_INITIAL,
       formData({
         ...CHAMPS_BASE,
         id: bien.id,
@@ -137,7 +138,7 @@ describe("modifierBienAction — jamais de codeInseeCommune périmé (ADR-035, s
       })
     );
 
-    await modifierBienAction(
+    await modifierBienAction(ETAT_FORMULAIRE_INITIAL,
       formData({ ...CHAMPS_BASE, id: bien.id, reference: bien.reference, adresse: "1 rue Test", ville: "Houilles", codePostal: "78800" })
     ).catch(() => {});
 
@@ -149,7 +150,7 @@ describe("modifierBienAction — jamais de codeInseeCommune périmé (ADR-035, s
     const bien = await creerBienDeTest("003");
     vi.stubGlobal("fetch", vi.fn(async () => reponseIgn(0.4)));
 
-    await modifierBienAction(
+    await modifierBienAction(ETAT_FORMULAIRE_INITIAL,
       formData({
         ...CHAMPS_BASE,
         id: bien.id,
@@ -169,7 +170,7 @@ describe("modifierBienAction — jamais de codeInseeCommune périmé (ADR-035, s
 
     // 1) résolution réussie vers une nouvelle commune
     vi.stubGlobal("fetch", vi.fn(async () => reponseIgn(0.9, "Carrières-sur-Seine", "78124")));
-    await modifierBienAction(
+    await modifierBienAction(ETAT_FORMULAIRE_INITIAL,
       formData({ ...CHAMPS_BASE, id: bien.id, reference: bien.reference, adresse: "x", ville: "Carrières-sur-Seine", codePostal: "78420" })
     ).catch(() => {});
     vi.unstubAllGlobals();
@@ -179,7 +180,7 @@ describe("modifierBienAction — jamais de codeInseeCommune périmé (ADR-035, s
 
     // 2) résolution suivante en échec — le code de l'étape 1 ne doit jamais survivre
     vi.stubGlobal("fetch", vi.fn(async () => new Response("erreur", { status: 500 })));
-    await modifierBienAction(
+    await modifierBienAction(ETAT_FORMULAIRE_INITIAL,
       formData({ ...CHAMPS_BASE, id: bien.id, reference: bien.reference, adresse: "y", ville: "Ailleurs", codePostal: "00000" })
     ).catch(() => {});
 

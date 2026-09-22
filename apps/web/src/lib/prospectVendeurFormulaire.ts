@@ -4,6 +4,7 @@ import type { NouveauBien } from "@/lib/bienRepository";
 import type { NouveauProspectVendeur } from "@/types/prospectVendeur";
 import type { OrigineLead } from "@/types/origineLead";
 import type { TypeBien } from "@/types/bien";
+import { ErreurSaisie } from "@/lib/formulaires/etatFormulaire";
 
 const TYPES_BIEN: TypeBien[] = ["appartement", "maison", "studio", "loft", "local_commercial"];
 
@@ -18,16 +19,16 @@ function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefi
 // (voir NouveauProspectVendeur, ADR-027).
 export function parseProspectVendeurFormData(formData: FormData): NouveauProspectVendeur {
   const nom = String(formData.get("nom") ?? "").trim();
-  if (!nom) throw new Error("Le nom est obligatoire.");
+  if (!nom) throw new ErreurSaisie("Le nom est obligatoire.");
 
   const origineLeadBrut = parseTexteOptionnel(formData.get("origineLead"));
   if (origineLeadBrut !== undefined && !ORIGINES_LEAD.includes(origineLeadBrut as OrigineLead)) {
-    throw new Error("Origine du lead invalide.");
+    throw new ErreurSaisie("Origine du lead invalide.");
   }
 
   const typeBienBrut = parseTexteOptionnel(formData.get("typeBien"));
   if (typeBienBrut !== undefined && !TYPES_BIEN.includes(typeBienBrut as TypeBien)) {
-    throw new Error("Type de bien invalide.");
+    throw new ErreurSaisie("Type de bien invalide.");
   }
 
   return {
@@ -52,12 +53,12 @@ export function parseProspectVendeurFormData(formData: FormData): NouveauProspec
 // ne pré-remplit `adresse` que depuis adresseBienPotentiel, jamais depuis secteurBienPotentiel).
 export function parseSignatureMandatFormData(formData: FormData): NouveauBien {
   const donneesBien = parseBienFormData(formData);
-  if (!donneesBien.reference) throw new Error("La référence du bien est obligatoire.");
-  if (!donneesBien.titre) throw new Error("Le titre du bien est obligatoire.");
+  if (!donneesBien.reference) throw new ErreurSaisie("La référence du bien est obligatoire.");
+  if (!donneesBien.titre) throw new ErreurSaisie("Le titre du bien est obligatoire.");
   if (!donneesBien.adresse) {
-    throw new Error("L'adresse précise du bien est obligatoire pour créer le bien — un secteur approximatif ne suffit pas.");
+    throw new ErreurSaisie("L'adresse précise du bien est obligatoire pour créer le bien — un secteur approximatif ne suffit pas.");
   }
-  if (!donneesBien.ville) throw new Error("La ville du bien est obligatoire.");
-  if (!donneesBien.codePostal) throw new Error("Le code postal du bien est obligatoire.");
+  if (!donneesBien.ville) throw new ErreurSaisie("La ville du bien est obligatoire.");
+  if (!donneesBien.codePostal) throw new ErreurSaisie("Le code postal du bien est obligatoire.");
   return donneesBien;
 }

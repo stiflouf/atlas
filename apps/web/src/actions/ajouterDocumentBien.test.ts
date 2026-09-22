@@ -22,6 +22,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration + garde-fou : même principe que ajouterNoteBien.test.ts. Vérifie qu'un appel
 // direct à ajouterDocumentBienAction (contournant le formulaire, qui masque déjà l'entrée sur un
@@ -106,7 +107,7 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     const fichier = new File([new Uint8Array([1, 2, 3])], "diag.pdf", { type: "application/pdf" });
-    await ajouterDocumentBienAction(
+    await ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
       formDataAvecFichier({ bienId: bien.id, nom: "Diagnostic", categorie: "diagnostic" }, fichier)
     ).catch(() => {});
 
@@ -117,7 +118,7 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
     const bien = await creerBienDeTest("[test réel] DOC-MIME-INTERDIT");
 
     const fichier = new File([new Uint8Array([1, 2, 3])], "notes.txt", { type: "text/plain" });
-    await ajouterDocumentBienAction(
+    await ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
       formDataAvecFichier({ bienId: bien.id, nom: "Notes", categorie: "autre" }, fichier)
     ).catch(() => {});
 
@@ -130,7 +131,7 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
     const fichier = new File([new Uint8Array(10 * 1024 * 1024 + 1)], "gros.pdf", {
       type: "application/pdf",
     });
-    await ajouterDocumentBienAction(
+    await ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
       formDataAvecFichier({ bienId: bien.id, nom: "Trop gros", categorie: "autre" }, fichier)
     ).catch(() => {});
 
@@ -140,7 +141,7 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
   it("n'insère aucun document si aucun fichier n'est fourni", async () => {
     const bien = await creerBienDeTest("[test réel] DOC-SANS-FICHIER");
 
-    await ajouterDocumentBienAction(
+    await ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
       formDataAvecFichier({ bienId: bien.id, nom: "Sans fichier", categorie: "autre" }, null)
     ).catch(() => {});
 
@@ -173,7 +174,7 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
 
     const fichier = new File([new Uint8Array([1, 2, 3])], "diag.pdf", { type: "application/pdf" });
     await expect(
-      ajouterDocumentBienAction(
+      ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
         formDataAvecFichier(
           { bienId: bienDuDocument.id, nom: "Diagnostic", categorie: "diagnostic", compromisId: compromis.id },
           fichier
@@ -190,7 +191,7 @@ describe("ajouterDocumentBienAction — garde-fous", () => {
   it("upload : le fichier physique est écrit dans le répertoire configuré (ATLAS_DOCUMENT_STORAGE_DIR)", async () => {
     const bien = await creerBienDeTest("[test réel] DOC-STOCKAGE-CONFIGURE");
     const fichier = new File([new Uint8Array([9, 9, 9])], "diag.pdf", { type: "application/pdf" });
-    await ajouterDocumentBienAction(
+    await ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
       formDataAvecFichier({ bienId: bien.id, nom: "Diagnostic", categorie: "diagnostic" }, fichier)
     ).catch(() => {});
 
@@ -204,7 +205,7 @@ describe("corrigerClassementDocumentBienAction — remplacement complet, jamais 
   it("corrige le classement sans jamais toucher au fichier physique, et préserve typeDocumentDetail/provenance quand le formulaire les renvoie inchangés", async () => {
     const bien = await creerBienDeTest("[test réel] DOC-CORRECTION-001");
     const fichier = new File([new Uint8Array([1, 2, 3])], "diag.pdf", { type: "application/pdf" });
-    await ajouterDocumentBienAction(
+    await ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
       formDataAvecFichier(
         {
           bienId: bien.id,
@@ -223,7 +224,7 @@ describe("corrigerClassementDocumentBienAction — remplacement complet, jamais 
     // Le formulaire de correction renvoie désormais explicitement typeDocumentDetail/provenance
     // (dette corrigée : ces deux champs étaient absents du formulaire, ce qui les remettait
     // silencieusement à NULL via le remplacement complet de corrigerClassementDocumentBienAction).
-    await corrigerClassementDocumentBienAction(
+    await corrigerClassementDocumentBienAction(ETAT_FORMULAIRE_INITIAL,
       formDataAvecFichier(
         {
           id: document.id,

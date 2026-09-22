@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, like } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // VISIT_NATIVE_ENTRY_V1 — LE test d'intégration critique du lot (brief §47) : le tunnel vendeur
 // complet passe par les Server Actions réelles, SANS Google Calendar et SANS ajout manuel de partie
@@ -117,7 +118,7 @@ describe("tunnel vendeur — Prospect → Mandat → Visite native → CR → re
   it("le vendeur canonique est résolu automatiquement, sans Calendar ni ajout manuel de partie", async () => {
     // 1. Prospect vendeur créé par l'action réelle : Contact canonique + projet + prospect.
     const redirectionProspect = await executer(() =>
-      creerProspectVendeurAction(formulaire({ nom: `${M} Vendeur`, prenom: "Camille", email: "tunnel@example.test", telephone: "0611111111" }))
+      creerProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formulaire({ nom: `${M} Vendeur`, prenom: "Camille", email: "tunnel@example.test", telephone: "0611111111" }))
     );
     const prospectId = redirectionProspect.match(/\/prospects-vendeurs\/([0-9a-f-]{36})/)?.[1];
     expect(prospectId).toBeDefined();
@@ -126,7 +127,7 @@ describe("tunnel vendeur — Prospect → Mandat → Visite native → CR → re
 
     // 2. Signature du mandat par l'action réelle → bien + mandat + partie mandant.
     const redirectionSignature = await executer(() =>
-      signerMandatProspectVendeurAction(
+      signerMandatProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
         formulaire({
           id: prospectId!,
           reference: `${M} ref`,

@@ -59,6 +59,36 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   rattachements, provenance, état de vérification) sont corrigibles sans ré-upload
   (`corrigerClassementDocumentBienAction`) — voir "Dossier documentaire (ADR-029)" ci-dessous.
 
+## Feedback des formulaires (`FORM_FEEDBACK_V1`, 2026-09-21)
+
+- **Périmètre converti** — les erreurs de saisie et les refus métier attendus des formulaires
+  centraux reviennent dans le formulaire comme message local (`role="alert"`), la saisie est
+  conservée par le navigateur (aucune navigation), le bouton est désactivé pendant l'envoi
+  (`BoutonSoumettre`, `useFormStatus`). Contrat : `EtatFormulaire` + `ErreurSaisie` +
+  `avecFeedbackFormulaire` (`src/lib/formulaires/etatFormulaire.ts`), primitives
+  `FormulaireAvecEtat`/`BoutonSoumettre` (`src/components/formulaires/`). Actions converties (26) :
+  tâche (création), offre (création, décision), lien visite ↔ offre, compromis (création, décision,
+  date d'acte), rémunération (création, correction, encaissement — saisie uniquement), prospect
+  vendeur (création, modification, jalons, signature du mandat, perte, note), acquéreur (création,
+  modification), bien (création, modification), document (ajout, correction de classement). Les
+  parseurs `lib/*Formulaire.ts` lèvent `ErreurSaisie` pour un champ absent, un format ou un nombre
+  invalide.
+- **Non converti, volontairement** — `mandat.ts` (panneau Mandat : refus déjà rendus localement par
+  la convention `?mandat=<refus>`), `statutCommercialBien.ts` (actions legacy dont les boutons sont
+  masqués par l'UI sur un bien archivé), `terminerTache`/`annulerTache` (formulaires inline de
+  Today/fiches), `modifierContact`, fiscal, automatisations, `historiqueAmorcage`,
+  `repereRelationnel` ; `secteurRecherche`, Gmail, photo, bon de visite, retour vendeur et
+  `PlanifierVisiteForm` étaient déjà conformes.
+- **Ce qui continue à lever (fail-closed, error.tsx reste le repli)** : session absente et
+  workspace (gardes inchangées, avant toute validation), erreurs DB/stockage/infrastructure, les
+  invariants « Contact canonique introuvable » (prospect vendeur, acquéreur), les états
+  comptables impossibles de la rémunération (compromis annulé, doublon, déjà encaissée, compromis
+  non réalisé, date d'acte réelle absente), et le validateur de cohérence des rattachements
+  documentaires (`lib/documents/coherenceRattachementDocument.ts`, 5 `throw` — sélections
+  contraintes par l'UI). `error.tsx` ne montre toujours jamais `error.message`.
+- **Saisie** : conservée parce qu'aucune navigation n'a lieu ; les champs ne sont pas des
+  composants contrôlés — un rechargement volontaire de la page la perd, comme avant.
+
 ## Documents réels : stockage local, désormais configurable (ADR-050)
 
 - **Code compatible avec un stockage persistant configuré** — `ATLAS_DOCUMENT_STORAGE_DIR`
@@ -80,11 +110,14 @@ choix faits — chaque limite listée correspond à une décision de scope assum
   aucun rollback/cleanup, dette non traitée par ADR-050 (aucun chemin de code de production
   n'exécute de `DELETE` documentaire à ce jour).
 - **Deux limites de taille non alignées, comportement vérifié en conditions réelles** : un upload
-  entre 10 et 11 Mo est rejeté proprement par la validation applicative (`throw` explicite depuis
-  ADR-029, aucune écriture) ; un upload dépassant 11 Mo (`serverActions.bodySizeLimit`, `next.config.ts`)
-  échoue en erreur serveur (500) **avant** d'atteindre cette validation — pas de message utilisateur
-  propre dans ce cas, seulement le crash générique de Next.js. Corriger ce cas proprement
-  nécessiterait une validation côté client (taille du fichier avant soumission), hors périmètre V1.
+  entre 10 et 13 Mo est rejeté proprement par la validation applicative (depuis `FORM_FEEDBACK_V1`,
+  message local dans le formulaire, aucune écriture — vérifié en smoke avec un PDF de 10,5 Mo) ; un
+  upload dépassant 13 Mo (`serverActions.bodySizeLimit` et `proxyClientMaxBodySize`,
+  `next.config.ts`, alignés par `FORM_FEEDBACK_V1` : le Proxy tronquait auparavant à 10 Mo, ce qui
+  envoyait tout upload de 10 à 13 Mo — documents comme photos — vers error.tsx) échoue en erreur
+  serveur (500) **avant** d'atteindre cette validation — pas de message utilisateur propre dans ce
+  cas. Corriger ce cas proprement nécessiterait une validation côté client (taille du fichier avant
+  soumission), hors périmètre V1.
 - **Liste blanche de types de fichiers volontairement restreinte** (`application/pdf`,
   `image/jpeg`, `image/png`) — pas de Word/Excel, pas d'archives ZIP, pas de scans TIFF.
 - **Un seul fichier par soumission** — pas d'upload multiple en une fois.

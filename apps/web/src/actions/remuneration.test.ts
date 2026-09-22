@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration + garde-fous : ajouterRemunerationAction/modifierRemunerationAction/
 // marquerRemunerationEncaisseeAction doivent refuser explicitement (throw) sur les invariants
@@ -117,7 +118,7 @@ describe("ajouterRemunerationAction — garde-fous", () => {
     await marquerCompromisAnnule(compromis.id, "2026-08-10", "autre");
 
     await expect(
-      ajouterRemunerationAction(
+      ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, montantRemunerationConseiller: "10000" })
       )
     ).rejects.toThrow(/annulé/);
@@ -128,10 +129,10 @@ describe("ajouterRemunerationAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      ajouterRemunerationAction(
+      ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, montantRemunerationConseiller: "10000" })
       )
-    ).rejects.toThrow(/archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/archivé/) });
 
     await expect(getRemunerationParCompromis(compromis.id)).resolves.toBeUndefined();
   });
@@ -141,10 +142,10 @@ describe("ajouterRemunerationAction — garde-fous", () => {
     await archiverAcquereur(acquereur.id);
 
     await expect(
-      ajouterRemunerationAction(
+      ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, montantRemunerationConseiller: "10000" })
       )
-    ).rejects.toThrow(/archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/archivé/) });
   });
 
   it("accepte l'ajout sur un compromis realise dont le bien est archivé (archivage commercial ≠ clôture du suivi financier, ADR-021)", async () => {
@@ -152,7 +153,7 @@ describe("ajouterRemunerationAction — garde-fous", () => {
     await marquerCompromisRealise(compromis.id, "2026-09-01");
     await archiverBien(bien.id);
 
-    await ajouterRemunerationAction(
+    await ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, montantRemunerationConseiller: "125000.50" })
     ).catch(() => {});
 
@@ -165,8 +166,8 @@ describe("ajouterRemunerationAction — garde-fous", () => {
     const { compromis } = await creerCompromisDeTest("MONTANT-INVALIDE");
 
     await expect(
-      ajouterRemunerationAction(formData({ compromisId: compromis.id, montantRemunerationConseiller: "0" }))
-    ).rejects.toThrow(/rémunération du conseiller/);
+      ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromis.id, montantRemunerationConseiller: "0" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/rémunération du conseiller/) });
   });
 
   it("refuse explicitement (throw) une rémunération en doublon pour le même compromis", async () => {
@@ -178,7 +179,7 @@ describe("ajouterRemunerationAction — garde-fous", () => {
     idsRemunerationCrees.push(premiere.id);
 
     await expect(
-      ajouterRemunerationAction(
+      ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, montantRemunerationConseiller: "50000" })
       )
     ).rejects.toThrow(/existe déjà/);
@@ -197,7 +198,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
     await marquerRemunerationEncaissee(compromis.id, "2026-09-15");
 
     await expect(
-      modifierRemunerationAction(
+      modifierRemunerationAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, montantRemunerationConseiller: "200000" })
       )
     ).rejects.toThrow(/encaissée/);
@@ -213,10 +214,10 @@ describe("modifierRemunerationAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      modifierRemunerationAction(
+      modifierRemunerationAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, montantRemunerationConseiller: "200000" })
       )
-    ).rejects.toThrow(/archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/archivé/) });
   });
 
   it("accepte la correction sur un compromis realise dont le bien est archivé", async () => {
@@ -230,7 +231,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
     idsRemunerationCrees.push(r.id);
     await archiverBien(bien.id);
 
-    await modifierRemunerationAction(
+    await modifierRemunerationAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, montantRemunerationConseiller: "150000" })
     ).catch(() => {});
 
@@ -247,7 +248,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
     });
     idsRemunerationCrees.push(r.id);
 
-    await modifierRemunerationAction(
+    await modifierRemunerationAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, montantRemunerationConseiller: "100000", montantHonorairesTotal: "" })
     ).catch(() => {});
 
@@ -266,7 +267,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     idsRemunerationCrees.push(r.id);
 
     await expect(
-      marquerRemunerationEncaisseeAction(
+      marquerRemunerationEncaisseeAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, dateEncaissementReelle: "2026-09-15" })
       )
     ).rejects.toThrow(/réalisé/);
@@ -284,7 +285,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
 
     await expect(
-      marquerRemunerationEncaisseeAction(
+      marquerRemunerationEncaisseeAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, dateEncaissementReelle: "2026-09-15" })
       )
     ).rejects.toThrow(/date réelle de l'acte/);
@@ -300,7 +301,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     idsRemunerationCrees.push(r.id);
     await archiverBien(bien.id);
 
-    await marquerRemunerationEncaisseeAction(
+    await marquerRemunerationEncaisseeAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, dateEncaissementReelle: "2026-09-20" })
     ).catch(() => {});
 
@@ -319,7 +320,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     await marquerRemunerationEncaissee(compromis.id, "2026-09-20");
 
     await expect(
-      marquerRemunerationEncaisseeAction(
+      marquerRemunerationEncaisseeAction(ETAT_FORMULAIRE_INITIAL,
         formData({ compromisId: compromis.id, dateEncaissementReelle: "2026-10-01" })
       )
     ).rejects.toThrow(/déjà marquée comme encaissée/);

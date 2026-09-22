@@ -1,4 +1,6 @@
 import type { ProfilAcquereur } from "@/types/client";
+import FormulaireAvecEtat, { type ActionFormulaire } from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -19,14 +21,14 @@ export default function AcquereurFormulaire({
   libelleSubmit,
 }: {
   acquereur?: ProfilAcquereur;
-  action: (formData: FormData) => Promise<void>;
+  action: ActionFormulaire;
   libelleSubmit: string;
 }) {
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <FormulaireAvecEtat action={action} className="flex flex-col gap-4" positionErreur="haut">
       {acquereur && <input type="hidden" name="id" value={acquereur.id} />}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Prénom *</label>
           <input name="prenom" required defaultValue={acquereur?.prenom ?? ""} className={inputCls} />
@@ -37,7 +39,7 @@ export default function AcquereurFormulaire({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Email *</label>
           <input
@@ -54,7 +56,7 @@ export default function AcquereurFormulaire({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Budget minimum (€) *</label>
           <input
@@ -81,7 +83,7 @@ export default function AcquereurFormulaire({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Stade du projet</label>
           <select
@@ -113,7 +115,7 @@ export default function AcquereurFormulaire({
           Champs optionnels — laissés sur « Inconnu », ils ne seront jamais traités comme une
           réponse négative.
         </p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Pièces minimum</label>
             <input
@@ -193,12 +195,9 @@ export default function AcquereurFormulaire({
         <textarea name="notes" rows={4} defaultValue={acquereur?.notes ?? ""} className={inputCls} />
       </div>
 
-      <button
-        type="submit"
-        className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
-      >
+      <BoutonSoumettre classeBrute="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg" libelleAttente="Enregistrement…">
         {libelleSubmit}
-      </button>
-    </form>
+      </BoutonSoumettre>
+    </FormulaireAvecEtat>
   );
 }

@@ -1,5 +1,7 @@
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 import { ORIGINES_LEAD, LABEL_ORIGINE_LEAD } from "@/types/origineLead";
+import FormulaireAvecEtat, { type ActionFormulaire } from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -24,14 +26,14 @@ export default function ProspectVendeurFormulaire({
   libelleSubmit,
 }: {
   prospect?: ProspectVendeur;
-  action: (formData: FormData) => Promise<void>;
+  action: ActionFormulaire;
   libelleSubmit: string;
 }) {
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <FormulaireAvecEtat action={action} className="flex flex-col gap-4" positionErreur="haut">
       {prospect && <input type="hidden" name="id" value={prospect.id} />}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Nom *</label>
           <input name="nom" required defaultValue={prospect?.nom ?? ""} className={inputCls} />
@@ -43,7 +45,7 @@ export default function ProspectVendeurFormulaire({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Email</label>
           <input name="email" type="email" defaultValue={prospect?.email ?? ""} className={inputCls} />
@@ -58,7 +60,7 @@ export default function ProspectVendeurFormulaire({
         d&apos;avoir une coordonnée de contact directe.
       </p>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Origine du lead</label>
           <select name="origineLead" defaultValue={prospect?.origineLead ?? ""} className={inputCls}>
@@ -83,7 +85,7 @@ export default function ProspectVendeurFormulaire({
 
       <div className="border-t border-border pt-4 mt-2">
         <p className="text-[12px] text-text-3 mb-3">Bien potentiel — tout est facultatif à ce stade.</p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Adresse précise</label>
             <input
@@ -124,12 +126,9 @@ export default function ProspectVendeurFormulaire({
         </div>
       </div>
 
-      <button
-        type="submit"
-        className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
-      >
+      <BoutonSoumettre classeBrute="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg" libelleAttente="Enregistrement…">
         {libelleSubmit}
-      </button>
-    </form>
+      </BoutonSoumettre>
+    </FormulaireAvecEtat>
   );
 }

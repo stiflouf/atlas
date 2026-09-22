@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration + garde-fou : creerTacheAction doit refuser explicitement (throw) toute
 // association à un bien, un acquéreur ou un prospect vendeur archivé (ADR-012/027/028), ainsi que
@@ -82,7 +83,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
     await archiverBien(bien.id);
 
     await expect(
-      creerTacheAction(
+      creerTacheAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           titre: "[test réel] Tâche sur entité archivée",
           type: "autre",
@@ -90,7 +91,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
           bienId: bien.id,
         })
       )
-    ).rejects.toThrow(/bien archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/bien archivé/) });
   });
 
   it("refuse explicitement (throw) une tâche associée à un acquéreur archivé", async () => {
@@ -110,7 +111,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
     await archiverAcquereur(acquereur.id);
 
     await expect(
-      creerTacheAction(
+      creerTacheAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           titre: "[test réel] Tâche sur entité archivée",
           type: "autre",
@@ -118,7 +119,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
           acquereurId: acquereur.id,
         })
       )
-    ).rejects.toThrow(/acquéreur archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/acquéreur archivé/) });
   });
 
   it("refuse explicitement (throw) une tâche associée à un prospect vendeur archivé", async () => {
@@ -139,7 +140,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
     await archiverProspectVendeur(prospect.id);
 
     await expect(
-      creerTacheAction(
+      creerTacheAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           titre: "[test réel] Tâche sur entité archivée",
           type: "autre",
@@ -147,7 +148,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
           prospectVendeurId: prospect.id,
         })
       )
-    ).rejects.toThrow(/prospect vendeur archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/prospect vendeur archivé/) });
   });
 
   it("refuse explicitement (throw) plus d'une cible à la fois", async () => {
@@ -182,7 +183,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
     idsAcquereursCrees.push(acquereur.id);
 
     await expect(
-      creerTacheAction(
+      creerTacheAction(ETAT_FORMULAIRE_INITIAL,
         formData({
           titre: "[test réel] Tâche sur entité archivée",
           type: "autre",
@@ -191,12 +192,10 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
           acquereurId: acquereur.id,
         })
       )
-    ).rejects.toThrow(/une seule cible/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/une seule cible/) });
   });
 
   it("refuse un titre vide", async () => {
-    await expect(creerTacheAction(formData({ titre: "  ", type: "autre", priorite: "normale" }))).rejects.toThrow(
-      /[Tt]itre/
-    );
+    await expect(creerTacheAction(ETAT_FORMULAIRE_INITIAL, formData({ titre: "  ", type: "autre", priorite: "normale" }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/[Tt]itre/) });
   });
 });

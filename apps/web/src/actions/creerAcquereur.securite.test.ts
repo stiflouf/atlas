@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, like } from "drizzle-orm";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-047, §14/§25/§26 de l'audit : creerAcquereurAction n'avait jusqu'ici AUCUN test, direct ou
 // indirect (confirmé par recherche exhaustive). Fournit le test comportemental direct demandé par
@@ -47,7 +48,7 @@ function formulaireValide(): FormData {
 
 describe("creerAcquereurAction — sécurité (ADR-047)", () => {
   it("anonyme échoue AVANT toute mutation DB — zéro ligne créée", async () => {
-    await expect(creerAcquereurAction(formulaireValide())).rejects.toThrow(/non authentifié/i);
+    await expect(creerAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaireValide())).rejects.toThrow(/non authentifié/i);
 
     const lignes = await getDb().select().from(acquereursTable).where(eq(acquereursTable.nom, REFERENCE_TEST));
     expect(lignes).toHaveLength(0);

@@ -14,6 +14,7 @@ import type { StatutCompromis } from "@/types/compromis";
 import { estMotifPerteHumain } from "@/types/motifPerte";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { ErreurSaisie, avecFeedbackFormulaire, type EtatFormulaire } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-061 §13 (lot OFFER_LIFECYCLE_FOUNDATION_V1) — création et transitions du Compromis passent par
 // des writers transactionnels scoped (verrou du bien, même ordre que l'Offre), qui rendent un
@@ -46,24 +47,26 @@ function parseOffreIdOptionnel(valeur: FormDataEntryValue | null): string | unde
 // l'émission de l'événement `compromis_signe` (ADR-032, correction validée) : corrige une absence
 // d'atomicité préexistante entre les deux premières écritures (auparavant deux appels séquentiels
 // non transactionnels) en même temps qu'elle y accroche le moteur d'automatisations.
-export async function ajouterCompromisAction(formData: FormData): Promise<void> {
+export async function ajouterCompromisAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const workspaceId = await exigerWorkspaceCourant();
-  const bienId = String(formData.get("bienId") ?? "");
-  const acquereurId = String(formData.get("acquereurId") ?? "");
-  const prixConvenu = parseMontant(formData.get("prixConvenu"));
-  const dateSignature = String(formData.get("dateSignature") ?? "").trim();
-  const dateActe = parseDateOptionnelle(formData.get("dateActe"));
-  const offreId = parseOffreIdOptionnel(formData.get("offreId"));
+  return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
+    const bienId = String(formData.get("bienId") ?? "");
+    const acquereurId = String(formData.get("acquereurId") ?? "");
+    const prixConvenu = parseMontant(formData.get("prixConvenu"));
+    const dateSignature = String(formData.get("dateSignature") ?? "").trim();
+    const dateActe = parseDateOptionnelle(formData.get("dateActe"));
+    const offreId = parseOffreIdOptionnel(formData.get("offreId"));
 
-  if (!prixConvenu) throw new Error("Le prix convenu doit être un nombre positif.");
-  if (!dateSignature) throw new Error("La date de signature est obligatoire.");
+    if (!prixConvenu) throw new ErreurSaisie("Le prix convenu doit être un nombre positif.");
+    if (!dateSignature) throw new ErreurSaisie("La date de signature est obligatoire.");
 
-  const resultat = await creerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe }, workspaceId);
-  if (resultat.statut !== "cree") throw new Error(messageRefusCreation(resultat));
-  await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
+    const resultat = await creerCompromis({ bienId, acquereurId, offreId, prixConvenu, dateSignature, dateActe }, workspaceId);
+    if (resultat.statut !== "cree") throw new ErreurSaisie(messageRefusCreation(resultat));
+    await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
 
-  redirect(`/biens/${bienId}`);
+    redirect(`/biens/${bienId}`);
+  });
 }
 
 function messageRefusCreation(resultat: Exclude<ResultatCreationCompromis, { statut: "cree" }>): string {
@@ -113,38 +116,40 @@ function messageRefusDecision(resultat: Exclude<ResultatDecisionCompromis, { sta
 // d'acteur : seul le motif choisi par le conseiller fait foi.
 // Ne modifie jamais compromisSigneLe, l'archivage du bien, ni stadeProjet de l'acquéreur —
 // gestes commerciaux volontairement séparés (ADR-014/ADR-016/ADR-017).
-export async function changerStatutCompromisAction(formData: FormData): Promise<void> {
+export async function changerStatutCompromisAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const workspaceId = await exigerWorkspaceCourant();
-  const compromisId = String(formData.get("compromisId") ?? "");
-  const statut = String(formData.get("statut") ?? "") as StatutCompromis;
+  return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
+    const compromisId = String(formData.get("compromisId") ?? "");
+    const statut = String(formData.get("statut") ?? "") as StatutCompromis;
 
-  if (!TRANSITIONS_VALIDES.includes(statut)) {
-    throw new Error("Transition de statut invalide.");
-  }
+    if (!TRANSITIONS_VALIDES.includes(statut)) {
+      throw new ErreurSaisie("Transition de statut invalide.");
+    }
 
-  let resultat: ResultatDecisionCompromis;
-  if (statut === "realise") {
-    const dateActeReelle = parseDateOptionnelle(formData.get("dateActeReelle"));
-    if (!dateActeReelle) {
-      throw new Error("La date réelle de signature de l'acte est obligatoire pour marquer une vente réalisée.");
+    let resultat: ResultatDecisionCompromis;
+    if (statut === "realise") {
+      const dateActeReelle = parseDateOptionnelle(formData.get("dateActeReelle"));
+      if (!dateActeReelle) {
+        throw new ErreurSaisie("La date réelle de signature de l'acte est obligatoire pour marquer une vente réalisée.");
+      }
+      resultat = await deciderCompromis(compromisId, { statut: "realise", dateActeReelle }, workspaceId);
+    } else {
+      const dateAnnulation = parseDateOptionnelle(formData.get("dateAnnulation"));
+      if (!dateAnnulation) {
+        throw new ErreurSaisie("La date d'annulation est obligatoire.");
+      }
+      const motifAnnulation = String(formData.get("motifAnnulation") ?? "").trim();
+      if (!estMotifPerteHumain(motifAnnulation)) {
+        throw new ErreurSaisie("Le motif de l'annulation est obligatoire.");
+      }
+      resultat = await deciderCompromis(compromisId, { statut: "annule", dateAnnulation, motifAnnulation }, workspaceId);
     }
-    resultat = await deciderCompromis(compromisId, { statut: "realise", dateActeReelle }, workspaceId);
-  } else {
-    const dateAnnulation = parseDateOptionnelle(formData.get("dateAnnulation"));
-    if (!dateAnnulation) {
-      throw new Error("La date d'annulation est obligatoire.");
-    }
-    const motifAnnulation = String(formData.get("motifAnnulation") ?? "").trim();
-    if (!estMotifPerteHumain(motifAnnulation)) {
-      throw new Error("Le motif de l'annulation est obligatoire.");
-    }
-    resultat = await deciderCompromis(compromisId, { statut: "annule", dateAnnulation, motifAnnulation }, workspaceId);
-  }
-  if (resultat.statut !== "decide") throw new Error(messageRefusDecision(resultat));
-  await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
+    if (resultat.statut !== "decide") throw new ErreurSaisie(messageRefusDecision(resultat));
+    await traiterExecutionsEnAttente(resultat.idsExecutionsATraiter);
 
-  redirect(`/biens/${resultat.compromis.bienId}`);
+    redirect(`/biens/${resultat.compromis.bienId}`);
+  });
 }
 
 // Modification de la date d'acte PRÉVUE (ADR-046) — jamais une transition de statut, action
@@ -157,15 +162,17 @@ export async function changerStatutCompromisAction(formData: FormData): Promise<
 // soumission (le compromis devient 'realise'/'annule' entre-temps) est donc refusée ici, pas
 // seulement masquée côté UI. `dateActe` reste nullable : un champ vide efface explicitement la
 // date (report sans nouvelle date connue) — jamais remplacé par une estimation inventée.
-export async function modifierDateActeAction(formData: FormData): Promise<void> {
+export async function modifierDateActeAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const workspaceId = await exigerWorkspaceCourant();
-  const compromisId = String(formData.get("compromisId") ?? "");
-  const dateActe = parseDateOptionnelle(formData.get("dateActe"));
+  return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
+    const compromisId = String(formData.get("compromisId") ?? "");
+    const dateActe = parseDateOptionnelle(formData.get("dateActe"));
 
-  const resultat = await modifierDateActeCompromis(compromisId, dateActe, workspaceId);
-  if (resultat.statut === "deja_finalise") throw new Error("La date d'acte prévue n'est modifiable que pour un compromis en cours.");
-  if (resultat.statut !== "modifie") throw new Error(messageRefusDecision(resultat));
+    const resultat = await modifierDateActeCompromis(compromisId, dateActe, workspaceId);
+    if (resultat.statut === "deja_finalise") throw new ErreurSaisie("La date d'acte prévue n'est modifiable que pour un compromis en cours.");
+    if (resultat.statut !== "modifie") throw new ErreurSaisie(messageRefusDecision(resultat));
 
-  redirect(`/biens/${resultat.compromis.bienId}`);
+    redirect(`/biens/${resultat.compromis.bienId}`);
+  });
 }

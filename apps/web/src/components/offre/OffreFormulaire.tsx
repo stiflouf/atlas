@@ -9,6 +9,8 @@ import { LABEL_INTERET, type CompteRenduVisite } from "@/types/compteRenduVisite
 import type { ProfilAcquereur } from "@/types/client";
 import type { Offre } from "@/types/offre";
 import { nomComplet } from "@/lib/identite/nomPersonne";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 function formatPrix(montant: number): string {
   return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(montant);
@@ -62,7 +64,7 @@ export default function OffreFormulaire(props: Props) {
   const soumissionBloqueeParDoublon = offresEnCoursPourPaire.length > 0 && !confirmerMalgreExistante;
 
   return (
-    <form action={ajouterOffreAction} className="flex flex-col gap-2">
+    <FormulaireAvecEtat action={ajouterOffreAction} className="flex flex-col gap-2">
       <input type="hidden" name="bienId" value={props.bienId} />
 
       {props.verrouille ? (
@@ -154,9 +156,7 @@ export default function OffreFormulaire(props: Props) {
         Date de validité (optionnelle)
         <Input type="date" name="dateValidite" className="mt-1" />
       </label>
-      <Button type="submit" variant="primary" size="md" className="self-start" disabled={soumissionBloqueeParDoublon}>
-        Ajouter l&apos;offre
-      </Button>
-    </form>
+      <BoutonSoumettre variant="primary" size="md" className="self-start" disabled={soumissionBloqueeParDoublon} libelleAttente="Création…">Ajouter l&apos;offre</BoutonSoumettre>
+    </FormulaireAvecEtat>
   );
 }

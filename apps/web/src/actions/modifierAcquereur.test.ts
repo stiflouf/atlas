@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-047, §14/§25 de l'audit : modifierAcquereurAction n'avait jusqu'ici AUCUN test (confirmé par
 // recherche exhaustive). Comportement métier ici, session Atlas mockée valide — le refus anonyme
@@ -79,7 +80,7 @@ describe("modifierAcquereurAction — comportement", () => {
     }, WORKSPACE_TEST);
     idsAcquereurs.push(acquereur.id);
 
-    await modifierAcquereurAction(formulaireModification(acquereur.id)).catch(() => {}); // redirect() attendu
+    await modifierAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaireModification(acquereur.id)).catch(() => {}); // redirect() attendu
 
     const relu = await getClientById(acquereur.id);
     expect(relu?.email).toBe("jean.modifie@example.com");
@@ -88,6 +89,6 @@ describe("modifierAcquereurAction — comportement", () => {
 
   it("id inexistant -> notFound(), jamais un succès silencieux", async () => {
     const idInexistant = "00000000-0000-0000-0000-000000000000";
-    await expect(modifierAcquereurAction(formulaireModification(idInexistant))).rejects.toThrow();
+    await expect(modifierAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaireModification(idInexistant))).rejects.toThrow();
   });
 });

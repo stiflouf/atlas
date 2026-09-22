@@ -6,6 +6,8 @@ import { listerBiens } from "@/lib/bienRepository";
 import { listerClients } from "@/lib/clientRepository";
 import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
 import { nomComplet } from "@/lib/identite/nomPersonne";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -67,7 +69,7 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
         Nouvelle tâche
       </h1>
 
-      <form action={creerTacheAction} className="flex flex-col gap-4">
+      <FormulaireAvecEtat action={creerTacheAction} className="flex flex-col gap-4" positionErreur="haut">
         <div>
           <label className={labelCls}>Titre *</label>
           <input
@@ -124,13 +126,10 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
           prospectVendeurIdInitial={prospectVendeurIdPreselectionne}
         />
 
-        <button
-          type="submit"
-          className="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg"
-        >
+        <BoutonSoumettre classeBrute="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg" libelleAttente="Création…">
           Créer la tâche
-        </button>
-      </form>
+        </BoutonSoumettre>
+      </FormulaireAvecEtat>
     </div>
   );
 }

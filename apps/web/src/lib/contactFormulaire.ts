@@ -1,4 +1,5 @@
 import type { NouveauContact } from "@/lib/contactRepository";
+import { ErreurSaisie } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-057 — LA FRONTIÈRE du formulaire d'identité canonique, et le seul endroit où une chaîne vide
 // a le droit d'exister. Un input HTML vide arrive en `""` ; les colonnes optionnelles de `contacts`
@@ -17,7 +18,7 @@ function parseTexteOptionnel(valeur: FormDataEntryValue | null): string | undefi
 
 export function parseContactFormData(formData: FormData): NouveauContact {
   const nom = String(formData.get("nom") ?? "").trim();
-  if (!nom) throw new Error("Le nom est obligatoire.");
+  if (!nom) throw new ErreurSaisie("Le nom est obligatoire.");
 
   return {
     nom,

@@ -5,6 +5,8 @@ import {
   LABEL_TYPE_NOTE_PROSPECT_VENDEUR,
 } from "@/types/noteProspectVendeur";
 import { ajouterNoteProspectVendeurAction } from "@/actions/prospectVendeur";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[13px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -52,7 +54,7 @@ export default function ProspectVendeurJournal({
         <summary className="list-none cursor-pointer select-none inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:text-accent-hover transition-colors">
           + Noter un échange
         </summary>
-        <form action={ajouterNoteProspectVendeurAction} className="flex flex-col gap-3 mt-3.5">
+        <FormulaireAvecEtat action={ajouterNoteProspectVendeurAction} className="flex flex-col gap-3 mt-3.5">
           <input type="hidden" name="id" value={prospectId} />
           <div>
             <label className="text-[12px] font-medium text-text-2 mb-1 block">Type d&apos;échange</label>
@@ -75,13 +77,8 @@ export default function ProspectVendeurJournal({
             Journalise un échange déjà eu — n&apos;envoie aucun message. Un échange autre qu&apos;une
             note interne met à jour la date de dernier contact.
           </p>
-          <button
-            type="submit"
-            className="self-start text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg"
-          >
-            Enregistrer l&apos;échange
-          </button>
-        </form>
+          <BoutonSoumettre classeBrute="self-start text-[13px] font-medium text-accent bg-surface border border-border-md hover:border-accent transition-colors px-3.5 py-2 rounded-lg" libelleAttente="Enregistrement…">Enregistrer l&apos;échange</BoutonSoumettre>
+        </FormulaireAvecEtat>
       </details>
 
       {entrees.length === 0 ? (

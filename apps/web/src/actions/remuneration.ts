@@ -13,6 +13,7 @@ import {
 import { parseMontantCentimes } from "@/types/remuneration";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { ErreurSaisie, avecFeedbackFormulaire, type EtatFormulaire } from "@/lib/formulaires/etatFormulaire";
 
 // undefined = absent (champ optionnel non renseigné), null n'est jamais retourné par ce helper —
 // distinct de parseMontantCentimesOuNull utilisé par la correction (§ modifierRemunerationAction).
@@ -45,55 +46,57 @@ function parseDateOuNull(valeur: FormDataEntryValue | null): string | null {
 // aucun blocage d'archivage si le compromis est realise, ADR-021), si le montant de rémunération du
 // conseiller est absent/≤0, si les honoraires totaux sont renseignés mais ≤0, ou si une rémunération
 // existe déjà pour ce compromis (contrainte UNIQUE en base, vérifiée ici pour un message clair).
-export async function ajouterRemunerationAction(formData: FormData): Promise<void> {
+export async function ajouterRemunerationAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const compromisId = String(formData.get("compromisId") ?? "");
+  return avecFeedbackFormulaire(async () => {
+    const compromisId = String(formData.get("compromisId") ?? "");
 
-  const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
-  if (!compromisActuel) throw new Error("Compromis introuvable.");
-  if (compromisActuel.statut === "annule") {
-    throw new Error("Impossible d'ajouter une rémunération sur un compromis annulé.");
-  }
-
-  if (compromisActuel.statut === "en_cours") {
-    const [bien, acquereur] = await Promise.all([
-      getBienById(compromisActuel.bienId),
-      getClientById(compromisActuel.acquereurId),
-    ]);
-    if (bien?.archiveLe || acquereur?.archiveLe) {
-      throw new Error(
-        "Impossible d'ajouter une rémunération prévisionnelle sur un compromis en cours dont le bien ou l'acquéreur est archivé."
-      );
+    const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
+    if (!compromisActuel) throw new Error("Compromis introuvable.");
+    if (compromisActuel.statut === "annule") {
+      throw new Error("Impossible d'ajouter une rémunération sur un compromis annulé.");
     }
-  }
 
-  const remunerationExistante = await getRemunerationParCompromis(compromisId);
-  if (remunerationExistante) {
-    throw new Error("Une rémunération existe déjà pour ce compromis — utilisez la correction.");
-  }
+    if (compromisActuel.statut === "en_cours") {
+      const [bien, acquereur] = await Promise.all([
+        getBienById(compromisActuel.bienId),
+        getClientById(compromisActuel.acquereurId),
+      ]);
+      if (bien?.archiveLe || acquereur?.archiveLe) {
+        throw new ErreurSaisie(
+          "Impossible d'ajouter une rémunération prévisionnelle sur un compromis en cours dont le bien ou l'acquéreur est archivé."
+        );
+      }
+    }
 
-  const montantRemunerationConseillerCentimes = parseMontantCentimesOptionnel(
-    formData.get("montantRemunerationConseiller")
-  );
-  if (!montantRemunerationConseillerCentimes || montantRemunerationConseillerCentimes <= 0) {
-    throw new Error("Le montant de la rémunération du conseiller doit être un nombre positif.");
-  }
+    const remunerationExistante = await getRemunerationParCompromis(compromisId);
+    if (remunerationExistante) {
+      throw new Error("Une rémunération existe déjà pour ce compromis — utilisez la correction.");
+    }
 
-  const montantHonorairesTotalCentimes = parseMontantCentimesOptionnel(formData.get("montantHonorairesTotal"));
-  if (montantHonorairesTotalCentimes !== undefined && montantHonorairesTotalCentimes <= 0) {
-    throw new Error("Le montant des honoraires totaux, s'il est renseigné, doit être un nombre positif.");
-  }
+    const montantRemunerationConseillerCentimes = parseMontantCentimesOptionnel(
+      formData.get("montantRemunerationConseiller")
+    );
+    if (!montantRemunerationConseillerCentimes || montantRemunerationConseillerCentimes <= 0) {
+      throw new ErreurSaisie("Le montant de la rémunération du conseiller doit être un nombre positif.");
+    }
 
-  const dateEncaissementPrevue = parseDateOptionnelle(formData.get("dateEncaissementPrevue"));
+    const montantHonorairesTotalCentimes = parseMontantCentimesOptionnel(formData.get("montantHonorairesTotal"));
+    if (montantHonorairesTotalCentimes !== undefined && montantHonorairesTotalCentimes <= 0) {
+      throw new ErreurSaisie("Le montant des honoraires totaux, s'il est renseigné, doit être un nombre positif.");
+    }
 
-  await enregistrerRemuneration({
-    compromisId,
-    montantRemunerationConseillerCentimes,
-    montantHonorairesTotalCentimes,
-    dateEncaissementPrevue,
+    const dateEncaissementPrevue = parseDateOptionnelle(formData.get("dateEncaissementPrevue"));
+
+    await enregistrerRemuneration({
+      compromisId,
+      montantRemunerationConseillerCentimes,
+      montantHonorairesTotalCentimes,
+      dateEncaissementPrevue,
+    });
+
+    redirect(`/biens/${compromisActuel.bienId}`);
   });
-
-  redirect(`/biens/${compromisActuel.bienId}`);
 }
 
 // Refus explicite si la rémunération est introuvable, si le compromis est annulé, si le compromis
@@ -102,61 +105,63 @@ export async function ajouterRemunerationAction(formData: FormData): Promise<voi
 // champ laissé vide dans le formulaire repasse explicitement à NULL en base (jamais "ignoré"). Si
 // modifierRemunerationPrevisionnelle retourne undefined, la rémunération vient d'être marquée
 // encaissée entre la lecture et l'écriture (gel concurrent, ADR-021) — throw dédié.
-export async function modifierRemunerationAction(formData: FormData): Promise<void> {
+export async function modifierRemunerationAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const compromisId = String(formData.get("compromisId") ?? "");
+  return avecFeedbackFormulaire(async () => {
+    const compromisId = String(formData.get("compromisId") ?? "");
 
-  const remunerationActuelle = await getRemunerationParCompromis(compromisId);
-  if (!remunerationActuelle) throw new Error("Rémunération introuvable.");
+    const remunerationActuelle = await getRemunerationParCompromis(compromisId);
+    if (!remunerationActuelle) throw new Error("Rémunération introuvable.");
 
-  const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
-  if (!compromisActuel) throw new Error("Compromis introuvable.");
-  if (compromisActuel.statut === "annule") {
-    throw new Error("Impossible de corriger une rémunération sur un compromis annulé.");
-  }
-  if (remunerationActuelle.dateEncaissementReelle) {
-    throw new Error("Cette rémunération est encaissée, ses montants ne sont plus modifiables.");
-  }
-
-  if (compromisActuel.statut === "en_cours") {
-    const [bien, acquereur] = await Promise.all([
-      getBienById(compromisActuel.bienId),
-      getClientById(compromisActuel.acquereurId),
-    ]);
-    if (bien?.archiveLe || acquereur?.archiveLe) {
-      throw new Error(
-        "Impossible de corriger une rémunération prévisionnelle sur un compromis en cours dont le bien ou l'acquéreur est archivé."
-      );
+    const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
+    if (!compromisActuel) throw new Error("Compromis introuvable.");
+    if (compromisActuel.statut === "annule") {
+      throw new Error("Impossible de corriger une rémunération sur un compromis annulé.");
     }
-  }
+    if (remunerationActuelle.dateEncaissementReelle) {
+      throw new Error("Cette rémunération est encaissée, ses montants ne sont plus modifiables.");
+    }
 
-  const montantRemunerationConseillerCentimes = parseMontantCentimesOptionnel(
-    formData.get("montantRemunerationConseiller")
-  );
-  if (!montantRemunerationConseillerCentimes || montantRemunerationConseillerCentimes <= 0) {
-    throw new Error("Le montant de la rémunération du conseiller doit être un nombre positif.");
-  }
+    if (compromisActuel.statut === "en_cours") {
+      const [bien, acquereur] = await Promise.all([
+        getBienById(compromisActuel.bienId),
+        getClientById(compromisActuel.acquereurId),
+      ]);
+      if (bien?.archiveLe || acquereur?.archiveLe) {
+        throw new ErreurSaisie(
+          "Impossible de corriger une rémunération prévisionnelle sur un compromis en cours dont le bien ou l'acquéreur est archivé."
+        );
+      }
+    }
 
-  const montantHonorairesTotalCentimes = parseMontantCentimesOuNull(formData.get("montantHonorairesTotal"));
-  if (montantHonorairesTotalCentimes === undefined) {
-    throw new Error("Le montant des honoraires totaux, s'il est renseigné, doit être un nombre positif.");
-  }
-  if (montantHonorairesTotalCentimes !== null && montantHonorairesTotalCentimes <= 0) {
-    throw new Error("Le montant des honoraires totaux, s'il est renseigné, doit être un nombre positif.");
-  }
+    const montantRemunerationConseillerCentimes = parseMontantCentimesOptionnel(
+      formData.get("montantRemunerationConseiller")
+    );
+    if (!montantRemunerationConseillerCentimes || montantRemunerationConseillerCentimes <= 0) {
+      throw new ErreurSaisie("Le montant de la rémunération du conseiller doit être un nombre positif.");
+    }
 
-  const dateEncaissementPrevue = parseDateOuNull(formData.get("dateEncaissementPrevue"));
+    const montantHonorairesTotalCentimes = parseMontantCentimesOuNull(formData.get("montantHonorairesTotal"));
+    if (montantHonorairesTotalCentimes === undefined) {
+      throw new ErreurSaisie("Le montant des honoraires totaux, s'il est renseigné, doit être un nombre positif.");
+    }
+    if (montantHonorairesTotalCentimes !== null && montantHonorairesTotalCentimes <= 0) {
+      throw new ErreurSaisie("Le montant des honoraires totaux, s'il est renseigné, doit être un nombre positif.");
+    }
 
-  const resultat = await modifierRemunerationPrevisionnelle(compromisId, {
-    montantRemunerationConseillerCentimes,
-    montantHonorairesTotalCentimes,
-    dateEncaissementPrevue,
+    const dateEncaissementPrevue = parseDateOuNull(formData.get("dateEncaissementPrevue"));
+
+    const resultat = await modifierRemunerationPrevisionnelle(compromisId, {
+      montantRemunerationConseillerCentimes,
+      montantHonorairesTotalCentimes,
+      dateEncaissementPrevue,
+    });
+    if (!resultat) {
+      throw new Error("Cette rémunération vient d'être marquée comme encaissée, elle n'est plus modifiable.");
+    }
+
+    redirect(`/biens/${compromisActuel.bienId}`);
   });
-  if (!resultat) {
-    throw new Error("Cette rémunération vient d'être marquée comme encaissée, elle n'est plus modifiable.");
-  }
-
-  redirect(`/biens/${compromisActuel.bienId}`);
 }
 
 // Refus explicite si la rémunération est introuvable, si le compromis n'est pas realise, si la date
@@ -166,34 +171,36 @@ export async function modifierRemunerationAction(formData: FormData): Promise<vo
 // règlement financier d'une vente déjà conclue ne s'arrête pas à l'archivage du dossier commercial).
 // Si marquerRemunerationEncaissee retourne undefined, la rémunération est déjà encaissée (gel
 // concurrent) — throw dédié.
-export async function marquerRemunerationEncaisseeAction(formData: FormData): Promise<void> {
+export async function marquerRemunerationEncaisseeAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
-  const compromisId = String(formData.get("compromisId") ?? "");
+  return avecFeedbackFormulaire(async () => {
+    const compromisId = String(formData.get("compromisId") ?? "");
 
-  const remunerationActuelle = await getRemunerationParCompromis(compromisId);
-  if (!remunerationActuelle) throw new Error("Rémunération introuvable.");
-  if (remunerationActuelle.dateEncaissementReelle) {
-    throw new Error("Cette rémunération est déjà marquée comme encaissée.");
-  }
+    const remunerationActuelle = await getRemunerationParCompromis(compromisId);
+    if (!remunerationActuelle) throw new Error("Rémunération introuvable.");
+    if (remunerationActuelle.dateEncaissementReelle) {
+      throw new Error("Cette rémunération est déjà marquée comme encaissée.");
+    }
 
-  const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
-  if (!compromisActuel) throw new Error("Compromis introuvable.");
-  if (compromisActuel.statut !== "realise") {
-    throw new Error("Une rémunération ne peut être marquée encaissée que sur un compromis réalisé.");
-  }
-  if (!compromisActuel.dateActeReelle) {
-    throw new Error("La date réelle de l'acte doit être renseignée avant de marquer la rémunération encaissée.");
-  }
+    const compromisActuel = await getCompromisById(compromisId, await exigerWorkspaceCourant());
+    if (!compromisActuel) throw new Error("Compromis introuvable.");
+    if (compromisActuel.statut !== "realise") {
+      throw new Error("Une rémunération ne peut être marquée encaissée que sur un compromis réalisé.");
+    }
+    if (!compromisActuel.dateActeReelle) {
+      throw new Error("La date réelle de l'acte doit être renseignée avant de marquer la rémunération encaissée.");
+    }
 
-  const dateEncaissementReelle = parseDateOptionnelle(formData.get("dateEncaissementReelle"));
-  if (!dateEncaissementReelle) {
-    throw new Error("La date d'encaissement réelle est obligatoire.");
-  }
+    const dateEncaissementReelle = parseDateOptionnelle(formData.get("dateEncaissementReelle"));
+    if (!dateEncaissementReelle) {
+      throw new ErreurSaisie("La date d'encaissement réelle est obligatoire.");
+    }
 
-  const resultat = await marquerRemunerationEncaissee(compromisId, dateEncaissementReelle);
-  if (!resultat) {
-    throw new Error("Cette rémunération est déjà marquée comme encaissée.");
-  }
+    const resultat = await marquerRemunerationEncaissee(compromisId, dateEncaissementReelle);
+    if (!resultat) {
+      throw new Error("Cette rémunération est déjà marquée comme encaissée.");
+    }
 
-  redirect(`/biens/${compromisActuel.bienId}`);
+    redirect(`/biens/${compromisActuel.bienId}`);
+  });
 }

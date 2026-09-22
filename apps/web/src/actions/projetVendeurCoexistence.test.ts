@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, like } from "drizzle-orm";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-055 §B — COEXISTENCE côté vendeur : une création réelle alimente le modèle canonique complet
 // (personne, projet de vente, participation) sans que rien du comportement historique ne change.
@@ -68,7 +69,7 @@ function formulaire(nom: string): FormData {
 describe("ADR-055 §B — une création prospect vendeur alimente le modèle canonique complet", () => {
   it("crée Contact + SellerProject + partie vendeur + ligne historique, tous reliés", async () => {
     const nom = `${MARQUEUR} NOMINAL`;
-    await creerProspectVendeurAction(formulaire(nom)).catch(() => {}); // redirect() attendu
+    await creerProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formulaire(nom)).catch(() => {}); // redirect() attendu
 
     // 1. Comportement historique intact : l'opportunité existe avec exactement les champs soumis.
     const [prospect] = await getDb()

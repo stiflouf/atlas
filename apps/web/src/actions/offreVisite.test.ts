@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration + garde-fous : lierVisiteAOffreAction/delierVisiteAction doivent refuser
 // explicitement (throw) sur une correspondance bien/acquéreur invalide, une date incohérente ou
@@ -118,7 +119,7 @@ describe("lierVisiteAOffreAction — garde-fous", () => {
   it("crée le lien pour une visite valide (même bien/acquéreur, antérieure à l'offre)", async () => {
     const { bien, offre, compteRendu } = await creerJeuDeTest("VALIDE");
 
-    await lierVisiteAOffreAction(
+    await lierVisiteAOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ offreId: offre.id, compteRenduVisiteId: compteRendu.id })
     ).catch(() => {});
 
@@ -130,10 +131,10 @@ describe("lierVisiteAOffreAction — garde-fous", () => {
     const { compteRendu } = await creerJeuDeTest("OFFRE-INTROUVABLE");
 
     await expect(
-      lierVisiteAOffreAction(
+      lierVisiteAOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ offreId: "00000000-0000-0000-0000-000000000000", compteRenduVisiteId: compteRendu.id })
       )
-    ).rejects.toThrow(/Offre introuvable/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/Offre introuvable/) });
   });
 
   it("refuse explicitement (throw) une visite qui ne concerne pas le même bien", async () => {
@@ -141,8 +142,8 @@ describe("lierVisiteAOffreAction — garde-fous", () => {
     const { compteRendu: compteRenduAutreBien } = await creerJeuDeTest("AUTRE-BIEN-B");
 
     await expect(
-      lierVisiteAOffreAction(formData({ offreId: offre.id, compteRenduVisiteId: compteRenduAutreBien.id }))
-    ).rejects.toThrow(/ce bien/);
+      lierVisiteAOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, compteRenduVisiteId: compteRenduAutreBien.id }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/ce bien/) });
   });
 
   it("refuse explicitement (throw) une visite postérieure à l'offre", async () => {
@@ -157,8 +158,8 @@ describe("lierVisiteAOffreAction — garde-fous", () => {
     idsComptesRendusCrees.push(compteRenduTardif.id);
 
     await expect(
-      lierVisiteAOffreAction(formData({ offreId: offre.id, compteRenduVisiteId: compteRenduTardif.id }))
-    ).rejects.toThrow(/postérieure/);
+      lierVisiteAOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, compteRenduVisiteId: compteRenduTardif.id }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/postérieure/) });
   });
 
   it("refuse explicitement (throw) une paire déjà liée", async () => {
@@ -166,8 +167,8 @@ describe("lierVisiteAOffreAction — garde-fous", () => {
     await lierVisiteAOffre(offre.id, compteRendu.id);
 
     await expect(
-      lierVisiteAOffreAction(formData({ offreId: offre.id, compteRenduVisiteId: compteRendu.id }))
-    ).rejects.toThrow(/déjà liée/);
+      lierVisiteAOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, compteRenduVisiteId: compteRendu.id }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/déjà liée/) });
   });
 });
 
@@ -176,14 +177,14 @@ describe("delierVisiteAction — retrouve le bien côté serveur, jamais depuis 
     const { bien, offre, compteRendu } = await creerJeuDeTest("RETRAIT");
     const lien = await lierVisiteAOffre(offre.id, compteRendu.id);
 
-    await delierVisiteAction(formData({ lienId: lien.id })).catch(() => {});
+    await delierVisiteAction(ETAT_FORMULAIRE_INITIAL, formData({ lienId: lien.id })).catch(() => {});
 
     await expect(listerLiensPourBien(bien.id)).resolves.toEqual([]);
   });
 
   it("refuse explicitement (throw) un lienId introuvable", async () => {
     await expect(
-      delierVisiteAction(formData({ lienId: "00000000-0000-0000-0000-000000000000" }))
-    ).rejects.toThrow(/Lien introuvable/);
+      delierVisiteAction(ETAT_FORMULAIRE_INITIAL, formData({ lienId: "00000000-0000-0000-0000-000000000000" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/Lien introuvable/) });
   });
 });

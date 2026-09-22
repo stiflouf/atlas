@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { eq, inArray, like } from "drizzle-orm";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-055 — COEXISTENCE : les créations réelles alimentent désormais l'identité canonique, sans
 // que rien du comportement historique ne change. Ces tests vérifient les deux moitiés de cette
@@ -108,7 +109,7 @@ function formulaireProspect(nom: string): FormData {
 describe("ADR-055 — coexistence du modèle historique et de l'identité canonique", () => {
   it("créer un acquéreur crée aussi son Contact canonique, et les relie", async () => {
     const nom = `${MARQUEUR} ACQUEREUR`;
-    await creerAcquereurAction(formulaireAcquereur(nom, EMAIL_PARTAGE)).catch(() => {}); // redirect() attendu
+    await creerAcquereurAction(ETAT_FORMULAIRE_INITIAL, formulaireAcquereur(nom, EMAIL_PARTAGE)).catch(() => {}); // redirect() attendu
 
     // Comportement historique intact : l'acquéreur existe avec exactement les champs soumis.
     const [acquereur] = await getDb().select().from(acquereursTable).where(eq(acquereursTable.nom, nom));
@@ -128,7 +129,7 @@ describe("ADR-055 — coexistence du modèle historique et de l'identité canoni
 
   it("créer un prospect vendeur crée aussi son Contact canonique, et les relie", async () => {
     const nom = `${MARQUEUR} PROSPECT`;
-    await creerProspectVendeurAction(formulaireProspect(nom)).catch(() => {}); // redirect() attendu
+    await creerProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formulaireProspect(nom)).catch(() => {}); // redirect() attendu
 
     const [prospect] = await getDb()
       .select()

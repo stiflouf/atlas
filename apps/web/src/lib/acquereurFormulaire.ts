@@ -1,5 +1,6 @@
 import type { NouvelAcquereur } from "@/lib/clientRepository";
 import type { StadeProjet } from "@/types/client";
+import { ErreurSaisie } from "@/lib/formulaires/etatFormulaire";
 
 // Un select à 3 états (Inconnu/Oui/Non) — jamais une checkbox — pour ne jamais pouvoir soumettre
 // "false" par accident quand l'information est simplement inconnue. Partagé entre création et
@@ -24,19 +25,19 @@ export function parseAcquereurFormData(formData: FormData): NouvelAcquereur {
   const surfaceMin = parseNombreOptionnel(formData.get("surfaceMin"));
 
   if (!Number.isFinite(budgetMin) || budgetMin < 0) {
-    throw new Error("Budget minimum invalide : doit être positif ou nul.");
+    throw new ErreurSaisie("Budget minimum invalide : doit être positif ou nul.");
   }
   if (!Number.isFinite(budgetMax) || budgetMax < 0) {
-    throw new Error("Budget maximum invalide : doit être positif ou nul.");
+    throw new ErreurSaisie("Budget maximum invalide : doit être positif ou nul.");
   }
   if (budgetMin > budgetMax) {
-    throw new Error("Le budget minimum ne peut pas être supérieur au budget maximum.");
+    throw new ErreurSaisie("Le budget minimum ne peut pas être supérieur au budget maximum.");
   }
   if (piecesMin !== undefined && (!Number.isFinite(piecesMin) || piecesMin <= 0)) {
-    throw new Error("Pièces minimum invalide : doit être strictement supérieur à 0.");
+    throw new ErreurSaisie("Pièces minimum invalide : doit être strictement supérieur à 0.");
   }
   if (surfaceMin !== undefined && (!Number.isFinite(surfaceMin) || surfaceMin <= 0)) {
-    throw new Error("Surface minimum invalide : doit être strictement supérieure à 0.");
+    throw new ErreurSaisie("Surface minimum invalide : doit être strictement supérieure à 0.");
   }
 
   const criteres = String(formData.get("criteres") ?? "")

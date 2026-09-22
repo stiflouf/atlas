@@ -19,6 +19,7 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 }));
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 
 // Test d'intégration + garde-fous : ajouterOffreAction/changerStatutOffreAction doivent refuser
 // explicitement (throw) sur bien/acquéreur invalides ou archivés, et changerStatutOffreAction sur
@@ -108,10 +109,10 @@ describe("ajouterOffreAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      ajouterOffreAction(
+      ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "300000", dateOffre: "2026-08-01" })
       )
-    ).rejects.toThrow(/bien archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/bien archivé/) });
 
     await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
@@ -121,10 +122,10 @@ describe("ajouterOffreAction — garde-fous", () => {
     await archiverAcquereur(acquereur.id);
 
     await expect(
-      ajouterOffreAction(
+      ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "300000", dateOffre: "2026-08-01" })
       )
-    ).rejects.toThrow(/acquéreur archivé/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/acquéreur archivé/) });
 
     await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
@@ -133,10 +134,10 @@ describe("ajouterOffreAction — garde-fous", () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("MONTANT-INVALIDE");
 
     await expect(
-      ajouterOffreAction(
+      ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "0", dateOffre: "2026-08-01" })
       )
-    ).rejects.toThrow(/montant/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/montant/) });
   });
 
   // ADR-061 §12 — fin du dual-write : le domaine Offre n'écrit plus `biens.offre_en_cours_le` ;
@@ -144,7 +145,7 @@ describe("ajouterOffreAction — garde-fous", () => {
   it("ne pose plus offreEnCoursLe sur le bien lors d'une offre valide (ADR-061)", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("COUPLAGE");
 
-    await ajouterOffreAction(
+    await ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "310000", dateOffre: "2026-08-01" })
     ).catch(() => {});
 
@@ -172,7 +173,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
 
     const fd = formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" });
     fd.append("compteRenduVisiteIds", cr.id);
-    await ajouterOffreAction(fd).catch(() => {});
+    await ajouterOffreAction(ETAT_FORMULAIRE_INITIAL, fd).catch(() => {});
 
     const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     idsOffresCrees.push(...offres.map((o) => o.id));
@@ -197,7 +198,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
     const fd = formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" });
     fd.append("compteRenduVisiteIds", cr.id);
 
-    await expect(ajouterOffreAction(fd)).rejects.toThrow(/acquéreur/);
+    await expect(ajouterOffreAction(ETAT_FORMULAIRE_INITIAL, fd)).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/acquéreur/) });
     await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
@@ -215,7 +216,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
     const fd = formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" });
     fd.append("compteRenduVisiteIds", cr.id);
 
-    await expect(ajouterOffreAction(fd)).rejects.toThrow(/postérieure/);
+    await expect(ajouterOffreAction(ETAT_FORMULAIRE_INITIAL, fd)).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/postérieure/) });
     await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
@@ -238,7 +239,7 @@ describe("ajouterOffreAction — liens visite -> offre (ADR-019)", () => {
     fd.append("compteRenduVisiteIds", cr.id);
     fd.append("compteRenduVisiteIds", cr.id);
 
-    await expect(ajouterOffreAction(fd)).rejects.toThrow();
+    await expect(ajouterOffreAction(ETAT_FORMULAIRE_INITIAL, fd)).rejects.toThrow();
 
     await expect(listerOffresPourBien(bien.id, WORKSPACE_TEST)).resolves.toEqual([]);
     const bienApres = await getBienById(bien.id);
@@ -258,10 +259,10 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
     idsOffresCrees.push(premiere.id);
 
     await expect(
-      ajouterOffreAction(
+      ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" })
       )
-    ).rejects.toThrow(/offre en cours existe déjà/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/offre en cours existe déjà/) });
 
     const offres = await listerOffresPourBien(bien.id, WORKSPACE_TEST);
     expect(offres).toHaveLength(1); // aucune deuxième offre créée
@@ -277,7 +278,7 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
     });
     idsOffresCrees.push(premiere.id);
 
-    await ajouterOffreAction(
+    await ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({
         bienId: bien.id,
         acquereurId: acquereur.id,
@@ -307,11 +308,11 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(premiere.id);
-    await changerStatutOffreAction(
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ offreId: premiere.id, statut: "refusee", dateDecision: "2026-08-05", motifPerte: "desaccord_prix" })
     ).catch(() => {});
 
-    await ajouterOffreAction(
+    await ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ bienId: bien.id, acquereurId: acquereur.id, montant: "320000", dateOffre: "2026-08-10" })
     ).catch(() => {});
 
@@ -331,7 +332,7 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
     });
     idsOffresCrees.push(premiere.id);
 
-    await ajouterOffreAction(
+    await ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ bienId: bien.id, acquereurId: autreAcquereur.id, montant: "310000", dateOffre: "2026-08-10" })
     ).catch(() => {});
 
@@ -344,10 +345,10 @@ describe("ajouterOffreAction — doublon accidentel (ADR-044 §17-21)", () => {
 describe("changerStatutOffreAction — garde-fous", () => {
   it("refuse explicitement (throw) sur une offre introuvable", async () => {
     await expect(
-      changerStatutOffreAction(
+      changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ offreId: "00000000-0000-0000-0000-000000000000", statut: "acceptee", dateDecision: "2026-08-01" })
       )
-    ).rejects.toThrow(/introuvable/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/introuvable/) });
   });
 
   it("refuse explicitement (throw) sur un bien archivé", async () => {
@@ -362,8 +363,8 @@ describe("changerStatutOffreAction — garde-fous", () => {
     await archiverBien(bien.id);
 
     await expect(
-      changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" }))
-    ).rejects.toThrow(/archivé/);
+      changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/archivé/) });
   });
 
   it("refuse explicitement (throw) un deuxième changement de statut", async () => {
@@ -376,15 +377,15 @@ describe("changerStatutOffreAction — garde-fous", () => {
     });
     idsOffresCrees.push(offre.id);
 
-    await changerStatutOffreAction(
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" })
     ).catch(() => {});
 
     await expect(
-      changerStatutOffreAction(
+      changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ offreId: offre.id, statut: "refusee", dateDecision: "2026-08-06", motifPerte: "autre" })
       )
-    ).rejects.toThrow(/statut final/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/statut final/) });
   });
 
   it("ne modifie jamais offreEnCoursLe/compromisSigneLe lors d'un changement de statut", async () => {
@@ -400,7 +401,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
     const bienAvant = await getBienById(bien.id);
     expect(bienAvant?.offreEnCoursLe).toBeUndefined();
 
-    await changerStatutOffreAction(
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" })
     ).catch(() => {});
 
@@ -420,8 +421,8 @@ describe("changerStatutOffreAction — garde-fous", () => {
     idsOffresCrees.push(offre.id);
 
     await expect(
-      changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee" }))
-    ).rejects.toThrow(/date de décision/);
+      changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "acceptee" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/date de décision/) });
 
     const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
@@ -438,8 +439,8 @@ describe("changerStatutOffreAction — garde-fous", () => {
     idsOffresCrees.push(offre.id);
 
     await expect(
-      changerStatutOffreAction(formData({ offreId: offre.id, statut: "refusee", dateDecision: "2026-08-06" }))
-    ).rejects.toThrow(/motif/);
+      changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "refusee", dateDecision: "2026-08-06" }))
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/motif/) });
 
     const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
@@ -457,10 +458,10 @@ describe("changerStatutOffreAction — garde-fous", () => {
     idsOffresCrees.push(offre.id);
 
     await expect(
-      changerStatutOffreAction(
+      changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-06", motifPerte: "desaccord_prix" })
       )
-    ).rejects.toThrow(/n'a pas de sens/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/n'a pas de sens/) });
 
     const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
@@ -477,10 +478,10 @@ describe("changerStatutOffreAction — garde-fous", () => {
     idsOffresCrees.push(offre.id);
 
     await expect(
-      changerStatutOffreAction(
+      changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
         formData({ offreId: offre.id, statut: "retiree", dateDecision: "2026-08-06", motifPerte: "n'importe quoi" })
       )
-    ).rejects.toThrow(/motif/);
+    ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/motif/) });
 
     const inchangee = await getOffreById(offre.id, WORKSPACE_TEST);
     expect(inchangee?.statut).toBe("en_cours");
@@ -496,7 +497,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
     });
     idsOffresCrees.push(offre.id);
 
-    await changerStatutOffreAction(
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL,
       formData({ offreId: offre.id, statut: "retiree", dateDecision: "2026-08-07", motifPerte: "acquereur_se_retire" })
     ).catch(() => {});
 
@@ -516,8 +517,8 @@ describe("changerStatutOffreAction — ADR-061", () => {
     idsOffresCrees.push(offre.id);
     for (const statut of ["refusee", "retiree"]) {
       await expect(
-        changerStatutOffreAction(formData({ offreId: offre.id, statut, dateDecision: "2026-08-05", motifPerte: "autre_offre_acceptee" }))
-      ).rejects.toThrow(/motif de la perte est obligatoire/);
+        changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut, dateDecision: "2026-08-05", motifPerte: "autre_offre_acceptee" }))
+      ).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/motif de la perte est obligatoire/) });
     }
     expect((await getOffreById(offre.id, WORKSPACE_TEST))!.statut).toBe("en_cours");
   });
@@ -526,18 +527,18 @@ describe("changerStatutOffreAction — ADR-061", () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("CADUQUE");
     const offre = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(offre.id);
-    await expect(changerStatutOffreAction(formData({ offreId: offre.id, statut: "caduque", motifPerte: "autre" }))).rejects.toThrow(/Transition de statut invalide/);
+    await expect(changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "caduque", motifPerte: "autre" }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/Transition de statut invalide/) });
 
-    await changerStatutOffreAction(formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" })).catch(() => {});
-    await expect(changerStatutOffreAction(formData({ offreId: offre.id, statut: "caduque", motifPerte: "autre_offre_acceptee" }))).rejects.toThrow(/motif/);
-    await changerStatutOffreAction(formData({ offreId: offre.id, statut: "caduque", motifPerte: "acquereur_se_retire" })).catch(() => {});
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" })).catch(() => {});
+    await expect(changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "caduque", motifPerte: "autre_offre_acceptee" }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/motif/) });
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "caduque", motifPerte: "acquereur_se_retire" })).catch(() => {});
     const relue = (await getOffreById(offre.id, WORKSPACE_TEST))!;
     expect(relue).toMatchObject({ statut: "caduque", motifPerte: "acquereur_se_retire", dateDecision: "2026-08-05" });
 
     const { acquereur: autre } = await creerBienEtAcquereurDeTest("CADUQUE-B");
     const offreB = await enregistrerOffre({ bienId: bien.id, acquereurId: autre.id, montant: 310000, dateOffre: "2026-08-02" });
     idsOffresCrees.push(offreB.id);
-    await changerStatutOffreAction(formData({ offreId: offreB.id, statut: "acceptee", dateDecision: "2026-08-10" })).catch(() => {});
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offreB.id, statut: "acceptee", dateDecision: "2026-08-10" })).catch(() => {});
     expect((await getOffreById(offreB.id, WORKSPACE_TEST))!.statut).toBe("acceptee");
   });
 
@@ -546,11 +547,11 @@ describe("changerStatutOffreAction — ADR-061", () => {
     const { acquereur: autre } = await creerBienEtAcquereurDeTest("ACTIVE-B");
     const a = await enregistrerOffre({ bienId: bien.id, acquereurId: acquereur.id, montant: 300000, dateOffre: "2026-08-01" });
     idsOffresCrees.push(a.id);
-    await changerStatutOffreAction(formData({ offreId: a.id, statut: "acceptee", dateDecision: "2026-08-05" })).catch(() => {});
+    await changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: a.id, statut: "acceptee", dateDecision: "2026-08-05" })).catch(() => {});
     // Une offre reçue APRÈS l'acceptation de A (sinon elle aurait été refusée par la politique A).
     const b = await enregistrerOffre({ bienId: bien.id, acquereurId: autre.id, montant: 310000, dateOffre: "2026-08-06" });
     idsOffresCrees.push(b.id);
-    await expect(changerStatutOffreAction(formData({ offreId: b.id, statut: "acceptee", dateDecision: "2026-08-06" }))).rejects.toThrow(/rendez son acceptation caduque/);
+    await expect(changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: b.id, statut: "acceptee", dateDecision: "2026-08-06" }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/rendez son acceptation caduque/) });
     expect((await getOffreById(b.id, WORKSPACE_TEST))!.statut).toBe("en_cours");
   });
 });
