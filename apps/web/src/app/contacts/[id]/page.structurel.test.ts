@@ -19,13 +19,20 @@ const page = codeSeul(PAGE);
 const readModel = codeSeul(READ_MODEL);
 
 describe("/contacts/[id] — la page consomme le read model", () => {
-  it("appelle ses deux read models, et n'importe ni schéma, ni client de base, ni autre repository", () => {
+  it("appelle ses trois read models, et n'importe ni schéma, ni client de base, ni autre repository", () => {
     expect(page).toMatch(/import \{ chargerContactDetail \} from "@\/lib\/contactDetailRepository"/);
     expect(page).toContain("chargerContactDetail(id, workspaceId)");
     // ADR-055 §H — les Contacts similaires viennent du read model dédié, avec le MÊME workspace.
     expect(page).toMatch(/import \{ trouverContactsSimilaires \} from "@\/lib\/similariteContactRepository"/);
     expect(page).toContain("trouverContactsSimilaires(id, workspaceId)");
-    expect(page.match(/Repository"/g)).toHaveLength(2);
+    // CRM_TIMELINE_V1 — l'historique et les contextes saisissables viennent du read model timeline,
+    // avec le MÊME workspace et une borne validée serveur (jamais `searchParams` brut).
+    expect(page).toMatch(/import \{ listerContextesEchangeContact, listerTimelineContact \} from "@\/lib\/timelineContactRepository"/);
+    expect(page).toContain("listerTimelineContact(id, workspaceId, limiteTimeline)");
+    expect(page).toContain("listerContextesEchangeContact(id, workspaceId)");
+    expect(page).toContain("limiteTimelineValide((await searchParams)?.timeline)");
+    expect(page).not.toMatch(/listerTimelineContact\([^)]*searchParams/);
+    expect(page.match(/Repository"/g)).toHaveLength(3);
     expect(page).not.toMatch(/@\/db\/|drizzle-orm|Table\b/);
   });
 
@@ -39,13 +46,24 @@ describe("/contacts/[id] — la page consomme le read model", () => {
   it("le workspace vient de la session et le contact hors périmètre est un 404", () => {
     expect(page).toContain("exigerWorkspaceCourant()");
     expect(page).toContain("notFound()");
-    expect(page).not.toMatch(/searchParams/);
+    // `searchParams` ne sert qu'à la borne de l'historique, validée par `limiteTimelineValide`.
+    expect(page.match(/searchParams/g)).toHaveLength(3);
   });
 
-  it("aucune action d'écriture Contact : ni import d'action, ni formulaire", () => {
+  it("aucune action d'écriture Contact : ni import d'action, ni formulaire dans la page — « Noter un échange » est un composant dédié", () => {
     expect(page).not.toMatch(/@\/actions\//);
     expect(page).not.toMatch(/<form|action=/);
     expect(page).not.toMatch(/modifierIdentiteContact|creerContact|fusionner|supprimer/);
+    // CRM_TIMELINE_V1 — le seul geste d'écriture est porté par NoterEchangeForm, qui n'appelle que
+    // enregistrerEchangeAction (une interaction canonique, jamais le journal legacy).
+    expect(page).toContain("<NoterEchangeForm contactId={contact.id} contextes={contextesEchange}");
+    const formulaire = codeSeul(join(__dirname, "..", "..", "..", "components", "contact", "NoterEchangeForm.tsx"));
+    expect(formulaire).toMatch(/import \{ enregistrerEchangeAction \} from "@\/actions\/enregistrerEchange"/);
+    expect(formulaire.match(/@\/actions\//g)).toHaveLength(1);
+    expect(formulaire).not.toMatch(/ajouterNoteProspectVendeur|notesProspectVendeur|@\/db\//);
+    // Seul le TYPE des contextes vient du repository timeline : aucune lecture depuis le composant.
+    expect(formulaire).toMatch(/import type \{ ContexteEchange \} from "@\/lib\/timelineContactRepository"/);
+    expect(formulaire.match(/Repository"/g)).toHaveLength(1);
   });
 
   it("aucun lien de dossier construit depuis un id de projet", () => {

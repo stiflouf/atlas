@@ -9,14 +9,16 @@ import SectionTitle from "@/components/ui/SectionTitle";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import ContactFusionneFiche from "@/components/contact/ContactFusionneFiche";
 import ContactsSimilairesSection from "@/components/contact/ContactsSimilairesSection";
+import NoterEchangeForm, { maintenantPourDatetimeLocal } from "@/components/contact/NoterEchangeForm";
+import TimelineContact from "@/components/contact/TimelineContact";
 import { chargerContactDetail } from "@/lib/contactDetailRepository";
 import { trouverContactsSimilaires } from "@/lib/similariteContactRepository";
+import { listerContextesEchangeContact, listerTimelineContact } from "@/lib/timelineContactRepository";
 import { initialesPersonne, nomComplet } from "@/lib/identite/nomPersonne";
 import { LABEL_STADE_PROJET } from "@/types/client";
-import { LABEL_SENS_INTERACTION, LABEL_TYPE_INTERACTION } from "@/types/interaction";
 import { LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
 import type { RoleContact } from "@/types/rechercheContact";
-import type { ContexteInteractionRecente } from "@/types/contactDetail";
+import { limiteTimelineValide } from "@/types/timelineContact";
 
 // ADR-058 — LA FICHE d'une personne : la destination canonique d'un Contact. Lecture seule : elle
 // affiche ce que le read model livre et ne dérive rien (rôles, statuts, ponts vers les dossiers).
@@ -24,6 +26,12 @@ import type { ContexteInteractionRecente } from "@/types/contactDetail";
 // Les seules actions sont des navigations vers des gestes qui existent déjà : la correction de
 // l'identité canonique (`/contacts/[id]/modifier`, ADR-057), la fiche d'un dossier, mailto:, tel:.
 // Aucune fusion ni suppression de Contact n'existe : aucun bouton ne le prétend.
+//
+// CRM_TIMELINE_V1 — « Historique » est un TROISIÈME read model (`listerTimelineContact`) : les
+// interactions canoniques et les notes legacy du journal vendeur, fusionnées à la lecture, jamais
+// persistées. La page en reçoit la liste déjà triée et bornée (`?timeline=`, validé serveur) et le
+// seul geste d'écriture de la fiche est « Noter un échange » (NoterEchangeForm), qui écrit UNE
+// interaction canonique — jamais le journal legacy (stratégie B, NO_DUAL_WRITE).
 //
 // Un lien vers un dossier n'est rendu que si le read model porte l'id de DOSSIER réel — jamais
 // construit depuis un id de projet, que `/clients/[id]` et `/prospects-vendeurs/[id]` ne
@@ -45,17 +53,11 @@ import type { ContexteInteractionRecente } from "@/types/contactDetail";
 
 export const dynamic = "force-dynamic";
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<{ timeline?: string }> };
 
 const LABEL_ROLE: Record<RoleContact, string> = {
   acquereur: "Acquéreur",
   vendeur: "Vendeur",
-};
-
-const LABEL_CONTEXTE_INTERACTION: Record<ContexteInteractionRecente, string> = {
-  projet_acquereur: "Projet acquéreur",
-  projet_vendeur: "Projet vendeur",
-  bien: "Bien",
 };
 
 function formatPrix(prix: number): string {
@@ -66,8 +68,9 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default async function FicheContact({ params }: PageProps) {
+export default async function FicheContact({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const limiteTimeline = limiteTimelineValide((await searchParams)?.timeline);
   // ADR-054 — le périmètre vient de la session ; un contact hors périmètre est introuvable.
   const workspaceId = await exigerWorkspaceCourant();
   const resultat = await chargerContactDetail(id, workspaceId);
@@ -83,7 +86,12 @@ export default async function FicheContact({ params }: PageProps) {
   }
 
   const { detail } = resultat;
-  const contactsSimilaires = await trouverContactsSimilaires(id, workspaceId);
+  const [contactsSimilaires, timeline, contextesEchange] = await Promise.all([
+    trouverContactsSimilaires(id, workspaceId),
+    listerTimelineContact(id, workspaceId, limiteTimeline),
+    listerContextesEchangeContact(id, workspaceId),
+  ]);
+  const dateEchangeParDefaut = maintenantPourDatetimeLocal();
 
   const {
     contact,
@@ -136,9 +144,14 @@ export default async function FicheContact({ params }: PageProps) {
             )}
             <p className="text-[12px] text-text-3 mt-0.5">Contact créé le {formatDate(contact.creeLe)}</p>
           </div>
-          <ButtonLink href={`/contacts/${contact.id}/modifier`} variant="secondary" size="sm" className="shrink-0">
-            Modifier
-          </ButtonLink>
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            <ButtonLink href="#noter-echange" variant="primary" size="sm">
+              + Noter un échange
+            </ButtonLink>
+            <ButtonLink href={`/contacts/${contact.id}/modifier`} variant="secondary" size="sm">
+              Modifier
+            </ButtonLink>
+          </div>
         </div>
       </Card>
 
@@ -292,32 +305,25 @@ export default async function FicheContact({ params }: PageProps) {
       )}
 
       <section>
-        <SectionTitle>Dernières interactions</SectionTitle>
-        {detail.interactionsRecentes.length === 0 ? (
-          <Card className="p-4">
-            <p className="flex items-center gap-2 text-[13px] text-text-3">
-              <MessageSquare size={15} strokeWidth={1.8} />
-              Aucune interaction enregistrée avec ce contact.
-            </p>
-          </Card>
-        ) : (
-          <Card>
-            <ul className="divide-y divide-border-subtle">
-              {detail.interactionsRecentes.map((interaction) => (
-                <li key={interaction.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-                  <span className="text-[13px] font-medium text-text-1">{LABEL_TYPE_INTERACTION[interaction.type]}</span>
-                  {interaction.sens && (
-                    <span className="text-[12px] text-text-3">{LABEL_SENS_INTERACTION[interaction.sens]}</span>
-                  )}
-                  {interaction.contexte && <Badge variant="muted">{LABEL_CONTEXTE_INTERACTION[interaction.contexte]}</Badge>}
-                  <time dateTime={interaction.survenuLe} className="ml-auto text-[12px] text-text-3">
-                    {formatDate(interaction.survenuLe)}
-                  </time>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
+        <SectionTitle>Historique</SectionTitle>
+        <Card className="p-4 md:p-5">
+          {timeline.length === 0 ? (
+            <div className="flex flex-col gap-3">
+              <p className="flex items-center gap-2 text-[13px] text-text-3">
+                <MessageSquare size={15} strokeWidth={1.8} />
+                Aucun échange enregistré
+              </p>
+              <NoterEchangeForm contactId={contact.id} contextes={contextesEchange} dateParDefaut={dateEchangeParDefaut} ouvert />
+            </div>
+          ) : (
+            <>
+              <div className="pb-4 mb-1 border-b border-border">
+                <NoterEchangeForm contactId={contact.id} contextes={contextesEchange} dateParDefaut={dateEchangeParDefaut} />
+              </div>
+              <TimelineContact contactId={contact.id} items={timeline} limite={limiteTimeline} />
+            </>
+          )}
+        </Card>
       </section>
     </div>
   );

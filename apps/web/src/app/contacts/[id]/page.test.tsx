@@ -151,7 +151,8 @@ describe("/contacts/[id] — identité et accès", () => {
     expect(html).toContain(`href="mailto:${M}.jean@example.test"`);
     expect(html).toContain('href="tel:0611223344"');
     expect(html).toContain('href="/contacts"');
-    expect(html).not.toMatch(/undefined|null/);
+    // Le script de relecture de formulaire injecté par React (`null!=f`) n'est pas du contenu.
+    expect(html.replace(/<script>[\s\S]*?<\/script>/g, "")).not.toMatch(/undefined|null/);
   });
 
   it("un Contact sans projet a une fiche valide : identité, aucun rôle, aucune section projet", async () => {
@@ -270,18 +271,29 @@ describe("/contacts/[id] — rôles, projets et dossiers", () => {
   });
 });
 
-describe("/contacts/[id] — interactions", () => {
-  it("aucune interaction : état vide discret", async () => {
+// CRM_TIMELINE_V1 — « Dernières interactions » est devenu « Historique » (read model
+// listerTimelineContact) : contenu affiché, libellé humain type + sens, contexte cliquable.
+describe("/contacts/[id] — historique", () => {
+  it("aucun échange : état vide « Aucun échange enregistré » + formulaire « Noter un échange » ouvert", async () => {
     const contact = await unContact({ nom: `${M} Silence` });
     const html = await rendre(contact.id);
-    expect(html).toContain("Aucune interaction enregistrée avec ce contact.");
+    const bloc = section(html, "Historique")!;
+    expect(bloc).toContain("Aucun échange enregistré");
+    expect(bloc).toContain('<details id="noter-echange" open=""');
+    expect(bloc).toContain("+ Noter un échange");
+    expect(bloc).toContain('name="echange"');
+    expect(bloc).toContain('type="datetime-local"');
+    expect(bloc).toContain('name="contenu"');
+    // Sans projet ni bien relié : aucun sélecteur de contexte.
+    expect(bloc).not.toContain('name="contexte"');
   });
 
   it("plusieurs interactions : type, sens, contexte et date, du plus récent au plus ancien, celles du contact seul", async () => {
     const contact = await unContact({ nom: `${M} Bavard` });
     const autre = await unContact({ nom: `${M} Autre` });
     const projet = await unProjetAcquereur(contact.id);
-    await creerInteraction({ contactId: contact.id, type: "appel", sens: "entrant", survenuLe: "2026-02-01T10:00:00.000Z" });
+    const dossier = await unDossierAcquereur({ contactId: contact.id, projetAcquereurId: projet.id });
+    await creerInteraction({ contactId: contact.id, type: "appel", sens: "entrant", survenuLe: "2026-02-01T10:00:00.000Z", contenu: "Rappelle jeudi" });
     await creerInteraction({
       contactId: contact.id,
       type: "email",
@@ -289,17 +301,23 @@ describe("/contacts/[id] — interactions", () => {
       survenuLe: "2026-06-15T10:00:00.000Z",
       projetAcquereurId: projet.id,
     });
-    await creerInteraction({ contactId: autre.id, type: "note", sens: "interne", survenuLe: "2026-07-01T10:00:00.000Z" });
+    await creerInteraction({ contactId: autre.id, type: "note", sens: "interne", survenuLe: "2026-07-01T10:00:00.000Z", contenu: "Secret de l'autre" });
 
     const html = await rendre(contact.id);
-    const bloc = section(html, "Dernières interactions")!;
+    const bloc = section(html, "Historique")!;
 
     expect(bloc.indexOf("15 juin 2026")).toBeLessThan(bloc.indexOf("1 février 2026"));
-    expect(bloc).toContain(">Email<");
-    expect(bloc).toContain(">sortant<");
+    expect(bloc).toContain(">Email envoyé<");
+    expect(bloc).toContain(">Appel entrant<");
+    expect(bloc).toContain("Rappelle jeudi");
+    expect(bloc).toContain(`href="/clients/${dossier.id}"`);
     expect(bloc).toContain(">Projet acquéreur<");
-    expect(bloc).toContain(">Appel<");
-    expect(bloc).not.toContain(">Note<");
+    // « Note interne » n'apparaît que comme option du formulaire, jamais comme item (note d'un autre contact).
+    expect(bloc.replace(/<option[^>]*>[^<]*<\/option>/g, "")).not.toContain("Note interne");
+    expect(bloc).not.toContain("Secret de l'autre");
     expect(bloc).not.toContain("1 juillet 2026");
+    expect(bloc).not.toContain("Aucun échange enregistré");
+    // Le sélecteur de contexte propose le projet réellement relié.
+    expect(bloc).toContain(`value="projetAcquereur:${projet.id}"`);
   });
 });

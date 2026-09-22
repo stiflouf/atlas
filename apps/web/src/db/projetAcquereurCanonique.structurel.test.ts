@@ -173,6 +173,9 @@ describe("ADR-055 §B — les moteurs et le tunnel commercial restent sur le mod
         // ADR-059 — la préparation de fusion lit les participations et `archive_le` du projet pour
         // dériver rôles, compte de projets et projets communs — jamais un critère.
         join("src", "lib", "preparationFusionContactRepository.ts"),
+        // CRM_TIMELINE_V1 — le read model timeline lit les participations et `archive_le` du projet
+        // pour PROPOSER les contextes d'un échange (et en afficher le libellé), jamais un critère.
+        join("src", "lib", "timelineContactRepository.ts"),
         join("src", "lib", "provenance", "champVerrouilleRepository.ts"),
         join("src", "lib", "provenance", "referenceExterneRepository.ts"),
       ].sort()

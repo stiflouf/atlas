@@ -1172,9 +1172,10 @@ antérieurs.
 **Rôle** : un **échange humain** avec une personne. Cette table comble un **vide réel** — il
 n'existait aucune table d'interaction côté contact/acquéreur — elle ne généralise rien.
 
-**État : écrite en production.** `finaliserEnvoiGmail` (envois Gmail réussis) et
+**État : écrite en production.** `finaliserEnvoiGmail` (envois Gmail réussis),
 `enregistrerRetourVendeurVisite` (`SELLER_FEEDBACK_INTERACTION_V1`, 2026-09-20, migration 0053, retour
-vendeur après visite) écrivent réellement cette table aujourd'hui.
+vendeur après visite) et `enregistrerEchangeManuel` (`CRM_TIMELINE_V1`, 2026-09-22, « Noter un
+échange » depuis la fiche Contact, aucune migration) écrivent réellement cette table aujourd'hui.
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
@@ -1247,6 +1248,49 @@ des invariants qu'une table polymorphe détruirait :
 recopier fabriquerait un doublon. Convertir les notes, emails et comptes rendus historiques
 produirait exactement les doublons qu'un futur connecteur Gmail/Calendar ne saurait pas rapprocher,
 faute de provenance. L'import viendra avec ADR-056.
+
+### Timeline Contact : un read model, jamais une table (`CRM_TIMELINE_V1`, 2026-09-22)
+
+`listerTimelineContact(contactId, workspaceId, limite)` (`src/lib/timelineContactRepository.ts`)
+livre l'« Historique » de la fiche Contact : une liste d'`ItemTimelineContact`
+(`src/types/timelineContact.ts`) **calculée à chaque lecture**, jamais persistée, sans migration.
+
+| Source | Table lue | Date métier | Type / sens | Contexte rendu |
+|---|---|---|---|---|
+| `interaction` | `interactions` (par `contact_id`) | `survenu_le` | tels quels | visite → `/visites/{id}` (bien de la visite), bien → `/biens/{id}`, projet vendeur → dossier prospect (`prospects_vendeurs.projet_vendeur_id`), projet acquéreur → dossier client (`acquereurs.projet_acquereur_id`) ; sans dossier, aucun lien fabriqué |
+| `note_legacy` | `notes_prospect_vendeur` via `prospects_vendeurs.contact_id` (même workspace) | `cree_le` (seule date disponible) | `appel/email/sms/rendez_vous` → même type, `autre_interaction` → `message`, `note_interne` → `note`/`interne` ; **aucun sens inventé** pour les autres | « Journal prospect vendeur » → `/prospects-vendeurs/{id}` |
+
+- **Objet Gmail** : une interaction Gmail n'a ni `contenu` ni contexte (ADR-055 §G). L'objet est relu
+  depuis `envois_email.objet` via `references_externes` (`fournisseur = 'gmail'`, cible
+  `interaction_id`, `id_externe = gmail_message_id`), scoped workspace — jamais un appel Gmail au
+  rendu, jamais une colonne ajoutée à `interactions`. Le `bien_id` de l'envoi n'est rendu que comme
+  repère « Bien concerné », jamais comme contexte affirmé.
+- **Bornes** : `?timeline=` validé serveur (`limiteTimelineValide` : multiples de 20 entre 20 et 200,
+  sinon 20). Chaque source est lue avec `LIMIT limite` (tri SQL `survenu_le DESC, cree_le DESC, id ASC`
+  côté interactions ; `cree_le DESC, id ASC` côté notes), puis fusionnée, triée (`survenuLe DESC`,
+  interaction avant note à date égale, puis `id`) et tronquée à `limite`. **Stratégie de frontière** :
+  les `limite` items rendus sont exactement les `limite` plus récents toutes sources confondues,
+  parce qu'aucune source ne peut avoir plus de `limite` items plus récents que le dernier rendu.
+- **Rapprochement Gmail ↔ note legacy (conservateur)** : `envoyerEmailGmail` écrit historiquement
+  une note `email` « `Email envoyé — Objet : …` » dans le journal vendeur ET (depuis ADR-055 §G) une
+  interaction Gmail. La note legacy n'est **retirée de l'affichage** que si TOUTES les preuves
+  concordent : même contact, note de type `email` au format exact, interaction `email`/`sortant`
+  reliée à un **vrai** envoi Gmail (référence externe + `envois_email`), objet identique après
+  normalisation (espaces, casse), horodatages à moins de 10 minutes (garde, jamais clé), et une
+  interaction ne consomme qu'une seule note. Au moindre doute, les deux items s'affichent. Rien n'est
+  supprimé ni migré en base.
+- **Écriture** : `enregistrerEchangeManuel(input, workspaceId)` (`interactionRepository.ts`) écrit
+  **une** interaction canonique par échange noté à la main (8 choix UI = type + sens sur le vocabulaire
+  existant ; « Rendez-vous » sans sens ; « Note interne » = `note`/`interne`), dans une transaction :
+  contact actif **sous verrou** avec workspace explicite (ADR-059 §10 : un contact absorbé est refusé,
+  jamais réécrit vers le survivant), contexte optionnel validé contre les liens réels du contact
+  (`parties_projet` pour les projets ; `parties_mandat → mandats → biens` ou
+  `prospects_vendeurs.bien_id` pour les biens — même prédicat que les options proposées), puis
+  `dernier_contact_le = greatest(coalesce(dernier_contact_le, survenu_le), survenu_le)` sur les
+  `prospects_vendeurs` **actifs** (`archive_le IS NULL AND date_perte IS NULL`) du contact et du
+  workspace — uniquement pour `appel`, `email`, `sms`, `rendez_vous`, `message`, **jamais** pour
+  `note`. **Aucune double écriture** vers `notes_prospect_vendeur` (stratégie B) : le journal legacy
+  garde ses écrivains historiques, la timeline les fusionne à la lecture.
 
 ### Mémoire relationnelle : un read model, jamais une table (non implémentée)
 

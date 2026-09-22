@@ -103,7 +103,8 @@ describe("/contacts/[id] — contact absorbé", () => {
     expect(html).not.toContain(`/contacts/${absorbe.id}/modifier`);
     expect(html).not.toContain(">Modifier<");
     expect(html).not.toContain("Projets acquéreur");
-    expect(html).not.toContain("Dernières interactions");
+    expect(html).not.toContain(">Historique<");
+    expect(html).not.toContain("Noter un échange");
     expect(html).not.toContain("Contacts partageant un email ou un téléphone");
     expect(html).not.toMatch(/<form|<button|mailto:|tel:/);
     expect(html).not.toMatch(/fusionner|doublon/i);
@@ -131,7 +132,7 @@ describe("/contacts/[id] — contact absorbé", () => {
     const html = await rendre(survivant.id);
 
     expect(html).toContain(`/contacts/${survivant.id}/modifier`);
-    expect(html).toContain("Dernières interactions");
+    expect(html).toContain(">Historique<");
     expect(html).not.toContain("Ce contact a été fusionné");
     expect(html).not.toContain(absorbe.id);
   });

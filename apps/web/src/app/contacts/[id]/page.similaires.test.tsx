@@ -245,13 +245,17 @@ describe("/contacts/[id] — périmètre et absence de geste", () => {
     expect(await rendre(a.id)).not.toContain(TITRE);
   });
 
-  it("M/N. aucun bouton Fusionner, aucun formulaire, aucun verdict", async () => {
+  it("M/N. aucun bouton Fusionner, aucun formulaire ni verdict dans la section similaires", async () => {
     const email = unEmail();
     const a = await unContact({ nom: `${M} Geste`, email });
     await unContact({ nom: `${M} Geste bis`, email });
     const html = await rendre(a.id);
     expect(section(html)).toBeDefined();
-    expect(html).not.toMatch(/rattacher|<form|<button|doublon/i);
+    // CRM_TIMELINE_V1 — le seul formulaire de la fiche est « Noter un échange » (section Historique),
+    // jamais un geste de fusion : on l'exclut avant de vérifier.
+    const sansHistorique = html.slice(0, html.indexOf(">Historique<"));
+    expect(sansHistorique).not.toMatch(/rattacher|<form|<button|doublon/i);
+    expect(html).not.toMatch(/rattacher|doublon/i);
     // Le seul « fusionner » est le segment d'URL du lien « Comparer » : jamais un libellé de bouton.
     expect(html).not.toMatch(/>\s*Fusionner/);
     expect(html).toMatch(new RegExp(`<a[^>]*href="/contacts/${a.id}/fusionner/[0-9a-f-]+"[^>]*>[^<]*Comparer`));

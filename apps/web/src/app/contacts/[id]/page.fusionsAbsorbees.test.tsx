@@ -92,7 +92,7 @@ describe("/contacts/[id] — « Contacts fusionnés » sur le survivant", { time
     expect(html).toMatch(new RegExp(`<a[^>]*href="/contacts/${b.id}"[^>]*>[^<]*Voir le contact fusionné`));
     // La section vient AVANT les projets, APRÈS l'en-tête.
     expect(html.indexOf("Contacts fusionnés")).toBeGreaterThan(html.indexOf(`/contacts/${a.id}/modifier`));
-    expect(html.indexOf("Contacts fusionnés")).toBeLessThan(html.indexOf("Dernières interactions"));
+    expect(html.indexOf("Contacts fusionnés")).toBeLessThan(html.indexOf(">Historique<"));
 
     // Rien de technique, et les coordonnées d'alors de B restent sur sa propre fiche.
     for (const interdit of ["google-sub-secret", `${M}.bob@example.test`, "0699999999", fusionId, "ids_deplaces", "idsDeplaces", "choix_par_champ", "avertissements", "identite_finale"]) {

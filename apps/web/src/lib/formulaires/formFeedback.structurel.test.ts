@@ -31,6 +31,8 @@ const ACTIONS_CONVERTIES: Record<string, string[]> = {
   "actions/creerBien.ts": ["creerBienAction"],
   "actions/modifierBien.ts": ["modifierBienAction"],
   "actions/ajouterDocumentBien.ts": ["ajouterDocumentBienAction", "corrigerClassementDocumentBienAction"],
+  // CRM_TIMELINE_V1
+  "actions/enregistrerEchange.ts": ["enregistrerEchangeAction"],
 };
 
 // `throw new Error` encore attendus dans les fichiers convertis : invariants (D) et états
@@ -91,6 +93,7 @@ describe("FORM_FEEDBACK_V1 — contrat", () => {
       "components/offre/OffreFormulaire.tsx",
       "components/compromis/CompromisFormulaire.tsx",
       "components/bien/BienTabs.tsx",
+      "components/contact/NoterEchangeForm.tsx",
     ]) {
       const source = lire(chemin);
       expect(source, chemin).toContain("FormulaireAvecEtat");

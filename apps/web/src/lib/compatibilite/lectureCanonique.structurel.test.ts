@@ -132,12 +132,15 @@ describe("ADR-055 §B — l'écriture humaine suit la même règle de source", (
     // tel quel, jamais arbitrer entre projet et dossier.
     // La préparation de fusion (ADR-059) joint le projet pour lire `archive_le` — rôle dérivé et
     // compte de projets actifs, même sémantique que la recherche — jamais un critère.
+    // La timeline Contact (CRM_TIMELINE_V1) joint le projet pour lister les contextes actifs d'un
+    // échange et en résumer le libellé (budget max affiché tel quel) — jamais arbitrer une source.
     expect(porteurs.sort()).toEqual(
       [
         REGLE,
         join("src", "lib", "rechercheContactRepository.ts"),
         join("src", "lib", "contactDetailRepository.ts"),
         join("src", "lib", "preparationFusionContactRepository.ts"),
+        join("src", "lib", "timelineContactRepository.ts"),
       ].sort()
     );
 

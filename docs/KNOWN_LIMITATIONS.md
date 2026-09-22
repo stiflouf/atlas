@@ -1289,15 +1289,31 @@ Limites qui en découlent, toutes assumées le temps de la transition :
   un renouvellement ne pourra pas ré-émettre l'événement avant que la cible `mandat_id` existe (lot
   automatisations).
 - **Aucun mandat pour l'historique** : les biens antérieurs à la migration `0037` n'en ont aucun.
-- **`interactions` existe mais n'a aucun écrivain.** Aucun flux du produit n'en crée : une note
-  vendeur a déjà son foyer (`notes_prospect_vendeur`, dont le `type` pilote `dernier_contact_le`),
-  et `envois_email` n'a ni contact ni contenu — seulement un hash. Un miroir y serait fabriqué, pas
-  constaté. La table attend l'écran de saisie ou l'import, et **aucune donnée historique n'y a été
-  convertie** : le faire produirait les doublons qu'un futur connecteur Gmail ne saurait pas
-  rapprocher, faute de provenance.
-- **Une interaction ne dit pas qui l'a menée** : le produit est mono-conseiller et aucun modèle
-  d'identité interne n'existe. À traiter avec le multi-membre — jamais en réutilisant un `sub`
-  Google comme clé métier.
+- **`interactions` a trois écrivains délibérés, aucune conversion d'historique.** Envoi Gmail
+  réussi (`finaliserEnvoiGmail`), retour vendeur après visite (`SELLER_FEEDBACK_INTERACTION_V1`) et
+  échange noté à la main depuis la fiche Contact (`CRM_TIMELINE_V1`, 2026-09-22). Une note vendeur
+  saisie depuis le dossier prospect garde son foyer (`notes_prospect_vendeur`, dont le `type` pilote
+  `dernier_contact_le`) ; `envois_email` n'a ni contact ni contenu — seulement un hash. **Aucune
+  donnée historique n'a été convertie** : le faire produirait des doublons sans provenance.
+- **Une interaction ne dit pas qui l'a menée** (`INTERACTION_AUTHOR_DEBT`, ouvert, P3) : le produit
+  est mono-conseiller et aucun modèle d'identité interne n'existe. Un échange noté depuis la fiche
+  Contact n'a donc pas d'auteur. À traiter avec le multi-membre — jamais en réutilisant un `sub`
+  Google comme clé métier, aucune migration posée en attendant.
+- **Journal prospect vendeur et Historique Contact : deux écritures, une lecture** (`CRM_TIMELINE_V1`,
+  stratégie B). « Noter un échange » sur un **dossier prospect vendeur** écrit toujours
+  `notes_prospect_vendeur` ; « Noter un échange » sur une **fiche Contact** écrit `interactions`. La
+  fiche Contact fusionne les deux **à la lecture seulement** (`listerTimelineContact`) ; le journal du
+  dossier prospect, lui, n'affiche pas les interactions canoniques. Aucune double écriture, aucune
+  migration des notes vers `interactions`. Une note legacy porte `cree_le` comme seule date : un
+  échange antidaté depuis le dossier prospect apparaît à sa date de saisie.
+- **Rapprochement Gmail ↔ note legacy volontairement conservateur.** Un envoi Gmail laisse
+  historiquement une note « `Email envoyé — Objet : …` » dans le journal vendeur ET une interaction.
+  La timeline ne masque la note que si le contact, le format exact, un vrai envoi Gmail, l'objet
+  normalisé et un horodatage compatible (≤ 10 min, garde jamais suffisante seule) concordent, une
+  note par interaction. Deux vrais emails proches restent deux items ; en cas de doute les deux
+  s'affichent — un doublon visible est préféré à un email effacé. Rien n'est nettoyé en base.
+- **Aucune synchronisation des emails entrants.** L'Historique ne connaît que les envois Gmail faits
+  depuis DOMIORA ; un email reçu n'apparaît que s'il est noté à la main (« Email reçu »).
 - **La mémoire relationnelle n'existe pas** : elle sera un read model dérivé, jamais une table.
   `memoire_contextuelle` n'est ni remplacée, ni touchée.
 - **La couche provenance existe mais est vide.** `references_externes` et `champs_verrouilles`
@@ -1453,8 +1469,9 @@ ouvert :
   jointure par les ponts de dossier, lot à part entière. Elles restent visibles sur chaque dossier.
 - **Les interactions historiques sans `contact_id` n'apparaissent pas sur la fiche.** Une
   interaction n'entre dans la fiche que par `contact_id` exact ; aucune n'est rapprochée par email
-  ou téléphone (ADR-055 §H). Les notes de prospect vendeur et comptes rendus de visite, qui ne sont
-  pas des interactions canoniques, restent sur leur dossier.
+  ou téléphone (ADR-055 §H). Les notes de prospect vendeur sont fusionnées à la lecture dans
+  l'Historique depuis `CRM_TIMELINE_V1` (via `prospects_vendeurs.contact_id`) ; les comptes rendus
+  de visite, qui ne sont pas des interactions canoniques, restent sur leur dossier.
 - **Le stade affiché pour un projet acquéreur est celui de `projets_acquereur`**, qui n'est plus mis
   à jour après la création (voir plus bas) ; le parcours commercial à jour reste sur le dossier,
   ouvrable depuis la fiche. Pas d'autosuggest, pas de barre globale, pas de filtre par rôle sur

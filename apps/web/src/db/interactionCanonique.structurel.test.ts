@@ -211,8 +211,10 @@ describe("ADR-055 §G — au-delà de la fondation, seuls des flux délibérés 
     // Une note vendeur a déjà un foyer, et `envois_email` n'a ni contact ni contenu — un miroir y
     // serait fabriqué, pas constaté. SELLER_FEEDBACK_INTERACTION_V1 (ADR-063, 2026-09-20) ajoute une
     // exception délibérée : le retour vendeur après visite devient un fait CRM canonique constaté,
-    // jamais un miroir d'un fait qui vivrait ailleurs.
-    const actionsAutorisees = [join("src", "actions", "retourVendeurVisite.ts")];
+    // jamais un miroir d'un fait qui vivrait ailleurs. CRM_TIMELINE_V1 (2026-09-22) : l'échange noté
+    // à la main depuis la fiche Contact est lui aussi un fait CRM constaté, écrit UNE fois dans
+    // `interactions` (stratégie B, aucune double écriture vers le journal vendeur).
+    const actionsAutorisees = [join("src", "actions", "retourVendeurVisite.ts"), join("src", "actions", "enregistrerEchange.ts")];
     const fautifs = FICHIERS.filter((chemin) => chemin.includes(join("src", "actions")))
       .filter((chemin) => !actionsAutorisees.some((exception) => chemin.endsWith(exception)))
       .filter((chemin) => REFERENCES.test(readFileSync(chemin, "utf8")));
