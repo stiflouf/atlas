@@ -114,8 +114,8 @@ configuration propre à chaque instance.
 | Région | EU West | EU West |
 | Volume | `domiora-volume` → `/data/stockage-documents` | `domiora-demo-volume` → `/data/stockage-documents` |
 | Postgres | dédié | dédié, distinct |
-| Jobs cron | 3 Railway Functions | **aucun** |
-| Calendar / Gmail | connectés | **non connectés** |
+| Jobs cron | 3 Railway Functions | **aucun** — scan manuel avant démonstration (voir « Automatisations » ci-dessous) |
+| Calendar / Gmail | connectés | variables présentes, **jeton révoqué** (voir ci-dessous) |
 
 **Interdiction permanente : aucune donnée personnelle réelle dans DOMIORA DEMO.** Cette instance
 n'accueille que le dataset fictif produit par `apps/web/scripts/seed-demo.mjs`. Le jour où un
@@ -129,12 +129,23 @@ recommandée sur toute instance déployée, et **strictement distincte d'`ATLAS_
 est ce qui s'affiche, l'autre décide qui peut entrer. Steven reste donc l'identité autorisée à se
 connecter au showroom sans que son nom y apparaisse.
 
-Variables volontairement **absentes** : `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY`,
-`PRIM_API_KEY`, les 4 secrets d'endpoints techniques. Vérifié dans le code : toutes les lectures de
-`process.env` sont paresseuses (aucune au niveau module), l'application démarre et le cockpit
-s'affiche sans elles. Conséquence à connaître avant une démonstration : les boutons « Se connecter »
-de Calendar/Gmail sur le cockpit échouent tant que `GOOGLE_REDIRECT_URI` est absente — ne pas les
-cliquer en direct.
+Variables réellement configurées sur DOMIORA DEMO, constatées le 2026-09-22 (noms uniquement,
+aucune valeur ici) : `DATABASE_URL`, `NODE_ENV=production`, `ATLAS_SESSION_PASSWORD`,
+`ATLAS_ALLOWED_EMAIL`, `ATLAS_ADVISOR_DISPLAY_NAME`, `ATLAS_DOCUMENT_STORAGE_DIR`,
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_ATLAS_REDIRECT_URI`, `GOOGLE_REDIRECT_URI`,
+`GOOGLE_TOKEN_ENCRYPTION_KEY`, les trois `DOMIORA_REDACTION_*`, `RAILPACK_BUILD_CMD`,
+`RAILPACK_START_CMD`, plus depuis `RAILWAY_DEMO_DEPLOYMENT_V1` les trois secrets d'endpoints
+`AUTOMATISATIONS_SCAN_SECRET`, `AUTOMATISATIONS_REPRISE_SECRET`, `COMPATIBILITE_SCAN_SECRET`.
+Reste absente : `PRIM_API_KEY` (transports sur `/preparer`, hors chemin de démonstration) et
+`COMPATIBILITE_BASELINE_SECRET` (outil manuel de rebuild, délibérément non configuré).
+
+**Google sur la démo : à ne pas toucher en direct.** Une connexion existe en base mais son
+`refresh_token` est **révoqué** — chaque rendu du cockpit logue
+`[google-calendar] Calendar indisponible, repli : ... invalid_grant` et l'agenda retombe sur une
+liste vide (comportement voulu en production). Le cockpit affiche donc « Se reconnecter ». Le chemin
+de démonstration n'en dépend pas (visites natives) : ne pas cliquer ce bouton pendant une
+démonstration. Contrairement à ce que ce runbook indiquait avant le 2026-09-22, `GOOGLE_REDIRECT_URI`
+est bien présente : un clic lancerait un vrai flux d'autorisation Google, pas une erreur.
 
 Seed (confirmation **ponctuelle**, jamais enregistrée comme variable Railway) — voir
 `apps/web/README.md`, section « Seed de démonstration » :
@@ -146,9 +157,76 @@ DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA pnpm db:seed:demo
 Depuis `DEMO_SEED_CANONICAL_V1` (2026-09-21), le seed écrit aussi des fichiers (PDF du bon signé,
 signature, documents, photo) dans `ATLAS_DOCUMENT_STORAGE_DIR` — le volume documentaire doit donc
 être monté avant de seeder — et se **rejoue** par-dessus lui-même (périmètre ciblé, jamais une purge
-par workspace) : rafraîchir le showroom après une démonstration = relancer la même commande. Aucune
-exécution sur la démo distante n'a été faite dans ce lot : elle relève d'un lot de déploiement
-contrôlé, après application des migrations.
+par workspace) : rafraîchir le showroom après une démonstration = relancer la même commande.
+
+### 1 quater. État vérifié de DOMIORA DEMO (RAILWAY_DEMO_DEPLOYMENT_V1, 2026-09-22)
+
+Premier déploiement contrôlé de bout en bout de cette instance. Tout ce qui suit a été **constaté**,
+jamais déduit.
+
+| Point | État vérifié |
+|---|---|
+| Commit déployé | `b32513b` (`feat(crm): add contact interaction timeline`), déploiement auto depuis `develop`, statut SUCCESS |
+| Projet / environnement | `domiora-demo` · `3d771bb3-f397-4aed-9216-c5587c5232b4` · environment `production` |
+| Service web / Postgres | `domiora-demo` (`50fdd82a-68d7-4afe-9f26-a3b14312809b`) · `Postgres` (`681d7804-2b43-4cdd-bc63-bd545aceb128`) |
+| Identité base | `current_database() = railway`, `current_user = postgres`, PostgreSQL 18.6, 1 seul workspace |
+| Migrations | **40 → 54** appliquées ce jour ; dernière = `0053_seller_feedback_interaction_v1` (l'instance était restée à `0039`) |
+| Volume | `domiora-demo-volume` monté sur `/data/stockage-documents`, `ATLAS_DOCUMENT_STORAGE_DIR` identique, écriture testée |
+| Seed canonique | `recree_depuis_partiel` — 12 contacts, 6 prospects, 3 biens, 3 mandats + 3 mandants, 6 acquéreurs, 6 visites, 3 CR, 1 bon signé + 1 signature, 3 documents, 1 photo, 3 interactions, 2 offres, 1 compromis, 6 tâches, 18 compatibilités, 7 règles actives |
+| Téléchargements | document (PDF 1 130 o), bon signé (PDF 8 748 o, **SHA-256 identique à `bons_visite.hash_document`**), photo (WebP 8 872 o) — tous HTTP 200 |
+| Persistance stockage | deux redéploiements successifs, mêmes SHA-256 après chaque : le volume tient |
+| Logs | aucune erreur applicative hors `invalid_grant` Google décrit ci-dessus |
+
+**Point de méthode appris.** Le seed a d'abord **refusé** (garde n° 3 : données métier hors
+périmètre) à cause de deux lignes de test manuelles créées lors d'essais antérieurs sur la démo
+(un contact et un acquéreur « Demo Railway », plus leurs quatre lignes dérivées : participation
+projet, deux états de compatibilité, une demande de resynchronisation, deux événements métier). La
+garde a fonctionné exactement comme prévu : aucune écriture, aucune suppression. Ces six lignes ont
+été supprimées une par une, par identifiant, sur décision explicite — jamais un `TRUNCATE`, jamais un
+reset. **Toute saisie manuelle faite sur la démo bloquera le prochain seed de la même façon** :
+c'est le prix assumé de la garde, et la marche à suivre est celle-ci, pas son contournement.
+
+#### Procédure reproductible (démo distante)
+
+1. **Prouver la cible** : `railway status` doit afficher `domiora-demo` /
+   `3d771bb3-f397-4aed-9216-c5587c5232b4`. Aucune commande mutante avant.
+2. **Backup** : `railway ssh -s Postgres -- pg_dump -U postgres -d railway --format=custom > <fichier local>`
+   (vérifier l'en-tête `PGDMP`). Jamais dans le dépôt.
+3. **Migrations** : `railway ssh -s domiora-demo -- sh -lc 'export PATH=/mise/shims:$PATH; cd /app/apps/web && pnpm exec drizzle-kit migrate'`
+   — exécuté **dans le conteneur**, qui porte la `DATABASE_URL` interne
+   (`postgres.railway.internal`, injoignable depuis un poste). Jamais `pnpm db:migrate` en local sans
+   `DATABASE_URL` explicite : `drizzle.config.ts` retomberait silencieusement sur `localhost`.
+4. **Vérifier** : `select count(*), max(created_at) from drizzle.__drizzle_migrations;` — attendu 54
+   et `1789912897707` (= `0053`, valeur `when` du journal).
+5. **Seed** : `railway ssh -s domiora-demo -- sh -lc 'export PATH=/mise/shims:$PATH; cd /app/apps/web && DOMIORA_DEMO_SEED_CONFIRM=I_UNDERSTAND_THIS_IS_DEMO_DATA node scripts/seed-demo.mjs'`.
+   La confirmation reste **ponctuelle**, jamais une variable Railway.
+6. **Smoke** : `/`, `/contacts/…1001` (Historique + retour vendeur), `/biens/…301`, `/visites/…501`,
+   puis les trois téléchargements ci-dessus.
+7. **Automatisations** : voir ci-dessous.
+
+#### Automatisations sur la démo — scan manuel, jamais un cron
+
+Stratégie retenue : **OPTION B, déclenchement manuel avant démonstration**. Aucune Railway Function
+n'a été créée sur `domiora-demo` ; aucun cron n'y existe et il ne faut pas en laisser croire un.
+
+Trois secrets ont été posés (valeurs jamais écrites ici ni dans le dépôt) :
+`AUTOMATISATIONS_SCAN_SECRET`, `AUTOMATISATIONS_REPRISE_SECRET`, `COMPATIBILITE_SCAN_SECRET`.
+
+```
+curl -s -X POST -H "Authorization: Bearer <secret>" https://domiora-demo-production.up.railway.app/api/automatisations/scan
+curl -s -X POST -H "Authorization: Bearer <secret>" https://domiora-demo-production.up.railway.app/api/compatibilite/scan
+curl -s -X POST -H "Authorization: Bearer <secret>" https://domiora-demo-production.up.railway.app/api/automatisations/reprise
+```
+
+Résultat constaté le 2026-09-22 sur le dataset canonique : 4 tâches automatiques créées
+(« Préparer la visite de demain », « Compléter le compte rendu de visite »,
+« Offre en attente de décision », « Mandat à renouveler bientôt »), visibles dans Today. **Second
+appel identique : 0 nouvelle occurrence** — idempotence vérifiée. Un Bearer absent ou faux est
+refusé en 401. `inactivite_prospect_vendeur` ne s'exécute pas (règle non activée par le seed), et
+`/api/compatibilite/baseline` reste sans secret : geste manuel jamais nécessaire ici.
+
+Formulation honnête en démonstration : « le scan a été déclenché avant la séance ». Ne jamais dire
+que DOMIORA vient de générer ces tâches toute seule sur cette instance.
 
 ### 1 ter. Build Railpack — commandes de build/start
 
@@ -171,6 +249,9 @@ qui serait un geste à part entière, à décider séparément).
 
 - Noter ici, à chaque déploiement réel, le tag ou le hash de commit exact déployé en production
   (ex. `v1.0.0-rc1` ou `e0423f9`) et sa date. Aucun déploiement sans un identifiant exact tracé.
+- `domiora-demo` : **`b32513b`**, déployé et validé le **2026-09-22** (migrations 0053, seed
+  canonique, téléchargements et persistance du volume vérifiés — section 1 quater).
+- `sparkling-rejoicing` : `1c92c8a` (2026-08-28), **non revérifié** depuis.
 
 ## 3. Prérequis avant tout déploiement réel
 
@@ -331,6 +412,17 @@ déploiement `domiora-demo` ne suit pas cette séquence — il découle automati
    - [ ] Google Calendar/Gmail toujours connectés (ou reconnexion possible si révoqués).
 
 ## 8. Rollback
+
+### Rollback DOMIORA DEMO
+
+- **Base** : restaurer le `pg_dump --format=custom` pris avant migration
+  (`pg_restore --clean --if-exists`). Les données étant fictives, l'alternative normale est plus
+  simple : rejouer le seed (`recree`), qui remet le dataset canonique en place.
+- **Code** : redéployer le déploiement Railway précédent depuis l'interface, ou `railway deployment
+  redeploy -s domiora-demo` sur le déploiement voulu.
+- **Stockage** : **aucune sauvegarde du volume documentaire n'est faite**. Ne pas prétendre le
+  contraire. Les fixtures du seed sont déterministes et recréées à chaque exécution du seed ; tout
+  fichier déposé manuellement pendant une démonstration, lui, serait définitivement perdu.
 
 ### Rollback code
 

@@ -1119,6 +1119,29 @@ Limites connues de cette brique :
   `docs/DEVELOPER_ONBOARDING.md`, `docs/AI_HANDOFF.md`, `docs/BUSINESS_RULES.md`. Ils n'ont pas été
   corrigés par la passe qui a corrigé cette section.
 
+## Instance de démonstration (DOMIORA DEMO) — état vérifié le 2026-09-22
+
+- **Aucun scheduler, et c'est assumé.** `domiora-demo` n'a aucune Railway Function cron. Les tâches
+  automatiques n'existent que si `POST /api/automatisations/scan` a été appelé à la main avant la
+  séance (secrets configurés depuis `RAILWAY_DEMO_DEPLOYMENT_V1`, procédure dans
+  `docs/PILOT_RUNBOOK.md#1-quater`). Idempotence vérifiée : un second appel ne crée aucun doublon.
+  Ne jamais présenter ces tâches comme apparues spontanément sur cette instance.
+- **Connecteurs Google présents mais jeton révoqué.** Une ligne `connexions_google` subsiste avec un
+  `refresh_token` invalide : chaque rendu du cockpit logue un `invalid_grant`, l'agenda retombe sur
+  une liste vide (comportement voulu en production) et l'encart affiche « Se reconnecter ». Le
+  parcours de démonstration n'en dépend pas ; ne pas cliquer ce bouton en séance.
+- **Persistance documentaire vérifiée.** Volume `domiora-demo-volume` monté sur
+  `/data/stockage-documents`, identique à `ATLAS_DOCUMENT_STORAGE_DIR` ; documents, bon signé et
+  photo retéléchargés à l'identique (SHA-256 stables) après deux redéploiements. En revanche
+  **aucune sauvegarde du volume** n'existe : seules les fixtures du seed sont reproductibles.
+- **Toute saisie manuelle faite sur la démo bloque le prochain seed.** La garde n° 3 du seed refuse
+  dès qu'une ligne métier hors périmètre déterministe existe — constaté sur cette instance, où deux
+  lignes de test antérieures ont dû être supprimées par identifiant avant de pouvoir seeder. C'est
+  le comportement voulu, pas un défaut : la garde ne se contourne pas, on nettoie explicitement.
+- **Mono-workspace, comme le pilote.** Un seul `workspaces` en base ; aucun second utilisateur n'est
+  possible (allowlist à une adresse), ce qui neutralise aujourd'hui les défauts de périmètre
+  documentés ailleurs dans ce fichier.
+
 ## Pas de multi-utilisateur
 
 Produit mono-conseiller assumé (ADR-006). Depuis ADR-047, Atlas a une vraie authentification
