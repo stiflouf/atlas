@@ -33,7 +33,23 @@ import { lienRetourFicheVisite, retourVisiteValide } from "@/lib/visites/retourV
 
 // `retour` (VISIT_NATIVE_ENTRY_V1) : provenance d'ouverture, enum fermé (bien | acquereur) — toute
 // autre valeur retombe sur le retour historique vers Aujourd'hui.
-type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<{ retour?: string }> };
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ retour?: string; erreurRetourVendeur?: string }>;
+};
+
+// DEMO_UX_HARDENING_V1 — `enregistrerRetourVendeurVisiteAction` rapportait déjà ses refus par
+// `?erreurRetourVendeur=<statut>`, mais personne ne lisait le paramètre : un refus ressemblait à un
+// clic sans effet. Les CINQ statuts de refus du writer (le sixième, `enregistre`, est le succès)
+// sont traduits ici, et EUX SEULS : un code inconnu (URL bricolée) n'affiche rien plutôt qu'un
+// texte arbitraire ou la valeur brute.
+const MESSAGE_REFUS_RETOUR_VENDEUR: Record<string, string> = {
+  deja_enregistre: "Le retour vendeur a déjà été enregistré pour cette visite.",
+  introuvable: "Cette visite est introuvable.",
+  visite_non_realisee: "Le retour vendeur ne s'enregistre qu'une fois la visite réalisée.",
+  aucun_vendeur_canonique: "Aucun vendeur n'est rattaché au mandat de ce bien : ajoutez un mandant avant d'enregistrer son retour.",
+  contact_fusionne: "Le vendeur a été fusionné dans un autre contact : reprenez depuis la fiche conservée.",
+};
 
 const VARIANT_BADGE_STATUT_VISITE = {
   planifiee: "accent",
@@ -70,7 +86,11 @@ export default async function VisitePage({ params, searchParams }: PageProps) {
   const workspaceId = await exigerWorkspaceCourant();
   const visite = await getVisiteById(id, workspaceId);
   if (!visite) notFound();
-  const lienRetour = lienRetourFicheVisite(retourVisiteValide((await searchParams)?.retour), visite);
+  const parametres = await searchParams;
+  const lienRetour = lienRetourFicheVisite(retourVisiteValide(parametres?.retour), visite);
+  const refusRetourVendeur = parametres?.erreurRetourVendeur
+    ? MESSAGE_REFUS_RETOUR_VENDEUR[parametres.erreurRetourVendeur]
+    : undefined;
 
   const [bien, acquereur, compteRendu, bonsVisite] = await Promise.all([
     getBienById(visite.bienId),
@@ -438,6 +458,14 @@ export default async function VisitePage({ params, searchParams }: PageProps) {
       {visite.statut === "realisee" && (
         <section className="mb-8 border-t border-border pt-6">
           <SectionTitle>Retour vendeur</SectionTitle>
+          {refusRetourVendeur && (
+            <p
+              role="alert"
+              className="text-[13px] text-status-danger bg-status-danger-subtle border border-status-danger-border rounded-lg px-3 py-2 mb-3"
+            >
+              {refusRetourVendeur}
+            </p>
+          )}
           {interactionsRetourVendeur.length > 0 ? (
             <div className="flex flex-col gap-2">
               {interactionsRetourVendeur.map((interaction) => {

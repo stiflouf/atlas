@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { modifierContactAction } from "@/actions/modifierContact";
-import Button from "@/components/ui/Button";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
+import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
 import ButtonLink from "@/components/ui/ButtonLink";
 import Input from "@/components/ui/Input";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
@@ -47,7 +48,7 @@ export default async function ModifierContactPage({ params }: PageProps) {
         L’identité corrigée ici s’applique à tous les dossiers reliés à cette personne.
       </p>
 
-      <form action={modifierContactAction} className="flex flex-col gap-4">
+      <FormulaireAvecEtat action={modifierContactAction} className="flex flex-col gap-4" positionErreur="haut">
         <input type="hidden" name="id" value={contact.id} />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -78,14 +79,12 @@ export default async function ModifierContactPage({ params }: PageProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mt-2">
-          <Button type="submit" variant="primary" size="md">
-            Enregistrer
-          </Button>
+          <BoutonSoumettre>Enregistrer</BoutonSoumettre>
           <ButtonLink href={`/contacts/${contact.id}`} variant="ghost" size="md">
             Annuler
           </ButtonLink>
         </div>
-      </form>
+      </FormulaireAvecEtat>
     </div>
   );
 }

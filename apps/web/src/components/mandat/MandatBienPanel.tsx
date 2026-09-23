@@ -50,6 +50,9 @@ const MESSAGES_REFUS: Record<string, string> = {
   deja_partie: "Cette personne est déjà partie au mandat. Modifiez son rôle plutôt que de l'ajouter à nouveau.",
   contact_introuvable: "Ce contact est introuvable.",
   contact_fusionne: "Ce contact a été fusionné dans un autre : choisissez le contact conservé.",
+  // DEMO_UX_HARDENING_V1 — refus de SAISIE (date mal formée, type de mandat absent) routé par
+  // actions/mandat.ts dans ce même canal, plutôt qu'une page d'erreur.
+  saisie_invalide: "Saisie incomplète ou mal formée : vérifiez le type de mandat et les dates (AAAA-MM-JJ).",
 };
 
 // Date ISO (AAAA-MM-JJ) -> « 1 janvier 2026 », en UTC pour ne jamais glisser d'un jour.

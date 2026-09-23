@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { Archive, Plus, SearchX, Users } from "lucide-react";
 import Card from "@/components/ui/Card";
+import EmptyState from "@/components/ui/EmptyState";
 import Badge from "@/components/ui/Badge";
 import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
@@ -78,7 +79,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">
-            {modeArchives ? "Acquéreurs archivés" : "Clients"}
+            {modeArchives ? "Acquéreurs archivés" : "Acquéreurs"}
           </h1>
           <p className="text-[14px] text-text-3 mt-1">
             {totalAffiche} {modeArchives ? "acquéreurs archivés" : "acquéreurs"}
@@ -112,14 +113,32 @@ export default async function ClientsPage({ searchParams }: PageProps) {
 
       <section>
         <SectionTitle>{modeArchives ? "Acquéreurs archivés" : "Acquéreurs"}</SectionTitle>
+        {/* DEMO_UX_HARDENING_V1 — même patron d'état vide que /biens : une liste qui n'a rien à
+            montrer propose le geste suivant, au lieu d'une phrase sèche. Les trois cibles existent
+            déjà dans cette page. */}
         {clients.length === 0 ? (
-          <p className="text-[14px] text-text-3">
-            {texte
-              ? `Aucun résultat pour « ${texte} ».`
-              : modeArchives
-                ? "Aucun acquéreur archivé."
-                : "Aucun acquéreur actif."}
-          </p>
+          texte ? (
+            <EmptyState
+              icon={SearchX}
+              titre={`Aucun résultat pour « ${texte} »`}
+              message="Aucun nom, prénom, email ou téléphone ne correspond. Essayez un terme plus court, ou effacez la recherche."
+              cta={{ href: construireHref({ archives: modeArchives }), libelle: "Effacer la recherche" }}
+            />
+          ) : modeArchives ? (
+            <EmptyState
+              icon={Archive}
+              titre="Aucun acquéreur archivé"
+              message="Les acquéreurs que vous archivez sortent des flux actifs sans être supprimés. Ils apparaîtront ici."
+              cta={{ href: construireHref({ archives: false }), libelle: "Voir les acquéreurs actifs" }}
+            />
+          ) : (
+            <EmptyState
+              icon={Users}
+              titre="Aucun acquéreur actif"
+              message="Le premier acquéreur que vous ajoutez ouvre ses critères, ses visites et ses rapprochements avec vos biens."
+              cta={{ href: "/clients/nouveau", libelle: "Ajouter un acquéreur" }}
+            />
+          )
         ) : (
           <div className="flex flex-col gap-2">
             {clients.map((client) => (

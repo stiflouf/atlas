@@ -57,6 +57,16 @@ export function deriverEtatRemuneration(
   return "previsionnelle"; // en_cours
 }
 
+// DEMO_UX_HARDENING_V1 — bruit de saisie retiré AVANT le parsing, et lui seul : espaces (ASCII,
+// insécable U+00A0, insécable étroite U+202F — celles que produisent un copier-coller depuis un
+// tableur ou un PDF) et symbole €. Aucune interprétation : un séparateur de milliers POINT ou
+// VIRGULE ("30.000,00", "30,000.00") reste refusé, parce que le distinguer d'un séparateur
+// décimal demanderait de deviner, et deviner sur un montant se paie au millier près. L'appelant
+// rend alors un refus lisible, jamais une page d'erreur.
+function retirerBruitDeSaisie(valeur: string): string {
+  return valeur.replace(/[\s\u00a0\u202f]/g, "").replace(/€/g, "");
+}
+
 // Parsing texte -> centimes entiers, sans jamais passer par une multiplication flottante
 // ("12487.36" * 100 en JS produit 1248735.9999999998). Accepte "." et "," comme séparateur
 // décimal. Découpage en partie entière / partie décimale par manipulation de chaîne, complétée à
@@ -64,7 +74,7 @@ export function deriverEtatRemuneration(
 // nombre positif à au plus 2 décimales, ou dont le résultat dépasserait Number.MAX_SAFE_INTEGER
 // (retourne undefined — l'appelant (action) transforme ça en erreur explicite).
 export function parseMontantCentimes(valeur: string): number | undefined {
-  const brut = valeur.trim();
+  const brut = retirerBruitDeSaisie(valeur);
   if (!/^\d+([.,]\d{1,2})?$/.test(brut)) return undefined;
   const [entier, decimale = ""] = brut.split(/[.,]/);
   const centimes = Number(entier + decimale.padEnd(2, "0"));

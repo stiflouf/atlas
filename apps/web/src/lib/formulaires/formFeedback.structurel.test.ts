@@ -33,6 +33,11 @@ const ACTIONS_CONVERTIES: Record<string, string[]> = {
   "actions/ajouterDocumentBien.ts": ["ajouterDocumentBienAction", "corrigerClassementDocumentBienAction"],
   // CRM_TIMELINE_V1
   "actions/enregistrerEchange.ts": ["enregistrerEchangeAction"],
+  // DEMO_UX_HARDENING_V1 — les trois derniers écrans de démonstration qui pouvaient encore
+  // éjecter sur error.tsx pour une saisie plausible.
+  "actions/rfrFoyer.ts": ["enregistrerRfrFoyerAction"],
+  "actions/historiqueAmorcage.ts": ["enregistrerHistoriqueAmorcageAction"],
+  "actions/modifierContact.ts": ["modifierContactAction"],
 };
 
 // `throw new Error` encore attendus dans les fichiers convertis : invariants (D) et états
@@ -41,6 +46,9 @@ const THROWS_CONSERVES: Record<string, string[]> = {
   "actions/prospectVendeur.ts": ["Contact canonique introuvable"],
   "actions/modifierAcquereur.ts": ["Contact canonique introuvable"],
   "actions/remuneration.ts": ["introuvable", "annulé", "existe déjà", "encaissée", "compromis réalisé", "date réelle de l'acte"],
+  // ADR-057 — le writer a déjà relu et validé la ligne : ce `throw` ne peut naître que d'une
+  // course, jamais d'une saisie. Même invariant que ses jumeaux ci-dessus.
+  "actions/modifierContact.ts": ["Contact introuvable."],
 };
 
 describe("FORM_FEEDBACK_V1 — contrat", () => {
@@ -94,6 +102,8 @@ describe("FORM_FEEDBACK_V1 — contrat", () => {
       "components/compromis/CompromisFormulaire.tsx",
       "components/bien/BienTabs.tsx",
       "components/contact/NoterEchangeForm.tsx",
+      "components/fiscal/RfrFoyerFormulaire.tsx",
+      "components/fiscal/HistoriqueAmorcageFormulaire.tsx",
     ]) {
       const source = lire(chemin);
       expect(source, chemin).toContain("FormulaireAvecEtat");

@@ -87,7 +87,7 @@ export default async function PageDossierNotaire({ params }: PageProps) {
           État de préparation {PRODUCT_NAME}
         </p>
         <p className="text-[16px] font-medium text-text-1">{LABEL_ETAT_PREPARATION_PACK[pack.etatPreparation]}</p>
-        {pack.etatPreparation === "preparation_atlas_complete" && (
+        {pack.etatPreparation === "preparation_complete" && (
           <p className="text-[12px] text-text-3 mt-1">
             Signifie uniquement qu'aucun constat n'est détecté par les contrôles {PRODUCT_NAME} actuellement implémentés —
             pas une garantie de conformité légale ni d'acceptation par le notaire.

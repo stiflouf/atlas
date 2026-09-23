@@ -29,27 +29,45 @@ afterAll(async () => {
   await getDb().delete(rfrFoyerTable).where(eq(rfrFoyerTable.dossierFiscalId, "default"));
 });
 
+const ETAT_FORMULAIRE_INITIAL = { statut: "idle" } as const;
+
 function formData(champs: Record<string, string>): FormData {
   const fd = new FormData();
   for (const [cle, valeur] of Object.entries(champs)) fd.set(cle, valeur);
   return fd;
 }
 
+// DEMO_UX_HARDENING_V1 — les refus de saisie reviennent au formulaire (FORM_FEEDBACK_V1), ils ne
+// lèvent plus : une virgule mal placée ne doit jamais éjecter le conseiller sur error.tsx.
 describe("enregistrerRfrFoyerAction — garde-fous", () => {
-  it("refuse explicitement (throw) un nombre de parts invalide", async () => {
-    await expect(
-      enregistrerRfrFoyerAction(formData({ anneeRfr: "2024", rfrFoyer: "3000000", nombreParts: "0" }))
-    ).rejects.toThrow(/parts/);
+  it("refuse un nombre de parts invalide, en état de formulaire", async () => {
+    const etat = await enregistrerRfrFoyerAction(ETAT_FORMULAIRE_INITIAL, formData({ anneeRfr: "2024", rfrFoyer: "3000000", nombreParts: "0" }));
+    expect(etat.statut).toBe("erreur");
+    expect(etat.statut === "erreur" && etat.message).toMatch(/parts/);
   });
 
-  it("refuse explicitement (throw) un RFR invalide", async () => {
-    await expect(
-      enregistrerRfrFoyerAction(formData({ anneeRfr: "2024", rfrFoyer: "abc", nombreParts: "1.5" }))
-    ).rejects.toThrow(/RFR/);
+  it("refuse un RFR invalide, en état de formulaire", async () => {
+    const etat = await enregistrerRfrFoyerAction(ETAT_FORMULAIRE_INITIAL, formData({ anneeRfr: "2024", rfrFoyer: "abc", nombreParts: "1.5" }));
+    expect(etat.statut).toBe("erreur");
+    expect(etat.statut === "erreur" && etat.message).toMatch(/RFR/);
+  });
+
+  it("refuse un format de milliers AMBIGU (30.000,00) plutôt que de deviner", async () => {
+    const etat = await enregistrerRfrFoyerAction(ETAT_FORMULAIRE_INITIAL, formData({ anneeRfr: "2024", rfrFoyer: "30.000,00", nombreParts: "1" }));
+    expect(etat.statut).toBe("erreur");
+  });
+
+  it("accepte les formats humains non ambigus : espaces (ASCII, U+00A0, U+202F) et symbole €", async () => {
+    for (const [annee, saisie] of [[2019, "45 000"], [2018, "45\u00a0000 €"], [2017, "45\u202f000,50"]] as const) {
+      await enregistrerRfrFoyerAction(ETAT_FORMULAIRE_INITIAL, formData({ anneeRfr: String(annee), rfrFoyer: saisie, nombreParts: " 1,5 " })).catch(() => {});
+      const [ligne] = await getDb().select().from(rfrFoyerTable).where(eq(rfrFoyerTable.anneeRfr, annee));
+      expect(ligne?.nombrePartsCentiemes, saisie).toBe(150);
+      expect(ligne?.rfrFoyerCentimes, saisie).toBe(annee === 2017 ? 4500050 : 4500000);
+    }
   });
 
   it("convertit 1,5 part en 150 centièmes exacts, sans flottant", async () => {
-    await enregistrerRfrFoyerAction(formData({ anneeRfr: "2024", rfrFoyer: "3000000", nombreParts: "1.5" })).catch(
+    await enregistrerRfrFoyerAction(ETAT_FORMULAIRE_INITIAL, formData({ anneeRfr: "2024", rfrFoyer: "3000000", nombreParts: "1.5" })).catch(
       () => {}
     );
 

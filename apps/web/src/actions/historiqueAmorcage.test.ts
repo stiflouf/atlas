@@ -31,31 +31,42 @@ afterAll(async () => {
   await getDb().delete(historiqueAmorcageTable).where(eq(historiqueAmorcageTable.dossierFiscalId, "default"));
 });
 
+const ETAT_FORMULAIRE_INITIAL = { statut: "idle" } as const;
+
 function formData(champs: Record<string, string>): FormData {
   const fd = new FormData();
   for (const [cle, valeur] of Object.entries(champs)) fd.set(cle, valeur);
   return fd;
 }
 
+// DEMO_UX_HARDENING_V1 — refus de saisie rendus au formulaire (FORM_FEEDBACK_V1), jamais error.tsx.
 describe("enregistrerHistoriqueAmorcageAction — garde-fous", () => {
-  it("refuse explicitement (throw) une date de fin de couverture hors de l'année déclarée", async () => {
+  it("refuse une date de fin de couverture hors de l'année déclarée, en état de formulaire", async () => {
     const anneeEnCours = new Date().getFullYear();
-    await expect(
-      enregistrerHistoriqueAmorcageAction(
-        formData({ annee: String(anneeEnCours), montantEncaisse: "50000", dateFinCouverture: `${anneeEnCours - 1}-12-31` })
-      )
-    ).rejects.toThrow(/année déclarée/);
+    const etat = await enregistrerHistoriqueAmorcageAction(
+      ETAT_FORMULAIRE_INITIAL,
+      formData({ annee: String(anneeEnCours), montantEncaisse: "50000", dateFinCouverture: `${anneeEnCours - 1}-12-31` })
+    );
+    expect(etat.statut === "erreur" && etat.message).toMatch(/année déclarée/);
   });
 
-  it("refuse explicitement (throw) une date de fin de couverture absente pour l'année en cours", async () => {
+  it("refuse une date de fin de couverture absente pour l'année en cours, en état de formulaire", async () => {
     const anneeEnCours = new Date().getFullYear();
-    await expect(
-      enregistrerHistoriqueAmorcageAction(formData({ annee: String(anneeEnCours), montantEncaisse: "50000" }))
-    ).rejects.toThrow(/obligatoire/);
+    const etat = await enregistrerHistoriqueAmorcageAction(
+      ETAT_FORMULAIRE_INITIAL,
+      formData({ annee: String(anneeEnCours), montantEncaisse: "50000" })
+    );
+    expect(etat.statut === "erreur" && etat.message).toMatch(/obligatoire/);
+  });
+
+  it("accepte un montant collé depuis un tableur (espace insécable et €)", async () => {
+    await enregistrerHistoriqueAmorcageAction(ETAT_FORMULAIRE_INITIAL, formData({ annee: "2021", montantEncaisse: "12\u00a0000 €" })).catch(() => {});
+    const [ligne] = await getDb().select().from(historiqueAmorcageTable).where(eq(historiqueAmorcageTable.annee, 2021));
+    expect(ligne?.montantEncaisseCentimes).toBe(1200000);
   });
 
   it("pose automatiquement le 31 décembre pour une année révolue, sans que le champ soit fourni", async () => {
-    await enregistrerHistoriqueAmorcageAction(formData({ annee: "2023", montantEncaisse: "1200000" })).catch(() => {});
+    await enregistrerHistoriqueAmorcageAction(ETAT_FORMULAIRE_INITIAL, formData({ annee: "2023", montantEncaisse: "1200000" })).catch(() => {});
 
     const [ligne] = await getDb()
       .select()
@@ -64,9 +75,8 @@ describe("enregistrerHistoriqueAmorcageAction — garde-fous", () => {
     expect(ligne?.dateFinCouverture).toBe("2023-12-31");
   });
 
-  it("refuse explicitement (throw) un montant invalide", async () => {
-    await expect(
-      enregistrerHistoriqueAmorcageAction(formData({ annee: "2022", montantEncaisse: "abc" }))
-    ).rejects.toThrow(/Montant/);
+  it("refuse un montant invalide, en état de formulaire", async () => {
+    const etat = await enregistrerHistoriqueAmorcageAction(ETAT_FORMULAIRE_INITIAL, formData({ annee: "2022", montantEncaisse: "abc" }));
+    expect(etat.statut === "erreur" && etat.message).toMatch(/Montant/);
   });
 });

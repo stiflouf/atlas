@@ -11,7 +11,7 @@ export default function NouvelAcquereurPage() {
         className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
-        Clients
+        Acquéreurs
       </Link>
 
       <h1 className="text-[20px] md:text-[24px] font-semibold text-text-1 leading-tight mb-6">

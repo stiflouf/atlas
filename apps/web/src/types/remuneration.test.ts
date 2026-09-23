@@ -11,6 +11,47 @@ function remunerationTest(surcharge: Partial<Remuneration> = {}): Remuneration {
   };
 }
 
+// DEMO_UX_HARDENING_V1 — un montant recopié depuis un tableur, un PDF ou un relevé arrive avec des
+// espaces (insécables compris) et parfois le symbole €. C'est du bruit de présentation, pas une
+// valeur différente : il est retiré avant lecture. Ce qui reste AMBIGU l'est toujours refusé.
+describe("parseMontantCentimes — formats humains", () => {
+  it("accepte les espaces de milliers : ASCII, insécable (U+00A0), insécable étroite (U+202F)", () => {
+    expect(parseMontantCentimes("45 000")).toBe(4500000);
+    expect(parseMontantCentimes("45\u00a0000")).toBe(4500000);
+    expect(parseMontantCentimes("45\u202f000")).toBe(4500000);
+    expect(parseMontantCentimes("1 234 567,89")).toBe(123456789);
+  });
+
+  it("accepte le symbole € et les espaces qui l'entourent", () => {
+    expect(parseMontantCentimes("45000 €")).toBe(4500000);
+    expect(parseMontantCentimes("45 000 €")).toBe(4500000);
+    expect(parseMontantCentimes("€45000,50")).toBe(4500050);
+  });
+
+  it("n'altère pas les formats déjà acceptés", () => {
+    expect(parseMontantCentimes("45000")).toBe(4500000);
+    expect(parseMontantCentimes("45000,50")).toBe(4500050);
+    expect(parseMontantCentimes("45000.50")).toBe(4500050);
+    expect(parseMontantCentimes("0")).toBe(0);
+  });
+
+  it("REFUSE les séparateurs de milliers ambigus plutôt que de deviner — un facteur mille se paie cher", () => {
+    expect(parseMontantCentimes("30.000,00")).toBeUndefined();
+    expect(parseMontantCentimes("30,000.00")).toBeUndefined();
+    // "30.000" est refusé pour une autre raison, antérieure : trois décimales. Assertion conservée
+    // pour documenter que la tolérance ajoutée ne l'a pas rendu acceptable par inadvertance.
+    expect(parseMontantCentimes("30.000")).toBeUndefined();
+  });
+
+  it("refuse toujours ce qui n'est pas un nombre positif à deux décimales", () => {
+    expect(parseMontantCentimes("abc")).toBeUndefined();
+    expect(parseMontantCentimes("")).toBeUndefined();
+    expect(parseMontantCentimes("€")).toBeUndefined();
+    expect(parseMontantCentimes("-100")).toBeUndefined();
+    expect(parseMontantCentimes("100,123")).toBeUndefined();
+  });
+});
+
 describe("parseMontantCentimes", () => {
   it("convertit un montant à 2 décimales en centimes exacts, sans multiplication flottante", () => {
     // "12487.36" * 100 en JS produit 1248735.9999999998 — cas connu pour casser une conversion

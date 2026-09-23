@@ -55,7 +55,7 @@ export default function CibleTacheSelecteur({
         Une tâche peut être rattachée à une seule cible à la fois — un bien, un acquéreur ou un
         prospect vendeur — ou à aucun des trois pour une tâche générale.
       </p>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className={labelCls}>Bien</label>
           <select

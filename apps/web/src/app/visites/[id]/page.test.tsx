@@ -250,3 +250,69 @@ describe("Fiche Visite /visites/{id} — consultable sans Google Calendar (ADR-0
     expect(html).not.toContain("Créer une offre");
   });
 });
+
+// DEMO_UX_HARDENING_V1 — l'action de retour vendeur rapportait ses refus par
+// `?erreurRetourVendeur=`, que personne ne lisait : un refus ressemblait à un clic sans effet.
+describe("Fiche Visite — refus de retour vendeur rapportés à l'écran", () => {
+  async function visiteRealisee(suffixe: string) {
+    const bien = await creerBienDeTest(suffixe);
+    const acquereur = await creerAcquereurDeTest(suffixe);
+    const resultat = await materialiserVisite(
+      { bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-08-01", rendezVousCalendarId: `gcal-fiche-${bien.id}` },
+      WORKSPACE_TEST
+    );
+    if (resultat.statut !== "creee") throw new Error("création de visite attendue");
+    await creerCompteRenduEtRealiserVisite(
+      {
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        visiteId: resultat.visite.id,
+        dateVisite: "2026-08-01",
+        retour: "[test réel] Retour de visite.",
+        interet: "interesse",
+        prochaineEtape: "",
+      },
+      WORKSPACE_TEST
+    );
+    return resultat.visite;
+  }
+
+  it("chacun des cinq statuts de refus du writer devient un message lisible en role=alert", async () => {
+    const visite = await visiteRealisee("REFUS");
+    const attendus: Array<[string, RegExp]> = [
+      ["deja_enregistre", /déjà été enregistré/],
+      ["introuvable", /introuvable/],
+      ["visite_non_realisee", /visite réalisée/],
+      ["aucun_vendeur_canonique", /mandant/],
+      ["contact_fusionne", /fusionné/],
+    ];
+    for (const [code, attendu] of attendus) {
+      const html = renderToStaticMarkup(
+        await VisitePage({
+          params: Promise.resolve({ id: visite.id }),
+          searchParams: Promise.resolve({ erreurRetourVendeur: code }),
+        })
+      );
+      expect(html, code).toContain('role="alert"');
+      expect(html, code).toMatch(attendu);
+    }
+  });
+
+  it("un code inconnu n'affiche RIEN : ni message arbitraire, ni valeur brute recopiée", async () => {
+    const visite = await visiteRealisee("INCONNU");
+    const html = renderToStaticMarkup(
+      await VisitePage({
+        params: Promise.resolve({ id: visite.id }),
+        searchParams: Promise.resolve({ erreurRetourVendeur: "<script>bidon</script>" }),
+      })
+    );
+    expect(html).not.toContain("bidon");
+    expect(html).not.toContain('role="alert"');
+  });
+
+  it("sans paramètre, la fiche ne montre aucun refus", async () => {
+    const visite = await visiteRealisee("SANS");
+    const html = renderToStaticMarkup(await VisitePage({ params: Promise.resolve({ id: visite.id }) }));
+    expect(html).not.toContain('role="alert"');
+  });
+});

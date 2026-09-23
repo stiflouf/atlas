@@ -7,6 +7,7 @@ import { enregistrerMandatExistant, modifierMandat, resilierMandat } from "@/lib
 import { parseDateObligatoire, parseFaitsMandatFormData, parseMotifResiliation } from "@/lib/mandatFormulaire";
 import { ajouterPartieMandat, modifierRolePartieMandat, retirerPartieMandat } from "@/lib/partieMandatRepository";
 import { estRolePartieMandat } from "@/types/partieMandat";
+import { ErreurSaisie } from "@/lib/formulaires/etatFormulaire";
 
 // ADR-060 §13, §16 — les GESTES HUMAINS sur le mandat canonique et ses parties (lot
 // MANDATE_CANONICAL_UI_V1). Pipeline identique pour chacun : session → workspace de SESSION (jamais
@@ -20,6 +21,22 @@ import { estRolePartieMandat } from "@/types/partieMandat";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// DEMO_UX_HARDENING_V1 — une saisie invalide (date mal formée, type de mandat absent) est un refus
+// comme les autres : elle rejoint le canal `?mandat=` déjà lu par la fiche Bien et traduit par
+// `MESSAGES_REFUS`, au lieu de remonter en page d'erreur. Le panneau garde ses sept formulaires et
+// sa navigation de retour — c'est elle qui recharge le bien avec des données fraîches.
+//
+// N'enveloppe QUE le parsing : jamais un writer (dont les refus sont déjà typés), jamais un
+// `redirect()` (qui lève par conception et doit traverser intact).
+function saisieValide<T>(formData: FormData, lire: () => T): T {
+  try {
+    return lire();
+  } catch (erreur) {
+    if (erreur instanceof ErreurSaisie) redirect(cheminRetour(formData, "saisie_invalide"));
+    throw erreur;
+  }
+}
+
 function cheminRetour(formData: FormData, refus?: string): string {
   const bienId = String(formData.get("bienId") ?? "");
   if (!UUID_REGEX.test(bienId)) notFound();
@@ -32,7 +49,7 @@ export async function modifierMandatAction(formData: FormData): Promise<void> {
   const mandatId = String(formData.get("mandatId") ?? "");
   if (!mandatId) notFound();
 
-  const faits = parseFaitsMandatFormData(formData);
+  const faits = saisieValide(formData, () => parseFaitsMandatFormData(formData));
   const resultat = await modifierMandat(mandatId, faits, workspaceId);
   if (resultat.statut === "introuvable") notFound();
   if (resultat.statut !== "modifie") redirect(cheminRetour(formData, resultat.statut));
@@ -45,7 +62,7 @@ export async function resilierMandatAction(formData: FormData): Promise<void> {
   const mandatId = String(formData.get("mandatId") ?? "");
   if (!mandatId) notFound();
 
-  const resilieLe = parseDateObligatoire(formData.get("resilieLe"), "Date de résiliation");
+  const resilieLe = saisieValide(formData, () => parseDateObligatoire(formData.get("resilieLe"), "Date de résiliation"));
   const motifResiliation = parseMotifResiliation(formData.get("motifResiliation"));
   const resultat = await resilierMandat(mandatId, { resilieLe, motifResiliation }, workspaceId);
   if (resultat.statut === "introuvable") notFound();
@@ -62,8 +79,10 @@ export async function enregistrerMandatExistantAction(formData: FormData): Promi
   const bienId = String(formData.get("bienId") ?? "");
   if (!UUID_REGEX.test(bienId)) notFound();
 
-  const dateDebut = parseDateObligatoire(formData.get("dateDebutMandat"), "Date de prise d'effet");
-  const faits = parseFaitsMandatFormData(formData);
+  const { dateDebut, faits } = saisieValide(formData, () => ({
+    dateDebut: parseDateObligatoire(formData.get("dateDebutMandat"), "Date de prise d'effet"),
+    faits: parseFaitsMandatFormData(formData),
+  }));
   const resultat = await enregistrerMandatExistant(bienId, { ...faits, dateDebut }, workspaceId);
   if (resultat.statut === "bien_introuvable") notFound();
   if (resultat.statut !== "enregistre") redirect(cheminRetour(formData, resultat.statut));

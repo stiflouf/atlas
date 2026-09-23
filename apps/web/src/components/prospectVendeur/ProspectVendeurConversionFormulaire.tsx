@@ -40,7 +40,7 @@ export default function ProspectVendeurConversionFormulaire({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className={labelCls}>Référence *</label>
-          <input name="reference" required className={inputCls} placeholder="ATL-2026-001" />
+          <input name="reference" required className={inputCls} placeholder="DOM-2026-001" />
         </div>
         <div>
           <label className={labelCls}>Type *</label>
@@ -87,7 +87,7 @@ export default function ProspectVendeurConversionFormulaire({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label className={labelCls}>Surface (m²) *</label>
           <input name="surface" type="number" min="0.1" step="0.1" required className={inputCls} />

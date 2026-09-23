@@ -38,20 +38,23 @@ export type ConstatPackNotaire = {
 };
 
 // Jamais une prétention juridique ("dossier complet/accepté par le notaire") — uniquement un
-// état PRODUIT décrivant ce que les contrôles Atlas actuellement implémentés détectent.
+// état PRODUIT décrivant ce que les contrôles actuellement implémentés détectent.
 // `contexte_transactionnel_incomplet` : aucun compromis en cours n'existe pour ce bien, la notion
 // même de "prêt à transmettre" est dénuée de sens (rien à transmettre) — jamais assimilé à "non".
 export type EtatPreparationPack =
   | "contexte_transactionnel_incomplet"
   | "elements_bloquants"
   | "elements_a_traiter"
-  | "preparation_atlas_complete";
+  // DEMO_UX_HARDENING_V1 — renommé depuis `preparation_atlas_complete` : cet état est DÉRIVÉ à
+  // chaque lecture, jamais persisté ni exposé à un consommateur externe (aucune colonne, aucune
+  // API), son nom n'avait donc aucune raison de porter l'ancienne marque.
+  | "preparation_complete";
 
 export const LABEL_ETAT_PREPARATION_PACK: Record<EtatPreparationPack, string> = {
   contexte_transactionnel_incomplet: "Contexte transactionnel incomplet",
   elements_bloquants: "Éléments bloquants",
   elements_a_traiter: "Éléments à traiter",
-  preparation_atlas_complete: "Préparation Atlas complète (contrôles Atlas actuellement implémentés uniquement)",
+  preparation_complete: "Aucun point bloquant détecté par les contrôles en place",
 };
 
 export type PackNotaire = {
@@ -297,7 +300,7 @@ export function calculerPackNotaire(
   } else if (constats.some((c) => c.severite === "a_obtenir" || c.severite === "a_verifier")) {
     etatPreparation = "elements_a_traiter";
   } else {
-    etatPreparation = "preparation_atlas_complete";
+    etatPreparation = "preparation_complete";
   }
 
   return { etatPreparation, constats, documentsInterdits, selectionProposee, documentsDisponibles };

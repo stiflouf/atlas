@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { PRODUCT_NAME } from "@/lib/branding";
+import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
+import FormulaireAvecEtat, { type ActionFormulaire } from "@/components/formulaires/FormulaireAvecEtat";
 
 const inputCls =
   "w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent";
@@ -11,21 +13,21 @@ const labelCls = "text-[12px] font-medium text-text-2 mb-1 block";
 // franchise TVA) ne remonte plus loin (ADR-023, point 2 de l'audit préalable). dateFinCouverture
 // n'est demandée que pour l'année en cours : une année révolue est nécessairement couverte en
 // totalité (voir schema.ts, historique_amorcage).
-export default function HistoriqueAmorcageFormulaire({
-  action,
-}: {
-  action: (formData: FormData) => Promise<void>;
-}) {
+export default function HistoriqueAmorcageFormulaire({ action }: { action: ActionFormulaire }) {
   const anneeEnCours = new Date().getFullYear();
   const [annee, setAnnee] = useState(String(anneeEnCours));
   const anneeEstEnCours = Number(annee) === anneeEnCours;
 
   return (
-    <form action={action} className="flex flex-col gap-3">
+    <FormulaireAvecEtat action={action} className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls}>Année</label>
-          <select name="annee" value={annee} onChange={(e) => setAnnee(e.target.value)} className={inputCls}>
+          {/* NON CONTRÔLÉ (`defaultValue`), délibérément : après un refus, `FormulaireAvecEtat`
+              réécrit la valeur soumise dans le DOM — un champ contrôlé par React l'écraserait au
+              rendu suivant. L'état local ne sert plus qu'à afficher ou non la date de couverture,
+              et il survit au refus (le composant n'est jamais démonté). */}
+          <select name="annee" defaultValue={annee} onChange={(e) => setAnnee(e.target.value)} className={inputCls}>
             <option value={anneeEnCours}>{anneeEnCours}</option>
             <option value={anneeEnCours - 1}>{anneeEnCours - 1}</option>
             <option value={anneeEnCours - 2}>{anneeEnCours - 2}</option>
@@ -48,12 +50,9 @@ export default function HistoriqueAmorcageFormulaire({
         </div>
       )}
 
-      <button
-        type="submit"
-        className="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2 rounded-lg"
-      >
+      <BoutonSoumettre classeBrute="self-start text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2 rounded-lg">
         Enregistrer
-      </button>
-    </form>
+      </BoutonSoumettre>
+    </FormulaireAvecEtat>
   );
 }

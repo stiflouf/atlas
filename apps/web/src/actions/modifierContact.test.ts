@@ -68,11 +68,13 @@ function formulaire(id: string, champs: { nom?: string; prenom?: string; email?:
 }
 
 // `redirect()` et `notFound()` lèvent par conception (Next.js) : on capture le digest pour
-// distinguer un succès (redirection vers la fiche) d'un refus.
+// distinguer un succès (redirection vers la fiche) d'un refus. Depuis DEMO_UX_HARDENING_V1
+// l'action suit FORM_FEEDBACK_V1 : un refus de SAISIE ne lève plus, il revient en état — rendu ici
+// sous la forme `etat:<message>` pour rester comparable aux digests.
 async function soumettre(formData: FormData): Promise<string> {
   try {
-    await modifierContactAction(formData);
-    return "aucune";
+    const etat = await modifierContactAction({ statut: "idle" }, formData);
+    return etat.statut === "erreur" ? `etat:${etat.message}` : "aucune";
   } catch (erreur) {
     return String((erreur as { digest?: string }).digest ?? (erreur as Error).message);
   }

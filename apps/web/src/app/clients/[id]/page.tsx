@@ -191,7 +191,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
         className="inline-flex items-center gap-1.5 text-[13px] text-text-2 hover:text-text-1 transition-colors mb-6"
       >
         <ArrowLeft size={14} />
-        Clients
+        Acquéreurs
       </Link>
 
       <div className="mb-4">

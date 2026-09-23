@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 import { Home, Building2, BookUser, Users, LayoutDashboard, Landmark, UserSearch, Zap } from "lucide-react";
 
 const items = [
@@ -10,7 +11,9 @@ const items = [
   { label: "Biens", href: "/biens", icon: Building2 },
   // ADR-058 — le carnet de personnes, avant les vues de pipeline (acquéreurs, prospects vendeurs).
   { label: "Contacts", href: "/contacts", icon: BookUser },
-  { label: "Clients", href: "/clients", icon: Users },
+  // DEMO_UX_HARDENING_V1 — « Acquéreurs » partout à l'écran : la route reste /clients (aucun
+  // renommage technique), mais le produit n'emploie plus deux mots pour la même personne.
+  { label: "Acquéreurs", href: "/clients", icon: Users },
   { label: "Prospects vendeurs", href: "/prospects-vendeurs", icon: UserSearch },
   { label: "Fiscal", href: "/fiscal", icon: Landmark },
   { label: "Automatisations", href: "/automatisations", icon: Zap },
@@ -20,6 +23,16 @@ type Props = { variant: "sidebar" | "bottom" };
 
 export default function NavItems({ variant }: Props) {
   const pathname = usePathname();
+  const conteneurRef = useRef<HTMLElement>(null);
+  const actifRef = useRef<HTMLAnchorElement>(null);
+
+  // Barre du bas uniquement : amener l'entrée courante dans la zone visible. `inline: "nearest"`
+  // ne bouge rien quand elle y est déjà, et `block: "nearest"` évite tout défilement vertical de
+  // la page — une barre `fixed` ne doit jamais faire sauter le contenu.
+  useEffect(() => {
+    if (variant !== "bottom") return;
+    actifRef.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [variant, pathname]);
 
   if (variant === "sidebar") {
     return (
@@ -56,16 +69,29 @@ export default function NavItems({ variant }: Props) {
     );
   }
 
+  // DEMO_UX_HARDENING_V1 — la barre du bas portait les 8 mêmes entrées en `px-6`, sans
+  // compression possible (`min-width:auto` sur un flex item) ni débordement géré : ~800 px de
+  // contenu incompressible pour 375 px d'écran, donc la moitié des entrées peintes hors de la
+  // barre et inatteignables au doigt. On garde les 8 entrées — la fiche Contact, les vues de
+  // pipeline et le fiscal sont tous des destinations réelles du parcours — et on rend la barre
+  // DÉFILANTE, sur le patron déjà en production dans `components/ui/Tabs.tsx` : items insécables
+  // (`whitespace-nowrap`) et non compressés (`shrink-0`), padding resserré, et l'entrée courante
+  // ramenée dans la zone visible à l'affichage pour qu'on sache toujours où l'on est.
   return (
-    <nav aria-label="Navigation principale" className="flex items-center justify-around h-full">
+    <nav
+      ref={conteneurRef}
+      aria-label="Navigation principale"
+      className="flex items-center h-full overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       {items.map(({ label, href, icon: Icon }) => {
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link
             key={href}
+            ref={active ? actifRef : undefined}
             href={href}
             aria-current={active ? "page" : undefined}
-            className={`flex flex-col items-center gap-1 py-2 px-6 transition-colors duration-100 ${
+            className={`flex flex-col items-center shrink-0 whitespace-nowrap gap-1 py-2 px-3 transition-colors duration-100 ${
               active ? "text-navy" : "text-text-muted"
             }`}
           >

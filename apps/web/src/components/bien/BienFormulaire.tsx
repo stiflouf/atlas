@@ -45,7 +45,7 @@ export default function BienFormulaire({
             required
             defaultValue={bien?.reference ?? ""}
             className={inputCls}
-            placeholder="ATL-2026-001"
+            placeholder="DOM-2026-001"
           />
         </div>
         <div>
@@ -99,7 +99,7 @@ export default function BienFormulaire({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label className={labelCls}>Surface (m²) *</label>
           <input

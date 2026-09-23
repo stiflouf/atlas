@@ -122,12 +122,14 @@ describe("modifierMandatAction", () => {
     expect(relu).toMatchObject({ type: "semi_exclusif", numero: "M-77", dateFin: "2026-12-31", exclusiviteJusquAu: "2026-06-30", dateDebut: "2026-01-15" });
   });
 
-  it("validation : type absent ou hors vocabulaire, date mal formée → refus avant écriture", async () => {
+  // DEMO_UX_HARDENING_V1 — une saisie invalide n'éjecte plus sur error.tsx : elle emprunte le canal
+  // de refus déjà en place (`?mandat=saisie_invalide`), affiché par MandatBienPanel. Rien n'est écrit.
+  it("validation : type absent ou hors vocabulaire, date mal formée → ?mandat=saisie_invalide, rien d'écrit", async () => {
     const bien = await unBien();
     const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-15", type: "simple" });
-    expect(await soumettre(modifierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, typeMandat: "" }))).toMatch(/type de mandat est obligatoire/);
-    expect(await soumettre(modifierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, typeMandat: "reseau" }))).toMatch(/type de mandat est obligatoire/);
-    expect(await soumettre(modifierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, typeMandat: "simple", dateFinMandat: "31/12/2026" }))).toMatch(/Date de mandat invalide/);
+    expect(await soumettre(modifierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, typeMandat: "" }))).toContain("?mandat=saisie_invalide");
+    expect(await soumettre(modifierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, typeMandat: "reseau" }))).toContain("?mandat=saisie_invalide");
+    expect(await soumettre(modifierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, typeMandat: "simple", dateFinMandat: "31/12/2026" }))).toContain("?mandat=saisie_invalide");
     expect((await getMandatById(mandat.id, WORKSPACE_TEST))!.type).toBe("simple");
   });
 
@@ -183,8 +185,8 @@ describe("resilierMandatAction", () => {
   it("date absente ou mal formée → refus avant écriture ; date avant la prise d'effet → ?mandat=date_incoherente", async () => {
     const bien = await unBien();
     const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-15", type: "simple" });
-    expect(await soumettre(resilierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, resilieLe: "" }))).toMatch(/date est obligatoire/);
-    expect(await soumettre(resilierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, resilieLe: "01/03/2026" }))).toMatch(/Date de mandat invalide/);
+    expect(await soumettre(resilierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, resilieLe: "" }))).toContain("?mandat=saisie_invalide");
+    expect(await soumettre(resilierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, resilieLe: "01/03/2026" }))).toContain("?mandat=saisie_invalide");
     expect(await soumettre(resilierMandatAction, formulaire({ mandatId: mandat.id, bienId: bien.id, resilieLe: "2025-12-31" }))).toContain("?mandat=date_incoherente");
     expect((await getMandatById(mandat.id, WORKSPACE_TEST))!.resilieLe).toBeUndefined();
   });
@@ -226,8 +228,8 @@ describe("enregistrerMandatExistantAction", () => {
 
   it("date ou type absents → refus avant écriture ; canonique déjà présent → ?mandat=mandat_canonique_existant", async () => {
     const bien = await unBien();
-    expect(await soumettre(enregistrerMandatExistantAction, formulaire({ bienId: bien.id, dateDebutMandat: "", typeMandat: "simple" }))).toMatch(/date est obligatoire/);
-    expect(await soumettre(enregistrerMandatExistantAction, formulaire({ bienId: bien.id, dateDebutMandat: "2026-01-01", typeMandat: "" }))).toMatch(/type de mandat est obligatoire/);
+    expect(await soumettre(enregistrerMandatExistantAction, formulaire({ bienId: bien.id, dateDebutMandat: "", typeMandat: "simple" }))).toContain("?mandat=saisie_invalide");
+    expect(await soumettre(enregistrerMandatExistantAction, formulaire({ bienId: bien.id, dateDebutMandat: "2026-01-01", typeMandat: "" }))).toContain("?mandat=saisie_invalide");
     expect(await listerMandatsDuBien(bien.id, WORKSPACE_TEST)).toEqual([]);
     await soumettre(enregistrerMandatExistantAction, formulaire({ bienId: bien.id, dateDebutMandat: "2026-01-01", typeMandat: "simple" }));
     expect(await soumettre(enregistrerMandatExistantAction, formulaire({ bienId: bien.id, dateDebutMandat: "2026-01-01", typeMandat: "simple" }))).toContain("?mandat=mandat_canonique_existant");
