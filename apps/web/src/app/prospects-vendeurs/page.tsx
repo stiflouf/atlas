@@ -8,7 +8,8 @@ import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
 import EmptyState from "@/components/ui/EmptyState";
 import { rechercherProspectsVendeurs, type VueProspectVendeur } from "@/lib/prospectVendeurRepository";
-import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
+import { listerTachesParProspectVendeurDuWorkspace } from "@/lib/tacheRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { tachePrioritaire, raisonTache } from "@/lib/tachePriority";
 import { deriverStatutProspectVendeur, LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
 import { LABEL_ORIGINE_LEAD } from "@/types/origineLead";
@@ -71,10 +72,18 @@ export default async function ProspectsVendeursPage({ searchParams }: PageProps)
   // avec listerProspectsVendeurs*()). Retourne l'ensemble correspondant, pas encore paginé : voir
   // rechercherProspectsVendeurs() pour la raison (tri par échéance de tâche à appliquer avant
   // pagination, une donnée que ce repository n'a délibérément pas vocation à connaître).
-  const correspondants = await rechercherProspectsVendeurs({ q: texte, vue });
+  // WORKSPACE_SCOPING_V2B1 — le périmètre entre dans le SQL de la recherche : sans terme saisi, le
+  // `where` était jusqu'ici vide, donc la table entière. Le tri par échéance et le découpage de
+  // page restent en mémoire (le statut n'est pas stocké, le tri dépend des tâches), mais ils
+  // s'appliquent désormais à un ensemble déjà restreint au workspace.
+  const workspaceId = await exigerWorkspaceCourant();
+  const correspondants = await rechercherProspectsVendeurs({ workspaceId, q: texte, vue });
 
-  const listesTaches = await Promise.all(correspondants.map((p) => getTachesPourProspectVendeur(p.id)));
-  const tachesParProspect = new Map<string, Tache[]>(correspondants.map((p, i) => [p.id, listesTaches[i]]));
+  // UNE requête scopée pour toutes les lignes, au lieu d'une par prospect sans périmètre.
+  const tachesParProspect = await listerTachesParProspectVendeurDuWorkspace(
+    correspondants.map((p) => p.id),
+    workspaceId
+  );
 
   if (vue === "en_cours") correspondants.sort(comparerParEcheance(tachesParProspect));
 

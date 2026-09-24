@@ -50,7 +50,7 @@ describe("rechercherProspectsVendeurs (ADR-048)", () => {
     const archive = await prospectDeTest("ARCHIVE");
     await archiverProspectVendeur(archive.id, WORKSPACE_TEST);
 
-    const resultat = await rechercherProspectsVendeurs({ vue: "en_cours" });
+    const resultat = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, vue: "en_cours" });
     const ids = resultat.map((p) => p.id);
     expect(ids).toContain(enCours.id);
     expect(ids).not.toContain(perdu.id);
@@ -61,7 +61,7 @@ describe("rechercherProspectsVendeurs (ADR-048)", () => {
     const perdu = await prospectDeTest("PERDU-VUE");
     await marquerProspectVendeurPerdu(perdu.id, "desaccord_estimation", "2026-01-15", WORKSPACE_TEST);
 
-    const resultat = await rechercherProspectsVendeurs({ vue: "perdus" });
+    const resultat = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, vue: "perdus" });
     expect(resultat.map((p) => p.id)).toContain(perdu.id);
   });
 
@@ -70,20 +70,20 @@ describe("rechercherProspectsVendeurs (ADR-048)", () => {
     await marquerProspectVendeurPerdu(perduEtArchive.id, "desaccord_estimation", "2026-01-15", WORKSPACE_TEST);
     await archiverProspectVendeur(perduEtArchive.id, WORKSPACE_TEST);
 
-    const resultat = await rechercherProspectsVendeurs({ vue: "archives" });
+    const resultat = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, vue: "archives" });
     expect(resultat.map((p) => p.id)).toContain(perduEtArchive.id);
   });
 
   it("recherche texte : trouve par nom ou par prénom, insensible à la casse, combinée à la vue", async () => {
     const prospect = await prospectDeTest("TEXTE-1", "Sylvie");
 
-    const parNom = await rechercherProspectsVendeurs({ q: "texte-1", vue: "en_cours" });
+    const parNom = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q: "texte-1", vue: "en_cours" });
     expect(parNom.map((p) => p.id)).toContain(prospect.id);
 
-    const parPrenom = await rechercherProspectsVendeurs({ q: "SYLVIE", vue: "en_cours" });
+    const parPrenom = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q: "SYLVIE", vue: "en_cours" });
     expect(parPrenom.map((p) => p.id)).toContain(prospect.id);
 
-    const sansCorrespondance = await rechercherProspectsVendeurs({ q: "zzz-aucune-correspondance-zzz", vue: "en_cours" });
+    const sansCorrespondance = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q: "zzz-aucune-correspondance-zzz", vue: "en_cours" });
     expect(sansCorrespondance).toHaveLength(0);
   });
 
@@ -94,7 +94,7 @@ describe("rechercherProspectsVendeurs (ADR-048)", () => {
     const second = await prospectDeTest("ORDRE-2");
     await getDb().update(prospectsVendeursTable).set({ nom }).where(eq(prospectsVendeursTable.id, second.id));
 
-    const resultat = await rechercherProspectsVendeurs({ q: "ORDRE", vue: "en_cours" });
+    const resultat = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q: "ORDRE", vue: "en_cours" });
     const index1 = resultat.findIndex((p) => p.id === premier.id);
     const index2 = resultat.findIndex((p) => p.id === second.id);
     expect(index2).toBeLessThan(index1);

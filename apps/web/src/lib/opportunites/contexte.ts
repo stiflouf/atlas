@@ -5,7 +5,7 @@ import type { Tache } from "@/types/tache";
 import type { Visite } from "@/types/visite";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { ResultatCompatibilite } from "@/lib/compatibilite/types";
-import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
+import { listerProspectsVendeursPourMachine } from "@/lib/prospectVendeurRepository";
 import { listerVisites } from "@/lib/visiteRepository";
 import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
 import { listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
@@ -39,7 +39,7 @@ export async function chargerContexteOpportunites(deja: {
   tachesActives: Tache[];
 }): Promise<ContexteOpportunites> {
   const [prospectsVendeurs, visites, comptesRendus, secteursParAcquereur, profils] = await Promise.all([
-    listerProspectsVendeurs(),
+    listerProspectsVendeursPourMachine(),
     listerVisites(),
     listerComptesRendus(),
     listerSecteursPourAcquereurs(deja.acquereurs.map((a) => a.id)),

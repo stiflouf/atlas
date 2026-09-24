@@ -9,7 +9,7 @@ import {
   remuneration as remunerationTable,
 } from "@/db/schema";
 import {
-  listerProspectsVendeurs,
+  listerProspectsVendeursPourMachine,
   listerProspectsVendeursPerdus,
   listerProspectsVendeursConvertis,
 } from "@/lib/prospectVendeurRepository";
@@ -695,7 +695,7 @@ export type DashboardPipelineVendeur = {
 
 export async function chargerPipelineVendeur(): Promise<DashboardPipelineVendeur> {
   const [enCours, perdus, convertis] = await Promise.all([
-    listerProspectsVendeurs(),
+    listerProspectsVendeursPourMachine(),
     listerProspectsVendeursPerdus(),
     listerProspectsVendeursConvertis(),
   ]);

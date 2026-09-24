@@ -24,7 +24,7 @@ const {
   marquerProspectVendeurPerdu,
   archiverProspectVendeur,
   desarchiverProspectVendeur,
-  listerProspectsVendeurs,
+  listerProspectsVendeursPourMachine,
   listerProspectsVendeursPerdus,
   listerProspectsVendeursConvertis,
   listerProspectsVendeursArchives,
@@ -196,7 +196,7 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
     ).rejects.toThrow();
   });
 
-  it("listerProspectsVendeurs()/Perdus()/Convertis()/Archives() filtrent correctement par statut et archivage", async () => {
+  it("listerProspectsVendeursPourMachine()/Perdus()/Convertis()/Archives() filtrent correctement par statut et archivage", async () => {
     const enCours = await creerProspectDeTest("010a");
     const perdu = await creerProspectDeTest("010b");
     await marquerProspectVendeurPerdu(perdu.id, "autre", "2026-09-05", WORKSPACE_TEST);
@@ -204,7 +204,7 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
     await archiverProspectVendeur(archive.id, WORKSPACE_TEST);
 
     const [listeEnCours, listePerdus, listeArchives] = await Promise.all([
-      listerProspectsVendeurs(),
+      listerProspectsVendeursPourMachine(),
       listerProspectsVendeursPerdus(),
       listerProspectsVendeursArchives(),
     ]);

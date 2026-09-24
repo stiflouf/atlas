@@ -1,5 +1,5 @@
 import { getDb } from "@/db/client";
-import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
+import { listerProspectsVendeursPourMachine } from "@/lib/prospectVendeurRepository";
 import { calculerOccurrencesInactiviteDues } from "../calculOccurrencesInactivite";
 import { getConfigurationAutomatisation } from "../configurationAutomatisationRepository";
 import { emettreEvenementEtPreparerExecutions } from "../evenementMetierRepository";
@@ -26,7 +26,7 @@ function categoriserErreur(erreur: unknown): string {
 // Si la règle est inactive ou son seuil non configuré, AUCUN run n'est créé — un run représente
 // une tentative de scan réellement effectuée, pas la consultation d'un feature flag.
 //
-// `listerProspectsVendeurs()` (déjà existant, ADR-027) exclut prospects archivés/perdus/mandat
+// `listerProspectsVendeursPourMachine()` (déjà existant, ADR-027) exclut prospects archivés/perdus/mandat
 // déjà signé — jamais un filtre réinventé ici (ADR-033, point 9). Chaque occurrence est émise dans
 // sa PROPRE transaction courte : un scan portant sur des centaines de prospects ne dépend jamais
 // d'un seul verrou long, et une erreur sur un prospect n'affecte jamais les autres.
@@ -47,7 +47,7 @@ export async function scannerInactiviteProspectVendeur(maintenant: Date = new Da
   let nombreOccurrencesCreees = 0;
 
   try {
-    const prospects = await listerProspectsVendeurs();
+    const prospects = await listerProspectsVendeursPourMachine();
     nombreCandidats = prospects.length;
     const candidats = prospects.map((p) => ({
       prospectVendeurId: p.id,

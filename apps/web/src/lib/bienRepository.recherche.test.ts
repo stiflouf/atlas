@@ -44,11 +44,11 @@ describe("rechercherBiensPage (ADR-048)", () => {
     idsCrees.push(archive.id);
     await archiverBien(archive.id, WORKSPACE_TEST);
 
-    const { lignes: actifs } = await rechercherBiensPage({ archives: false, page: 1, parPage: 50 });
+    const { lignes: actifs } = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, archives: false, page: 1, parPage: 50 });
     expect(actifs.some((b) => b.id === actif.id)).toBe(true);
     expect(actifs.some((b) => b.id === archive.id)).toBe(false);
 
-    const { lignes: archives } = await rechercherBiensPage({ archives: true, page: 1, parPage: 50 });
+    const { lignes: archives } = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, archives: true, page: 1, parPage: 50 });
     expect(archives.some((b) => b.id === archive.id)).toBe(true);
     expect(archives.some((b) => b.id === actif.id)).toBe(false);
   });
@@ -60,16 +60,16 @@ describe("rechercherBiensPage (ADR-048)", () => {
     );
     idsCrees.push(bien.id);
 
-    const parReference = await rechercherBiensPage({ q: "texte-1", archives: false, page: 1, parPage: 50 });
+    const parReference = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: "texte-1", archives: false, page: 1, parPage: 50 });
     expect(parReference.lignes.some((b) => b.id === bien.id)).toBe(true);
 
-    const parAdresse = await rechercherBiensPage({ q: "FOCH", archives: false, page: 1, parPage: 50 });
+    const parAdresse = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: "FOCH", archives: false, page: 1, parPage: 50 });
     expect(parAdresse.lignes.some((b) => b.id === bien.id)).toBe(true);
 
-    const parVille = await rechercherBiensPage({ q: "belfort", archives: false, page: 1, parPage: 50 });
+    const parVille = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: "belfort", archives: false, page: 1, parPage: 50 });
     expect(parVille.lignes.some((b) => b.id === bien.id)).toBe(true);
 
-    const sansCorrespondance = await rechercherBiensPage({
+    const sansCorrespondance = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST,
       q: "zzz-aucune-correspondance-zzz",
       archives: false,
       page: 1,
@@ -88,9 +88,9 @@ describe("rechercherBiensPage (ADR-048)", () => {
       crees.push(bien);
     }
 
-    const page1 = await rechercherBiensPage({ q: "PAGINATION", archives: false, page: 1, parPage: 2 });
-    const page2 = await rechercherBiensPage({ q: "PAGINATION", archives: false, page: 2, parPage: 2 });
-    const page3 = await rechercherBiensPage({ q: "PAGINATION", archives: false, page: 3, parPage: 2 });
+    const page1 = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: "PAGINATION", archives: false, page: 1, parPage: 2 });
+    const page2 = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: "PAGINATION", archives: false, page: 2, parPage: 2 });
+    const page3 = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: "PAGINATION", archives: false, page: 3, parPage: 2 });
 
     expect(page1.total).toBe(5);
     expect(page2.total).toBe(5);
@@ -110,7 +110,7 @@ describe("rechercherBiensPage (ADR-048)", () => {
     const bien = await creerBien(bienTest("HORS-BORNES"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
 
-    const resultat = await rechercherBiensPage({ q: "HORS-BORNES", archives: false, page: 99, parPage: 25 });
+    const resultat = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: "HORS-BORNES", archives: false, page: 99, parPage: 25 });
     expect(resultat.lignes).toHaveLength(0);
     expect(resultat.total).toBe(1);
   });

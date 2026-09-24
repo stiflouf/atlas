@@ -8,7 +8,8 @@ import SectionTitle from "@/components/ui/SectionTitle";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import Pagination from "@/components/ui/Pagination";
 import Avatar from "@/components/ui/Avatar";
-import { listerClients, rechercherAcquereursPage } from "@/lib/clientRepository";
+import { rechercherAcquereursPage } from "@/lib/clientRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { nomComplet, initialesPersonne } from "@/lib/identite/nomPersonne";
 
 const PAR_PAGE = 25;
@@ -52,7 +53,10 @@ export default async function ClientsPage({ searchParams }: PageProps) {
   const texte = q?.trim() || undefined;
   const pageDemandee = Math.max(1, Number(pageBrut) || 1);
 
+  // WORKSPACE_SCOPING_V2B1 — cette page ne résolvait aucun périmètre jusqu'ici.
+  const workspaceId = await exigerWorkspaceCourant();
   const { lignes: clientsPage, total } = await rechercherAcquereursPage({
+    workspaceId,
     q: texte,
     archives: modeArchives,
     page: pageDemandee,
@@ -66,12 +70,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     redirect(construireHref({ archives: modeArchives, q: texte, page: totalPagesReel }));
   }
 
-  // Fallback démo (ADR-048) : préserve le comportement historique de listerClients() quand aucun
-  // acquéreur réel n'existe encore.
-  const aucunClientReel = total === 0 && !texte && !modeArchives;
-  const clientsDemo = aucunClientReel ? await listerClients() : undefined;
-  const clients = clientsDemo ?? clientsPage;
-  const totalAffiche = clientsDemo ? clientsDemo.length : total;
+  // WORKSPACE_SCOPING_V2B1 — repli démo retiré (« vide veut dire vide »), même raison que /biens.
+  const clients = clientsPage;
+  const totalAffiche = total;
   const totalPages = Math.max(1, Math.ceil(totalAffiche / PAR_PAGE));
 
   return (
@@ -167,13 +168,11 @@ export default async function ClientsPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        {!clientsDemo && (
-          <Pagination
-            page={pageDemandee}
-            totalPages={totalPages}
-            construireHref={(p) => construireHref({ archives: modeArchives, q: texte, page: p })}
-          />
-        )}
+        <Pagination
+          page={pageDemandee}
+          totalPages={totalPages}
+          construireHref={(p) => construireHref({ archives: modeArchives, q: texte, page: p })}
+        />
       </section>
     </div>
   );

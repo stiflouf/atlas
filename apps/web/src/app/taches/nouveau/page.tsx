@@ -2,9 +2,10 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { creerTacheAction } from "@/actions/creerTache";
 import CibleTacheSelecteur from "@/components/tache/CibleTacheSelecteur";
-import { listerBiens } from "@/lib/bienRepository";
-import { listerClients } from "@/lib/clientRepository";
-import { listerProspectsVendeurs } from "@/lib/prospectVendeurRepository";
+import { listerBiensActifsDuWorkspace } from "@/lib/bienRepository";
+import { listerAcquereursActifsDuWorkspace } from "@/lib/clientRepository";
+import { listerProspectsVendeursDuWorkspace } from "@/lib/prospectVendeurRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { nomComplet } from "@/lib/identite/nomPersonne";
 import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
 import BoutonSoumettre from "@/components/formulaires/BoutonSoumettre";
@@ -21,10 +22,16 @@ type PageProps = { searchParams: Promise<{ bienId?: string; acquereurId?: string
 
 export default async function NouvelleTachePage({ searchParams }: PageProps) {
   const params = await searchParams;
+  // WORKSPACE_SCOPING_V2B1 (ADR-054) — les trois `<select>` de cible ne proposent que des entités
+  // du périmètre de session. La création était déjà protégée (V1/V2A) : ce qui change ici, c'est
+  // que l'écran cesse de RÉVÉLER les noms et les identifiants d'un autre workspace. Même modèle
+  // que /visites/nouvelle, qui utilise ces lecteurs scopés depuis VISIT_NATIVE_ENTRY_V1. Aucun
+  // repli de démonstration : un workspace vide propose des listes vides.
+  const workspaceId = await exigerWorkspaceCourant();
   const [biens, clients, prospects] = await Promise.all([
-    listerBiens(),
-    listerClients(),
-    listerProspectsVendeurs(),
+    listerBiensActifsDuWorkspace(workspaceId),
+    listerAcquereursActifsDuWorkspace(workspaceId),
+    listerProspectsVendeursDuWorkspace(workspaceId),
   ]);
 
   // Préremplissage depuis une fiche (?bienId=/?acquereurId=/?prospectVendeurId=) : uniquement si

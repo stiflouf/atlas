@@ -9,7 +9,7 @@ import Pagination from "@/components/ui/Pagination";
 import PhotoPrincipale from "@/components/bien/PhotoPrincipale";
 import ButtonLink from "@/components/ui/ButtonLink";
 import EmptyState from "@/components/ui/EmptyState";
-import { listerBiens, rechercherBiensPage } from "@/lib/bienRepository";
+import { rechercherBiensPage } from "@/lib/bienRepository";
 import { statutCommercialBienEffectif, LABEL_STATUT_COMMERCIAL, type StatutCommercial } from "@/lib/statutCommercialBien";
 import { chargerEtatsOffresParBien } from "@/lib/offreRepository";
 import { listerCompromisParBiens } from "@/lib/compromisRepository";
@@ -57,7 +57,12 @@ export default async function BiensPage({ searchParams }: PageProps) {
   const texte = q?.trim() || undefined;
   const pageDemandee = Math.max(1, Number(pageBrut) || 1);
 
+  // WORKSPACE_SCOPING_V2B1 — le périmètre est résolu AVANT la requête de liste (il était jusqu'ici
+  // obtenu plus bas, seulement pour les enrichissements) et entre dans le SQL : lignes, total et
+  // pagination portent tous le même filtre.
+  const workspaceId = await exigerWorkspaceCourant();
   const { lignes: biensPage, total } = await rechercherBiensPage({
+    workspaceId,
     q: texte,
     archives: modeArchives,
     page: pageDemandee,
@@ -71,14 +76,11 @@ export default async function BiensPage({ searchParams }: PageProps) {
     redirect(construireHref({ archives: modeArchives, q: texte, page: totalPagesReel }));
   }
 
-  // Fallback démo (ADR-048) : préserve le comportement historique de listerBiens() quand aucun
-  // bien réel n'existe encore — recherche/pagination n'a jamais de sens sur ce jeu figé, affiché
-  // uniquement sur la vue par défaut (pas de recherche, page 1, biens actifs).
-  const aucunBienReel = total === 0 && !texte && !modeArchives;
-  const biensDemo = aucunBienReel ? await listerBiens() : undefined;
-  const biens = biensDemo ?? biensPage;
-  const totalAffiche = biensDemo ? biensDemo.length : total;
-  const workspaceId = await exigerWorkspaceCourant();
+  // WORKSPACE_SCOPING_V2B1 — le repli démo d'ADR-048 est retiré : « vide veut dire vide ». Un
+  // workspace sans bien voit son état vide, jamais le catalogue de démonstration — qui n'appartient
+  // à aucun périmètre et s'afficherait donc identiquement chez tout le monde.
+  const biens = biensPage;
+  const totalAffiche = total;
   const [etatsOffres, compromisParBien] = await Promise.all([
     chargerEtatsOffresParBien(biens, workspaceId),
     listerCompromisParBiens(biens.map((b) => b.id), workspaceId),
@@ -247,13 +249,11 @@ export default async function BiensPage({ searchParams }: PageProps) {
           </>
         )}
 
-        {!biensDemo && (
-          <Pagination
-            page={pageDemandee}
-            totalPages={totalPages}
-            construireHref={(p) => construireHref({ archives: modeArchives, q: texte, page: p })}
-          />
-        )}
+        <Pagination
+          page={pageDemandee}
+          totalPages={totalPages}
+          construireHref={(p) => construireHref({ archives: modeArchives, q: texte, page: p })}
+        />
       </section>
     </div>
   );

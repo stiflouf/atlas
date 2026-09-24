@@ -43,11 +43,11 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
     idsCrees.push(archive.id);
     await archiverAcquereur(archive.id, WORKSPACE_TEST);
 
-    const { lignes: actifs } = await rechercherAcquereursPage({ archives: false, page: 1, parPage: 50 });
+    const { lignes: actifs } = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, archives: false, page: 1, parPage: 50 });
     expect(actifs.some((a) => a.id === actif.id)).toBe(true);
     expect(actifs.some((a) => a.id === archive.id)).toBe(false);
 
-    const { lignes: archives } = await rechercherAcquereursPage({ archives: true, page: 1, parPage: 50 });
+    const { lignes: archives } = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, archives: true, page: 1, parPage: 50 });
     expect(archives.some((a) => a.id === archive.id)).toBe(true);
   });
 
@@ -55,13 +55,13 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
     const acquereur = await creerAcquereur(acquereurTest("TEXTE-1", { prenom: "Dominique" }), WORKSPACE_TEST);
     idsCrees.push(acquereur.id);
 
-    const parNom = await rechercherAcquereursPage({ q: "texte-1", archives: false, page: 1, parPage: 50 });
+    const parNom = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: "texte-1", archives: false, page: 1, parPage: 50 });
     expect(parNom.lignes.some((a) => a.id === acquereur.id)).toBe(true);
 
-    const parPrenom = await rechercherAcquereursPage({ q: "DOMINIQUE", archives: false, page: 1, parPage: 50 });
+    const parPrenom = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: "DOMINIQUE", archives: false, page: 1, parPage: 50 });
     expect(parPrenom.lignes.some((a) => a.id === acquereur.id)).toBe(true);
 
-    const sansCorrespondance = await rechercherAcquereursPage({
+    const sansCorrespondance = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST,
       q: "zzz-aucune-correspondance-zzz",
       archives: false,
       page: 1,
@@ -80,9 +80,9 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
       crees.push(acquereur);
     }
 
-    const page1 = await rechercherAcquereursPage({ q: "PAGINATION", archives: false, page: 1, parPage: 2 });
-    const page2 = await rechercherAcquereursPage({ q: "PAGINATION", archives: false, page: 2, parPage: 2 });
-    const page3 = await rechercherAcquereursPage({ q: "PAGINATION", archives: false, page: 3, parPage: 2 });
+    const page1 = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: "PAGINATION", archives: false, page: 1, parPage: 2 });
+    const page2 = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: "PAGINATION", archives: false, page: 2, parPage: 2 });
+    const page3 = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: "PAGINATION", archives: false, page: 3, parPage: 2 });
 
     expect(page1.total).toBe(5);
     expect(page1.lignes).toHaveLength(2);
@@ -98,7 +98,7 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
     const acquereur = await creerAcquereur(acquereurTest("HORS-BORNES"), WORKSPACE_TEST);
     idsCrees.push(acquereur.id);
 
-    const resultat = await rechercherAcquereursPage({ q: "HORS-BORNES", archives: false, page: 99, parPage: 25 });
+    const resultat = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: "HORS-BORNES", archives: false, page: 99, parPage: 25 });
     expect(resultat.lignes).toHaveLength(0);
     expect(resultat.total).toBe(1);
   });

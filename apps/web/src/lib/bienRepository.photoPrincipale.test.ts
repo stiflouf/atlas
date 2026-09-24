@@ -51,7 +51,7 @@ describe("bienRepository — photoPrincipaleId (ADR-052)", () => {
       hashSha256: "hash-repo-test",
     }, WORKSPACE_TEST);
 
-    const { lignes } = await rechercherBiensPage({ q: REFERENCE_PREFIX, archives: false, page: 1, parPage: 50 });
+    const { lignes } = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST, q: REFERENCE_PREFIX, archives: false, page: 1, parPage: 50 });
 
     const ligneSansPhoto = lignes.find((l) => l.id === sansPhoto.id);
     const ligneAvecPhoto = lignes.find((l) => l.id === avecPhoto.id);
@@ -81,7 +81,7 @@ describe("bienRepository — photoPrincipaleId (ADR-052)", () => {
     void p2;
 
     const principaleAttendue = await getPhotoPrincipaleBien(bien.id);
-    const { lignes } = await rechercherBiensPage({
+    const { lignes } = await rechercherBiensPage({ workspaceId: WORKSPACE_TEST,
       q: `${REFERENCE_PREFIX}-PLUSIEURS`,
       archives: false,
       page: 1,

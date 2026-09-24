@@ -86,6 +86,35 @@ export async function getTachesPourProspectVendeur(prospectVendeurId: string): P
   }
 }
 
+// WORKSPACE_SCOPING_V2B1 — enrichissement de la liste /prospects-vendeurs : UNE requête pour tous
+// les prospects affichés, scopée par le périmètre, au lieu d'une requête par ligne. Avant ce lot,
+// la page appelait `getTachesPourProspectVendeur` dans une boucle, sans périmètre : les libellés
+// de tâches d'un autre workspace s'affichaient sur ses lignes.
+export async function listerTachesParProspectVendeurDuWorkspace(
+  prospectVendeurIds: string[],
+  workspaceId: string
+): Promise<Map<string, Tache[]>> {
+  const ids = prospectVendeurIds.filter((id) => UUID_REGEX.test(id));
+  const parProspect = new Map<string, Tache[]>();
+  if (ids.length === 0) return parProspect;
+  try {
+    const lignes = await getDb()
+      .select()
+      .from(tachesTable)
+      .where(and(inArray(tachesTable.prospectVendeurId, ids), eq(tachesTable.workspaceId, workspaceId)));
+    for (const ligne of lignes) {
+      const tache = ligneVersTache(ligne);
+      if (!tache.prospectVendeurId) continue;
+      const deja = parProspect.get(tache.prospectVendeurId);
+      if (deja) deja.push(tache);
+      else parProspect.set(tache.prospectVendeurId, [tache]);
+    }
+  } catch (erreur) {
+    console.error("[taches] lecture Postgres indisponible :", erreur);
+  }
+  return parProspect;
+}
+
 // WORKSPACE_SCOPING_V1 — `taches` est une table RACINE : le périmètre est une colonne, le filtre
 // tient dans le `WHERE`. À utiliser dès que l'identifiant vient du client (FormData « Terminer »,
 // « Annuler »). Hors périmètre = introuvable.

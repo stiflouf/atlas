@@ -210,7 +210,11 @@ export async function listerClientsArchives(): Promise<ProfilAcquereur[]> {
 // ADR-057 — le filtre `q` porte sur l'identité EFFECTIVE (Contact pour un dossier rattaché,
 // instantané sinon), c'est-à-dire sur ce que la liste affiche : chercher « Bob » ne remonte plus une
 // ligne rendue « Alice ». Filtre en SQL, avant LIMIT/OFFSET et dans le COUNT — jamais en mémoire.
+// WORKSPACE_SCOPING_V2B1 (ADR-054) — le périmètre rejoint les conditions existantes, donc il est
+// appliqué avant LIMIT/OFFSET et dans le COUNT, exactement comme le filtre d'identité effective
+// que le commentaire ci-dessus décrit. Modèle : la recherche de /contacts, scopée depuis ADR-058.
 export async function rechercherAcquereursPage(params: {
+  workspaceId: string;
   q?: string;
   archives: boolean;
   page: number;
@@ -221,7 +225,10 @@ export async function rechercherAcquereursPage(params: {
   const conditionTexte: SQL | undefined = texte
     ? filtreIdentiteEffective(texte, identiteEffectiveSql(acquereursTable.contactId, acquereursTable))
     : undefined;
-  const conditions = conditionTexte ? and(conditionArchive, conditionTexte) : conditionArchive;
+  const conditionPerimetre = eq(acquereursTable.workspaceId, params.workspaceId);
+  const conditions = conditionTexte
+    ? and(conditionPerimetre, conditionArchive, conditionTexte)
+    : and(conditionPerimetre, conditionArchive);
 
   const page = Math.max(1, Math.floor(params.page) || 1);
   const offset = (page - 1) * params.parPage;

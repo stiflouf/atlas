@@ -1,7 +1,14 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
+
+// WORKSPACE_SCOPING_V2B1 (ADR-054) — cette page résout désormais le périmètre depuis la session :
+// il est mocké ici sur le workspace de test, comme dans app/biens/page.test.tsx.
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: async () => "default",
+}));
+
 
 // Test d'intégration réel (même pattern que biens/page.test.tsx, ADR-048) — correctif UX : après
 // création depuis une fiche, l'utilisateur doit revenir sur cette fiche (jamais "Aujourd'hui" par

@@ -65,6 +65,16 @@ async function listerToutesLesLignes(): Promise<ProspectVendeur[]> {
   return lignes.map(ligneVersProspectVendeur);
 }
 
+// WORKSPACE_SCOPING_V2B1 (ADR-054) — `prospects_vendeurs` est une table RACINE : le périmètre est
+// une colonne, le filtre tient dans le `WHERE` et s'applique donc AVANT toute lecture en mémoire.
+async function listerLignesDuWorkspace(workspaceId: string): Promise<ProspectVendeur[]> {
+  const lignes = await getDb()
+    .select()
+    .from(prospectsVendeursTable)
+    .where(eq(prospectsVendeursTable.workspaceId, workspaceId));
+  return lignes.map(ligneVersProspectVendeur);
+}
+
 export type VueProspectVendeur = "en_cours" | "perdus" | "convertis" | "archives";
 
 // Prédicat métier UNIQUE (ADR-048) : factorisé pour que listerProspectsVendeurs*() et la future
@@ -116,8 +126,27 @@ function predicatVue(vue: VueProspectVendeur): (p: ProspectVendeur) => boolean {
   };
 }
 
-// Vue par défaut : non archivés, statut en cours (ni perdu, ni déjà converti).
-export async function listerProspectsVendeurs(): Promise<ProspectVendeur[]> {
+// WORKSPACE_SCOPING_V2B1 — LA lecture de liste des prospects vendeurs pour une SURFACE
+// UTILISATEUR. Le périmètre est obligatoire et posé en SQL ; la vue, elle, reste filtrée en
+// mémoire parce que le statut n'est jamais stocké (voir `predicatVue`). Un workspace sans prospect
+// rend `[]` — jamais un jeu de démonstration, jamais les lignes d'un autre périmètre.
+export async function listerProspectsVendeursDuWorkspace(
+  workspaceId: string,
+  vue: VueProspectVendeur = "en_cours"
+): Promise<ProspectVendeur[]> {
+  const tous = await listerLignesDuWorkspace(workspaceId);
+  return appliquerIdentiteEffective(tous.filter(predicatVue(vue)));
+}
+
+// MACHINE UNIQUEMENT — trans-workspace par conception (ADR-062) : le scanner d'inactivité balaye
+// le parc entier, sa garde est le secret Bearer de la route de scan, jamais une session. Ne JAMAIS
+// l'appeler depuis un écran : `listerProspectsVendeursDuWorkspace` est là pour ça.
+//
+// Dette V2B2/V2B3 assumée et visible : trois surfaces utilisateur l'appellent encore (l'écran
+// Aujourd'hui, le tableau de bord, le contexte des opportunités). Le nom le dit à l'appel, et c'est
+// exactement pourquoi il a été choisi : `listerProspectsVendeursPourMachine()` dans un composant de
+// page se remarque, là où `listerProspectsVendeurs()` se lisait comme un appel anodin.
+export async function listerProspectsVendeursPourMachine(): Promise<ProspectVendeur[]> {
   const tous = await listerToutesLesLignes();
   return appliquerIdentiteEffective(tous.filter(predicatVue("en_cours")));
 }
@@ -155,17 +184,25 @@ export async function listerProspectsVendeursArchives(): Promise<ProspectVendeur
 // ADR-057 — le filtre `q` porte sur l'identité EFFECTIVE (Contact pour un prospect rattaché,
 // instantané sinon), même règle SQL que `rechercherAcquereursPage` : la liste se cherche par ce
 // qu'elle affiche. Le filtre par vue, lui, reste en mémoire (statut jamais stocké, voir ci-dessus).
-export async function rechercherProspectsVendeurs(params: { q?: string; vue: VueProspectVendeur }): Promise<ProspectVendeur[]> {
+// WORKSPACE_SCOPING_V2B1 — le périmètre est DANS le `where`, y compris lorsqu'aucun terme n'est
+// saisi : avant ce lot, une recherche vide produisait un `where(undefined)`, c'est-à-dire la table
+// entière, tous workspaces confondus. C'est la fuite la plus large des trois listes.
+export async function rechercherProspectsVendeurs(params: {
+  workspaceId: string;
+  q?: string;
+  vue: VueProspectVendeur;
+}): Promise<ProspectVendeur[]> {
   const texte = params.q?.trim();
   const conditionTexte = texte
     ? filtreIdentiteEffective(texte, identiteEffectiveSql(prospectsVendeursTable.contactId, prospectsVendeursTable))
     : undefined;
+  const conditionPerimetre = eq(prospectsVendeursTable.workspaceId, params.workspaceId);
 
   const lignes = await joindreContactCanonique(
     getDb().select(getTableColumns(prospectsVendeursTable)).from(prospectsVendeursTable).$dynamic(),
     prospectsVendeursTable.contactId
   )
-    .where(conditionTexte)
+    .where(conditionTexte ? and(conditionPerimetre, conditionTexte) : conditionPerimetre)
     .orderBy(desc(prospectsVendeursTable.creeLe), desc(prospectsVendeursTable.id));
 
   return appliquerIdentiteEffective(lignes.map(ligneVersProspectVendeur).filter(predicatVue(params.vue)));

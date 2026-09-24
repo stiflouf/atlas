@@ -136,7 +136,12 @@ export async function listerBiensArchives(): Promise<Bien[]> {
 //
 // Ordre déterministe explicite (ADR-048) : `creeLe DESC, id DESC` — voir clientRepository.ts pour
 // la justification complète (aucun repository de ce projet n'avait d'ORDER BY avant cette ADR).
+// WORKSPACE_SCOPING_V2B1 (ADR-054) — le périmètre entre dans `conditions`, donc dans LA MÊME
+// clause que la recherche et l'archivage : il s'applique avant l'`ORDER BY`, avant le `LIMIT`, et
+// il est partagé par le `COUNT`. C'est la seule forme qui donne un total juste et des pages
+// pleines ; filtrer après pagination donnerait des pages trouées et un total faux.
 export async function rechercherBiensPage(params: {
+  workspaceId: string;
   q?: string;
   archives: boolean;
   page: number;
@@ -151,7 +156,10 @@ export async function rechercherBiensPage(params: {
         ilike(biensTable.ville, `%${texte}%`)
       )
     : undefined;
-  const conditions = conditionTexte ? and(conditionArchive, conditionTexte) : conditionArchive;
+  const conditionPerimetre = eq(biensTable.workspaceId, params.workspaceId);
+  const conditions = conditionTexte
+    ? and(conditionPerimetre, conditionArchive, conditionTexte)
+    : and(conditionPerimetre, conditionArchive);
 
   const page = Math.max(1, Math.floor(params.page) || 1);
   const offset = (page - 1) * params.parPage;

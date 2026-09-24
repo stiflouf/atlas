@@ -91,8 +91,8 @@ async function unProspect(snapshot: { nom: string; prenom?: string; email?: stri
 }
 
 const idsBuyer = async (q: string) =>
-  (await rechercherAcquereursPage({ q, archives: false, page: 1, parPage: 100 })).lignes.map((l) => l.id);
-const idsSeller = async (q: string) => (await rechercherProspectsVendeurs({ q, vue: "en_cours" })).map((p) => p.id);
+  (await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q, archives: false, page: 1, parPage: 100 })).lignes.map((l) => l.id);
+const idsSeller = async (q: string) => (await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q, vue: "en_cours" })).map((p) => p.id);
 
 describe("recherche sur l'identité effective — /clients (rechercherAcquereursPage)", () => {
   it("A. non rattaché : trouvé par son instantané (nom, prénom, email, téléphone)", async () => {
@@ -109,7 +109,7 @@ describe("recherche sur l'identité effective — /clients (rechercherAcquereurs
     expect(await idsBuyer(`${M}aliceb`)).toContain(acq.id);
     expect(await idsBuyer(`${M}DurandB`)).not.toContain(acq.id);
     expect(await idsBuyer(`${M}BobB`)).not.toContain(acq.id);
-    const { lignes } = await rechercherAcquereursPage({ q: `${M}MartinB`, archives: false, page: 1, parPage: 100 });
+    const { lignes } = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}MartinB`, archives: false, page: 1, parPage: 100 });
     // Ce qui est cherché est ce qui est affiché.
     expect(lignes.find((l) => l.id === acq.id)).toMatchObject({ nom: `${M}MartinB`, prenom: `${M}AliceB` });
   });
@@ -155,29 +155,29 @@ describe("recherche sur l'identité effective — /clients (rechercherAcquereurs
     const alice = await unContact({ nom: `${M}MartinI`, prenom: "Alice" });
     const crees = [];
     for (let i = 0; i < 5; i++) crees.push(await unAcquereur({ nom: `${M}DurandI${i}`, prenom: "Bob" }, alice.id));
-    const page1 = await rechercherAcquereursPage({ q: `${M}MartinI`, archives: false, page: 1, parPage: 2 });
-    const page2 = await rechercherAcquereursPage({ q: `${M}MartinI`, archives: false, page: 2, parPage: 2 });
-    const page3 = await rechercherAcquereursPage({ q: `${M}MartinI`, archives: false, page: 3, parPage: 2 });
+    const page1 = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}MartinI`, archives: false, page: 1, parPage: 2 });
+    const page2 = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}MartinI`, archives: false, page: 2, parPage: 2 });
+    const page3 = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}MartinI`, archives: false, page: 3, parPage: 2 });
     expect(page1.total).toBe(5);
     expect(page1.lignes).toHaveLength(2);
     expect(page2.lignes).toHaveLength(2);
     expect(page3.lignes).toHaveLength(1);
     const ids = [...page1.lignes, ...page2.lignes, ...page3.lignes].map((l) => l.id);
     expect(ids).toEqual([...crees].reverse().map((a) => a.id));
-    expect((await rechercherAcquereursPage({ q: `${M}DurandI`, archives: false, page: 1, parPage: 2 })).total).toBe(0);
+    expect((await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}DurandI`, archives: false, page: 1, parPage: 2 })).total).toBe(0);
   });
 
   it("le filtre archives reste combiné au filtre effectif", async () => {
     const alice = await unContact({ nom: `${M}MartinArch`, prenom: "Alice" });
     const acq = await unAcquereur({ nom: `${M}DurandArch`, prenom: "Bob" }, alice.id);
-    expect((await rechercherAcquereursPage({ q: `${M}MartinArch`, archives: true, page: 1, parPage: 100 })).lignes.map((l) => l.id)).not.toContain(acq.id);
+    expect((await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}MartinArch`, archives: true, page: 1, parPage: 100 })).lignes.map((l) => l.id)).not.toContain(acq.id);
   });
 
   it("nombre de requêtes borné : 2 pour la recherche (page + total) puis les projections batchées, jamais une par ligne", async () => {
     const alice = await unContact({ nom: `${M}MartinN`, prenom: "Alice" });
     for (let i = 0; i < 4; i++) await unAcquereur({ nom: `${M}DurandN${i}`, prenom: "Bob" }, alice.id);
     const espion = vi.spyOn(getDb(), "select");
-    const { lignes } = await rechercherAcquereursPage({ q: `${M}MartinN`, archives: false, page: 1, parPage: 100 });
+    const { lignes } = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}MartinN`, archives: false, page: 1, parPage: 100 });
     const n = espion.mock.calls.length;
     espion.mockRestore();
     expect(lignes).toHaveLength(4);
@@ -200,7 +200,7 @@ describe("recherche sur l'identité effective — /prospects-vendeurs (recherche
     expect(await idsSeller(`${M}alicesb`)).toContain(pro.id);
     expect(await idsSeller(`${M}DurandSB`)).not.toContain(pro.id);
     expect(await idsSeller(`${M}BobSB`)).not.toContain(pro.id);
-    const resultat = await rechercherProspectsVendeurs({ q: `${M}MartinSB`, vue: "en_cours" });
+    const resultat = await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q: `${M}MartinSB`, vue: "en_cours" });
     expect(resultat.find((p) => p.id === pro.id)).toMatchObject({ nom: `${M}MartinSB`, prenom: `${M}AliceSB` });
   });
 
@@ -238,7 +238,7 @@ describe("recherche sur l'identité effective — /prospects-vendeurs (recherche
     const second = await unProspect({ nom: `${M}DurandSV2` }, alice.id);
     const enCours = await idsSeller(`${M}MartinSV`);
     expect(enCours.indexOf(second.id)).toBeLessThan(enCours.indexOf(premier.id));
-    expect((await rechercherProspectsVendeurs({ q: `${M}MartinSV`, vue: "perdus" })).map((p) => p.id)).not.toContain(premier.id);
+    expect((await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q: `${M}MartinSV`, vue: "perdus" })).map((p) => p.id)).not.toContain(premier.id);
   });
 });
 
@@ -272,7 +272,7 @@ describe("recherche après fusion réelle B → A (moteur)", () => {
       expect(await idsBuyer(q), q).not.toContain(acq.id);
       expect(await idsSeller(q), q).not.toContain(pro.id);
     }
-    const { lignes } = await rechercherAcquereursPage({ q: `${M}MartinJ`, archives: false, page: 1, parPage: 100 });
+    const { lignes } = await rechercherAcquereursPage({ workspaceId: WORKSPACE_TEST, q: `${M}MartinJ`, archives: false, page: 1, parPage: 100 });
     expect(lignes.find((l) => l.id === acq.id)).toMatchObject({ nom: a.nom, prenom: "Alice", email: a.email });
   });
 });

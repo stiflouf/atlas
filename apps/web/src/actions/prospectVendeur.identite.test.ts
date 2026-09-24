@@ -30,7 +30,7 @@ const {
 } = await import("@/db/schema");
 const { creerContact, getContactById } = await import("@/lib/contactRepository");
 const { creerAcquereur, getClientById } = await import("@/lib/clientRepository");
-const { creerProspectVendeur, getProspectVendeurById, listerProspectsVendeurs } = await import(
+const { creerProspectVendeur, getProspectVendeurById, listerProspectsVendeursPourMachine } = await import(
   "@/lib/prospectVendeurRepository"
 );
 const { modifierProspectVendeurAction } = await import("./prospectVendeur");
@@ -156,7 +156,7 @@ describe("ADR-057 vendeur — lecture effective", () => {
     const prospect = await unProspect("liste", contact.id);
     await getDb().update(contactsTable).set({ email: "liste@example.test" }).where(eq(contactsTable.id, contact.id));
 
-    const dansLaListe = (await listerProspectsVendeurs()).find((p) => p.id === prospect.id);
+    const dansLaListe = (await listerProspectsVendeursPourMachine()).find((p) => p.id === prospect.id);
     expect(dansLaListe?.email).toBe("liste@example.test");
   });
 });
