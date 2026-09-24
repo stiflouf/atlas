@@ -137,7 +137,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
       typeBien: undefined,
     }, WORKSPACE_TEST);
     idsProspectsCrees.push(prospect.id);
-    await archiverProspectVendeur(prospect.id);
+    await archiverProspectVendeur(prospect.id, WORKSPACE_TEST);
 
     await expect(
       creerTacheAction(ETAT_FORMULAIRE_INITIAL,

@@ -54,7 +54,7 @@ describe("repereRelationnelRepository — création et refus par défaut", () =>
       libelle: "Préfère les échanges par email",
       provenance: "indique_par_le_client",
       utilisableCommunication: false,
-    });
+    }, WORKSPACE_TEST);
 
     const actifs = await listerReperesRelationnelsAcquereur(acquereurId);
     expect(actifs).toHaveLength(1);
@@ -73,7 +73,7 @@ describe("repereRelationnelRepository — création et refus par défaut", () =>
       libelle: "Football",
       provenance: "observe_lors_d_un_echange",
       utilisableCommunication: false,
-    });
+    }, WORKSPACE_TEST);
 
     const [repere] = await listerReperesRelationnelsAcquereur(acquereurId);
     expect(repere.utilisableCommunication).toBe(false);
@@ -102,7 +102,7 @@ describe("repereRelationnelRepository — création et refus par défaut", () =>
       libelle: "Préfère être appelé en fin de journée",
       provenance: "indique_par_le_client",
       utilisableCommunication: true,
-    });
+    }, WORKSPACE_TEST);
 
     const [repere] = await listerReperesRelationnelsAcquereur(acquereurId);
     expect(repere.utilisableCommunication).toBe(true);
@@ -118,14 +118,14 @@ describe("repereRelationnelRepository — correction", () => {
       libelle: "Préfère l'email",
       provenance: "saisi_par_le_conseiller",
       utilisableCommunication: false,
-    });
+    }, WORKSPACE_TEST);
 
     const modifie = await modifierRepereRelationnelAcquereur(cree.id, acquereurId, {
       categorie: "preference_contact",
       libelle: "Préfère les échanges par email",
       provenance: "indique_par_le_client",
       utilisableCommunication: true,
-    });
+    }, WORKSPACE_TEST);
 
     expect(modifie?.categorie).toBe("preference_contact");
     expect(modifie?.libelle).toBe("Préfère les échanges par email");
@@ -144,14 +144,14 @@ describe("repereRelationnelRepository — correction", () => {
       libelle: "Randonnée",
       provenance: "observe_lors_d_un_echange",
       utilisableCommunication: false,
-    });
+    }, WORKSPACE_TEST);
 
     const tentative = await modifierRepereRelationnelAcquereur(cree.id, autre, {
       categorie: "autre",
       libelle: "Modifié depuis une autre fiche",
       provenance: "saisi_par_le_conseiller",
       utilisableCommunication: true,
-    });
+    }, WORKSPACE_TEST);
 
     expect(tentative).toBeUndefined();
     const [inchange] = await listerReperesRelationnelsAcquereur(proprietaire);
@@ -170,9 +170,9 @@ describe("repereRelationnelRepository — archivage", () => {
       provenance: "observe_lors_d_un_echange",
       // Même autorisé, un repère archivé n'alimente plus rien : l'archivage prime.
       utilisableCommunication: true,
-    });
+    }, WORKSPACE_TEST);
 
-    const archive = await archiverRepereRelationnelAcquereur(cree.id, acquereurId);
+    const archive = await archiverRepereRelationnelAcquereur(cree.id, acquereurId, WORKSPACE_TEST);
     expect(archive?.archiveLe).toBeDefined();
 
     expect(await listerReperesRelationnelsAcquereur(acquereurId)).toHaveLength(0);
@@ -189,10 +189,10 @@ describe("repereRelationnelRepository — archivage", () => {
       libelle: "Souhaite être rappelé plutôt le matin",
       provenance: "indique_par_le_client",
       utilisableCommunication: false,
-    });
-    await archiverRepereRelationnelAcquereur(cree.id, acquereurId);
+    }, WORKSPACE_TEST);
+    await archiverRepereRelationnelAcquereur(cree.id, acquereurId, WORKSPACE_TEST);
 
-    const restaure = await restaurerRepereRelationnelAcquereur(cree.id, acquereurId);
+    const restaure = await restaurerRepereRelationnelAcquereur(cree.id, acquereurId, WORKSPACE_TEST);
     expect(restaure?.archiveLe).toBeUndefined();
     expect(await listerReperesRelationnelsAcquereur(acquereurId)).toHaveLength(1);
     expect(await listerReperesRelationnelsArchivesAcquereur(acquereurId)).toHaveLength(0);
@@ -209,7 +209,7 @@ describe("repereRelationnelRepository — ordre et intégrité", () => {
         libelle,
         provenance: "saisi_par_le_conseiller",
         utilisableCommunication: false,
-      });
+      }, WORKSPACE_TEST);
     }
 
     const premiereLecture = (await listerReperesRelationnelsAcquereur(acquereurId)).map((r) => r.id);
@@ -226,7 +226,7 @@ describe("repereRelationnelRepository — ordre et intégrité", () => {
       libelle: "Randonnée",
       provenance: "observe_lors_d_un_echange",
       utilisableCommunication: false,
-    });
+    }, WORKSPACE_TEST);
 
     // La suppression n'existe jamais dans le produit (archivage seulement, ADR-012) — vérifiée ici
     // parce que la FK doit rester correcte si une purge technique a lieu un jour.

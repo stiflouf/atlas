@@ -111,9 +111,9 @@ async function unProspect(contactId: string, workspaceId = WORKSPACE_TEST) {
 }
 
 async function uneNoteLegacy(prospectId: string, type: "appel" | "email" | "sms" | "rendez_vous" | "autre_interaction" | "note_interne", contenu: string, creeLe?: string) {
-  const note = await ajouterNoteProspectVendeur(prospectId, type, contenu);
-  if (creeLe) await getDb().update(notesProspectVendeurTable).set({ creeLe: new Date(creeLe) }).where(eq(notesProspectVendeurTable.id, note.id));
-  return note;
+  const note = await ajouterNoteProspectVendeur(prospectId, type, contenu, WORKSPACE_TEST);
+  if (creeLe) await getDb().update(notesProspectVendeurTable).set({ creeLe: new Date(creeLe) }).where(eq(notesProspectVendeurTable.id, note!.id));
+  return note!;
 }
 
 async function unBien(workspaceId = WORKSPACE_TEST) {

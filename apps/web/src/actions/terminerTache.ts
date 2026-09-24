@@ -41,7 +41,9 @@ export async function terminerTacheAction(formData: FormData): Promise<void> {
     if (!contenu) {
       throw new Error("Le contenu de l'interaction ne peut pas être vide.");
     }
-    await ajouterNoteProspectVendeur(tache.prospectVendeurId, type, contenu);
+    // La tâche a déjà été prouvée dans ce périmètre (getTacheDuWorkspace) ; le writer le revérifie
+    // sur la racine prospect, sous verrou.
+    await ajouterNoteProspectVendeur(tache.prospectVendeurId, type, contenu, workspaceId);
   }
 
   const redirectTo = String(formData.get("redirectTo") ?? "/");

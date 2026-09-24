@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getClientById } from "@/lib/clientRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import {
   archiverRepereRelationnelAcquereur,
   creerRepereRelationnelAcquereur,
@@ -17,6 +17,7 @@ import {
   type RepereRelationnel,
 } from "@/types/repereRelationnel";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Erreurs actionnables rendues dans le formulaire (patron useActionState d'ajouterSecteurRecherche
 // / envoyerEmailGmail, ADR-031-bis), jamais un throw brut qui déclencherait la page d'erreur
@@ -72,9 +73,12 @@ function validerChamps(formData: FormData): { ok: true; champs: ChampsValides } 
 
 // Relecture serveur de la cible, jamais une confiance dans l'id soumis : un acquéreur inexistant
 // ou archivé ne reçoit aucun nouveau repère (même garde que ajouterSecteurRechercheAction).
-async function verifierAcquereurModifiable(acquereurId: string): Promise<string | undefined> {
+// WORKSPACE_SCOPING_V2A (ADR-054) — la cible est résolue DANS le périmètre de session : hors
+// workspace, « Acquéreur introuvable. », le même message qu'un id qui n'a jamais existé. Les
+// writers portent en plus leur propre preuve sous verrou — c'est elle qui compte.
+async function verifierAcquereurModifiable(acquereurId: string, workspaceId: string): Promise<string | undefined> {
   if (!acquereurId) return "Acquéreur introuvable.";
-  const acquereur = await getClientById(acquereurId);
+  const acquereur = await getAcquereurDuWorkspace(acquereurId, workspaceId);
   if (!acquereur) return "Acquéreur introuvable.";
   if (acquereur.archiveLe) return "Impossible d'ajouter ou de modifier un repère sur un acquéreur archivé.";
   return undefined;
@@ -85,14 +89,15 @@ export async function ajouterRepereRelationnelAction(
   formData: FormData
 ): Promise<ResultatActionRepereRelationnel> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const acquereurId = String(formData.get("acquereurId") ?? "");
-  const erreurCible = await verifierAcquereurModifiable(acquereurId);
+  const erreurCible = await verifierAcquereurModifiable(acquereurId, workspaceId);
   if (erreurCible) return { statut: "erreur", message: erreurCible };
 
   const validation = validerChamps(formData);
   if (!validation.ok) return { statut: "erreur", message: validation.message };
 
-  const repere = await creerRepereRelationnelAcquereur({ acquereurId, ...validation.champs });
+  const repere = await creerRepereRelationnelAcquereur({ acquereurId, ...validation.champs }, workspaceId);
   return { statut: "succes", repere };
 }
 
@@ -101,15 +106,16 @@ export async function modifierRepereRelationnelAction(
   formData: FormData
 ): Promise<ResultatActionRepereRelationnel> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
-  const erreurCible = await verifierAcquereurModifiable(acquereurId);
+  const erreurCible = await verifierAcquereurModifiable(acquereurId, workspaceId);
   if (erreurCible) return { statut: "erreur", message: erreurCible };
 
   const validation = validerChamps(formData);
   if (!validation.ok) return { statut: "erreur", message: validation.message };
 
-  const modifie = await modifierRepereRelationnelAcquereur(id, acquereurId, validation.champs);
+  const modifie = await modifierRepereRelationnelAcquereur(id, acquereurId, validation.champs, workspaceId);
   if (!modifie) return { statut: "erreur", message: "Ce repère n'existe plus." };
 
   return { statut: "succes", repere: modifie };
@@ -123,20 +129,22 @@ export async function modifierRepereRelationnelAction(
 // de la fiche.
 export async function archiverRepereRelationnelAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   if (!id || !acquereurId) throw new Error("Identifiant de repère manquant.");
 
-  await archiverRepereRelationnelAcquereur(id, acquereurId);
+  await archiverRepereRelationnelAcquereur(id, acquereurId, workspaceId);
   redirect(`/clients/${acquereurId}`);
 }
 
 export async function restaurerRepereRelationnelAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   const acquereurId = String(formData.get("acquereurId") ?? "");
   if (!id || !acquereurId) throw new Error("Identifiant de repère manquant.");
 
-  await restaurerRepereRelationnelAcquereur(id, acquereurId);
+  await restaurerRepereRelationnelAcquereur(id, acquereurId, workspaceId);
   redirect(`/clients/${acquereurId}`);
 }

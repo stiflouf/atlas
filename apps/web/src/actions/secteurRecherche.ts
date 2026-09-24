@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getDb } from "@/db/client";
-import { getClientById } from "@/lib/clientRepository";
+import { ErreurAcquereurHorsPerimetre, getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { ajouterSecteurRecherche, supprimerSecteurRecherche } from "@/lib/secteurRechercheRepository";
 import { verifierCommune } from "@/lib/geocodage/ignClient";
 import { enqueuerResynchronisationAcquereur } from "@/lib/compatibilite/resynchronisationRepository";
@@ -29,7 +29,10 @@ export async function ajouterSecteurRechercheAction(
   formData: FormData
 ): Promise<ResultatActionAjoutSecteur> {
   await exigerSessionAtlas();
-  // ADR-054 — appartenance explicite de la demande de resynchronisation (table racine).
+  // WORKSPACE_SCOPING_V2A (ADR-054) — ce périmètre ne sert plus seulement à ESTAMPILLER la demande
+  // de resynchronisation : il prouve d'abord que l'acquéreur visé est bien le nôtre. Sans cela, un
+  // id d'un autre workspace faisait naître dans CE workspace une demande — puis des paires de
+  // compatibilité — pointant une personne qui n'y appartient pas.
   const workspaceId = await exigerWorkspaceCourant();
   const acquereurId = String(formData.get("acquereurId") ?? "");
   const codeInsee = String(formData.get("codeInsee") ?? "").trim();
@@ -38,7 +41,7 @@ export async function ajouterSecteurRechercheAction(
     return { statut: "erreur", message: "Sélection de secteur incomplète — recherchez et sélectionnez une commune." };
   }
 
-  const acquereur = await getClientById(acquereurId);
+  const acquereur = await getAcquereurDuWorkspace(acquereurId, workspaceId);
   if (!acquereur || acquereur.archiveLe) {
     return { statut: "erreur", message: "Impossible d'ajouter un secteur de recherche à un acquéreur archivé." };
   }
@@ -56,7 +59,7 @@ export async function ajouterSecteurRechercheAction(
     // peut rendre compatibles des paires qui ne l'étaient pas, jamais un scan de fond N×M : seul
     // cet unique acquéreur est resynchronisé (synchroniserCompatibilitesPourAcquereur).
     const { secteur, idDemandeResynchronisation } = await getDb().transaction(async (tx) => {
-      const secteur = await ajouterSecteurRecherche(acquereurId, communeVerifiee, tx);
+      const secteur = await ajouterSecteurRecherche(acquereurId, communeVerifiee, workspaceId, tx);
       const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereurId, workspaceId, tx);
       return { secteur, idDemandeResynchronisation };
     });
@@ -94,11 +97,20 @@ export async function supprimerSecteurRechercheAction(formData: FormData): Promi
   // Suppression + enqueue de resynchronisation dans LA MÊME transaction (ADR-036) — un secteur
   // retiré peut sortir des paires de la compatibilité géographique (0 événement, l'état technique
   // est simplement mis à jour, voir synchronisation.ts).
-  const idDemandeResynchronisation = await getDb().transaction(async (tx) => {
-    await supprimerSecteurRecherche(id, acquereurId, tx);
-    return enqueuerResynchronisationAcquereur(acquereurId, workspaceId, tx);
-  });
-  await traiterDemandeResynchronisation(idDemandeResynchronisation);
+  // WORKSPACE_SCOPING_V2A — la preuve d'appartenance est prise sous verrou DANS cette transaction
+  // (supprimerSecteurRecherche) : hors périmètre, elle lève, la transaction est annulée entière et
+  // ni la suppression ni la demande de resynchronisation n'existent. L'écran se comporte alors
+  // comme pour un secteur déjà supprimé — aucune distinction offerte à l'appelant.
+  let idDemandeResynchronisation: string | undefined;
+  try {
+    idDemandeResynchronisation = await getDb().transaction(async (tx) => {
+      await supprimerSecteurRecherche(id, acquereurId, workspaceId, tx);
+      return enqueuerResynchronisationAcquereur(acquereurId, workspaceId, tx);
+    });
+  } catch (erreur) {
+    if (!(erreur instanceof ErreurAcquereurHorsPerimetre)) throw erreur;
+  }
+  if (idDemandeResynchronisation) await traiterDemandeResynchronisation(idDemandeResynchronisation);
 
   const redirectTo = String(formData.get("redirectTo") ?? `/clients/${acquereurId}`);
   redirect(redirectTo.startsWith("/") ? redirectTo : `/clients/${acquereurId}`);

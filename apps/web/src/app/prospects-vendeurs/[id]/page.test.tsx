@@ -102,7 +102,7 @@ describe("Fiche prospect vendeur — prochaine étape (une seule action primaire
 
   it("mandat proposé : la signature devient l'action primaire", async () => {
     const prospect = await prospectDeTest("MANDAT-PROPOSE");
-    await proposerMandatProspectVendeur(prospect.id);
+    await proposerMandatProspectVendeur(prospect.id, WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("Signer le mandat et créer le bien");
@@ -111,7 +111,7 @@ describe("Fiche prospect vendeur — prochaine étape (une seule action primaire
 
   it("perdu : aucune prochaine étape, le motif réel est affiché", async () => {
     const prospect = await prospectDeTest("PERDU");
-    await marquerProspectVendeurPerdu(prospect.id, "choix_agence_concurrente", "2026-08-06");
+    await marquerProspectVendeurPerdu(prospect.id, "choix_agence_concurrente", "2026-08-06", WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).not.toContain("Prochaine étape");
@@ -154,8 +154,8 @@ describe("Fiche prospect vendeur — rail de progression", () => {
 
   it("affiche une date de rendez-vous seulement PRÉVUE sans marquer le jalon franchi", async () => {
     const prospect = await prospectDeTest("RDV-PREVU");
-    await qualifierProspectVendeur(prospect.id);
-    await planifierRdvEstimationProspectVendeur(prospect.id, new Date("2026-07-29T12:30:00.000Z"));
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await planifierRdvEstimationProspectVendeur(prospect.id, new Date("2026-07-29T12:30:00.000Z"), WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("prévu ");
@@ -227,8 +227,8 @@ describe("Fiche prospect vendeur — état incomplet", () => {
 describe("Fiche prospect vendeur — journal", () => {
   it("fusionne jalons réels et notes réelles dans un seul fil", async () => {
     const prospect = await prospectDeTest("JOURNAL");
-    await qualifierProspectVendeur(prospect.id);
-    await ajouterNoteProspectVendeur(prospect.id, "appel", "Rappel effectué, rendez-vous à caler.");
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await ajouterNoteProspectVendeur(prospect.id, "appel", "Rappel effectué, rendez-vous à caler.", WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("Parcours et échanges");
@@ -257,8 +257,8 @@ describe("Fiche prospect vendeur — journal", () => {
 
   it("compte les échanges réellement enregistrés, jamais des relances déduites", async () => {
     const prospect = await prospectDeTest("COMPTE");
-    await ajouterNoteProspectVendeur(prospect.id, "appel", "Premier échange.");
-    await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Remarque interne, pas un échange.");
+    await ajouterNoteProspectVendeur(prospect.id, "appel", "Premier échange.", WORKSPACE_TEST);
+    await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Remarque interne, pas un échange.", WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("Échanges enregistrés");
@@ -272,9 +272,9 @@ describe("Fiche prospect vendeur — cohérence temporelle du rendez-vous", () =
     // Régression smoke (28/08/2026) : le journal doit refléter rdv_estimation_realise_le tel qu'il
     // est en base. Ici prévu le 24, tenu le 25 : les deux entrées coexistent avec leur vraie date.
     const prospect = await prospectDeTest("RDV-TENU");
-    await qualifierProspectVendeur(prospect.id);
-    await planifierRdvEstimationProspectVendeur(prospect.id, new Date("2026-07-24T08:00:00.000Z"));
-    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-07-25T15:30:00.000Z"));
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await planifierRdvEstimationProspectVendeur(prospect.id, new Date("2026-07-24T08:00:00.000Z"), WORKSPACE_TEST);
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-07-25T15:30:00.000Z"), WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("Rendez-vous d&#x27;estimation planifié");
@@ -287,8 +287,8 @@ describe("Fiche prospect vendeur — cohérence temporelle du rendez-vous", () =
     // Le rendez-vous est planifié dans le futur et n'a pas été marqué réalisé : aucune entrée
     // « réalisé » ne doit exister, et le jalon ne doit pas être franchi.
     const prospect = await prospectDeTest("PREVU-SEUL");
-    await qualifierProspectVendeur(prospect.id);
-    await planifierRdvEstimationProspectVendeur(prospect.id, new Date(Date.now() + 24 * 60 * 60 * 1000));
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await planifierRdvEstimationProspectVendeur(prospect.id, new Date(Date.now() + 24 * 60 * 60 * 1000), WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("Rendez-vous d&#x27;estimation planifié");
@@ -301,9 +301,9 @@ describe("Fiche prospect vendeur — cohérence temporelle du rendez-vous", () =
 describe("Fiche prospect vendeur — mandat signé", () => {
   it("clôt le pipeline et ouvre un pont vers le bien réellement créé", async () => {
     const prospect = await prospectDeTest("SIGNE");
-    await qualifierProspectVendeur(prospect.id);
-    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-07-24T10:00:00.000Z"));
-    await enregistrerEstimationProspectVendeur(prospect.id, 39_500_000, "2026-07-28");
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-07-24T10:00:00.000Z"), WORKSPACE_TEST);
+    await enregistrerEstimationProspectVendeur(prospect.id, 39_500_000, "2026-07-28", WORKSPACE_TEST);
 
     const resultat = await signerMandatProspectVendeur(prospect.id, {
       reference: `${NOM_PREFIX}-REF-SIGNE`,
@@ -348,8 +348,8 @@ describe("Fiche prospect vendeur — sémantique contact / échange", () => {
     // marqué réalisé (ADR-027) sans qu'aucune note existe — « contact » et « échange » ne
     // désignent pas la même chose.
     const prospect = await prospectDeTest("CONTACT-SANS-NOTE");
-    await qualifierProspectVendeur(prospect.id);
-    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date(Date.now() - 60 * 60 * 1000));
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date(Date.now() - 60 * 60 * 1000), WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("Dernier contact");
@@ -363,8 +363,8 @@ describe("Fiche prospect vendeur — sémantique contact / échange", () => {
 
   it("le header suit la même sémantique que le bloc Relation", async () => {
     const prospect = await prospectDeTest("HEADER-CONTACT");
-    await qualifierProspectVendeur(prospect.id);
-    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date(Date.now() - 60 * 60 * 1000));
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date(Date.now() - 60 * 60 * 1000), WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("contact aujourd&#x27;hui");
@@ -372,7 +372,7 @@ describe("Fiche prospect vendeur — sémantique contact / échange", () => {
 
   it("un vrai échange noté est bien compté et daté", async () => {
     const prospect = await prospectDeTest("ECHANGE-REEL");
-    await ajouterNoteProspectVendeur(prospect.id, "appel", "Point téléphonique avec le vendeur.");
+    await ajouterNoteProspectVendeur(prospect.id, "appel", "Point téléphonique avec le vendeur.", WORKSPACE_TEST);
     const html = await rendre(prospect.id);
 
     expect(html).toContain("Dernier contact");
@@ -384,7 +384,7 @@ describe("Fiche prospect vendeur — sémantique contact / échange", () => {
     // ProspectVendeur n'a aucune datePremiereContact (contrairement à ProfilAcquereur) : creeLe
     // est la création de l'opportunité. Le libellé reprend le vocabulaire du dashboard.
     const prospect = await prospectDeTest("PREMIER-CONTACT");
-    await proposerMandatProspectVendeur(prospect.id);
+    await proposerMandatProspectVendeur(prospect.id, WORKSPACE_TEST);
     const resultat = await signerMandatProspectVendeur(prospect.id, {
       reference: `${NOM_PREFIX}-REF-DELAI`,
       titre: "Studio test délai",

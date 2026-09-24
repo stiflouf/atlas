@@ -140,11 +140,8 @@ const EXCEPTIONS_JUSTIFIEES: Record<string, string[]> = {
   // L'identifiant vient du contexte Google Calendar du conseiller connecté, jamais d'un champ.
   "actions/visite.ts": ["getBienById", "getClientById"],
 
-  // ── V2, dette connue et documentée : jalons du parcours prospect vendeur, repères relationnels
-  // et secteurs de recherche de l'acquéreur.
-  "actions/prospectVendeur.ts": ["getProspectVendeurById"],
-  "actions/repereRelationnel.ts": ["getClientById"],
-  "actions/secteurRecherche.ts": ["getClientById"],
+  // (WORKSPACE_SCOPING_V2A a refermé actions/prospectVendeur.ts, actions/repereRelationnel.ts et
+  // actions/secteurRecherche.ts : leurs exceptions ont été retirées, pas commentées.)
 
   // ── V2, écrans de lecture seule : ce lot durcit les MUTATIONS et les routes qui servent des
   // fichiers. Une page hors périmètre affiche aujourd'hui une fiche qu'elle ne devrait pas
@@ -163,6 +160,89 @@ const EXCEPTIONS_JUSTIFIEES: Record<string, string[]> = {
   "app/visites/[id]/preparer/page.tsx": ["getBienById", "getClientById"],
   "app/visites/[id]/bon-de-visite/[bonId]/page.tsx": ["getClientById"],
 };
+
+// ───────────────────────────── 3. WRITERS DES DOMAINES USER-FACING ─────────────────────────────
+
+// WORKSPACE_SCOPING_V2A — les deux gardes ci-dessus raisonnent sur les IMPORTS. Elles n'ont donc
+// rien vu des six actions qui écrivaient sans jamais lire (archiver un repère, supprimer un
+// secteur, archiver un prospect…) : sans reader importé, aucune trace à détecter.
+//
+// Celle-ci raisonne sur les ÉCRITURES. Règle : dans ces repositories, toute fonction exportée qui
+// écrit doit recevoir un `workspaceId`. Peu importe qu'elle le porte dans son `WHERE` (table
+// racine) ou qu'elle le prouve sous verrou sur sa racine (table feuille) — ce qui est verrouillé
+// ici, c'est qu'une écriture ne puisse pas être ajoutée sans que la question du périmètre soit
+// posée. C'est la garde qui aurait arrêté les 15 mutations restées ouvertes après V1.
+const REPOSITORIES_USER_FACING = [
+  "lib/bienRepository.ts",
+  "lib/clientRepository.ts",
+  "lib/prospectVendeurRepository.ts",
+  "lib/noteProspectVendeurRepository.ts",
+  "lib/repereRelationnelRepository.ts",
+  "lib/secteurRechercheRepository.ts",
+  "lib/tacheRepository.ts",
+  "lib/photoBienRepository.ts",
+  "lib/documentBienRepository.ts",
+];
+
+// Écritures dont le périmètre est porté autrement. Chaque entrée dit pourquoi — une exception sans
+// justification est un oubli, pas une décision.
+const WRITERS_SANS_WORKSPACE_JUSTIFIES: Record<string, string> = {
+  // MACHINE (ADR-062) : les scanners d'automatisation balayent délibérément le parc. Leur garde
+  // est le secret Bearer de la route de scan, jamais une session — leur imposer un périmètre de
+  // session n'aurait aucun sens et casserait la clôture des tâches devenues obsolètes.
+  cloturerTachesAutomatiquesObsoletes: "scanner d'automatisation, trans-workspace par conception",
+  cloturerTachesParIds: "scanner d'automatisation, ids déjà produits par le scan de ce workspace",
+  // Feuilles de `biens` : ces deux writers ne sont jamais atteints qu'après que l'appelant a prouvé
+  // le bien dans son périmètre (V1 — ajouterDocumentBienAction / corrigerClassementDocumentBienAction
+  // passent par getBienDuWorkspace et getDocumentBienDuWorkspace), ou depuis le domaine Bon de
+  // visite dont la chaîne visite → bien → workspace est déjà scopée.
+  enregistrerDocumentBien: "feuille de `biens`, bien prouvé par l'appelant (V1)",
+  corrigerClassementDocumentBien: "feuille de `biens`, document ET bien cible prouvés par l'appelant (V1)",
+};
+
+describe("Frontière workspace — writers des domaines user-facing", () => {
+  it("toute fonction exportée qui écrit reçoit un workspaceId, ou figure dans les exceptions justifiées", () => {
+    const fautifs: string[] = [];
+    for (const relatif of REPOSITORIES_USER_FACING) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      // Découpe grossière mais suffisante : chaque `export async function` jusqu'au suivant.
+      const blocs = source.split(/(?=export async function )/);
+      for (const bloc of blocs) {
+        const nom = /^export async function (\w+)/.exec(bloc)?.[1];
+        if (!nom) continue;
+        // La signature s'arrête à la parenthèse fermante de la liste de paramètres — pas au premier
+        // `{`, qui appartient souvent à un paramètre objet (`input: { … }`).
+        let profondeur = 0;
+        let finSignature = bloc.length;
+        for (let i = bloc.indexOf("("); i < bloc.length; i += 1) {
+          if (bloc[i] === "(") profondeur += 1;
+          else if (bloc[i] === ")") {
+            profondeur -= 1;
+            if (profondeur === 0) {
+              finSignature = i;
+              break;
+            }
+          }
+        }
+        const signature = bloc.slice(0, finSignature);
+        const corps = bloc.slice(finSignature);
+        const ecrit = /\.(insert|update|delete)\(/.test(corps);
+        if (!ecrit) continue;
+        if (/workspaceId/.test(signature)) continue;
+        if (WRITERS_SANS_WORKSPACE_JUSTIFIES[nom]) continue;
+        fautifs.push(`${relatif} → ${nom}`);
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  it("chaque exception nommée correspond encore à une fonction qui existe", () => {
+    const toutes = REPOSITORIES_USER_FACING.map((r) => codeSeul(join(SRC, ...r.split("/")))).join("\n");
+    for (const nom of Object.keys(WRITERS_SANS_WORKSPACE_JUSTIFIES)) {
+      expect(toutes, nom).toContain(`export async function ${nom}`);
+    }
+  });
+});
 
 describe("Frontière workspace — lecteurs non scopés hors des écrans et des actions", () => {
   const surfaces = [
@@ -187,11 +267,20 @@ describe("Frontière workspace — lecteurs non scopés hors des écrans et des 
     expect(fautifs).toEqual([]);
   });
 
-  it("chaque exception nommée existe encore : une exception périmée doit être retirée, pas oubliée", () => {
-    for (const relatif of Object.keys(EXCEPTIONS_JUSTIFIEES)) {
+  // Une exception qui ne correspond plus à rien est pire qu'absente : elle fait croire à une dette
+  // qui n'existe plus, et masque le fait que la surface est déjà fermée. Le test échoue donc AUSSI
+  // quand le fichier a cessé d'importer le lecteur qu'on l'autorisait à importer.
+  it("chaque exception nommée correspond encore à un import réel : une exception périmée doit être retirée", () => {
+    const perimees: string[] = [];
+    for (const [relatif, lecteurs] of Object.entries(EXCEPTIONS_JUSTIFIEES)) {
       const chemin = join(SRC, ...relatif.split("/"));
       expect(() => lire(chemin), relatif).not.toThrow();
+      const source = codeSeul(chemin);
+      for (const lecteur of lecteurs) {
+        if (!new RegExp(`\\b${lecteur}\\b`).test(source)) perimees.push(`${relatif} → ${lecteur}`);
+      }
     }
+    expect(perimees).toEqual([]);
   });
 
   it("les surfaces durcies par ce lot n'ont plus aucune exception", () => {

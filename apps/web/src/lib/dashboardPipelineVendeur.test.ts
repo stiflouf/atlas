@@ -43,7 +43,7 @@ describe("chargerPipelineVendeur (intégration Postgres)", () => {
     const enCours = await creerProspectDeTest(`${suffixe}-encours`);
     const signe1 = await creerProspectDeTest(`${suffixe}-signe1`);
     const perdu1 = await creerProspectDeTest(`${suffixe}-perdu1`);
-    await marquerProspectVendeurPerdu(perdu1.id, "autre", "2026-09-01");
+    await marquerProspectVendeurPerdu(perdu1.id, "autre", "2026-09-01", WORKSPACE_TEST);
 
     // On ne peut pas signer sans créer un bien à chaque fois dans ce test (hors-scope ici) : on
     // vérifie seulement, via une mesure AVANT/APRÈS, que le nombre de clôturés grandit avec une
@@ -51,7 +51,7 @@ describe("chargerPipelineVendeur (intégration Postgres)", () => {
     const avant = await chargerPipelineVendeur();
 
     const perdu2 = await creerProspectDeTest(`${suffixe}-perdu2`);
-    await marquerProspectVendeurPerdu(perdu2.id, "autre", "2026-09-01");
+    await marquerProspectVendeurPerdu(perdu2.id, "autre", "2026-09-01", WORKSPACE_TEST);
     const apres = await chargerPipelineVendeur();
 
     expect(apres.nombrePerdus).toBe(avant.nombrePerdus + 1);
@@ -74,8 +74,8 @@ describe("chargerPipelineVendeur (intégration Postgres)", () => {
     const avant = await chargerPipelineVendeur();
 
     const prospect = await creerProspectDeTest(`estimation-${Date.now()}`);
-    await qualifierProspectVendeur(prospect.id);
-    await enregistrerEstimationProspectVendeur(prospect.id, 300_000_00, "2026-09-01");
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    await enregistrerEstimationProspectVendeur(prospect.id, 300_000_00, "2026-09-01", WORKSPACE_TEST);
 
     const apres = await chargerPipelineVendeur();
     expect(apres.nombreEstimationsEnCoursRenseignees).toBe(avant.nombreEstimationsEnCoursRenseignees + 1);

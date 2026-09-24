@@ -84,56 +84,56 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
     expect(deriverStatutProspectVendeur(prospect)).toBe("prospect");
   });
 
-  it("qualifierProspectVendeur() pose qualifieLe, jamais dernierContactLe (bookkeeping interne)", async () => {
+  it("qualifierProspectVendeur(WORKSPACE_TEST) pose qualifieLe, jamais dernierContactLe (bookkeeping interne)", async () => {
     const prospect = await creerProspectDeTest("002");
-    const qualifie = await qualifierProspectVendeur(prospect.id);
+    const qualifie = await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
     expect(qualifie?.qualifieLe).toBeDefined();
     expect(qualifie?.dernierContactLe).toBeUndefined();
   });
 
-  it("planifierRdvEstimationProspectVendeur() ne fait jamais avancer le statut, marquerRdvEstimationRealise() si", async () => {
+  it("planifierRdvEstimationProspectVendeur(WORKSPACE_TEST) ne fait jamais avancer le statut, marquerRdvEstimationRealise() si", async () => {
     const prospect = await creerProspectDeTest("003");
-    const planifie = await planifierRdvEstimationProspectVendeur(prospect.id, new Date("2026-09-10T14:30:00Z"));
+    const planifie = await planifierRdvEstimationProspectVendeur(prospect.id, new Date("2026-09-10T14:30:00Z"), WORKSPACE_TEST);
     expect(deriverStatutProspectVendeur(planifie!)).toBe("prospect");
     expect(planifie?.dernierContactLe).toBeUndefined();
 
-    const realise = await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-09-10T15:00:00Z"));
+    const realise = await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-09-10T15:00:00Z"), WORKSPACE_TEST);
     expect(deriverStatutProspectVendeur(realise!)).toBe("rendez_vous");
     // Un rendez-vous réalisé EST une vraie interaction (correction n° 4).
     expect(realise?.dernierContactLe).toBeDefined();
   });
 
-  it("enregistrerEstimationProspectVendeur() pose le montant et la date atomiquement, jamais dernierContactLe", async () => {
+  it("enregistrerEstimationProspectVendeur(WORKSPACE_TEST) pose le montant et la date atomiquement, jamais dernierContactLe", async () => {
     const prospect = await creerProspectDeTest("004");
-    const estime = await enregistrerEstimationProspectVendeur(prospect.id, 35_000_00, "2026-09-01");
+    const estime = await enregistrerEstimationProspectVendeur(prospect.id, 35_000_00, "2026-09-01", WORKSPACE_TEST);
     expect(estime?.estimationProposeeCentimes).toBe(35_000_00);
     expect(estime?.estimationProposeeLe).toBe("2026-09-01");
     expect(estime?.dernierContactLe).toBeUndefined();
     expect(deriverStatutProspectVendeur(estime!)).toBe("estimation");
   });
 
-  it("proposerMandatProspectVendeur() pose mandatProposeLe", async () => {
+  it("proposerMandatProspectVendeur(WORKSPACE_TEST) pose mandatProposeLe", async () => {
     const prospect = await creerProspectDeTest("005");
-    const propose = await proposerMandatProspectVendeur(prospect.id);
+    const propose = await proposerMandatProspectVendeur(prospect.id, WORKSPACE_TEST);
     expect(deriverStatutProspectVendeur(propose!)).toBe("mandat_propose");
   });
 
-  it("marquerProspectVendeurPerdu() pose motifPerte et datePerte atomiquement", async () => {
+  it("marquerProspectVendeurPerdu(WORKSPACE_TEST) pose motifPerte et datePerte atomiquement", async () => {
     const prospect = await creerProspectDeTest("006");
-    const perdu = await marquerProspectVendeurPerdu(prospect.id, "injoignable", "2026-09-05");
+    const perdu = await marquerProspectVendeurPerdu(prospect.id, "injoignable", "2026-09-05", WORKSPACE_TEST);
     expect(perdu?.motifPerte).toBe("injoignable");
     expect(perdu?.datePerte).toBe("2026-09-05");
     expect(deriverStatutProspectVendeur(perdu!)).toBe("perdu");
   });
 
-  it("archiverProspectVendeur()/desarchiverProspectVendeur() sont orthogonaux au statut dérivé (correction n° 5)", async () => {
+  it("archiverProspectVendeur(WORKSPACE_TEST)/desarchiverProspectVendeur(WORKSPACE_TEST) sont orthogonaux au statut dérivé (correction n° 5)", async () => {
     const prospect = await creerProspectDeTest("007");
-    await qualifierProspectVendeur(prospect.id);
-    const archive = await archiverProspectVendeur(prospect.id);
+    await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
+    const archive = await archiverProspectVendeur(prospect.id, WORKSPACE_TEST);
     expect(archive?.archiveLe).toBeDefined();
     expect(deriverStatutProspectVendeur(archive!)).toBe("qualification");
 
-    const desarchive = await desarchiverProspectVendeur(prospect.id);
+    const desarchive = await desarchiverProspectVendeur(prospect.id, WORKSPACE_TEST);
     expect(desarchive?.archiveLe).toBeUndefined();
   });
 
@@ -199,9 +199,9 @@ describe("prospectVendeurRepository (intégration Postgres)", () => {
   it("listerProspectsVendeurs()/Perdus()/Convertis()/Archives() filtrent correctement par statut et archivage", async () => {
     const enCours = await creerProspectDeTest("010a");
     const perdu = await creerProspectDeTest("010b");
-    await marquerProspectVendeurPerdu(perdu.id, "autre", "2026-09-05");
+    await marquerProspectVendeurPerdu(perdu.id, "autre", "2026-09-05", WORKSPACE_TEST);
     const archive = await creerProspectDeTest("010c");
-    await archiverProspectVendeur(archive.id);
+    await archiverProspectVendeur(archive.id, WORKSPACE_TEST);
 
     const [listeEnCours, listePerdus, listeArchives] = await Promise.all([
       listerProspectsVendeurs(),

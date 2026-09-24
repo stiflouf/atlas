@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
+import { verrouillerAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { secteursRechercheAcquereur as secteursTable } from "@/db/schema";
 import type { SecteurRecherche } from "@/types/secteurRecherche";
 import type { Commune } from "@/types/geocodage";
@@ -54,11 +55,19 @@ export async function listerSecteursPourAcquereurs(
 // (acquereur_id, code_insee) fait échouer l'insertion (erreur Postgres 23505) en cas de doublon —
 // à l'appelant (Server Action) de la traduire en message actionnable, jamais absorbée
 // silencieusement ici.
+// WORKSPACE_SCOPING_V2A (ADR-054) — `secteurs_recherche_acquereur` est une FEUILLE de `acquereurs`
+// (aucun `workspace_id` propre) : la preuve d'appartenance est prise sur la racine, sous verrou,
+// dans la transaction de l'appelant — celle qui porte déjà l'insertion ET la demande de
+// resynchronisation. Un acquéreur d'un autre périmètre ne verrouille rien : ni secteur, ni
+// resynchronisation, ni paire de compatibilité ne sont écrits. C'est ce point précis qui empêchait
+// le périmètre de l'appelant d'estampiller une demande visant un acquéreur qui ne lui appartient pas.
 export async function ajouterSecteurRecherche(
   acquereurId: string,
   commune: Commune,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<SecteurRecherche> {
+  await verrouillerAcquereurDuWorkspace(executeur, acquereurId, workspaceId);
   const [ligne] = await executeur
     .insert(secteursTable)
     .values({
@@ -76,12 +85,17 @@ export async function ajouterSecteurRecherche(
 // le secteur d'un autre acquéreur. Retourne undefined si aucune ligne ne correspond (id inconnu,
 // ou id existant mais n'appartenant pas à acquereurId) plutôt que de supposer une suppression
 // effective.
+// WORKSPACE_SCOPING_V2A — même preuve sur la racine que l'ajout, avant un DELETE qui, lui, est
+// irréversible : hors périmètre, le verrou lève et la transaction de l'appelant est annulée
+// entière (suppression ET resynchronisation).
 export async function supprimerSecteurRecherche(
   id: string,
   acquereurId: string,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<SecteurRecherche | undefined> {
   if (!UUID_REGEX.test(id) || !UUID_REGEX.test(acquereurId)) return undefined;
+  await verrouillerAcquereurDuWorkspace(executeur, acquereurId, workspaceId);
   const [ligne] = await executeur
     .delete(secteursTable)
     .where(and(eq(secteursTable.id, id), eq(secteursTable.acquereurId, acquereurId)))

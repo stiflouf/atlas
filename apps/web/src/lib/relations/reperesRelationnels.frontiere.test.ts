@@ -64,7 +64,7 @@ async function acquereurAvecRepereSentinelle() {
     libelle: SENTINELLE,
     provenance: "indique_par_le_client",
     utilisableCommunication: true,
-  });
+  }, WORKSPACE_TEST);
   return acquereur;
 }
 

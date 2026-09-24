@@ -124,13 +124,13 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
       nom: "Houilles",
       codePostal: "78800",
       contexte: "",
-    });
+    }, WORKSPACE_TEST);
     await ajouterSecteurRecherche(acquereurAvecSecteurDifferent.id, {
       citycode: "75056",
       nom: "Paris",
       codePostal: "75001",
       contexte: "",
-    });
+    }, WORKSPACE_TEST);
 
     const resultats = await evaluerCompatibiliteBien(bien.id);
 
@@ -146,7 +146,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
 
   it("évaluerCompatibiliteAcquereur() : réutilise les mêmes secteurs de l'acquéreur pour chaque bien, sans requête par paire", async () => {
     const acquereur = await creerAcquereurDeTest("006");
-    await ajouterSecteurRecherche(acquereur.id, { citycode: "78311", nom: "Houilles", codePostal: "78800", contexte: "" });
+    await ajouterSecteurRecherche(acquereur.id, { citycode: "78311", nom: "Houilles", codePostal: "78800", contexte: "" }, WORKSPACE_TEST);
     const bienDansLeSecteur = await creerBienDeTest("006a", { codeInseeCommune: "78311" });
     const bienHorsSecteur = await creerBienDeTest("006b", { codeInseeCommune: "75056" });
 

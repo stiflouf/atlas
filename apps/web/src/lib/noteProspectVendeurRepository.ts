@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { notesProspectVendeur as notesProspectVendeurTable, prospectsVendeurs as prospectsVendeursTable } from "@/db/schema";
 import { TYPES_NOTE_INTERACTION } from "@/types/noteProspectVendeur";
@@ -35,12 +35,26 @@ export async function listerNotesProspectVendeur(prospectVendeurId: string): Pro
 // deux écritures (note + éventuelle mise à jour du prospect) dans la même transaction, pour ne
 // jamais laisser la note exister sans que dernier_contact_le reflète l'interaction qu'elle
 // représente. Validation (contenu non vide après trim) déjà faite par l'appelant.
+// WORKSPACE_SCOPING_V2A (ADR-054) — `notes_prospect_vendeur` est une FEUILLE de
+// `prospects_vendeurs` : aucun `workspace_id` à filtrer sur l'INSERT. La preuve est prise sur la
+// racine, sous verrou, dans la transaction qui porte DÉJÀ les deux écritures. Elle couvre donc
+// aussi la seconde : avancer `dernier_contact_le` éteint les relances d'inactivité du dossier —
+// un effet qu'un autre workspace ne doit jamais pouvoir déclencher, même sans lire la fiche.
 export async function ajouterNoteProspectVendeur(
   prospectVendeurId: string,
   type: TypeNoteProspectVendeur,
-  contenu: string
-): Promise<NoteProspectVendeur> {
+  contenu: string,
+  workspaceId: string
+): Promise<NoteProspectVendeur | undefined> {
+  if (!UUID_REGEX.test(prospectVendeurId)) return undefined;
   return getDb().transaction(async (tx) => {
+    const [racine] = await tx
+      .select({ id: prospectsVendeursTable.id })
+      .from(prospectsVendeursTable)
+      .where(and(eq(prospectsVendeursTable.id, prospectVendeurId), eq(prospectsVendeursTable.workspaceId, workspaceId)))
+      .for("update");
+    if (!racine) return undefined;
+
     const [ligne] = await tx
       .insert(notesProspectVendeurTable)
       .values({ prospectVendeurId, type, contenu })
@@ -49,7 +63,7 @@ export async function ajouterNoteProspectVendeur(
       await tx
         .update(prospectsVendeursTable)
         .set({ dernierContactLe: new Date(), modifieLe: new Date() })
-        .where(eq(prospectsVendeursTable.id, prospectVendeurId));
+        .where(and(eq(prospectsVendeursTable.id, prospectVendeurId), eq(prospectsVendeursTable.workspaceId, workspaceId)));
     }
     return ligneVersNoteProspectVendeur(ligne);
   });

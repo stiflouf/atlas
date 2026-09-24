@@ -132,7 +132,7 @@ describe("marquerRdvEstimationRealiseProspectVendeurAction — aucun jalon franc
   it("refuse de marquer réalisé un rendez-vous encore à venir, et ne persiste rien", async () => {
     const prospect = await creerProspectDeTest("R01");
     const demain = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await planifierRdvEstimationProspectVendeur(prospect.id, demain);
+    await planifierRdvEstimationProspectVendeur(prospect.id, demain, WORKSPACE_TEST);
 
     await expect(
       marquerRdvEstimationRealiseProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,
@@ -194,7 +194,7 @@ describe("marquerRdvEstimationRealiseProspectVendeurAction — aucun jalon franc
 describe("prospectVendeur Server Actions — gardes de transition", () => {
   it("qualifierProspectVendeurAction rejette un prospect déjà perdu", async () => {
     const prospect = await creerProspectDeTest("001");
-    await marquerProspectVendeurPerdu(prospect.id, "autre", "2026-09-01");
+    await marquerProspectVendeurPerdu(prospect.id, "autre", "2026-09-01", WORKSPACE_TEST);
 
     await expect(qualifierProspectVendeurAction(ETAT_FORMULAIRE_INITIAL, formData({ id: prospect.id }))).resolves.toMatchObject({ statut: "erreur", message: expect.stringMatching(/perdu/) });
   });
@@ -231,7 +231,7 @@ describe("prospectVendeur Server Actions — gardes de transition", () => {
 
   it("signerMandatProspectVendeurAction rejette un prospect déjà perdu", async () => {
     const prospect = await creerProspectDeTest("006");
-    await marquerProspectVendeurPerdu(prospect.id, "autre", "2026-09-01");
+    await marquerProspectVendeurPerdu(prospect.id, "autre", "2026-09-01", WORKSPACE_TEST);
 
     await expect(
       signerMandatProspectVendeurAction(ETAT_FORMULAIRE_INITIAL,

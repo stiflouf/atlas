@@ -40,7 +40,7 @@ describe("noteProspectVendeurRepository (intégration Postgres)", () => {
 
   it("une note de type 'note_interne' n'avance JAMAIS dernier_contact_le (correction n° 2)", async () => {
     const prospect = await creerProspectDeTest("001");
-    await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Remarque interne sans interaction réelle.");
+    await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Remarque interne sans interaction réelle.", WORKSPACE_TEST);
 
     const relu = await getProspectVendeurById(prospect.id);
     expect(relu?.dernierContactLe).toBeUndefined();
@@ -48,7 +48,7 @@ describe("noteProspectVendeurRepository (intégration Postgres)", () => {
 
   it("une note d'interaction ('appel') avance dernier_contact_le", async () => {
     const prospect = await creerProspectDeTest("002");
-    await ajouterNoteProspectVendeur(prospect.id, "appel", "Appel téléphonique avec le vendeur.");
+    await ajouterNoteProspectVendeur(prospect.id, "appel", "Appel téléphonique avec le vendeur.", WORKSPACE_TEST);
 
     const relu = await getProspectVendeurById(prospect.id);
     expect(relu?.dernierContactLe).toBeDefined();
@@ -57,7 +57,7 @@ describe("noteProspectVendeurRepository (intégration Postgres)", () => {
   it("chaque type d'interaction (email, sms, rendez_vous, autre_interaction) avance dernier_contact_le", async () => {
     for (const type of ["email", "sms", "rendez_vous", "autre_interaction"] as const) {
       const prospect = await creerProspectDeTest(`003-${type}`);
-      await ajouterNoteProspectVendeur(prospect.id, type, `Interaction de type ${type}.`);
+      await ajouterNoteProspectVendeur(prospect.id, type, `Interaction de type ${type}.`, WORKSPACE_TEST);
       const relu = await getProspectVendeurById(prospect.id);
       expect(relu?.dernierContactLe, `type=${type}`).toBeDefined();
     }
@@ -65,20 +65,20 @@ describe("noteProspectVendeurRepository (intégration Postgres)", () => {
 
   it("listerNotesProspectVendeur() retourne les notes triées par date décroissante", async () => {
     const prospect = await creerProspectDeTest("004");
-    const premiere = await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Première note.");
-    const seconde = await ajouterNoteProspectVendeur(prospect.id, "appel", "Seconde note, un appel.");
+    const premiere = await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Première note.", WORKSPACE_TEST);
+    const seconde = await ajouterNoteProspectVendeur(prospect.id, "appel", "Seconde note, un appel.", WORKSPACE_TEST);
 
     const notes = await listerNotesProspectVendeur(prospect.id);
-    expect(notes.map((n) => n.id)).toEqual([seconde.id, premiere.id]);
+    expect(notes.map((n) => n.id)).toEqual([seconde!.id, premiere!.id]);
     expect(notes[1].type).toBe("note_interne");
     expect(notes[0].type).toBe("appel");
   });
 
   it("insère bien la ligne en base (table notes_prospect_vendeur), pas seulement en mémoire", async () => {
     const prospect = await creerProspectDeTest("005");
-    const note = await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Vérification directe.");
+    const note = await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Vérification directe.", WORKSPACE_TEST);
 
-    const [ligne] = await getDb().select().from(notesTable).where(eq(notesTable.id, note.id));
+    const [ligne] = await getDb().select().from(notesTable).where(eq(notesTable.id, note!.id));
     expect(ligne).toBeDefined();
     expect(ligne.contenu).toBe("Vérification directe.");
   });

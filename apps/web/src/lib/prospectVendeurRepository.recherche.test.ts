@@ -46,9 +46,9 @@ describe("rechercherProspectsVendeurs (ADR-048)", () => {
   it("vue='en_cours' exclut perdus et archivés — même règle que listerProspectsVendeurs()", async () => {
     const enCours = await prospectDeTest("EN-COURS");
     const perdu = await prospectDeTest("PERDU");
-    await marquerProspectVendeurPerdu(perdu.id, "desaccord_estimation", "2026-01-15");
+    await marquerProspectVendeurPerdu(perdu.id, "desaccord_estimation", "2026-01-15", WORKSPACE_TEST);
     const archive = await prospectDeTest("ARCHIVE");
-    await archiverProspectVendeur(archive.id);
+    await archiverProspectVendeur(archive.id, WORKSPACE_TEST);
 
     const resultat = await rechercherProspectsVendeurs({ vue: "en_cours" });
     const ids = resultat.map((p) => p.id);
@@ -59,7 +59,7 @@ describe("rechercherProspectsVendeurs (ADR-048)", () => {
 
   it("vue='perdus' ne retourne que les prospects marqués perdus, non archivés", async () => {
     const perdu = await prospectDeTest("PERDU-VUE");
-    await marquerProspectVendeurPerdu(perdu.id, "desaccord_estimation", "2026-01-15");
+    await marquerProspectVendeurPerdu(perdu.id, "desaccord_estimation", "2026-01-15", WORKSPACE_TEST);
 
     const resultat = await rechercherProspectsVendeurs({ vue: "perdus" });
     expect(resultat.map((p) => p.id)).toContain(perdu.id);
@@ -67,8 +67,8 @@ describe("rechercherProspectsVendeurs (ADR-048)", () => {
 
   it("vue='archives' ignore le statut sous-jacent — un prospect perdu ET archivé apparaît", async () => {
     const perduEtArchive = await prospectDeTest("PERDU-ARCHIVE");
-    await marquerProspectVendeurPerdu(perduEtArchive.id, "desaccord_estimation", "2026-01-15");
-    await archiverProspectVendeur(perduEtArchive.id);
+    await marquerProspectVendeurPerdu(perduEtArchive.id, "desaccord_estimation", "2026-01-15", WORKSPACE_TEST);
+    await archiverProspectVendeur(perduEtArchive.id, WORKSPACE_TEST);
 
     const resultat = await rechercherProspectsVendeurs({ vue: "archives" });
     expect(resultat.map((p) => p.id)).toContain(perduEtArchive.id);

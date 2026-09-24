@@ -2,7 +2,7 @@
 
 import { notFound, redirect } from "next/navigation";
 import {
-  getProspectVendeurById,
+  getProspectVendeurDuWorkspace,
   creerProspectVendeur,
   modifierProspectVendeur,
   qualifierProspectVendeur,
@@ -50,8 +50,12 @@ function parseDateHeure(valeur: FormDataEntryValue | null): Date | undefined {
 
 // Guard partagée par tous les jalons de pipeline (ADR-027) : aucune séquence stricte imposée entre
 // qualification/estimation/rendez-vous/mandat proposé, seuls perte et signature sont terminaux.
-async function chargerProspectPourJalon(id: string): Promise<ProspectVendeur> {
-  const prospect = await getProspectVendeurById(id);
+// WORKSPACE_SCOPING_V2A (ADR-054) — la résolution passe par le reader SCOPÉ : hors périmètre, le
+// prospect est introuvable, exactement comme un id inexistant (`notFound()`). Cette seule ligne
+// couvre les six jalons qui partagent cette garde ; les writers portent en plus le périmètre dans
+// leur `WHERE`, et c'est cette seconde preuve qui est contraignante.
+async function chargerProspectPourJalon(id: string, workspaceId: string): Promise<ProspectVendeur> {
+  const prospect = await getProspectVendeurDuWorkspace(id, workspaceId);
   if (!prospect) notFound();
   const statut = deriverStatutProspectVendeur(prospect);
   if (statut === "perdu") throw new ErreurSaisie("Ce prospect est marqué perdu — aucun jalon ne peut plus être posé.");
@@ -148,10 +152,11 @@ export async function modifierProspectVendeurAction(_etatPrecedent: EtatFormulai
 export async function qualifierProspectVendeurAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
     if (!id) notFound();
-    await chargerProspectPourJalon(id);
-    await qualifierProspectVendeur(id);
+    await chargerProspectPourJalon(id, workspaceId);
+    await qualifierProspectVendeur(id, workspaceId);
     redirect(`/prospects-vendeurs/${id}`);
   });
 }
@@ -159,9 +164,10 @@ export async function qualifierProspectVendeurAction(_etatPrecedent: EtatFormula
 export async function enregistrerEstimationProspectVendeurAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
     if (!id) notFound();
-    await chargerProspectPourJalon(id);
+    await chargerProspectPourJalon(id, workspaceId);
 
     const estimationProposeeCentimes = parseMontantCentimes(String(formData.get("estimationProposeeCentimes") ?? ""));
     if (estimationProposeeCentimes === undefined || estimationProposeeCentimes <= 0) {
@@ -170,7 +176,7 @@ export async function enregistrerEstimationProspectVendeurAction(_etatPrecedent:
     const estimationProposeeLe = parseDateOptionnelle(formData.get("estimationProposeeLe"));
     if (!estimationProposeeLe) throw new ErreurSaisie("La date de l'estimation est obligatoire.");
 
-    await enregistrerEstimationProspectVendeur(id, estimationProposeeCentimes, estimationProposeeLe);
+    await enregistrerEstimationProspectVendeur(id, estimationProposeeCentimes, estimationProposeeLe, workspaceId);
     redirect(`/prospects-vendeurs/${id}`);
   });
 }
@@ -178,14 +184,15 @@ export async function enregistrerEstimationProspectVendeurAction(_etatPrecedent:
 export async function planifierRdvEstimationProspectVendeurAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
     if (!id) notFound();
-    await chargerProspectPourJalon(id);
+    await chargerProspectPourJalon(id, workspaceId);
 
     const rdvEstimationPrevuLe = parseDateHeure(formData.get("rdvEstimationPrevuLe"));
     if (!rdvEstimationPrevuLe) throw new ErreurSaisie("La date et l'heure du rendez-vous sont obligatoires.");
 
-    await planifierRdvEstimationProspectVendeur(id, rdvEstimationPrevuLe);
+    await planifierRdvEstimationProspectVendeur(id, rdvEstimationPrevuLe, workspaceId);
     redirect(`/prospects-vendeurs/${id}`);
   });
 }
@@ -197,7 +204,7 @@ export async function marquerRdvEstimationRealiseProspectVendeurAction(_etatPrec
     const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
     if (!id) notFound();
-    const prospectAvant = await chargerProspectPourJalon(id);
+    const prospectAvant = await chargerProspectPourJalon(id, workspaceId);
 
     const rdvEstimationRealiseLe = parseDateHeure(formData.get("rdvEstimationRealiseLe"));
     if (!rdvEstimationRealiseLe) throw new ErreurSaisie("La date et l'heure du rendez-vous réalisé sont obligatoires.");
@@ -220,7 +227,7 @@ export async function marquerRdvEstimationRealiseProspectVendeurAction(_etatPrec
     // toujours une correction de date, qui ne doit jamais réémettre l'événement).
     const estTransitionReelle = prospectAvant.rdvEstimationRealiseLe === undefined;
     const idsExecutionsATraiter = await getDb().transaction(async (tx) => {
-      await marquerRdvEstimationRealiseProspectVendeur(id, rdvEstimationRealiseLe, tx);
+      await marquerRdvEstimationRealiseProspectVendeur(id, rdvEstimationRealiseLe, workspaceId, tx);
       if (!estTransitionReelle) return [];
       const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
         { typeEvenement: "rdv_estimation_realise", prospectVendeurId: id },
@@ -238,10 +245,11 @@ export async function marquerRdvEstimationRealiseProspectVendeurAction(_etatPrec
 export async function proposerMandatProspectVendeurAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
     if (!id) notFound();
-    await chargerProspectPourJalon(id);
-    await proposerMandatProspectVendeur(id);
+    await chargerProspectPourJalon(id, workspaceId);
+    await proposerMandatProspectVendeur(id, workspaceId);
     redirect(`/prospects-vendeurs/${id}`);
   });
 }
@@ -278,10 +286,11 @@ export async function signerMandatProspectVendeurAction(_etatPrecedent: EtatForm
 export async function marquerProspectVendeurPerduAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
     if (!id) notFound();
 
-    const prospect = await getProspectVendeurById(id);
+    const prospect = await getProspectVendeurDuWorkspace(id, workspaceId);
     if (!prospect) notFound();
     if (deriverStatutProspectVendeur(prospect) === "mandat_signe") {
       throw new ErreurSaisie("Le mandat est déjà signé — impossible de marquer ce prospect comme perdu.");
@@ -292,25 +301,27 @@ export async function marquerProspectVendeurPerduAction(_etatPrecedent: EtatForm
     const datePerte = parseDateOptionnelle(formData.get("datePerte"));
     if (!datePerte) throw new ErreurSaisie("La date de perte est obligatoire.");
 
-    await marquerProspectVendeurPerdu(id, motifPerte, datePerte);
+    await marquerProspectVendeurPerdu(id, motifPerte, datePerte, workspaceId);
     redirect(`/prospects-vendeurs/${id}`);
   });
 }
 
 export async function archiverProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
-  const prospect = await archiverProspectVendeur(id);
+  const prospect = await archiverProspectVendeur(id, workspaceId);
   if (!prospect) notFound();
   redirect(`/prospects-vendeurs/${id}`);
 }
 
 export async function desarchiverProspectVendeurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
-  const prospect = await desarchiverProspectVendeur(id);
+  const prospect = await desarchiverProspectVendeur(id, workspaceId);
   if (!prospect) notFound();
   redirect(`/prospects-vendeurs/${id}`);
 }
@@ -320,6 +331,7 @@ export async function desarchiverProspectVendeurAction(formData: FormData): Prom
 export async function ajouterNoteProspectVendeurAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
+    const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
     if (!id) notFound();
 
@@ -328,7 +340,10 @@ export async function ajouterNoteProspectVendeurAction(_etatPrecedent: EtatFormu
     const contenu = String(formData.get("contenu") ?? "").trim();
     if (!contenu) throw new ErreurSaisie("Le contenu de la note ne peut pas être vide.");
 
-    await ajouterNoteProspectVendeur(id, type, contenu);
+    // Hors périmètre : aucune note, et surtout aucun `dernier_contact_le` avancé — `notFound()`,
+    // comme pour un prospect qui n'existe pas.
+    const note = await ajouterNoteProspectVendeur(id, type, contenu, workspaceId);
+    if (!note) notFound();
     redirect(`/prospects-vendeurs/${id}`);
   });
 }

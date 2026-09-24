@@ -271,7 +271,7 @@ describe("synchroniserCompatibilitesPourAcquereur — symétrie et secteurs (ADR
     const acquereur = await creerAcquereurDeTest("T12", { budgetMax: 400000 });
 
     // Secteur non correspondant : le critère géographique est incompatible → global incompatible.
-    await ajouterSecteurRecherche(acquereur.id, { citycode: "75056", nom: "Paris", codePostal: "75001", contexte: "" });
+    await ajouterSecteurRecherche(acquereur.id, { citycode: "75056", nom: "Paris", codePostal: "75001", contexte: "" }, WORKSPACE_TEST);
     await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("incompatible");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(0);
@@ -282,19 +282,19 @@ describe("synchroniserCompatibilitesPourAcquereur — symétrie et secteurs (ADR
       nom: "Houilles",
       codePostal: "78800",
       contexte: "",
-    });
+    }, WORKSPACE_TEST);
     await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.cycleCompatibilite).toBe(1);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1);
 
     // Suppression du secteur correspondant : redevient incompatible (le secteur Paris reste seul).
-    await supprimerSecteurRecherche(secteurCorrespondant.id, acquereur.id);
+    await supprimerSecteurRecherche(secteurCorrespondant.id, acquereur.id, WORKSPACE_TEST);
     await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("incompatible");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1); // toujours celui de l'entrée
 
     // Réajout : nouveau cycle, nouvel événement.
-    await ajouterSecteurRecherche(acquereur.id, { citycode: "78311", nom: "Houilles", codePostal: "78800", contexte: "" });
+    await ajouterSecteurRecherche(acquereur.id, { citycode: "78311", nom: "Houilles", codePostal: "78800", contexte: "" }, WORKSPACE_TEST);
     await synchroniserCompatibilitesPourAcquereur(acquereur.id, WORKSPACE_TEST);
     const etatFinal = await lireEtat(bien.id, acquereur.id);
     expect(etatFinal?.cycleCompatibilite).toBe(2);

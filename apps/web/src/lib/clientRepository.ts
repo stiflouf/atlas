@@ -142,6 +142,36 @@ export async function listerAcquereursActifsDuWorkspace(workspaceId: string, exe
   return appliquerCriteresEffectifs(lignes.map(ligneVersAcquereur), executeur);
 }
 
+// Acquéreur inexistant ET acquéreur d'un autre workspace : même erreur, indistinguables (ADR-054),
+// sur le modèle d'ErreurBienHorsPerimetre. L'appelant la traduit en « introuvable ».
+export class ErreurAcquereurHorsPerimetre extends Error {
+  constructor() {
+    super("Acquéreur introuvable.");
+    this.name = "ErreurAcquereurHorsPerimetre";
+  }
+}
+
+// WORKSPACE_SCOPING_V2A (ADR-054) — preuve d'appartenance pour les FEUILLES du dossier acquéreur
+// (secteurs de recherche, repères relationnels) : ces tables n'ont pas de `workspace_id` propre et
+// ne peuvent donc pas porter le périmètre dans leur propre `WHERE`. Le verrou le porte à leur
+// place, sur la racine, DANS la transaction appelante — même primitive que `verrouillerBien` pour
+// les galeries photo. C'est ce qui ferme la fenêtre entre la vérification et l'écriture : la ligne
+// prouvée est la ligne verrouillée, et une racine hors périmètre ne verrouille rien, donc rien de
+// ce qui suit ne s'engage.
+export async function verrouillerAcquereurDuWorkspace(
+  executeur: Executeur,
+  acquereurId: string,
+  workspaceId: string
+): Promise<void> {
+  if (!UUID_REGEX.test(acquereurId)) throw new ErreurAcquereurHorsPerimetre();
+  const [ligne] = await executeur
+    .select({ id: acquereursTable.id })
+    .from(acquereursTable)
+    .where(and(eq(acquereursTable.id, acquereurId), eq(acquereursTable.workspaceId, workspaceId)))
+    .for("update");
+  if (!ligne) throw new ErreurAcquereurHorsPerimetre();
+}
+
 export async function getAcquereurDuWorkspace(id: string, workspaceId: string, executeur: Executeur = getDb()): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur

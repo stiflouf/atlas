@@ -222,7 +222,7 @@ describe("règle retour_vendeur_apres_visite — aucun fallback (ADR-042)", () =
     const { bien, prospect } = await creerBienAvecVendeurDeTest("ARCHVENDEUR1");
     const acquereur = await creerAcquereurDeTest("ARCHVENDEUR1");
     const cr = await creerCompteRenduDeTest(bien.id, acquereur.id, "interesse");
-    await archiverProspectVendeur(prospect.id);
+    await archiverProspectVendeur(prospect.id, WORKSPACE_TEST);
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenementDeTest(cr.id));
     expect(champs).toBeUndefined();

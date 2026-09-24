@@ -348,12 +348,16 @@ export async function modifierProspectVendeur(
 // Ne touchent JAMAIS dernier_contact_le : bookkeeping interne, pas nécessairement une interaction
 // vécue à cet instant (voir marquerRdvEstimationRealiseProspectVendeur pour la seule exception
 // de jalon qui en est une).
-export async function qualifierProspectVendeur(id: string): Promise<ProspectVendeur | undefined> {
+// WORKSPACE_SCOPING_V2A (ADR-054) — `prospects_vendeurs` est une table RACINE : le périmètre
+// rejoint simplement le `WHERE`, comme pour les writers d'état de `biens` (V1). Hors workspace,
+// aucune ligne n'est touchée et l'appelant lit ce `undefined` comme un « introuvable ». La garde
+// vit dans le writer, pas seulement dans l'action : ces fonctions restent appelables ailleurs.
+export async function qualifierProspectVendeur(id: string, workspaceId: string): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(prospectsVendeursTable)
     .set({ qualifieLe: new Date(), modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
@@ -363,13 +367,14 @@ export async function qualifierProspectVendeur(id: string): Promise<ProspectVend
 export async function enregistrerEstimationProspectVendeur(
   id: string,
   estimationProposeeCentimes: number,
-  estimationProposeeLe: string
+  estimationProposeeLe: string,
+  workspaceId: string
 ): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(prospectsVendeursTable)
     .set({ estimationProposeeCentimes, estimationProposeeLe, modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
@@ -378,13 +383,14 @@ export async function enregistrerEstimationProspectVendeur(
 // correction n° 3).
 export async function planifierRdvEstimationProspectVendeur(
   id: string,
-  rdvEstimationPrevuLe: Date
+  rdvEstimationPrevuLe: Date,
+  workspaceId: string
 ): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(prospectsVendeursTable)
     .set({ rdvEstimationPrevuLe, modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
@@ -398,23 +404,24 @@ export async function planifierRdvEstimationProspectVendeur(
 export async function marquerRdvEstimationRealiseProspectVendeur(
   id: string,
   rdvEstimationRealiseLe: Date,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(prospectsVendeursTable)
     .set({ rdvEstimationRealiseLe, dernierContactLe: new Date(), modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
 
-export async function proposerMandatProspectVendeur(id: string): Promise<ProspectVendeur | undefined> {
+export async function proposerMandatProspectVendeur(id: string, workspaceId: string): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(prospectsVendeursTable)
     .set({ mandatProposeLe: new Date(), modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
@@ -537,38 +544,41 @@ export async function signerMandatProspectVendeur(
 
 // motifPerte/datePerte posés atomiquement, même principe que compromis.motifAnnulation/
 // dateAnnulation (ADR-020).
+// Périmètre dans le `WHERE` : l'état PERDU est terminal (plus aucun jalon possible ensuite), il ne
+// doit en aucun cas pouvoir être posé depuis un autre workspace.
 export async function marquerProspectVendeurPerdu(
   id: string,
   motifPerte: MotifPerteProspectVendeur,
-  datePerte: string
+  datePerte: string,
+  workspaceId: string
 ): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(prospectsVendeursTable)
     .set({ motifPerte, datePerte, modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
 
 // Gestion administrative de la fiche (ADR-012/ADR-027, correction n° 5) — jamais un résultat
 // commercial, orthogonal au statut dérivé.
-export async function archiverProspectVendeur(id: string): Promise<ProspectVendeur | undefined> {
+export async function archiverProspectVendeur(id: string, workspaceId: string): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(prospectsVendeursTable)
     .set({ archiveLe: new Date(), modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }
 
-export async function desarchiverProspectVendeur(id: string): Promise<ProspectVendeur | undefined> {
+export async function desarchiverProspectVendeur(id: string, workspaceId: string): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(prospectsVendeursTable)
     .set({ archiveLe: null, modifieLe: new Date() })
-    .where(eq(prospectsVendeursTable.id, id))
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersProspectVendeur(ligne) : undefined;
 }

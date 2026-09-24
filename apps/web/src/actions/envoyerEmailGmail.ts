@@ -87,11 +87,15 @@ async function enregistrerFaitCanoniqueSiPertinent(
 async function enregistrerInteractionSiPertinent(
   destinataireType: string | undefined,
   destinataireId: string | undefined,
-  objet: string
+  objet: string,
+  workspaceId: string
 ): Promise<void> {
   if (destinataireType !== "prospectVendeur" || !destinataireId) return;
   try {
-    await ajouterNoteProspectVendeur(destinataireId, "email", `Email envoyé — Objet : ${objet}`);
+    // WORKSPACE_SCOPING_V2A — le destinataire est prouvé dans le périmètre de l'envoi ; hors
+    // périmètre, aucune note n'est écrite (l'envoi lui-même reste un succès, comme pour toute
+    // défaillance de cette écriture secondaire).
+    await ajouterNoteProspectVendeur(destinataireId, "email", `Email envoyé — Objet : ${objet}`, workspaceId);
   } catch (erreur) {
     console.error("[envoi-email] échec de l'enregistrement de l'interaction ADR-027 :", erreur);
   }
@@ -196,7 +200,7 @@ export async function envoyerEmailGmailAction(
         workspaceId
       );
     }
-    await enregistrerInteractionSiPertinent(destinataireType, destinataireId, objet);
+    await enregistrerInteractionSiPertinent(destinataireType, destinataireId, objet, workspaceId);
     return { statut: "envoye" };
   }
 

@@ -144,7 +144,7 @@ describe("/clients/[id] — Fiche Acquéreur Premium", () => {
       nom: "Lyon 1er Arrondissement",
       codePostal: "69001",
       contexte: "69, Rhône, Auvergne-Rhône-Alpes",
-    });
+    }, WORKSPACE_TEST);
     const bien = await bienDeTest("MATCH", {
       prix: 420000,
       pieces: 4,

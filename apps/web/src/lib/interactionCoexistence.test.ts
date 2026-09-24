@@ -60,11 +60,12 @@ describe("ADR-055 §G — les workflows historiques restent indépendants du mod
     idsProspects.push(prospect.id);
     expect(prospect.dernierContactLe).toBeUndefined();
 
-    const note = await ajouterNoteProspectVendeur(prospect.id, "appel", "Rappelé pour l'estimation.");
+    const note = await ajouterNoteProspectVendeur(prospect.id, "appel", "Rappelé pour l'estimation.", WORKSPACE_TEST);
 
     // Comportement historique STRICTEMENT inchangé : la note existe, avec son type, et
     // l'invariant d'ADR-027 §4 s'applique toujours.
-    expect(note.type).toBe("appel");
+    expect(note).toBeDefined();
+    expect(note!.type).toBe("appel");
     const relu = await getProspectVendeurById(prospect.id);
     expect(relu!.dernierContactLe, "une vraie interaction fait avancer dernier_contact_le").toBeDefined();
 
@@ -81,7 +82,7 @@ describe("ADR-055 §G — les workflows historiques restent indépendants du mod
     );
     idsProspects.push(prospect.id);
 
-    await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Penser à vérifier le DPE.");
+    await ajouterNoteProspectVendeur(prospect.id, "note_interne", "Penser à vérifier le DPE.", WORKSPACE_TEST);
 
     const relu = await getProspectVendeurById(prospect.id);
     expect(relu!.dernierContactLe, "une note interne n'est pas un contact").toBeUndefined();

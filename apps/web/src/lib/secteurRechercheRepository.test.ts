@@ -44,9 +44,9 @@ const HOUILLES = { citycode: "78311", nom: "Houilles", codePostal: "78800", cont
 const CARRIERES = { citycode: "78124", nom: "Carrières-sur-Seine", codePostal: "78420", contexte: "78, Yvelines" };
 
 describe("secteurRechercheRepository (intégration Postgres)", () => {
-  it("ajouterSecteurRecherche() persiste un secteur pour un acquéreur", async () => {
+  it("ajouterSecteurRecherche(WORKSPACE_TEST) persiste un secteur pour un acquéreur", async () => {
     const acquereur = await creerAcquereurDeTest("001");
-    const secteur = await ajouterSecteurRecherche(acquereur.id, HOUILLES);
+    const secteur = await ajouterSecteurRecherche(acquereur.id, HOUILLES, WORKSPACE_TEST);
     expect(secteur.acquereurId).toBe(acquereur.id);
     expect(secteur.codeInsee).toBe("78311");
     expect(secteur.nomCommune).toBe("Houilles");
@@ -56,8 +56,8 @@ describe("secteurRechercheRepository (intégration Postgres)", () => {
   it("listerSecteursPourAcquereur() retourne les secteurs de cet acquéreur uniquement", async () => {
     const acquereurA = await creerAcquereurDeTest("002a");
     const acquereurB = await creerAcquereurDeTest("002b");
-    await ajouterSecteurRecherche(acquereurA.id, HOUILLES);
-    await ajouterSecteurRecherche(acquereurB.id, CARRIERES);
+    await ajouterSecteurRecherche(acquereurA.id, HOUILLES, WORKSPACE_TEST);
+    await ajouterSecteurRecherche(acquereurB.id, CARRIERES, WORKSPACE_TEST);
 
     const secteursA = await listerSecteursPourAcquereur(acquereurA.id);
     expect(secteursA).toHaveLength(1);
@@ -66,8 +66,8 @@ describe("secteurRechercheRepository (intégration Postgres)", () => {
 
   it("un acquéreur peut avoir plusieurs secteurs", async () => {
     const acquereur = await creerAcquereurDeTest("003");
-    await ajouterSecteurRecherche(acquereur.id, HOUILLES);
-    await ajouterSecteurRecherche(acquereur.id, CARRIERES);
+    await ajouterSecteurRecherche(acquereur.id, HOUILLES, WORKSPACE_TEST);
+    await ajouterSecteurRecherche(acquereur.id, CARRIERES, WORKSPACE_TEST);
 
     const secteurs = await listerSecteursPourAcquereur(acquereur.id);
     expect(secteurs.map((s) => s.codeInsee).sort()).toEqual(["78124", "78311"]);
@@ -75,34 +75,34 @@ describe("secteurRechercheRepository (intégration Postgres)", () => {
 
   it("contrainte UNIQUE(acquereur_id, code_insee) : un doublon échoue", async () => {
     const acquereur = await creerAcquereurDeTest("004");
-    await ajouterSecteurRecherche(acquereur.id, HOUILLES);
-    await expect(ajouterSecteurRecherche(acquereur.id, HOUILLES)).rejects.toThrow();
+    await ajouterSecteurRecherche(acquereur.id, HOUILLES, WORKSPACE_TEST);
+    await expect(ajouterSecteurRecherche(acquereur.id, HOUILLES, WORKSPACE_TEST)).rejects.toThrow();
   });
 
   it("le même citycode reste ajoutable pour deux acquéreurs différents (unicité scoped par acquéreur)", async () => {
     const acquereurA = await creerAcquereurDeTest("005a");
     const acquereurB = await creerAcquereurDeTest("005b");
-    await ajouterSecteurRecherche(acquereurA.id, HOUILLES);
-    await expect(ajouterSecteurRecherche(acquereurB.id, HOUILLES)).resolves.toBeDefined();
+    await ajouterSecteurRecherche(acquereurA.id, HOUILLES, WORKSPACE_TEST);
+    await expect(ajouterSecteurRecherche(acquereurB.id, HOUILLES, WORKSPACE_TEST)).resolves.toBeDefined();
   });
 
-  it("supprimerSecteurRecherche() retire le secteur quand il appartient bien à l'acquéreur", async () => {
+  it("supprimerSecteurRecherche(WORKSPACE_TEST) retire le secteur quand il appartient bien à l'acquéreur", async () => {
     const acquereur = await creerAcquereurDeTest("006");
-    const secteur = await ajouterSecteurRecherche(acquereur.id, HOUILLES);
+    const secteur = await ajouterSecteurRecherche(acquereur.id, HOUILLES, WORKSPACE_TEST);
 
-    const supprime = await supprimerSecteurRecherche(secteur.id, acquereur.id);
+    const supprime = await supprimerSecteurRecherche(secteur.id, acquereur.id, WORKSPACE_TEST);
     expect(supprime?.id).toBe(secteur.id);
 
     const restants = await listerSecteursPourAcquereur(acquereur.id);
     expect(restants).toHaveLength(0);
   });
 
-  it("supprimerSecteurRecherche() ne retire jamais un secteur appartenant à un autre acquéreur (scoping tenant)", async () => {
+  it("supprimerSecteurRecherche(WORKSPACE_TEST) ne retire jamais un secteur appartenant à un autre acquéreur (scoping tenant)", async () => {
     const acquereurA = await creerAcquereurDeTest("007a");
     const acquereurB = await creerAcquereurDeTest("007b");
-    const secteurDeA = await ajouterSecteurRecherche(acquereurA.id, HOUILLES);
+    const secteurDeA = await ajouterSecteurRecherche(acquereurA.id, HOUILLES, WORKSPACE_TEST);
 
-    const resultat = await supprimerSecteurRecherche(secteurDeA.id, acquereurB.id);
+    const resultat = await supprimerSecteurRecherche(secteurDeA.id, acquereurB.id, WORKSPACE_TEST);
     expect(resultat).toBeUndefined();
 
     const secteursDeA = await listerSecteursPourAcquereur(acquereurA.id);
@@ -111,7 +111,7 @@ describe("secteurRechercheRepository (intégration Postgres)", () => {
 
   it("suppression de l'acquéreur (CASCADE) supprime ses secteurs — vérifie la FK ON DELETE CASCADE", async () => {
     const acquereur = await creerAcquereurDeTest("008");
-    await ajouterSecteurRecherche(acquereur.id, HOUILLES);
+    await ajouterSecteurRecherche(acquereur.id, HOUILLES, WORKSPACE_TEST);
 
     await getDb().delete(acquereursTable).where(eq(acquereursTable.id, acquereur.id));
     idsAcquereursCrees.splice(idsAcquereursCrees.indexOf(acquereur.id), 1);
@@ -124,8 +124,8 @@ describe("secteurRechercheRepository (intégration Postgres)", () => {
     const acquereurA = await creerAcquereurDeTest("009a");
     const acquereurB = await creerAcquereurDeTest("009b");
     const acquereurC = await creerAcquereurDeTest("009c");
-    await ajouterSecteurRecherche(acquereurA.id, HOUILLES);
-    await ajouterSecteurRecherche(acquereurB.id, CARRIERES);
+    await ajouterSecteurRecherche(acquereurA.id, HOUILLES, WORKSPACE_TEST);
+    await ajouterSecteurRecherche(acquereurB.id, CARRIERES, WORKSPACE_TEST);
     // acquereurC n'a aucun secteur.
 
     const groupe = await listerSecteursPourAcquereurs([acquereurA.id, acquereurB.id, acquereurC.id]);

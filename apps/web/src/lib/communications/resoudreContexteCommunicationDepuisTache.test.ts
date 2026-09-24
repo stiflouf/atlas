@@ -160,7 +160,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
   it("tâche -> prospectVendeur : résolution directe, faits incluent le rdv d'estimation réalisé", async () => {
     const prospect = await creerProspectVendeur({ nom: "Dupont" }, WORKSPACE_TEST);
     idsProspects.push(prospect.id);
-    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-03-01T10:00:00.000Z"));
+    await marquerRdvEstimationRealiseProspectVendeur(prospect.id, new Date("2026-03-01T10:00:00.000Z"), WORKSPACE_TEST);
 
     const tache = await creerTache({
       titre: "Relancer Mme Dupont",
