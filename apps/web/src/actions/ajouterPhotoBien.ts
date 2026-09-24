@@ -1,6 +1,6 @@
 "use server";
 
-import { getBienById } from "@/lib/bienRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
 import { ErreurLimitePhotosAtteinte, ajouterPhotoBien } from "@/lib/photoBienRepository";
 import {
   ecrirePhotoOptimisee,
@@ -12,6 +12,7 @@ import {
 import { ErreurPhotoInvalide, traiterPhotoBien } from "@/lib/traitementPhotoBien";
 import { TAILLE_MAX_PHOTO_OCTETS, type PhotoBien } from "@/types/photoBien";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 export type ResultatAjoutPhotoBien = { succes: true; photo: PhotoBien } | { succes: false; erreur: string };
 
@@ -24,8 +25,12 @@ export type ResultatAjoutPhotoBien = { succes: true; photo: PhotoBien } | { succ
 // écriture) → clé opaque → écriture original → écriture optimisée → INSERT DB. Une incohérence
 // résiduelle se résout toujours en fichier(s) orphelin(s), jamais en ligne DB pointant vers un
 // fichier absent.
+// WORKSPACE_SCOPING_V1 (ADR-054) — le bien est prouvé DANS le périmètre AVANT toute écriture
+// disque : un bien d'un autre workspace ne laisse ni original, ni WebP, ni ligne. « Introuvable »
+// couvre les deux cas (inexistant, hors périmètre) sans les distinguer.
 export async function ajouterPhotoBienAction(formData: FormData): Promise<ResultatAjoutPhotoBien> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
 
   const bienId = String(formData.get("bienId") ?? "");
   const fichier = formData.get("fichier");
@@ -38,7 +43,7 @@ export async function ajouterPhotoBienAction(formData: FormData): Promise<Result
     return { succes: false, erreur: "Le fichier dépasse la taille maximale autorisée (12 Mo)." };
   }
 
-  const bien = await getBienById(bienId);
+  const bien = await getBienDuWorkspace(bienId, workspaceId);
   if (!bien) return { succes: false, erreur: "Bien introuvable." };
   if (bien.archiveLe) return { succes: false, erreur: "Impossible d'ajouter une photo sur un bien archivé." };
 
@@ -72,7 +77,7 @@ export async function ajouterPhotoBienAction(formData: FormData): Promise<Result
       typeMimeOriginal: traitement.typeMimeOriginal,
       tailleOctetsOriginal: fichier.size,
       hashSha256: traitement.hashSha256,
-    });
+    }, workspaceId);
     return { succes: true, photo };
   } catch (erreur) {
     await supprimerPhotoOriginale(cleStockage).catch((e) =>

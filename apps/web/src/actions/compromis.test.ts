@@ -124,7 +124,7 @@ function formData(champs: Record<string, string>): FormData {
 describe("ajouterCompromisAction — garde-fous", () => {
   it("refuse explicitement (throw) un compromis sur un bien archivé", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("BIEN-ARCHIVE");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
@@ -142,7 +142,7 @@ describe("ajouterCompromisAction — garde-fous", () => {
 
   it("refuse explicitement (throw) un compromis pour un acquéreur archivé", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("ACQ-ARCHIVE");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     await expect(
       ajouterCompromisAction(ETAT_FORMULAIRE_INITIAL,
@@ -401,7 +401,7 @@ describe("changerStatutCompromisAction — garde-fous", () => {
       dateSignature: "2026-08-01",
     });
     idsCompromisCrees.push(compromisCree.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       changerStatutCompromisAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, statut: "realise", dateActeReelle: "2026-09-01" }))
@@ -573,7 +573,7 @@ describe("statut commercial du Bien — priorité au modèle structuré (ADR-046
     // Simule exactement le vieux parcours indépendant (src/actions/statutCommercialBien.ts,
     // annulerCompromisAction) : efface le jalon legacy SANS jamais toucher la ligne compromis
     // structurée elle-même (les deux mécanismes sont totalement disjoints).
-    await annulerCompromisJalonLegacy(bien.id);
+    await annulerCompromisJalonLegacy(bien.id, WORKSPACE_TEST);
     const bienApres = await getBienById(bien.id);
     expect(bienApres?.compromisSigneLe).toBeUndefined();
 
@@ -594,7 +594,7 @@ describe("statut commercial du Bien — priorité au modèle structuré (ADR-046
     // ne pose pas compromisSigneLe — reproduit explicitement l'état laissé par le vrai parcours
     // ajouterCompromisAction (qui pose ce jalon dans la même transaction, ADR-016).
     const { marquerCompromisSigne } = await import("@/lib/bienRepository");
-    await marquerCompromisSigne(bien.id);
+    await marquerCompromisSigne(bien.id, WORKSPACE_TEST);
     const bienAvantAnnulation = await getBienById(bien.id);
     expect(bienAvantAnnulation?.compromisSigneLe).toBeDefined();
 
@@ -702,7 +702,7 @@ describe("modifierDateActeAction — garde-fous (ADR-046)", () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("DATEACTE-BIEN-ARCHIVE");
     const compromisCree = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-08-05" });
     idsCompromisCrees.push(compromisCree.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       modifierDateActeAction(ETAT_FORMULAIRE_INITIAL, formData({ compromisId: compromisCree.id, dateActe: "2026-12-01" }))

@@ -122,7 +122,7 @@ describe("/visites/nouvelle", () => {
 
   it("bien archivé ou `retour` hors enum : jamais préfixé, jamais une redirection arbitraire", async () => {
     const bien = await unBien("ARCHIVE");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const html = await rendre({ bienId: bien.id, retour: "https://evil.example" });
 

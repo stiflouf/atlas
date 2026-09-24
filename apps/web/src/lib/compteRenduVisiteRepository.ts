@@ -115,7 +115,12 @@ export async function enregistrerCompteRenduVisite(
 
 export type ResultatCreationCompteRendu =
   | { statut: "cree"; compteRendu: CompteRenduVisite; visite: Visite | undefined; idsExecutionsATraiter: string[] }
-  | { statut: "visite_deja_finalisee" };
+  | { statut: "visite_deja_finalisee" }
+  // WORKSPACE_SCOPING_V1 — une Visite a été DÉSIGNÉE mais ne se résout pas dans ce périmètre (id
+  // inconnu, autre workspace, ou couple bien/acquéreur qui ne correspond pas). Avant, ce cas
+  // enregistrait quand même un compte rendu « sans lien » avec les ids bruts soumis : c'était le
+  // seul chemin d'écriture cross-workspace du domaine Visite. Refus typé, rien n'est écrit.
+  | { statut: "visite_hors_perimetre" };
 
 // Writer central (§16/§17/§18 du brief) : la création du compte rendu ET la transition éventuelle
 // planifiee → realisee sont UNE seule transaction, sous le MÊME verrou que toute autre transition
@@ -140,12 +145,15 @@ export async function creerCompteRenduEtRealiserVisite(
 
     if (input.visiteId) {
       const verrou = await verrouillerVisite(input.visiteId, workspaceId, tx);
-      if (verrou.statut === "verrouille" && verrou.ligne.bienId === input.bienId && verrou.ligne.acquereurId === input.acquereurId) {
-        if (verrou.ligne.statut !== "planifiee") return { statut: "visite_deja_finalisee" };
-        visiteValide = verrou.ligne;
+      if (verrou.statut !== "verrouille" || verrou.ligne.bienId !== input.bienId || verrou.ligne.acquereurId !== input.acquereurId) {
+        // WORKSPACE_SCOPING_V1 — designer une Visite qu'on ne peut pas prouver dans ce périmètre
+        // n'est plus enregistré « sans lien » : c'était le dernier chemin par lequel un compte rendu
+        // pouvait naître d'ids bruts venus d'un autre workspace. Ne PAS soumettre de `visiteId` du
+        // tout (compte rendu hors cycle ADR-040) reste parfaitement valide, et inchangé.
+        return { statut: "visite_hors_perimetre" };
       }
-      // introuvable (autre workspace/id inconnu) ou bien/acquéreur non correspondant : garde
-      // défensive silencieuse inchangée (ADR-040) — le compte rendu s'enregistre sans lien.
+      if (verrou.ligne.statut !== "planifiee") return { statut: "visite_deja_finalisee" };
+      visiteValide = verrou.ligne;
     }
 
     const compteRendu = await enregistrerCompteRenduVisite({ ...input, visiteId: visiteValide?.id }, tx);

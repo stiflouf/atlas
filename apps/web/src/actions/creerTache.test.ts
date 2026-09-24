@@ -80,7 +80,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
       description: "",
     }, WORKSPACE_TEST);
     idsBiensCrees.push(bien.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       creerTacheAction(ETAT_FORMULAIRE_INITIAL,
@@ -108,7 +108,7 @@ describe("creerTacheAction — garde-fou entité archivée", () => {
       datePremiereContact: "2026-01-01",
     }, WORKSPACE_TEST);
     idsAcquereursCrees.push(acquereur.id);
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     await expect(
       creerTacheAction(ETAT_FORMULAIRE_INITIAL,

@@ -106,9 +106,9 @@ describe("clientRepository (intégration Postgres)", () => {
   });
 
   it("archiverAcquereur()/desarchiverAcquereur() retournent undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(archiverAcquereur("client-001")).resolves.toBeUndefined();
-    await expect(archiverAcquereur("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
-    await expect(desarchiverAcquereur("client-001")).resolves.toBeUndefined();
+    await expect(archiverAcquereur("client-001", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(archiverAcquereur("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(desarchiverAcquereur("client-001", WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("archiver un acquéreur : posé archiveLe, exclu de listerClients(), présent dans listerClientsArchives(), toujours résolu par getClientById()", async () => {
@@ -116,7 +116,7 @@ describe("clientRepository (intégration Postgres)", () => {
     idsCrees.push(cree.id);
     expect(cree.archiveLe).toBeUndefined();
 
-    const archive = await archiverAcquereur(cree.id);
+    const archive = await archiverAcquereur(cree.id, WORKSPACE_TEST);
     expect(archive?.archiveLe).toBeDefined();
 
     const actifs = await listerClients();
@@ -133,9 +133,9 @@ describe("clientRepository (intégration Postgres)", () => {
   it("désarchiver un acquéreur : archiveLe redevient undefined, réapparaît dans listerClients()", async () => {
     const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive2" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
-    await archiverAcquereur(cree.id);
+    await archiverAcquereur(cree.id, WORKSPACE_TEST);
 
-    const desarchive = await desarchiverAcquereur(cree.id);
+    const desarchive = await desarchiverAcquereur(cree.id, WORKSPACE_TEST);
     expect(desarchive?.archiveLe).toBeUndefined();
 
     const actifs = await listerClients();
@@ -145,7 +145,7 @@ describe("clientRepository (intégration Postgres)", () => {
   it("le comptage de bascule démo->réel inclut les acquéreurs archivés (pas de repli mock)", async () => {
     const cree = await creerAcquereur(acquereurTest({ nom: "[test réel] Archive3" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
-    await archiverAcquereur(cree.id);
+    await archiverAcquereur(cree.id, WORKSPACE_TEST);
 
     const actifs = await listerClients();
     expect(actifs.some((c) => c.id === "client-001")).toBe(false);

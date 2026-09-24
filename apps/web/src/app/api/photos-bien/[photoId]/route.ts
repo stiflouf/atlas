@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { getPhotoBien } from "@/lib/photoBienRepository";
+import { getPhotoBienDuWorkspace } from "@/lib/photoBienRepository";
 import { ErreurStockageDocumentsIndisponible, lirePhotoOptimisee } from "@/lib/stockagePhotosBien";
 import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 type RouteProps = { params: Promise<{ photoId: string }> };
 
@@ -17,12 +18,23 @@ type RouteProps = { params: Promise<{ photoId: string }> };
 // révoquée — un cache navigateur d'un an contournerait la revalidation. L'authentification est
 // vérifiée AVANT toute réponse conditionnelle 304, pour que le navigateur repasse par
 // l'autorisation serveur à chaque requête même en réutilisant les octets déjà en cache local.
+// WORKSPACE_SCOPING_V1 (ADR-054) — même ordre contraignant que /api/documents/[id] : session →
+// workspace → métadonnée prouvée par la jointure vers `biens` → seulement ensuite le fichier. Une
+// photo d'un autre périmètre est introuvable, et son fichier n'est jamais ouvert.
 export async function GET(request: Request, { params }: RouteProps) {
   const refus = await refuserSiSessionAtlasAbsente();
   if (refus) return refus;
 
   const { photoId } = await params;
-  const photo = await getPhotoBien(photoId);
+
+  let workspaceId: string;
+  try {
+    workspaceId = await exigerWorkspaceCourant();
+  } catch {
+    return NextResponse.json({ erreur: "Non autorisé." }, { status: 401 });
+  }
+
+  const photo = await getPhotoBienDuWorkspace(photoId, workspaceId);
   if (!photo) return new NextResponse(null, { status: 404 });
 
   let contenu: Buffer | undefined;

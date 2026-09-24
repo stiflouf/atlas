@@ -117,7 +117,7 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     expect((await lireEtat(bien.id, acquereur.id))?.cycleCompatibilite).toBe(0);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(0);
 
-    await modifierBien(bien.id, { ...donneesBase(bien), prix: 350000 }); // <= budgetMax → compatible
+    await modifierBien(bien.id, { ...donneesBase(bien), prix: 350000 }, WORKSPACE_TEST); // <= budgetMax → compatible
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     const etat = await lireEtat(bien.id, acquereur.id);
@@ -138,7 +138,7 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("a_verifier");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(0);
 
-    await modifierBien(bien.id, { ...donneesBase(bien), parking: true }); // devient compatible
+    await modifierBien(bien.id, { ...donneesBase(bien), parking: true }, WORKSPACE_TEST); // devient compatible
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     const etat = await lireEtat(bien.id, acquereur.id);
     expect(etat?.dernierStatut).toBe("compatible");
@@ -165,7 +165,7 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const bien = await creerBienDeTest("T4", { prix: 300000 });
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // compatible, cycle 1
 
-    await modifierBien(bien.id, { ...donneesBase(bien), prix: 500000 }); // devient incompatible
+    await modifierBien(bien.id, { ...donneesBase(bien), prix: 500000 }, WORKSPACE_TEST); // devient incompatible
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
     const etat = await lireEtat(bien.id, acquereur.id);
@@ -179,7 +179,7 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const bien = await creerBienDeTest("T5", { prix: 300000, parking: true }); // compatible dès le départ
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
 
-    await modifierBien(bien.id, { ...donneesBase(bien), parking: undefined }); // parking devient inconnu → a_verifier
+    await modifierBien(bien.id, { ...donneesBase(bien), parking: undefined }, WORKSPACE_TEST); // parking devient inconnu → a_verifier
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect((await lireEtat(bien.id, acquereur.id))?.dernierStatut).toBe("a_verifier");
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1); // toujours celui de l'entrée
@@ -191,11 +191,11 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // cycle 1
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1);
 
-    await modifierBien(bien.id, { ...donneesBase(bien), prix: 500000 });
+    await modifierBien(bien.id, { ...donneesBase(bien), prix: 500000 }, WORKSPACE_TEST);
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST);
     expect(await lireEvenements(bien.id, acquereur.id)).toHaveLength(1); // toujours 1, aucun événement de sortie
 
-    await modifierBien(bien.id, { ...donneesBase(bien), prix: 300000 });
+    await modifierBien(bien.id, { ...donneesBase(bien), prix: 300000 }, WORKSPACE_TEST);
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // cycle 2
 
     const etat = await lireEtat(bien.id, acquereur.id);
@@ -229,7 +229,7 @@ describe("synchroniserCompatibilitesPourBien — matrice de transitions", () => 
     const bien = await creerBienDeTest("T9", { prix: 500000 });
     await synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST); // incompatible, cycle 0
 
-    await modifierBien(bien.id, { ...donneesBase(bien), prix: 300000 }); // devient compatible
+    await modifierBien(bien.id, { ...donneesBase(bien), prix: 300000 }, WORKSPACE_TEST); // devient compatible
     await Promise.all([synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST), synchroniserCompatibilitesPourBien(bien.id, WORKSPACE_TEST)]);
 
     const etat = await lireEtat(bien.id, acquereur.id);

@@ -70,7 +70,7 @@ describe("/clients (ADR-048)", () => {
   it("archives=1 continue de fonctionner seul (rétrocompatibilité du lien existant)", async () => {
     const archive = await creerAcquereur(acquereurTest("ARCHIVE-COMPAT"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
-    await archiverAcquereur(archive.id);
+    await archiverAcquereur(archive.id, WORKSPACE_TEST);
 
     const element = await ClientsPage({ searchParams: Promise.resolve({ archives: "1" }) });
     const html = renderToStaticMarkup(element);

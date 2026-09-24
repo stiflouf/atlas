@@ -159,7 +159,7 @@ describe("ajouterSecteurRechercheAction — validation serveur obligatoire (ADR-
 
   it("rejette l'ajout à un acquéreur archivé", async () => {
     const acquereur = await creerAcquereurDeTest("004");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
     vi.stubGlobal("fetch", vi.fn(async () => reponseIgn("78311", "Houilles")));
 
     const resultat = await ajouterSecteurRechercheAction(

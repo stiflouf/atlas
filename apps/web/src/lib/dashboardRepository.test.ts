@@ -169,7 +169,7 @@ describe("dashboardRepository — chargerResultats", () => {
     });
     idsCompromisCrees.push(c.id);
     await marquerCompromisRealise(c.id, "2026-08-15");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const apres = await chargerResultats();
 
@@ -221,7 +221,7 @@ describe("dashboardRepository — chargerPipeline", () => {
       dateSignature: "2026-08-01",
     });
     idsCompromisCrees.push(c.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const apres = await chargerPipeline();
 
@@ -296,7 +296,7 @@ describe("dashboardRepository — chargerPipeline", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(o.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const apres = await chargerPipeline();
 
@@ -705,7 +705,7 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
     idsCompromisCrees.push(c.id);
     const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 1000000 });
     idsRemunerationCrees.push(r.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const apres = await chargerRemuneration();
 
@@ -768,7 +768,7 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
     await marquerCompromisRealise(c.id, "2026-09-01");
     const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 800000 });
     idsRemunerationCrees.push(r.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const apres = await chargerRemuneration();
 
@@ -979,7 +979,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
         dateEncaissementPrevue: finAnnee,
       });
       idsRemunerationCrees.push(r.id);
-      await archiverBien(bien.id);
+      await archiverBien(bien.id, WORKSPACE_TEST);
 
       const apres = await chargerProjectionAnnuelle();
 
@@ -1084,7 +1084,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       idsRemunerationCrees.push(r.id);
 
       const avantArchivage = await chargerProjectionAnnuelle();
-      await archiverBien(bien.id);
+      await archiverBien(bien.id, WORKSPACE_TEST);
       const apresArchivage = await chargerProjectionAnnuelle();
 
       expect(apresArchivage.encaissementsAttendusDepassesCentimes).toBe(avantArchivage.encaissementsAttendusDepassesCentimes);

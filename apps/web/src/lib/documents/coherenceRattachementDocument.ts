@@ -1,5 +1,5 @@
 import { getCompromisById } from "@/lib/compromisRepository";
-import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
+import { getProspectVendeurDuWorkspace } from "@/lib/prospectVendeurRepository";
 
 export type CandidatRattachementsDocument = {
   bienId: string;
@@ -32,7 +32,9 @@ export async function validerCoherenceRattachementsDocument(
   }
 
   if (prospectVendeurId) {
-    const prospectVendeur = await getProspectVendeurById(prospectVendeurId);
+    // WORKSPACE_SCOPING_V1 — le prospect vendeur est une racine : il est résolu dans le périmètre,
+    // comme le compromis juste au-dessus.
+    const prospectVendeur = await getProspectVendeurDuWorkspace(prospectVendeurId, workspaceId);
     if (!prospectVendeur) throw new Error("Prospect vendeur introuvable pour ce rattachement.");
     if (prospectVendeur.bienId !== bienId) {
       throw new Error("Ce prospect vendeur n'est pas le vendeur ayant converti ce bien.");

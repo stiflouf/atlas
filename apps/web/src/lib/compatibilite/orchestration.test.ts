@@ -89,7 +89,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
   it("un acquéreur archivé n'apparaît jamais comme candidat dans évaluerCompatibiliteBien()", async () => {
     const bien = await creerBienDeTest("002");
     const acquereur = await creerAcquereurDeTest("002");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     const resultats = await evaluerCompatibiliteBien(bien.id);
     expect(resultats.some((r) => r.acquereurId === acquereur.id)).toBe(false);
@@ -98,7 +98,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
   it("un bien archivé n'apparaît jamais comme candidat dans évaluerCompatibiliteAcquereur()", async () => {
     const bien = await creerBienDeTest("003");
     const acquereur = await creerAcquereurDeTest("003");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const resultats = await evaluerCompatibiliteAcquereur(acquereur.id);
     expect(resultats.some((r) => r.bienId === bien.id)).toBe(false);
@@ -107,7 +107,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
   it("un bien archivé reste consultable comme source (fiche déjà archivée) — évalue quand même ses candidats actifs", async () => {
     const bien = await creerBienDeTest("004");
     const acquereur = await creerAcquereurDeTest("004");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const resultats = await evaluerCompatibiliteBien(bien.id);
     expect(resultats.some((r) => r.acquereurId === acquereur.id)).toBe(true);

@@ -191,7 +191,12 @@ describe("creerCompteRenduEtRealiserVisite — writer central (VISIT_NATIVE_LIFE
     expect((await getCompteRenduVisiteParVisiteId(cree.visite.id, WORKSPACE_TEST))?.id).toBe(resultat.compteRendu.id);
   });
 
-  it("visiteId d'un autre bien/acquéreur (incohérence défensive) : CR enregistré sans lien, visite non touchée", async () => {
+  // WORKSPACE_SCOPING_V1 — comportement CHANGÉ : désigner une Visite qu'on ne peut pas prouver
+  // (couple bien/acquéreur incohérent, ou visite d'un autre workspace) ne produit plus un compte
+  // rendu « sans lien » avec les ids bruts soumis. C'était le dernier chemin par lequel une
+  // écriture pouvait naître d'identifiants d'un autre périmètre. Ne soumettre AUCUN `visiteId`
+  // reste valide et inchangé (cas testé juste au-dessus).
+  it("visiteId d'un autre bien/acquéreur : refus typé, AUCUN compte rendu créé, visite non touchée", async () => {
     const { bien, acquereur } = await creerJeuDeTest("MISMATCH1");
     const { bien: autreBien } = await creerJeuDeTest("MISMATCH1-AUTRE");
     const cree = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-09-01" }, WORKSPACE_TEST);
@@ -201,10 +206,21 @@ describe("creerCompteRenduEtRealiserVisite — writer central (VISIT_NATIVE_LIFE
       { bienId: autreBien.id, acquereurId: acquereur.id, visiteId: cree.visite.id, dateVisite: "2026-09-01", retour: "R.", interet: "inconnu" },
       WORKSPACE_TEST
     );
-    expect(resultat.statut).toBe("cree");
-    if (resultat.statut !== "cree") return;
-    expect(resultat.compteRendu.visiteId).toBeUndefined();
-    expect(resultat.visite).toBeUndefined();
+    expect(resultat.statut).toBe("visite_hors_perimetre");
+    expect(await listerComptesRendusPourBien(autreBien.id, WORKSPACE_TEST)).toEqual([]);
+    expect((await getVisiteById(cree.visite.id, WORKSPACE_TEST))?.statut).toBe("planifiee");
+  });
+
+  it("visite d'un AUTRE workspace désignée : même refus, rien n'est écrit", async () => {
+    const { bien, acquereur } = await creerJeuDeTest("MISMATCH-WS");
+    const cree = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-09-01" }, WORKSPACE_TEST);
+    if (cree.statut !== "creee") throw new Error("création attendue");
+
+    const resultat = await creerCompteRenduEtRealiserVisite(
+      { bienId: bien.id, acquereurId: acquereur.id, visiteId: cree.visite.id, dateVisite: "2026-09-01", retour: "R.", interet: "inconnu" },
+      "un-autre-workspace-inexistant"
+    );
+    expect(resultat.statut).toBe("visite_hors_perimetre");
     expect((await getVisiteById(cree.visite.id, WORKSPACE_TEST))?.statut).toBe("planifiee");
   });
 

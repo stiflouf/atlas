@@ -82,7 +82,7 @@ describe("/biens (ADR-048)", () => {
   it("archives=1 continue de fonctionner seul (rétrocompatibilité du lien existant)", async () => {
     const archive = await creerBien(bienTest("ARCHIVE-COMPAT"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
-    await archiverBien(archive.id);
+    await archiverBien(archive.id, WORKSPACE_TEST);
 
     const element = await BiensPage({ searchParams: Promise.resolve({ archives: "1" }) });
     const html = renderToStaticMarkup(element);
@@ -118,7 +118,7 @@ describe("/biens (ADR-048)", () => {
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 1024,
       hashSha256: "hash-test-page",
-    });
+    }, WORKSPACE_TEST);
 
     // rechercherBiensPage() elle-même récupère photoPrincipaleId dans SA requête de liste (une
     // sous-requête corrélée SQL, pas un aller-retour JS par bien) — la page ne fait ensuite plus

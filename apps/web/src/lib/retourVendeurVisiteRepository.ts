@@ -171,7 +171,7 @@ export async function enregistrerRetourVendeurVisite(
     const tacheId = await tacheRetourVendeurOuvertePourVisite(input.visiteId, workspaceId, tx);
     let tacheClotureeId: string | undefined;
     if (tacheId) {
-      const tache = await terminerTache(tacheId, tx);
+      const tache = await terminerTache(tacheId, workspaceId, tx);
       if (tache) tacheClotureeId = tache.id;
     }
 

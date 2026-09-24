@@ -35,18 +35,36 @@ function creerCookieStoreFactice() {
 let cookieStoreActuel = creerCookieStoreFactice();
 vi.mock("next/headers", () => ({ cookies: async () => cookieStoreActuel }));
 
+// WORKSPACE_SCOPING_V1 — périmètre piloté test par test, comme pour /api/documents/[id].
+let workspaceCourantMock = WORKSPACE_TEST;
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn(() => Promise.resolve(workspaceCourantMock)),
+}));
+
 const REFERENCE_PREFIX = "[test réel] ADR052-ROUTE-PHOTO";
 const { getDb } = await import("@/db/client");
-const { biens: biensTable } = await import("@/db/schema");
+const { biens: biensTable, workspaces: workspacesTable } = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { ajouterPhotoBien } = await import("@/lib/photoBienRepository");
 const { ecrirePhotoOptimisee, genererCleStockage } = await import("@/lib/stockagePhotosBien");
 
+const WORKSPACE_B = `ws-photo-route-${Date.now()}`;
+let workspaceBCree = false;
+
+async function autreWorkspace() {
+  if (!workspaceBCree) {
+    await getDb().insert(workspacesTable).values({ id: WORKSPACE_B, nom: "[test réel] autre workspace photos" });
+    workspaceBCree = true;
+  }
+  return WORKSPACE_B;
+}
+
 afterAll(async () => {
   await getDb().delete(biensTable).where(like(biensTable.reference, `${REFERENCE_PREFIX}%`));
+  if (workspaceBCree) await getDb().delete(workspacesTable).where(eq(workspacesTable.id, WORKSPACE_B));
 });
 
-async function creerPhotoTest(suffixe: string, contenuWebp: Buffer) {
+async function creerPhotoTest(suffixe: string, contenuWebp: Buffer, workspaceId: string = WORKSPACE_TEST) {
   const bien = await creerBien({
     reference: `${REFERENCE_PREFIX}-${suffixe}`,
     titre: "Bien de test route photo",
@@ -61,7 +79,7 @@ async function creerPhotoTest(suffixe: string, contenuWebp: Buffer) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  }, WORKSPACE_TEST);
+  }, workspaceId);
 
   const cle = genererCleStockage();
   await ecrirePhotoOptimisee(cle, contenuWebp);
@@ -72,13 +90,14 @@ async function creerPhotoTest(suffixe: string, contenuWebp: Buffer) {
     typeMimeOriginal: "image/jpeg",
     tailleOctetsOriginal: contenuWebp.length,
     hashSha256: `hash-${suffixe}`,
-  });
+  }, workspaceId);
   return photo;
 }
 
 describe("GET /api/photos-bien/[photoId] (ADR-052)", () => {
   beforeEach(() => {
     cookieStoreActuel = creerCookieStoreFactice();
+    workspaceCourantMock = WORKSPACE_TEST;
     vi.stubEnv("ATLAS_SESSION_PASSWORD", "a".repeat(32));
     vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
   });
@@ -149,7 +168,7 @@ describe("GET /api/photos-bien/[photoId] (ADR-052)", () => {
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 100,
       hashSha256: "hash-fantome",
-    });
+    }, WORKSPACE_TEST);
 
     const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
     await creerSessionAtlas({ sub: "google-sub-123", email: "conseiller@example.com" });
@@ -245,5 +264,46 @@ describe("GET /api/photos-bien/[photoId] (ADR-052)", () => {
 
     expect(reponse.status).toBe(503);
     expect(await reponse.json()).toEqual({ erreur: "Stockage documentaire indisponible." });
+  });
+
+  // WORKSPACE_SCOPING_V1 (ADR-054) — une photo d'un autre périmètre est introuvable, et son fichier
+  // n'est jamais ouvert : la preuve d'appartenance précède le disque.
+  it("session valide + photo d'un AUTRE workspace → 404, identique à un id inexistant, et aucun accès disque", async () => {
+    const photoB = await creerPhotoTest("WORKSPACE-B", Buffer.from("RIFFxxxxWEBPfake"), await autreWorkspace());
+    const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
+    await creerSessionAtlas({ sub: "route-photo-sub", email: "conseiller@example.com" });
+
+    const stockage = await import("@/lib/stockagePhotosBien");
+    const espion = vi.spyOn(stockage, "lirePhotoOptimisee");
+
+    const { GET } = await import("./route");
+    const croise = await GET(new Request(`http://localhost/api/photos-bien/${photoB.id}`), {
+      params: Promise.resolve({ photoId: photoB.id }),
+    });
+    const idInexistant = "00000000-0000-0000-0000-000000000000";
+    const inexistant = await GET(new Request(`http://localhost/api/photos-bien/${idInexistant}`), {
+      params: Promise.resolve({ photoId: idInexistant }),
+    });
+
+    expect(croise.status).toBe(404);
+    expect(inexistant.status).toBe(croise.status);
+    expect(espion).not.toHaveBeenCalled();
+    espion.mockRestore();
+  });
+
+  it("la même photo redevient servie depuis SON workspace", async () => {
+    const contenu = Buffer.from("RIFFyyyyWEBPfake");
+    const photoB = await creerPhotoTest("WORKSPACE-B-RETOUR", contenu, await autreWorkspace());
+    const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
+    await creerSessionAtlas({ sub: "route-photo-sub", email: "conseiller@example.com" });
+    workspaceCourantMock = WORKSPACE_B;
+
+    const { GET } = await import("./route");
+    const reponse = await GET(new Request(`http://localhost/api/photos-bien/${photoB.id}`), {
+      params: Promise.resolve({ photoId: photoB.id }),
+    });
+
+    expect(reponse.status).toBe(200);
+    expect(Buffer.from(await reponse.arrayBuffer())).toEqual(contenu);
   });
 });

@@ -104,7 +104,7 @@ function formDataAvecFichier(
 describe("ajouterDocumentBienAction — garde-fous", () => {
   it("n'insère aucun document si le bien est archivé, même en appelant l'action directement", async () => {
     const bien = await creerBienDeTest("[test réel] DOC-ARCHIVE");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const fichier = new File([new Uint8Array([1, 2, 3])], "diag.pdf", { type: "application/pdf" });
     await ajouterDocumentBienAction(ETAT_FORMULAIRE_INITIAL,

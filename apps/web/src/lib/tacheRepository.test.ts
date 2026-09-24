@@ -137,7 +137,7 @@ describe("tacheRepository (intégration Postgres)", () => {
     }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
-    const terminee = await terminerTache(tache.id);
+    const terminee = await terminerTache(tache.id, WORKSPACE_TEST);
 
     expect(terminee?.termineeLe).toBeDefined();
     expect(terminee?.annuleeLe).toBeUndefined();
@@ -152,8 +152,8 @@ describe("tacheRepository (intégration Postgres)", () => {
     }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
-    await terminerTache(tache.id);
-    const deuxieme = await terminerTache(tache.id);
+    await terminerTache(tache.id, WORKSPACE_TEST);
+    const deuxieme = await terminerTache(tache.id, WORKSPACE_TEST);
 
     expect(deuxieme).toBeUndefined();
   });
@@ -167,8 +167,8 @@ describe("tacheRepository (intégration Postgres)", () => {
     }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
-    await terminerTache(tache.id);
-    const annulation = await annulerTache(tache.id);
+    await terminerTache(tache.id, WORKSPACE_TEST);
+    const annulation = await annulerTache(tache.id, WORKSPACE_TEST);
 
     expect(annulation).toBeUndefined();
     const relue = await getTacheById(tache.id);
@@ -184,15 +184,15 @@ describe("tacheRepository (intégration Postgres)", () => {
     }, WORKSPACE_TEST);
     idsTachesCrees.push(tache.id);
 
-    const annulee = await annulerTache(tache.id);
+    const annulee = await annulerTache(tache.id, WORKSPACE_TEST);
 
     expect(annulee?.annuleeLe).toBeDefined();
     expect(annulee?.termineeLe).toBeUndefined();
   });
 
   it("terminerTache()/annulerTache()/getTacheById() sont des no-ops silencieux pour un id mocké (non-UUID)", async () => {
-    await expect(terminerTache("tache-001")).resolves.toBeUndefined();
-    await expect(annulerTache("tache-001")).resolves.toBeUndefined();
+    await expect(terminerTache("tache-001", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(annulerTache("tache-001", WORKSPACE_TEST)).resolves.toBeUndefined();
     await expect(getTacheById("tache-001")).resolves.toBeUndefined();
   });
 

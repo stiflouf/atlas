@@ -16,13 +16,17 @@ import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 // de ce bien, DANS LA MÊME transaction que l'archivage — un simple UPDATE déterministe, jamais un
 // appel à evaluerCompatibilite() (aucun fan-out, rien à isoler, donc pas de passage par le handoff
 // ici, voir etatRepository.ts). Aucun événement "nouveau match" n'est bien sûr émis dans ce sens.
+// WORKSPACE_SCOPING_V1 — le périmètre descend jusqu'à l'UPDATE : hors workspace, aucune ligne
+// n'est touchée, `archiverBien` rend `undefined` et l'action répond `notFound()` — donc aucun
+// effet secondaire (marquage hors périmètre, resynchronisation) n'est déclenché non plus.
 export async function archiverBienAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
   const bien = await getDb().transaction(async (tx) => {
-    const bien = await archiverBien(id, tx);
+    const bien = await archiverBien(id, workspaceId, tx);
     if (bien) await marquerHorsPerimetrePourBien(bien.id, tx);
     return bien;
   });
@@ -46,7 +50,7 @@ export async function desarchiverBienAction(formData: FormData): Promise<void> {
   if (!id) notFound();
 
   const resultat = await getDb().transaction(async (tx) => {
-    const bien = await desarchiverBien(id, tx);
+    const bien = await desarchiverBien(id, workspaceId, tx);
     if (!bien) return undefined;
     const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, workspaceId, tx);
     return { bien, idDemandeResynchronisation };

@@ -91,7 +91,7 @@ describe("lecteurs Bien scopés workspace", () => {
     const bienA = await unBien("A", WORKSPACE_TEST);
     const bienB = await unBien("B", autre);
     const archive = await unBien("ARCHIVE", WORKSPACE_TEST);
-    await archiverBien(archive.id);
+    await archiverBien(archive.id, WORKSPACE_TEST);
 
     const ids = (await listerBiensActifsDuWorkspace(WORKSPACE_TEST)).map((b) => b.id);
     expect(ids).toContain(bienA.id);
@@ -119,7 +119,7 @@ describe("lecteurs Acquéreur scopés workspace", () => {
     const acqA = await unAcquereur("A", WORKSPACE_TEST);
     const acqB = await unAcquereur("B", autre);
     const archive = await unAcquereur("ARCHIVE", WORKSPACE_TEST);
-    await archiverAcquereur(archive.id);
+    await archiverAcquereur(archive.id, WORKSPACE_TEST);
 
     const ids = (await listerAcquereursActifsDuWorkspace(WORKSPACE_TEST)).map((a) => a.id);
     expect(ids).toContain(acqA.id);

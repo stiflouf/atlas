@@ -139,7 +139,7 @@ describe("modifierBien — ADR-060 §2 LEGACY_WRITE_POLICY", () => {
     await soumettre(creerBienAction, formulaire(champs));
     const bien = (await getBienById((await bienParReference(champs.reference)).id))!;
     await creerMandat({ bienId: bien.id, dateDebut: "2026-02-01", type: "simple" });
-    const modifie = await modifierBien(bien.id, { ...bien, statutMandat: "actif", dateMandat: "2026-02-01" });
+    const modifie = await modifierBien(bien.id, { ...bien, statutMandat: "actif", dateMandat: "2026-02-01" }, WORKSPACE_TEST);
     expect(modifie!.statutMandat).toBe("suspendu");
     expect(modifie!.dateMandat).toBe(bien.dateMandat);
   });

@@ -345,7 +345,7 @@ describe("lectures scoped, précédence et imports incohérents", () => {
     for (const finale of ["refusee", "retiree", "caduque"] as const) {
       const bien = await unBien();
       const acquereur = await unAcquereur();
-      await marquerOffreEnCours(bien.id);
+      await marquerOffreEnCours(bien.id, WORKSPACE_TEST);
       const offre = await offreEnCours(bien.id, acquereur.id);
       if (finale === "caduque") {
         await accepterOffre(offre.id, "2026-08-05", WORKSPACE_TEST);
@@ -369,7 +369,7 @@ describe("lectures scoped, précédence et imports incohérents", () => {
   it("legacy-only : aucune offre canonique → mode legacy sur offre_en_cours_le ; ni jalon ni offre → aucun", async () => {
     const bien = await unBien();
     expect(await chargerEtatOffresBien(bien, WORKSPACE_TEST)).toEqual({ mode: "aucun" });
-    await marquerOffreEnCours(bien.id);
+    await marquerOffreEnCours(bien.id, WORKSPACE_TEST);
     const relu = (await getBienById(bien.id))!;
     expect(await chargerEtatOffresBien(relu, WORKSPACE_TEST)).toMatchObject({ mode: "legacy" });
     expect(statutCommercialBienEffectif(relu, [], [])).toBe("offre_en_cours");

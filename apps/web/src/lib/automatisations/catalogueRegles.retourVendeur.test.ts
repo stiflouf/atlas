@@ -211,11 +211,11 @@ describe("règle retour_vendeur_apres_visite — aucun fallback (ADR-042)", () =
     const { bien } = await creerBienAvecVendeurDeTest("ARCHBIEN1");
     const acquereur = await creerAcquereurDeTest("ARCHBIEN1");
     const cr = await creerCompteRenduDeTest(bien.id, acquereur.id, "interesse");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenementDeTest(cr.id));
     expect(champs).toBeUndefined();
-    await desarchiverBien(bien.id);
+    await desarchiverBien(bien.id, WORKSPACE_TEST);
   });
 
   it("prospect vendeur archivé au moment du traitement : aucune tâche", async () => {

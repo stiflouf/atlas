@@ -155,11 +155,11 @@ describe("règle suivi_apres_visite — politique par intérêt (ADR-041)", () =
       retour: "Intéressé",
       interet: "interesse",
     });
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenementDeTest(cr.id));
     expect(champs).toBeUndefined();
-    await desarchiverBien(bien.id);
+    await desarchiverBien(bien.id, WORKSPACE_TEST);
   });
 
   it("acquéreur archivé au moment du traitement : aucune tâche", async () => {
@@ -172,7 +172,7 @@ describe("règle suivi_apres_visite — politique par intérêt (ADR-041)", () =
       retour: "À réfléchir",
       interet: "a_reflechir",
     });
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenementDeTest(cr.id));
     expect(champs).toBeUndefined();

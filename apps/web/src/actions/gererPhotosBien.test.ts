@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -26,7 +26,7 @@ process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const REFERENCE_PREFIX = "[test réel] ADR052-ACTION-GERER";
 const { getDb } = await import("@/db/client");
-const { biens: biensTable } = await import("@/db/schema");
+const { biens: biensTable, workspaces: workspacesTable } = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { ajouterPhotoBien, listerPhotosBien } = await import("@/lib/photoBienRepository");
 const { ecrirePhotoOptimisee, ecrirePhotoOriginale, genererCleStockage } = await import("@/lib/stockagePhotosBien");
@@ -36,10 +36,22 @@ let dirStockageTest: string;
 
 afterAll(async () => {
   await getDb().delete(biensTable).where(like(biensTable.reference, `${REFERENCE_PREFIX}%`));
+  if (workspaceBCree) await getDb().delete(workspacesTable).where(eq(workspacesTable.id, WORKSPACE_B));
   if (dirStockageTest) await rm(dirStockageTest, { recursive: true, force: true });
 });
 
-async function bienTest(suffixe: string) {
+const WORKSPACE_B = `ws-photos-action-${Date.now()}`;
+let workspaceBCree = false;
+
+async function autreWorkspace() {
+  if (!workspaceBCree) {
+    await getDb().insert(workspacesTable).values({ id: WORKSPACE_B, nom: "[test réel] autre workspace photos action" });
+    workspaceBCree = true;
+  }
+  return WORKSPACE_B;
+}
+
+async function bienTest(suffixe: string, workspaceId: string = WORKSPACE_TEST) {
   return creerBien({
     reference: `${REFERENCE_PREFIX}-${suffixe}`,
     titre: "Bien de test gestion photos",
@@ -54,10 +66,10 @@ async function bienTest(suffixe: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  }, WORKSPACE_TEST);
+  }, workspaceId);
 }
 
-async function ajouterPhotoAvecFichiers(bienId: string, suffixe: string) {
+async function ajouterPhotoAvecFichiers(bienId: string, suffixe: string, workspaceId: string = WORKSPACE_TEST) {
   const cle = genererCleStockage();
   await ecrirePhotoOriginale(cle, Buffer.from(`original-${suffixe}`));
   await ecrirePhotoOptimisee(cle, Buffer.from(`optimisee-${suffixe}`));
@@ -68,7 +80,7 @@ async function ajouterPhotoAvecFichiers(bienId: string, suffixe: string) {
     typeMimeOriginal: "image/jpeg",
     tailleOctetsOriginal: 10,
     hashSha256: `hash-${suffixe}`,
-  });
+  }, workspaceId);
 }
 
 function formData(champs: Record<string, string>): FormData {
@@ -175,5 +187,43 @@ describe("deplacerPhotoBienAction / supprimerPhotoBienAction — contrôle auth 
     );
 
     exigerSessionAtlasMock.mockResolvedValue({ sub: "test-sub", email: "conseiller@example.com" });
+  });
+});
+
+// WORKSPACE_SCOPING_V1 (ADR-054) — la suppression d'une photo détruit une LIGNE et DEUX FICHIERS.
+// C'est l'opération la plus destructrice du domaine : elle doit prouver l'appartenance par la
+// photo elle-même (photo → bien → workspace), jamais par le `bienId` soumis dans le formulaire.
+describe("Photos — frontière workspace", () => {
+  it("supprimer une photo d'un AUTRE workspace : rien n'est supprimé, ni la ligne ni les fichiers", async () => {
+    const bienB = await bienTest("CROSS-SUPPR", await autreWorkspace());
+    const photoB = await ajouterPhotoAvecFichiers(bienB.id, "cross-suppr", WORKSPACE_B);
+
+    // Le workspace courant reste "default" (mock global) : on soumet la photo de B.
+    await supprimerPhotoBienAction(formData({ bienId: bienB.id, photoId: photoB.id })).catch(() => {});
+
+    const restantes = await listerPhotosBien(bienB.id);
+    expect(restantes.map((p) => p.id)).toEqual([photoB.id]);
+    await expect(stat(path.join(dirStockageTest, "photos", "originaux", photoB.cleStockage))).resolves.toBeDefined();
+    await expect(stat(path.join(dirStockageTest, "photos", "optimisees", `${photoB.cleStockage}.webp`))).resolves.toBeDefined();
+  });
+
+  it("le `bienId` soumis ne prouve rien : une photo de B avec le bienId de A n'est pas supprimée", async () => {
+    const bienA = await bienTest("CROSS-LEURRE-A");
+    const bienB = await bienTest("CROSS-LEURRE-B", await autreWorkspace());
+    const photoB = await ajouterPhotoAvecFichiers(bienB.id, "cross-leurre", WORKSPACE_B);
+
+    await supprimerPhotoBienAction(formData({ bienId: bienA.id, photoId: photoB.id })).catch(() => {});
+
+    expect((await listerPhotosBien(bienB.id)).map((p) => p.id)).toEqual([photoB.id]);
+  });
+
+  it("réordonner la galerie d'un AUTRE workspace : aucun ordre modifié", async () => {
+    const bienB = await bienTest("CROSS-ORDRE", await autreWorkspace());
+    const p1 = await ajouterPhotoAvecFichiers(bienB.id, "ordre-1", WORKSPACE_B);
+    const p2 = await ajouterPhotoAvecFichiers(bienB.id, "ordre-2", WORKSPACE_B);
+
+    await deplacerPhotoBienAction(formData({ bienId: bienB.id, photoId: p2.id, direction: "principale" })).catch(() => {});
+
+    expect((await listerPhotosBien(bienB.id)).map((p) => p.id)).toEqual([p1.id, p2.id]);
   });
 });

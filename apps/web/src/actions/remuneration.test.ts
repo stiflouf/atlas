@@ -126,7 +126,7 @@ describe("ajouterRemunerationAction — garde-fous", () => {
 
   it("refuse explicitement (throw) sur un compromis en_cours dont le bien est archivé", async () => {
     const { bien, compromis } = await creerCompromisDeTest("EN-COURS-ARCHIVE");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
@@ -139,7 +139,7 @@ describe("ajouterRemunerationAction — garde-fous", () => {
 
   it("refuse explicitement (throw) sur un compromis en_cours dont l'acquéreur est archivé", async () => {
     const { acquereur, compromis } = await creerCompromisDeTest("EN-COURS-ACQ-ARCHIVE");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     await expect(
       ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
@@ -151,7 +151,7 @@ describe("ajouterRemunerationAction — garde-fous", () => {
   it("accepte l'ajout sur un compromis realise dont le bien est archivé (archivage commercial ≠ clôture du suivi financier, ADR-021)", async () => {
     const { bien, compromis } = await creerCompromisDeTest("REALISE-ARCHIVE");
     await marquerCompromisRealise(compromis.id, "2026-09-01");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await ajouterRemunerationAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, montantRemunerationConseiller: "125000.50" })
@@ -211,7 +211,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       modifierRemunerationAction(ETAT_FORMULAIRE_INITIAL,
@@ -229,7 +229,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
       montantHonorairesTotalCentimes: 500000,
     });
     idsRemunerationCrees.push(r.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await modifierRemunerationAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, montantRemunerationConseiller: "150000" })
@@ -299,7 +299,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await marquerRemunerationEncaisseeAction(ETAT_FORMULAIRE_INITIAL,
       formData({ compromisId: compromis.id, dateEncaissementReelle: "2026-09-20" })

@@ -98,7 +98,7 @@ describe("/compromis/nouveau — route canonique de création (ADR-045)", () => 
 
   it("bienId archivé : état honnête, jamais un formulaire menant à un échec garanti", async () => {
     const bien = await creerBienDeTest("ARCHIVE1");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const html = renderToStaticMarkup(await NouveauCompromisPage({ searchParams: Promise.resolve({ bienId: bien.id }) }));
     expect(html).toContain("Aucun bien valide");
@@ -171,7 +171,7 @@ describe("/compromis/nouveau — route canonique de création (ADR-045)", () => 
   it("acquereurId inexistant/archivé : préremplissage ignoré, retombe sur la sélection libre", async () => {
     const bien = await creerBienDeTest("ACQINVALIDE1");
     const acquereurArchive = await creerAcquereurDeTest("ACQINVALIDE1");
-    await archiverAcquereur(acquereurArchive.id);
+    await archiverAcquereur(acquereurArchive.id, WORKSPACE_TEST);
 
     const html = renderToStaticMarkup(
       await NouveauCompromisPage({ searchParams: Promise.resolve({ bienId: bien.id, acquereurId: acquereurArchive.id }) })

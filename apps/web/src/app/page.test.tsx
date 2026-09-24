@@ -173,7 +173,7 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       origine: "manuelle",
     }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
-    await terminerTache(tache.id);
+    await terminerTache(tache.id, WORKSPACE_TEST);
 
     const html = await rendreCockpit();
     expect(html).not.toContain(tache.titre);
@@ -207,12 +207,12 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
       cible: { type: "bien", id: bien.id },
     }, WORKSPACE_TEST);
     idsTachesCreees.push(tache.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const html = await rendreCockpit();
     expect(html).not.toContain(tache.titre);
 
-    await desarchiverBien(bien.id);
+    await desarchiverBien(bien.id, WORKSPACE_TEST);
   });
 
   it("tâche sans cible exploitable : aucun lien « Voir la fiche » factice", async () => {

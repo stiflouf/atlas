@@ -208,6 +208,27 @@ export async function getContactCanoniqueDuProspectVendeur(
   return ligne?.contactId ?? undefined;
 }
 
+// WORKSPACE_SCOPING_V1 — `prospects_vendeurs` est une table RACINE : son appartenance se lit
+// directement, dans le `WHERE`. À utiliser dès que l'identifiant vient du client. Hors périmètre =
+// introuvable. `getProspectVendeurById` reste pour les chemins internes et les jalons encore
+// convertis en V2 (dette connue, voir docs/KNOWN_LIMITATIONS.md).
+export async function getProspectVendeurDuWorkspace(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<ProspectVendeur | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  const [ligne] = await executeur
+    .select()
+    .from(prospectsVendeursTable)
+    .where(and(eq(prospectsVendeursTable.id, id), eq(prospectsVendeursTable.workspaceId, workspaceId)))
+    .limit(1);
+  if (!ligne) return undefined;
+  const [effectif] = await appliquerIdentiteEffective([ligneVersProspectVendeur(ligne)]);
+  return effectif;
+}
+
+// INTERNE / NON SCOPÉ — préférer `getProspectVendeurDuWorkspace` pour tout id venant du client.
 export async function getProspectVendeurById(id: string): Promise<ProspectVendeur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb().select().from(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id)).limit(1);

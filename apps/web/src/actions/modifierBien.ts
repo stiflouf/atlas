@@ -35,7 +35,9 @@ export async function modifierBienAction(_etatPrecedent: EtatFormulaire, formDat
     const commune = await resoudreCommuneBien(donnees.adresse, donnees.ville, donnees.codePostal);
 
     const resultat = await getDb().transaction(async (tx) => {
-      const bien = await modifierBien(id, { ...donnees, codeInseeCommune: commune?.citycode }, tx);
+      // WORKSPACE_SCOPING_V1 — le périmètre est dans le `WHERE` de l'UPDATE : un bien d'un autre
+      // workspace ne renvoie aucune ligne, la transaction ne va pas plus loin, `notFound()`.
+      const bien = await modifierBien(id, { ...donnees, codeInseeCommune: commune?.citycode }, workspaceId, tx);
       if (!bien) return undefined;
       const idDemandeResynchronisation = await enqueuerResynchronisationBien(bien.id, workspaceId, tx);
       return { bien, idDemandeResynchronisation };

@@ -67,11 +67,11 @@ describe("photoBienRepository (intégration Postgres) — ADR-052", () => {
 
   it("ajouterPhotoBien() place toujours en fin de galerie : 0 si vide, MAX(ordre)+1 sinon", async () => {
     const bien = await creerBienTest("ORDRE-FIN");
-    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"));
+    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"), WORKSPACE_TEST);
     expect(p1.ordre).toBe(0);
-    const p2 = await ajouterPhotoBien(nouvellePhoto(bien.id, "2"));
+    const p2 = await ajouterPhotoBien(nouvellePhoto(bien.id, "2"), WORKSPACE_TEST);
     expect(p2.ordre).toBe(1);
-    const p3 = await ajouterPhotoBien(nouvellePhoto(bien.id, "3"));
+    const p3 = await ajouterPhotoBien(nouvellePhoto(bien.id, "3"), WORKSPACE_TEST);
     expect(p3.ordre).toBe(2);
 
     const galerie = await listerPhotosBien(bien.id);
@@ -80,8 +80,8 @@ describe("photoBienRepository (intégration Postgres) — ADR-052", () => {
 
   it("getPhotoPrincipaleBien() = premier élément du tri total (ordre ASC, creeLe ASC, id ASC)", async () => {
     const bien = await creerBienTest("PRINCIPALE");
-    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"));
-    await ajouterPhotoBien(nouvellePhoto(bien.id, "2"));
+    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"), WORKSPACE_TEST);
+    await ajouterPhotoBien(nouvellePhoto(bien.id, "2"), WORKSPACE_TEST);
 
     const principale = await getPhotoPrincipaleBien(bien.id);
     expect(principale?.id).toBe(p1.id);
@@ -113,10 +113,10 @@ describe("photoBienRepository (intégration Postgres) — ADR-052", () => {
   it(`limite de ${NOMBRE_MAX_PHOTOS_PAR_BIEN} photos par bien : la ${NOMBRE_MAX_PHOTOS_PAR_BIEN + 1}e est rejetée`, async () => {
     const bien = await creerBienTest("LIMITE");
     for (let i = 0; i < NOMBRE_MAX_PHOTOS_PAR_BIEN; i++) {
-      await ajouterPhotoBien(nouvellePhoto(bien.id, `l${i}`));
+      await ajouterPhotoBien(nouvellePhoto(bien.id, `l${i}`), WORKSPACE_TEST);
     }
     await expect(listerPhotosBien(bien.id)).resolves.toHaveLength(NOMBRE_MAX_PHOTOS_PAR_BIEN);
-    await expect(ajouterPhotoBien(nouvellePhoto(bien.id, "l-trop"))).rejects.toThrow(ErreurLimitePhotosAtteinte);
+    await expect(ajouterPhotoBien(nouvellePhoto(bien.id, "l-trop"), WORKSPACE_TEST)).rejects.toThrow(ErreurLimitePhotosAtteinte);
     // La tentative rejetée n'a rien inséré : toujours exactement la limite, pas la limite + 1.
     await expect(listerPhotosBien(bien.id)).resolves.toHaveLength(NOMBRE_MAX_PHOTOS_PAR_BIEN);
   });
@@ -125,12 +125,12 @@ describe("photoBienRepository (intégration Postgres) — ADR-052", () => {
     const bien = await creerBienTest("CONCURRENCE");
     const dejaLa = NOMBRE_MAX_PHOTOS_PAR_BIEN - 2;
     for (let i = 0; i < dejaLa; i++) {
-      await ajouterPhotoBien(nouvellePhoto(bien.id, `c${i}`));
+      await ajouterPhotoBien(nouvellePhoto(bien.id, `c${i}`), WORKSPACE_TEST);
     }
 
     // 5 ajouts lancés en parallèle pour 2 places restantes : exactement 2 doivent réussir.
     const resultats = await Promise.allSettled(
-      Array.from({ length: 5 }, (_, i) => ajouterPhotoBien(nouvellePhoto(bien.id, `race${i}`)))
+      Array.from({ length: 5 }, (_, i) => ajouterPhotoBien(nouvellePhoto(bien.id, `race${i}`), WORKSPACE_TEST))
     );
 
     const succes = resultats.filter((r) => r.status === "fulfilled");
@@ -145,23 +145,23 @@ describe("photoBienRepository (intégration Postgres) — ADR-052", () => {
 
   it("supprimerPhotoBien() est idempotent : id absent/déjà supprimé → undefined, jamais une erreur", async () => {
     const bien = await creerBienTest("SUPPRESSION");
-    const photo = await ajouterPhotoBien(nouvellePhoto(bien.id, "s1"));
+    const photo = await ajouterPhotoBien(nouvellePhoto(bien.id, "s1"), WORKSPACE_TEST);
 
-    const premiere = await supprimerPhotoBien(photo.id);
+    const premiere = await supprimerPhotoBien(photo.id, WORKSPACE_TEST);
     expect(premiere?.id).toBe(photo.id);
 
-    await expect(supprimerPhotoBien(photo.id)).resolves.toBeUndefined();
-    await expect(supprimerPhotoBien("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    await expect(supprimerPhotoBien(photo.id, WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(supprimerPhotoBien("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toBeUndefined();
     await expect(listerPhotosBien(bien.id)).resolves.toEqual([]);
   });
 
   it("reordonnerPhotosBien() réécrit 0..N-1 ; la première de la liste devient mécaniquement la principale", async () => {
     const bien = await creerBienTest("REORDER-OK");
-    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"));
-    const p2 = await ajouterPhotoBien(nouvellePhoto(bien.id, "2"));
-    const p3 = await ajouterPhotoBien(nouvellePhoto(bien.id, "3"));
+    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"), WORKSPACE_TEST);
+    const p2 = await ajouterPhotoBien(nouvellePhoto(bien.id, "2"), WORKSPACE_TEST);
+    const p3 = await ajouterPhotoBien(nouvellePhoto(bien.id, "3"), WORKSPACE_TEST);
 
-    const resultat = await reordonnerPhotosBien(bien.id, [p3.id, p1.id, p2.id]);
+    const resultat = await reordonnerPhotosBien(bien.id, [p3.id, p1.id, p2.id], WORKSPACE_TEST);
     expect(resultat).toBe("ok");
 
     const galerie = await listerPhotosBien(bien.id);
@@ -175,14 +175,14 @@ describe("photoBienRepository (intégration Postgres) — ADR-052", () => {
   it("reordonnerPhotosBien() rejette l'opération ENTIÈRE : doublon, omission, ou photo d'un autre bien", async () => {
     const bien = await creerBienTest("REORDER-INVALIDE");
     const autreBien = await creerBienTest("REORDER-AUTRE-BIEN");
-    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"));
-    const p2 = await ajouterPhotoBien(nouvellePhoto(bien.id, "2"));
-    const pAutre = await ajouterPhotoBien(nouvellePhoto(autreBien.id, "autre"));
+    const p1 = await ajouterPhotoBien(nouvellePhoto(bien.id, "1"), WORKSPACE_TEST);
+    const p2 = await ajouterPhotoBien(nouvellePhoto(bien.id, "2"), WORKSPACE_TEST);
+    const pAutre = await ajouterPhotoBien(nouvellePhoto(autreBien.id, "autre"), WORKSPACE_TEST);
 
-    await expect(reordonnerPhotosBien(bien.id, [p1.id, p1.id])).resolves.toBe("invalide"); // doublon
-    await expect(reordonnerPhotosBien(bien.id, [p1.id])).resolves.toBe("invalide"); // omission de p2
-    await expect(reordonnerPhotosBien(bien.id, [p1.id, p2.id, pAutre.id])).resolves.toBe("invalide"); // photo étrangère
-    await expect(reordonnerPhotosBien(bien.id, ["id-invalide"])).resolves.toBe("invalide"); // pas un UUID
+    await expect(reordonnerPhotosBien(bien.id, [p1.id, p1.id], WORKSPACE_TEST)).resolves.toBe("invalide"); // doublon
+    await expect(reordonnerPhotosBien(bien.id, [p1.id], WORKSPACE_TEST)).resolves.toBe("invalide"); // omission de p2
+    await expect(reordonnerPhotosBien(bien.id, [p1.id, p2.id, pAutre.id], WORKSPACE_TEST)).resolves.toBe("invalide"); // photo étrangère
+    await expect(reordonnerPhotosBien(bien.id, ["id-invalide"], WORKSPACE_TEST)).resolves.toBe("invalide"); // pas un UUID
 
     // Rien n'a été écrit : l'ordre initial est intact.
     const galerie = await listerPhotosBien(bien.id);

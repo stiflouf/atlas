@@ -15,13 +15,16 @@ import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 // Archivage (ADR-036) : bascule dans_perimetre_actif = false pour toutes les paires déjà observées
 // de cet acquéreur, DANS LA MÊME transaction — voir archiverBienAction pour le raisonnement
 // symétrique complet.
+// WORKSPACE_SCOPING_V1 — périmètre porté jusqu'à l'UPDATE : un acquéreur d'un autre workspace est
+// introuvable, et aucun marquage hors périmètre n'est écrit pour lui.
 export async function archiverAcquereurAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
   const acquereur = await getDb().transaction(async (tx) => {
-    const acquereur = await archiverAcquereur(id, tx);
+    const acquereur = await archiverAcquereur(id, workspaceId, tx);
     if (acquereur) await marquerHorsPerimetrePourAcquereur(acquereur.id, tx);
     return acquereur;
   });
@@ -40,7 +43,7 @@ export async function desarchiverAcquereurAction(formData: FormData): Promise<vo
   if (!id) notFound();
 
   const resultat = await getDb().transaction(async (tx) => {
-    const acquereur = await desarchiverAcquereur(id, tx);
+    const acquereur = await desarchiverAcquereur(id, workspaceId, tx);
     if (!acquereur) return undefined;
     const idDemandeResynchronisation = await enqueuerResynchronisationAcquereur(acquereur.id, workspaceId, tx);
     return { acquereur, idDemandeResynchronisation };

@@ -2,11 +2,11 @@
 
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { redirect } from "next/navigation";
-import { getBienById } from "@/lib/bienRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
 import {
   corrigerClassementDocumentBien,
   enregistrerDocumentBien,
-  getDocumentBienById,
+  getDocumentBienDuWorkspace,
 } from "@/lib/documentBienRepository";
 import { validerCoherenceRattachementsDocument } from "@/lib/documents/coherenceRattachementDocument";
 import { ecrireDocument, genererCleStockage } from "@/lib/stockageDocuments";
@@ -85,7 +85,10 @@ export async function ajouterDocumentBienAction(_etatPrecedent: EtatFormulaire, 
       throw new ErreurSaisie("Type de fichier non autorisé (PDF, JPEG ou PNG uniquement).");
     }
 
-    const bien = await getBienById(bienId);
+    // WORKSPACE_SCOPING_V1 (ADR-054) — le bien est prouvé dans le périmètre AVANT toute écriture
+    // disque : un bien d'un autre workspace ne laisse aucun fichier orphelin derrière lui.
+    const workspaceId = await exigerWorkspaceCourant();
+    const bien = await getBienDuWorkspace(bienId, workspaceId);
     if (!bien) throw new ErreurSaisie("Bien introuvable.");
     if (bien.archiveLe) throw new ErreurSaisie("Impossible d'ajouter un document sur un bien archivé.");
 
@@ -93,7 +96,7 @@ export async function ajouterDocumentBienAction(_etatPrecedent: EtatFormulaire, 
     const acquereurId = parseTexteOptionnel(formData.get("acquereurId"));
     const prospectVendeurId = parseTexteOptionnel(formData.get("prospectVendeurId"));
 
-    await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
+    await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, workspaceId);
 
     const cleStockage = genererCleStockage();
     const octets = Buffer.from(await fichier.arrayBuffer());
@@ -131,8 +134,13 @@ export async function ajouterDocumentBienAction(_etatPrecedent: EtatFormulaire, 
 export async function corrigerClassementDocumentBienAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
   await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
+    // WORKSPACE_SCOPING_V1 (ADR-054) — LES DEUX extrémités sont prouvées dans le périmètre : le
+    // document corrigé ET le bien de destination. Sans cela, un classement pouvait déplacer un
+    // document d'un workspace vers un autre — la seule opération du produit capable de faire
+    // franchir une frontière d'appartenance à une ligne existante.
+    const workspaceId = await exigerWorkspaceCourant();
     const id = String(formData.get("id") ?? "");
-    const documentActuel = await getDocumentBienById(id);
+    const documentActuel = await getDocumentBienDuWorkspace(id, workspaceId);
     if (!documentActuel) throw new ErreurSaisie("Document introuvable.");
 
     const bienId = String(formData.get("bienId") ?? "").trim();
@@ -140,7 +148,7 @@ export async function corrigerClassementDocumentBienAction(_etatPrecedent: EtatF
     if (!bienId) throw new ErreurSaisie("Le bien est obligatoire.");
     if (!nom) throw new ErreurSaisie("Le nom du document est obligatoire.");
 
-    const bien = await getBienById(bienId);
+    const bien = await getBienDuWorkspace(bienId, workspaceId);
     if (!bien) throw new ErreurSaisie("Bien introuvable.");
     if (bien.archiveLe) throw new ErreurSaisie("Impossible de rattacher un document à un bien archivé.");
 
@@ -148,7 +156,7 @@ export async function corrigerClassementDocumentBienAction(_etatPrecedent: EtatF
     const acquereurId = parseTexteOuNull(formData.get("acquereurId"));
     const prospectVendeurId = parseTexteOuNull(formData.get("prospectVendeurId"));
 
-    await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, await exigerWorkspaceCourant());
+    await validerCoherenceRattachementsDocument({ bienId, compromisId, acquereurId, prospectVendeurId }, workspaceId);
 
     const champs: ChampsCorrectionDocumentBien = {
       bienId,

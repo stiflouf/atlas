@@ -414,28 +414,33 @@ export async function modifierAcquereur(
 
 // Archivage/désarchivage : jamais un DELETE, uniquement archiveLe qui bascule (voir
 // bienRepository.archiverBien pour le détail des garanties FK).
+//
+// WORKSPACE_SCOPING_V1 (ADR-054) — périmètre dans le `WHERE`, comme `modifierAcquereur` juste
+// au-dessus : hors workspace, aucune ligne mise à jour, donc `undefined` et aucun effet secondaire.
 export async function archiverAcquereur(
   id: string,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(acquereursTable)
     .set({ archiveLe: new Date() })
-    .where(eq(acquereursTable.id, id))
+    .where(and(eq(acquereursTable.id, id), eq(acquereursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersAcquereur(ligne) : undefined;
 }
 
 export async function desarchiverAcquereur(
   id: string,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<ProfilAcquereur | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(acquereursTable)
     .set({ archiveLe: null })
-    .where(eq(acquereursTable.id, id))
+    .where(and(eq(acquereursTable.id, id), eq(acquereursTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersAcquereur(ligne) : undefined;
 }

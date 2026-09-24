@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { listerPhotosBien, reordonnerPhotosBien, supprimerPhotoBien } from "@/lib/photoBienRepository";
 import { supprimerPhotoOptimisee, supprimerPhotoOriginale } from "@/lib/stockagePhotosBien";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 type Direction = "monter" | "descendre" | "principale";
 
@@ -31,13 +32,18 @@ function calculerNouvelOrdre(idsActuels: string[], photoId: string, direction: D
 // aucune colonne est_principale. Page cible en `force-dynamic` (biens/[id]/photos/page.tsx) :
 // redirect() suffit à obtenir un rendu frais, comme le reste des Server Actions de mutation Bien
 // de ce projet (archiverBienAction, etc. — aucune n'utilise revalidatePath).
+// WORKSPACE_SCOPING_V1 (ADR-054) — le périmètre vient de la session et descend jusqu'au SQL :
+// `reordonnerPhotosBien` prend son verrou sur un bien du workspace, sinon rien n'est écrit.
 export async function deplacerPhotoBienAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const bienId = String(formData.get("bienId") ?? "");
   const photoId = String(formData.get("photoId") ?? "");
   const direction = String(formData.get("direction") ?? "") as Direction;
   if (!bienId || !photoId) notFound();
 
+  // La galerie lue ici ne sert qu'à calculer le nouvel ordre ; c'est le verrou scopé de
+  // `reordonnerPhotosBien` qui autorise — ou non — l'écriture.
   const galerie = await listerPhotosBien(bienId);
   const nouvelOrdre = calculerNouvelOrdre(
     galerie.map((p) => p.id),
@@ -49,7 +55,7 @@ export async function deplacerPhotoBienAction(formData: FormData): Promise<void>
     // Résultat "invalide" = course rare (galerie modifiée entre la lecture ci-dessus et l'écriture
     // verrouillée) — jamais une réorganisation à moitié appliquée : la page recharge simplement
     // l'état réel actuel.
-    await reordonnerPhotosBien(bienId, nouvelOrdre);
+    await reordonnerPhotosBien(bienId, nouvelOrdre, workspaceId);
   }
 
   redirect(`/biens/${bienId}/photos`);
@@ -58,13 +64,18 @@ export async function deplacerPhotoBienAction(formData: FormData): Promise<void>
 // Idempotente : une photo déjà absente n'est jamais une erreur (ADR-052 §13). DB d'abord, fichiers
 // ensuite en best-effort — une erreur filesystem reste invisible pour l'utilisateur, jamais
 // transformée en photo fantôme (la ligne DB est déjà supprimée quoi qu'il arrive côté fichiers).
+// WORKSPACE_SCOPING_V1 — le `bienId` soumis ne sert qu'à la navigation de retour : la preuve que
+// cette photo est supprimable vient de la photo elle-même (photo → bien → workspace). Hors
+// périmètre, `supprimerPhotoBien` rend `undefined` : aucune ligne supprimée, et surtout aucun
+// fichier effacé.
 export async function supprimerPhotoBienAction(formData: FormData): Promise<void> {
   await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
   const bienId = String(formData.get("bienId") ?? "");
   const photoId = String(formData.get("photoId") ?? "");
   if (!bienId || !photoId) notFound();
 
-  const supprimee = await supprimerPhotoBien(photoId);
+  const supprimee = await supprimerPhotoBien(photoId, workspaceId);
   if (supprimee) {
     await supprimerPhotoOriginale(supprimee.cleStockage).catch((e) =>
       console.error("[photos-bien] suppression fichier original échouée (clé %s) :", supprimee.cleStockage, e)

@@ -181,7 +181,7 @@ export async function creerCompromis(input: NouveauCompromis, workspaceId: strin
       }
       throw erreur;
     }
-    await marquerCompromisSigne(input.bienId, tx);
+    await marquerCompromisSigne(input.bienId, workspaceId, tx);
     const { idsExecutionsATraiter } = await emettreEvenementEtPreparerExecutions(
       { typeEvenement: "compromis_signe", compromisId: compromis.id },
       workspaceId,

@@ -205,7 +205,7 @@ describe("scannerOffreSansDecision", () => {
     expect(tache).toBeDefined();
 
     const { annulerTache } = await import("./../../tacheRepository");
-    await annulerTache(tache.id);
+    await annulerTache(tache.id, WORKSPACE_TEST);
     await scannerOffreSansDecision(maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(0);
     const toutes = await getDb().select().from(tachesTable).where(eq(tachesTable.offreId, offre.id));

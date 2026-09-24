@@ -86,6 +86,29 @@ export async function getTachesPourProspectVendeur(prospectVendeurId: string): P
   }
 }
 
+// WORKSPACE_SCOPING_V1 — `taches` est une table RACINE : le périmètre est une colonne, le filtre
+// tient dans le `WHERE`. À utiliser dès que l'identifiant vient du client (FormData « Terminer »,
+// « Annuler »). Hors périmètre = introuvable.
+export async function getTacheDuWorkspace(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Tache | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  try {
+    const [ligne] = await executeur
+      .select()
+      .from(tachesTable)
+      .where(and(eq(tachesTable.id, id), eq(tachesTable.workspaceId, workspaceId)))
+      .limit(1);
+    return ligne ? ligneVersTache(ligne) : undefined;
+  } catch (erreur) {
+    console.error("[taches] lecture Postgres indisponible :", erreur);
+    return undefined;
+  }
+}
+
+// INTERNE / NON SCOPÉ — préférer `getTacheDuWorkspace` pour tout id venant du client.
 export async function getTacheById(id: string): Promise<Tache | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   try {
@@ -163,22 +186,44 @@ export async function creerTache(
 // pour tous les appelants existants) : `enregistrerRetourVendeurVisite` doit pouvoir clôturer la
 // tâche DANS la même transaction que la création de l'Interaction (brief §8 — éviter une Interaction
 // créée sans tâche clôturée, ou l'inverse).
-export async function terminerTache(id: string, executeur: Executeur = getDb()): Promise<Tache | undefined> {
+//
+// WORKSPACE_SCOPING_V1 (ADR-054) — `taches` est une table racine : le périmètre rejoint les autres
+// conditions du `WHERE`. Une tâche d'un autre workspace se comporte exactement comme une tâche déjà
+// close : 0 ligne, `undefined`, aucune transition écrite.
+export async function terminerTache(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Tache | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(tachesTable)
     .set({ termineeLe: new Date() })
-    .where(and(eq(tachesTable.id, id), isNull(tachesTable.termineeLe), isNull(tachesTable.annuleeLe)))
+    .where(
+      and(
+        eq(tachesTable.id, id),
+        eq(tachesTable.workspaceId, workspaceId),
+        isNull(tachesTable.termineeLe),
+        isNull(tachesTable.annuleeLe)
+      )
+    )
     .returning();
   return ligne ? ligneVersTache(ligne) : undefined;
 }
 
-export async function annulerTache(id: string): Promise<Tache | undefined> {
+export async function annulerTache(id: string, workspaceId: string): Promise<Tache | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(tachesTable)
     .set({ annuleeLe: new Date() })
-    .where(and(eq(tachesTable.id, id), isNull(tachesTable.termineeLe), isNull(tachesTable.annuleeLe)))
+    .where(
+      and(
+        eq(tachesTable.id, id),
+        eq(tachesTable.workspaceId, workspaceId),
+        isNull(tachesTable.termineeLe),
+        isNull(tachesTable.annuleeLe)
+      )
+    )
     .returning();
   return ligne ? ligneVersTache(ligne) : undefined;
 }

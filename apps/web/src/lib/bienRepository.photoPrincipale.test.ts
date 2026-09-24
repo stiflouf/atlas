@@ -49,7 +49,7 @@ describe("bienRepository — photoPrincipaleId (ADR-052)", () => {
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 10,
       hashSha256: "hash-repo-test",
-    });
+    }, WORKSPACE_TEST);
 
     const { lignes } = await rechercherBiensPage({ q: REFERENCE_PREFIX, archives: false, page: 1, parPage: 50 });
 
@@ -69,7 +69,7 @@ describe("bienRepository — photoPrincipaleId (ADR-052)", () => {
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 10,
       hashSha256: "h1",
-    });
+    }, WORKSPACE_TEST);
     const p2 = await ajouterPhotoBien({
       bienId: bien.id,
       cleStockage: "cle-repo-2",
@@ -77,7 +77,7 @@ describe("bienRepository — photoPrincipaleId (ADR-052)", () => {
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 10,
       hashSha256: "h2",
-    });
+    }, WORKSPACE_TEST);
     void p2;
 
     const principaleAttendue = await getPhotoPrincipaleBien(bien.id);
@@ -99,7 +99,7 @@ describe("bienRepository — photoPrincipaleId (ADR-052)", () => {
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 10,
       hashSha256: "hash-listerbiens",
-    });
+    }, WORKSPACE_TEST);
 
     const biens = await listerBiens();
     const ligne = biens.find((b) => b.id === avecPhoto.id);

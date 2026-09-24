@@ -169,7 +169,7 @@ describe("creerVisite — création native, sans Calendar (VISIT_NATIVE_LIFECYCL
   it("bien archivé : bien_archive, aucune ligne créée", async () => {
     const bien = await creerBienDeTest("ARCHBIEN1");
     const acquereur = await creerAcquereurDeTest("ARCHBIEN1");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const resultat = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-09-01" }, WORKSPACE_TEST);
     expect(resultat.statut).toBe("bien_archive");
@@ -179,7 +179,7 @@ describe("creerVisite — création native, sans Calendar (VISIT_NATIVE_LIFECYCL
   it("acquéreur archivé : acquereur_archive, aucune ligne créée", async () => {
     const bien = await creerBienDeTest("ARCHACQ1");
     const acquereur = await creerAcquereurDeTest("ARCHACQ1");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     const resultat = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-09-01" }, WORKSPACE_TEST);
     expect(resultat.statut).toBe("acquereur_archive");
@@ -256,7 +256,7 @@ describe("materialiserVisite — création et idempotence (ADR-040), convergée 
   it("bien archivé (chemin Calendar) : bien_archive — même garde que le chemin natif (durcissement ADR-063)", async () => {
     const bien = await creerBienDeTest("ARCHBIENCAL1");
     const acquereur = await creerAcquereurDeTest("ARCHBIENCAL1");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const resultat = await materialiserVisite(
       { bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-09-01", rendezVousCalendarId: `gcal-arch-${bien.id}` },

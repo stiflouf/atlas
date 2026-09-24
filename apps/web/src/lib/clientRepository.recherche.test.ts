@@ -41,7 +41,7 @@ describe("rechercherAcquereursPage (ADR-048)", () => {
     idsCrees.push(actif.id);
     const archive = await creerAcquereur(acquereurTest("ARCHIVES-2"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
-    await archiverAcquereur(archive.id);
+    await archiverAcquereur(archive.id, WORKSPACE_TEST);
 
     const { lignes: actifs } = await rechercherAcquereursPage({ archives: false, page: 1, parPage: 50 });
     expect(actifs.some((a) => a.id === actif.id)).toBe(true);

@@ -106,7 +106,7 @@ function formData(champs: Record<string, string>): FormData {
 describe("ajouterOffreAction — garde-fous", () => {
   it("refuse explicitement (throw) une offre sur un bien archivé", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("BIEN-ARCHIVE");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
@@ -119,7 +119,7 @@ describe("ajouterOffreAction — garde-fous", () => {
 
   it("refuse explicitement (throw) une offre pour un acquéreur archivé", async () => {
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("ACQ-ARCHIVE");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     await expect(
       ajouterOffreAction(ETAT_FORMULAIRE_INITIAL,
@@ -360,7 +360,7 @@ describe("changerStatutOffreAction — garde-fous", () => {
       dateOffre: "2026-08-01",
     });
     idsOffresCrees.push(offre.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(
       changerStatutOffreAction(ETAT_FORMULAIRE_INITIAL, formData({ offreId: offre.id, statut: "acceptee", dateDecision: "2026-08-05" }))

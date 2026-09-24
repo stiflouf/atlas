@@ -125,7 +125,7 @@ describe("enregistrerCompteRenduVisiteAction — garde-fou entité archivée", (
   it("n'insère aucun compte rendu si le bien est archivé, même en appelant l'action directement", async () => {
     const bien = await creerBienTest("[test réel] CR-BIEN-ARCHIVE");
     const acquereur = await creerAcquereurTest("[test réel] CR-ACQ-1");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await enregistrerCompteRenduVisiteAction(
       formData({
@@ -143,10 +143,10 @@ describe("enregistrerCompteRenduVisiteAction — garde-fou entité archivée", (
   it("n'insère aucun compte rendu si l'acquéreur est archivé, même en appelant l'action directement", async () => {
     const bien = await creerBienTest("[test réel] CR-BIEN-2");
     const acquereur = await creerAcquereurTest("[test réel] CR-ACQ-ARCHIVE");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
     // S'assurer que seul l'acquéreur est archivé pour ce cas (le bien précédent avait été
     // archivé dans le test ci-dessus, celui-ci est un nouveau bien actif).
-    await desarchiverBien(bien.id);
+    await desarchiverBien(bien.id, WORKSPACE_TEST);
 
     await enregistrerCompteRenduVisiteAction(
       formData({
@@ -275,7 +275,9 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
     expect(compteRendu.visiteId).toBeUndefined();
   });
 
-  it("visiteId soumis mais pointant vers un autre couple bien/acquéreur : ignoré, aucune transition, compte rendu quand même enregistré", async () => {
+  // WORKSPACE_SCOPING_V1 — comportement CHANGÉ : une Visite désignée mais non prouvable ne donne
+  // plus un compte rendu « sans lien ». Le geste est refusé en entier, rien n'est écrit.
+  it("visiteId soumis mais pointant vers un autre couple bien/acquéreur : refus, AUCUN compte rendu enregistré", async () => {
     const bien = await creerBienTest("[test réel] CR-VISITE-MISMATCH-1");
     const acquereur = await creerAcquereurTest("[test réel] CR-VISITE-MISMATCH-ACQ-1");
     const autreBien = await creerBienTest("[test réel] CR-VISITE-MISMATCH-AUTRE");
@@ -304,7 +306,6 @@ describe("enregistrerCompteRenduVisiteAction — transition visite → realisee 
     ).catch(() => {});
 
     expect((await getVisiteById(visiteAutrePaire.id, WORKSPACE_TEST))?.statut).toBe("planifiee");
-    const [compteRendu] = await listerComptesRendusPourBien(bien.id, WORKSPACE_TEST);
-    expect(compteRendu.visiteId).toBeUndefined();
+    expect(await listerComptesRendusPourBien(bien.id, WORKSPACE_TEST)).toEqual([]);
   });
 });

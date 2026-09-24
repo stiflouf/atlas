@@ -198,7 +198,7 @@ describe("scannerMandatExpireBientot", () => {
     const [tache] = await tachesOuvertesDuBien(bien.id);
     expect(tache).toBeDefined();
 
-    await annulerTache(tache.id);
+    await annulerTache(tache.id, WORKSPACE_TEST);
     await scannerMandatExpireBientot(maintenant);
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(0);
     expect(await tachesDuBien(bien.id)).toHaveLength(1);

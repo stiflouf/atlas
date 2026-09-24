@@ -2,8 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { creerCompteRenduEtRealiserVisite } from "@/lib/compteRenduVisiteRepository";
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { traiterExecutionsEnAttente } from "@/lib/automatisations/moteur";
 import type { Interet } from "@/types/compteRenduVisite";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -49,7 +49,12 @@ export async function enregistrerCompteRenduVisiteAction(formData: FormData): Pr
   const interet = parseInteret(formData.get("interet"));
 
   if (bienId && acquereurId && dateVisite && retour && interet) {
-    const [bien, acquereur] = await Promise.all([getBienById(bienId), getClientById(acquereurId)]);
+    // WORKSPACE_SCOPING_V1 — bien et acquéreur résolus dans le périmètre de session : un compte
+    // rendu ne peut plus naître d'ids bruts appartenant à un autre workspace.
+    const [bien, acquereur] = await Promise.all([
+      getBienDuWorkspace(bienId, workspaceId),
+      getAcquereurDuWorkspace(acquereurId, workspaceId),
+    ]);
     if (bien && !bien.archiveLe && acquereur && !acquereur.archiveLe) {
       const resultat = await creerCompteRenduEtRealiserVisite(
         {
@@ -68,7 +73,7 @@ export async function enregistrerCompteRenduVisiteAction(formData: FormData): Pr
       // été tranchée par un autre geste au moment du verrou — n'enregistre jamais un second compte
       // rendu orphelin : retour direct sur la fiche du bien, message honnête, jamais une écriture
       // silencieuse.
-      if (resultat.statut === "visite_deja_finalisee") {
+      if (resultat.statut === "visite_deja_finalisee" || resultat.statut === "visite_hors_perimetre") {
         redirect(`/biens/${bienId}`);
       }
 

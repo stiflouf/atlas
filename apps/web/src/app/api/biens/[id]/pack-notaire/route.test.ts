@@ -38,8 +38,10 @@ vi.mock("@/lib/auth/sessionAtlas", () => ({
 // tests, src/lib/auth/workspaceCourant.test.ts). Sans ce mock, la résolution tenterait un bootstrap
 // d'appartenance pour un `sub` fictif et dépendrait de l'allowlist. Le littéral est celui du
 // workspace historique : ce que l'action écrit reste vérifié en base par les assertions.
+// WORKSPACE_SCOPING_V1 — périmètre pilotable, pour exercer le cas cross-workspace.
+let workspaceCourantMock = "default";
 vi.mock("@/lib/auth/workspaceCourant", () => ({
-  exigerWorkspaceCourant: vi.fn().mockResolvedValue("default"),
+  exigerWorkspaceCourant: vi.fn(() => Promise.resolve(workspaceCourantMock)),
 }));
 
 const { getDb } = await import("@/db/client");
@@ -118,6 +120,24 @@ describe("POST /api/biens/[id]/pack-notaire", () => {
       params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }),
     });
     expect(reponse.status).toBe(404);
+  });
+
+  // WORKSPACE_SCOPING_V1 (ADR-054) — avant ce lot, un bien d'un AUTRE workspace répondait 409
+  // (« aucun compromis en cours ») là où un bien inexistant répondait 404 : la différence
+  // confirmait l'existence de la ressource. Les deux réponses sont désormais identiques.
+  it("bien d'un AUTRE workspace → 404, exactement comme un bien inexistant", async () => {
+    const bien = await creerBienTest("[test réel] PACK-NOTAIRE-CROSS-WS");
+    workspaceCourantMock = "un-autre-workspace-inexistant";
+
+    const croise = await POST(requetePost(bien.id, []), { params: Promise.resolve({ id: bien.id }) });
+    const inexistant = await POST(requetePost("00000000-0000-0000-0000-000000000000", []), {
+      params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }),
+    });
+
+    expect(croise.status).toBe(404);
+    expect(inexistant.status).toBe(croise.status);
+    expect(await croise.json()).toEqual(await inexistant.json());
+    workspaceCourantMock = "default";
   });
 
   it("409 si aucun compromis en cours n'existe pour ce bien (contexte transactionnel incomplet, correction n°2)", async () => {

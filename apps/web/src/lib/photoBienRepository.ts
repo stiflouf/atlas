@@ -1,4 +1,4 @@
-import { count, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { biens as biensTable, photosBien as photosBienTable } from "@/db/schema";
 import type { PhotoBien } from "@/types/photoBien";
@@ -35,6 +35,27 @@ export async function listerPhotosBien(bienId: string): Promise<PhotoBien[]> {
   return lignes.map(ligneVersPhotoBien);
 }
 
+// WORKSPACE_SCOPING_V1 — LA résolution d'une photo par id quand l'identifiant vient du client
+// (Route Handler d'affichage, suppression, réordonnancement). `photos_bien` est une FEUILLE de
+// `biens` : l'appartenance se prouve par la jointure, en une seule requête. Le `bienId` que
+// soumettrait un formulaire ne prouve RIEN — c'est la photo qui doit désigner son bien, pas
+// l'inverse. Hors périmètre = introuvable, indistinguable d'un id inexistant.
+export async function getPhotoBienDuWorkspace(
+  photoId: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<PhotoBien | undefined> {
+  if (!UUID_REGEX.test(photoId)) return undefined;
+  const [ligne] = await executeur
+    .select({ photo: photosBienTable })
+    .from(photosBienTable)
+    .innerJoin(biensTable, eq(photosBienTable.bienId, biensTable.id))
+    .where(and(eq(photosBienTable.id, photoId), eq(biensTable.workspaceId, workspaceId)))
+    .limit(1);
+  return ligne ? ligneVersPhotoBien(ligne.photo) : undefined;
+}
+
+// INTERNE, NON SCOPÉ — voir `getPhotoBienDuWorkspace` pour tout identifiant venant du client.
 export async function getPhotoBien(photoId: string): Promise<PhotoBien | undefined> {
   if (!UUID_REGEX.test(photoId)) return undefined;
   const [ligne] = await getDb().select().from(photosBienTable).where(eq(photosBienTable.id, photoId)).limit(1);
@@ -82,9 +103,26 @@ export class ErreurLimitePhotosAtteinte extends Error {
 // suppression) d'un MÊME bien entre elles, sans jamais bloquer celles d'un autre bien. C'est ce
 // verrou, pas un test-puis-écriture non protégé, qui garantit que la limite de
 // NOMBRE_MAX_PHOTOS_PAR_BIEN reste correcte même sous upload concurrent.
-async function verrouillerBien(tx: Executeur, bienId: string): Promise<void> {
-  const [ligne] = await tx.select({ id: biensTable.id }).from(biensTable).where(eq(biensTable.id, bienId)).for("update");
-  if (!ligne) throw new Error("Bien introuvable.");
+// WORKSPACE_SCOPING_V1 (ADR-054) — le verrou porte AUSSI la preuve d'appartenance : il est pris
+// sur `biens` dans la transaction, avec le workspace dans le `WHERE`. Un bien d'un autre périmètre
+// ne verrouille rien, donc aucune mutation de galerie ne s'engage pour lui — et il n'y a aucune
+// fenêtre entre la vérification et l'écriture, puisque c'est la même ligne verrouillée.
+async function verrouillerBien(tx: Executeur, bienId: string, workspaceId: string): Promise<void> {
+  const [ligne] = await tx
+    .select({ id: biensTable.id })
+    .from(biensTable)
+    .where(and(eq(biensTable.id, bienId), eq(biensTable.workspaceId, workspaceId)))
+    .for("update");
+  if (!ligne) throw new ErreurBienHorsPerimetre();
+}
+
+// Bien inexistant ET bien d'un autre workspace : même erreur, indistinguables (ADR-054). L'appelant
+// la traduit en « introuvable », jamais en « appartient à quelqu'un d'autre ».
+export class ErreurBienHorsPerimetre extends Error {
+  constructor() {
+    super("Bien introuvable.");
+    this.name = "ErreurBienHorsPerimetre";
+  }
 }
 
 export type NouvellePhotoBien = {
@@ -100,9 +138,9 @@ export type NouvellePhotoBien = {
 // appel — insertion pure sous verrou, même principe que les autres repositories. `ordre` n'est
 // jamais fourni par l'appelant : calculé ici, sous le même verrou, comme MAX(ordre)+1 pour ce bien
 // (0 si galerie vide) — toujours en fin de galerie (ADR-052 §11).
-export async function ajouterPhotoBien(input: NouvellePhotoBien): Promise<PhotoBien> {
+export async function ajouterPhotoBien(input: NouvellePhotoBien, workspaceId: string): Promise<PhotoBien> {
   return getDb().transaction(async (tx) => {
-    await verrouillerBien(tx, input.bienId);
+    await verrouillerBien(tx, input.bienId, workspaceId);
 
     const [{ total }] = await tx
       .select({ total: count() })
@@ -137,13 +175,24 @@ export async function ajouterPhotoBien(input: NouvellePhotoBien): Promise<PhotoB
 // omission : tout écart rejette l'opération ENTIÈRE ("invalide"), rien n'est écrit. La première
 // photo de la liste devient mécaniquement la photo principale (même tri que
 // getPhotoPrincipaleBien : ordre=0 la place toujours en tête).
-export async function reordonnerPhotosBien(bienId: string, photoIdsOrdonnes: string[]): Promise<"ok" | "invalide"> {
+export async function reordonnerPhotosBien(
+  bienId: string,
+  photoIdsOrdonnes: string[],
+  workspaceId: string
+): Promise<"ok" | "invalide"> {
   if (!UUID_REGEX.test(bienId)) return "invalide";
   if (photoIdsOrdonnes.length === 0 || !photoIdsOrdonnes.every((id) => UUID_REGEX.test(id))) return "invalide";
   if (new Set(photoIdsOrdonnes).size !== photoIdsOrdonnes.length) return "invalide";
 
   return getDb().transaction(async (tx) => {
-    await verrouillerBien(tx, bienId);
+    // Hors périmètre : rien n'est verrouillé, rien n'est écrit — « invalide », comme un ensemble
+    // de photos incohérent. L'appelant ne peut pas distinguer les deux.
+    try {
+      await verrouillerBien(tx, bienId, workspaceId);
+    } catch (erreur) {
+      if (erreur instanceof ErreurBienHorsPerimetre) return "invalide";
+      throw erreur;
+    }
 
     const actuelles = await tx.select({ id: photosBienTable.id }).from(photosBienTable).where(eq(photosBienTable.bienId, bienId));
     const ensembleActuel = new Set(actuelles.map((l) => l.id));
@@ -163,14 +212,19 @@ export async function reordonnerPhotosBien(bienId: string, photoIdsOrdonnes: str
 // (visible, cassé). undefined = idempotent — photo déjà absente, aucune erreur, rien à verrouiller
 // (son bienId est inconnu). Le nettoyage physique (best-effort) reste à la charge de l'appelant
 // (src/actions/supprimerPhotoBien.ts), qui dispose de cleStockage via la ligne retournée.
-export async function supprimerPhotoBien(photoId: string): Promise<PhotoBien | undefined> {
+//
+// WORKSPACE_SCOPING_V1 — la photo est résolue DANS le périmètre (jointure vers `biens`) : le
+// `bienId` que soumettrait un formulaire ne prouve rien, c'est la photo qui désigne son bien. Une
+// photo d'un autre workspace se comporte exactement comme une photo déjà supprimée : `undefined`,
+// aucune ligne touchée, et l'appelant n'a donc aucun fichier à effacer.
+export async function supprimerPhotoBien(photoId: string, workspaceId: string): Promise<PhotoBien | undefined> {
   if (!UUID_REGEX.test(photoId)) return undefined;
 
-  const [avant] = await getDb().select().from(photosBienTable).where(eq(photosBienTable.id, photoId)).limit(1);
+  const avant = await getPhotoBienDuWorkspace(photoId, workspaceId);
   if (!avant) return undefined;
 
   return getDb().transaction(async (tx) => {
-    await verrouillerBien(tx, avant.bienId);
+    await verrouillerBien(tx, avant.bienId, workspaceId);
     const [supprimee] = await tx.delete(photosBienTable).where(eq(photosBienTable.id, photoId)).returning();
     return supprimee ? ligneVersPhotoBien(supprimee) : undefined;
   });

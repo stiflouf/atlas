@@ -3,7 +3,7 @@
 import { notFound, redirect } from "next/navigation";
 import {
   annulerCompromis,
-  getBienById,
+  getBienDuWorkspace,
   marquerCompromisSigne,
   marquerOffreEnCours,
   retirerOffre,
@@ -23,8 +23,11 @@ import { listerCompromisPourBien } from "@/lib/compromisRepository";
 // métier sur le dossier, jamais posé sur une entité sortie des flux actifs (ADR-012), même
 // principe que creerAction. Les boutons sont déjà masqués côté UI sur un bien archivé ; ce
 // garde-fou couvre un appel contourné.
-async function verifierBienNonArchive(id: string) {
-  const bien = await getBienById(id);
+// WORKSPACE_SCOPING_V1 (ADR-054) — le bien est résolu DANS le périmètre : hors workspace, il est
+// introuvable, exactement comme un id inexistant. Les writers ci-dessous portent en plus le
+// périmètre dans leur `WHERE` — ceinture et bretelles, la seconde étant celle qui compte.
+async function verifierBienNonArchive(id: string, workspaceId: string) {
+  const bien = await getBienDuWorkspace(id, workspaceId);
   if (!bien) notFound();
   if (bien.archiveLe) {
     throw new Error("Impossible de modifier le statut commercial d'un bien archivé.");
@@ -38,9 +41,9 @@ export async function marquerOffreEnCoursAction(formData: FormData): Promise<voi
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
-  await verifierBienNonArchive(id);
+  await verifierBienNonArchive(id, workspaceId);
   if (await existeOffreCanoniqueDuBien(id, workspaceId)) redirect(`/biens/${id}`);
-  await marquerOffreEnCours(id);
+  await marquerOffreEnCours(id, workspaceId);
 
   redirect(`/biens/${id}`);
 }
@@ -53,12 +56,12 @@ export async function retirerOffreAction(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
-  const bien = await verifierBienNonArchive(id);
+  const bien = await verifierBienNonArchive(id, workspaceId);
   if (await existeOffreCanoniqueDuBien(id, workspaceId)) redirect(`/biens/${id}`);
   if (bien.compromisSigneLe) {
     throw new Error("Impossible de retirer l'offre : un compromis est déjà signé sur ce bien.");
   }
-  await retirerOffre(id);
+  await retirerOffre(id, workspaceId);
 
   redirect(`/biens/${id}`);
 }
@@ -70,9 +73,9 @@ export async function marquerCompromisSigneAction(formData: FormData): Promise<v
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
-  await verifierBienNonArchive(id);
+  await verifierBienNonArchive(id, workspaceId);
   if ((await listerCompromisPourBien(id, workspaceId)).length > 0) redirect(`/biens/${id}`);
-  await marquerCompromisSigne(id);
+  await marquerCompromisSigne(id, workspaceId);
 
   redirect(`/biens/${id}`);
 }
@@ -83,9 +86,9 @@ export async function annulerCompromisAction(formData: FormData): Promise<void> 
   const id = String(formData.get("id") ?? "");
   if (!id) notFound();
 
-  await verifierBienNonArchive(id);
+  await verifierBienNonArchive(id, workspaceId);
   if ((await listerCompromisPourBien(id, workspaceId)).length > 0) redirect(`/biens/${id}`);
-  await annulerCompromis(id);
+  await annulerCompromis(id, workspaceId);
 
   redirect(`/biens/${id}`);
 }

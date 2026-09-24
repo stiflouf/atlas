@@ -249,9 +249,14 @@ export async function creerBien(
 // et `statut_mandat` ne sont plus écrits, même si le payload les porte — le canonique fait foi (§1)
 // et toute correction contractuelle passe par les writers Mandat. Jamais de dual-write. Un bien sans
 // mandat canonique reste éditable comme avant.
+// WORKSPACE_SCOPING_V1 (ADR-054) — le périmètre est DANS le `WHERE` de l'UPDATE, jamais une
+// vérification faite à côté : un bien d'un autre workspace ne renvoie aucune ligne, donc l'appelant
+// reçoit `undefined` exactement comme pour un id inexistant, et rien n'a été écrit entre-temps.
+// C'est la seule forme qui ne laisse pas de fenêtre entre le contrôle et la mutation.
 export async function modifierBien(
   id: string,
   input: NouveauBien,
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
@@ -285,30 +290,41 @@ export async function modifierBien(
       codeInseeCommune: input.codeInseeCommune ?? null,
       modifieLe: new Date(),
     })
-    .where(eq(biensTable.id, id))
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
 }
 
+// WORKSPACE_SCOPING_V1 — les six writers d'état ci-dessous portent tous le périmètre dans leur
+// `WHERE` : 0 ligne touchée hors workspace, et l'appelant lit ce `undefined` comme un « introuvable ».
+//
 // Archivage/désarchivage : jamais un DELETE, uniquement archiveLe qui bascule. N'affecte aucune
 // FK (notes_bien, comptes_rendus_visite) ni les colonnes text sans contrainte (actions,
 // memoire_contextuelle) — un UPDATE ne déclenche jamais ON DELETE CASCADE.
-export async function archiverBien(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
+export async function archiverBien(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(biensTable)
     .set({ archiveLe: new Date() })
-    .where(eq(biensTable.id, id))
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
 }
 
-export async function desarchiverBien(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
+export async function desarchiverBien(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(biensTable)
     .set({ archiveLe: null })
-    .where(eq(biensTable.id, id))
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
 }
@@ -318,22 +334,26 @@ export async function desarchiverBien(id: string, executeur: Executeur = getDb()
 // de la Server Action appelante, même séparation que archiverBien/desarchiverBien.
 // `executeur` optionnel : permet d'appeler cette fonction à l'intérieur d'une transaction ouverte
 // ailleurs (voir offreRepository.enregistrerOffreAvecLiensEtJalon, ADR-019).
-export async function marquerOffreEnCours(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
+export async function marquerOffreEnCours(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(biensTable)
     .set({ offreEnCoursLe: new Date() })
-    .where(eq(biensTable.id, id))
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
 }
 
-export async function retirerOffre(id: string): Promise<Bien | undefined> {
+export async function retirerOffre(id: string, workspaceId: string): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(biensTable)
     .set({ offreEnCoursLe: null })
-    .where(eq(biensTable.id, id))
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
 }
@@ -341,22 +361,26 @@ export async function retirerOffre(id: string): Promise<Bien | undefined> {
 // `executeur` optionnel (ADR-032) : permet de poser ce jalon dans la même transaction que
 // `compromisRepository.enregistrerCompromis` et l'émission de l'événement `compromis_signe`
 // (voir `ajouterCompromisAction`, désormais transactionnel).
-export async function marquerCompromisSigne(id: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {
+export async function marquerCompromisSigne(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await executeur
     .update(biensTable)
     .set({ compromisSigneLe: new Date() })
-    .where(eq(biensTable.id, id))
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
 }
 
-export async function annulerCompromis(id: string): Promise<Bien | undefined> {
+export async function annulerCompromis(id: string, workspaceId: string): Promise<Bien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
     .update(biensTable)
     .set({ compromisSigneLe: null })
-    .where(eq(biensTable.id, id))
+    .where(and(eq(biensTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .returning();
   return ligne ? ligneVersBien(ligne) : undefined;
 }

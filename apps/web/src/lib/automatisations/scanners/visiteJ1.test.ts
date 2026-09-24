@@ -226,7 +226,7 @@ describe("scannerVisiteJ1", () => {
     const [tache] = await tachesOuvertesDeLaVisite(visite.id);
     expect(tache).toBeDefined();
 
-    await annulerTache(tache.id);
+    await annulerTache(tache.id, WORKSPACE_TEST);
     await scannerVisiteJ1(maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
     expect(await tachesDeLaVisite(visite.id)).toHaveLength(1);
@@ -242,7 +242,7 @@ describe("scannerVisiteJ1", () => {
     const maintenant = new Date("2026-10-20T10:00:00Z");
     await scannerVisiteJ1(maintenant);
     const [tache] = await tachesOuvertesDeLaVisite(visite.id);
-    await annulerTache(tache.id);
+    await annulerTache(tache.id, WORKSPACE_TEST);
 
     await modifierDatePrevueVisite(visite.id, "2026-10-26", WORKSPACE_TEST);
     const nouvelleVeille = new Date("2026-10-25T10:00:00Z");

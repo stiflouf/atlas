@@ -70,7 +70,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 1024,
       hashSha256: "hash-test-fiche-1",
-    });
+    }, WORKSPACE_TEST);
 
     const element = await FicheBien({ params: Promise.resolve({ id: bien.id }), searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(element);
@@ -95,7 +95,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
       typeMimeOriginal: "image/jpeg",
       tailleOctetsOriginal: 1024,
       hashSha256: "hash-test-fiche-2a",
-    });
+    }, WORKSPACE_TEST);
     const photoB = await ajouterPhotoBien({
       bienId: bien.id,
       cleStockage: "cle-test-fiche-2b",
@@ -103,7 +103,7 @@ describe("/biens/[id] — câblage réel du Hero et du filmstrip selon le nombre
       typeMimeOriginal: "image/png",
       tailleOctetsOriginal: 2048,
       hashSha256: "hash-test-fiche-2b",
-    });
+    }, WORKSPACE_TEST);
 
     const element = await FicheBien({ params: Promise.resolve({ id: bien.id }), searchParams: Promise.resolve({}) });
     const html = renderToStaticMarkup(element);

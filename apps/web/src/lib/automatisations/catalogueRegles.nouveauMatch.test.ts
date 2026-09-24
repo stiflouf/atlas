@@ -300,18 +300,18 @@ describe("règle nouveau_match_bien_acquereur — revalidation complète avant e
   it("bien archivé avant le traitement : aucune tâche", async () => {
     const acquereur = await creerAcquereurDeTest("ARCH1", 400000);
     const bien = await creerBienDeTest("ARCH1", 300000);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
     const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
     expect(champs).toBeUndefined();
-    await desarchiverBien(bien.id);
+    await desarchiverBien(bien.id, WORKSPACE_TEST);
   });
 
   it("acquéreur archivé avant le traitement : aucune tâche", async () => {
     const acquereur = await creerAcquereurDeTest("ARCH2", 400000);
     const bien = await creerBienDeTest("ARCH2", 300000);
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
     const evenement = { id: "n/a", workspaceId: WORKSPACE_TEST, typeEvenement: "compatibilite_bien_acquereur_devenue_compatible" as const, bienId: bien.id, acquereurId: acquereur.id, cycleCompatibilite: 1, survenuLe: new Date().toISOString() };
 
     const champs = await trouverRegle(REGLE)!.construireTache(evenement);
@@ -477,7 +477,7 @@ describe("règle nouveau_match_bien_acquereur — anti-spam inter-cycle (distinc
     await traiterExecutionsEnAttente(premier.idsExecutionsATraiter);
     const [t1] = await tachesPourAcquereur(acquereur.id);
     const { terminerTache } = await import("@/lib/tacheRepository");
-    await terminerTache(t1.id);
+    await terminerTache(t1.id, WORKSPACE_TEST);
 
     const second = await emettreNouveauMatch(bien.id, acquereur.id, 2);
     await traiterExecutionsEnAttente(second.idsExecutionsATraiter);

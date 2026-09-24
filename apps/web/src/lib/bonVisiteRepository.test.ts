@@ -519,7 +519,7 @@ describe("bonVisiteRepository — snapshot figé (§31/§32/§51/§52)", () => {
       dateMandat: bien.dateMandat,
       caracteristiques: bien.caracteristiques,
       description: bien.description,
-    });
+    }, WORKSPACE_TEST);
 
     const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
     expect(relu?.contenuSnapshot.bien.adresse).toBe(adresseAvant);
@@ -659,7 +659,7 @@ describe("bonVisiteRepository — Visite archivée / historique (§35, archivage
       },
       WORKSPACE_TEST
     );
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
     const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
     expect(relu?.statut).toBe("signe");
   });

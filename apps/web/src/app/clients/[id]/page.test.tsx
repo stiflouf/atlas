@@ -256,7 +256,7 @@ describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)"
       origine: "manuelle",
       cible: { type: "acquereur", id: acquereur.id },
     }, WORKSPACE_TEST);
-    await terminerTache(tache.id);
+    await terminerTache(tache.id, WORKSPACE_TEST);
 
     const html = renderToStaticMarkup(await rendreFiche(acquereur.id, tache.id));
 

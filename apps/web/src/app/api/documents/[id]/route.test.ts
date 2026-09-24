@@ -36,8 +36,15 @@ function creerCookieStoreFactice() {
 let cookieStoreActuel = creerCookieStoreFactice();
 vi.mock("next/headers", () => ({ cookies: async () => cookieStoreActuel }));
 
+// WORKSPACE_SCOPING_V1 — le périmètre est piloté test par test (même patron que la route du bon de
+// visite) : la session dit QUI, cette variable dit DEPUIS QUEL workspace il regarde.
+let workspaceCourantMock = WORKSPACE_TEST;
+vi.mock("@/lib/auth/workspaceCourant", () => ({
+  exigerWorkspaceCourant: vi.fn(() => Promise.resolve(workspaceCourantMock)),
+}));
+
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, documentsBien: documentsBienTable } = await import("@/db/schema");
+const { biens: biensTable, documentsBien: documentsBienTable, workspaces: workspacesTable } = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { enregistrerDocumentBien } = await import("@/lib/documentBienRepository");
 const { ecrireDocument, genererCleStockage } = await import("@/lib/stockageDocuments");
@@ -48,9 +55,21 @@ const idsDocuments: string[] = [];
 afterAll(async () => {
   for (const id of idsDocuments) await getDb().delete(documentsBienTable).where(eq(documentsBienTable.id, id));
   for (const id of idsBiens) await getDb().delete(biensTable).where(eq(biensTable.id, id));
+  if (workspaceBCree) await getDb().delete(workspacesTable).where(eq(workspacesTable.id, WORKSPACE_B));
 });
 
-async function creerDocumentTest(reference: string, contenu: string) {
+const WORKSPACE_B = `ws-doc-route-${Date.now()}`;
+let workspaceBCree = false;
+
+async function autreWorkspace() {
+  if (!workspaceBCree) {
+    await getDb().insert(workspacesTable).values({ id: WORKSPACE_B, nom: "[test réel] autre workspace documents" });
+    workspaceBCree = true;
+  }
+  return WORKSPACE_B;
+}
+
+async function creerDocumentTest(reference: string, contenu: string, workspaceId: string = WORKSPACE_TEST) {
   const bien = await creerBien({
     reference,
     titre: "Bien de test document",
@@ -65,7 +84,7 @@ async function creerDocumentTest(reference: string, contenu: string) {
     dateMandat: "2026-01-01",
     caracteristiques: [],
     description: "",
-  }, WORKSPACE_TEST);
+  }, workspaceId);
   idsBiens.push(bien.id);
 
   const cle = genererCleStockage();
@@ -87,6 +106,7 @@ async function creerDocumentTest(reference: string, contenu: string) {
 describe("GET /api/documents/[id] (ADR-047)", () => {
   beforeEach(() => {
     cookieStoreActuel = creerCookieStoreFactice();
+    workspaceCourantMock = WORKSPACE_TEST;
     vi.stubEnv("ATLAS_SESSION_PASSWORD", "a".repeat(32));
     vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
   });
@@ -133,6 +153,49 @@ describe("GET /api/documents/[id] (ADR-047)", () => {
     });
 
     expect(reponse.status).toBe(404);
+  });
+
+  // WORKSPACE_SCOPING_V1 (ADR-054) — le cœur du lot : un document d'un AUTRE workspace doit être
+  // rigoureusement indistinguable d'un document qui n'a jamais existé, et son fichier ne doit
+  // jamais être ouvert. `lireDocument` est espionné pour le prouver : la preuve d'appartenance
+  // passe AVANT le système de fichiers, elle ne le suit pas.
+  it("session valide + document d'un AUTRE workspace → 404, identique à un id inexistant, et aucun accès disque", async () => {
+    const documentB = await creerDocumentTest("[test réel] DOCUMENT-WORKSPACE-B", "secret du workspace B", await autreWorkspace());
+    const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
+    await creerSessionAtlas({ sub: "google-sub-123", email: "conseiller@example.com" });
+
+    const stockage = await import("@/lib/stockageDocuments");
+    const espion = vi.spyOn(stockage, "lireDocument");
+
+    const { GET } = await import("./route");
+    const croise = await GET(new Request(`http://localhost/api/documents/${documentB.id}`), {
+      params: Promise.resolve({ id: documentB.id }),
+    });
+    const idInexistant = "00000000-0000-0000-0000-000000000000";
+    const inexistant = await GET(new Request(`http://localhost/api/documents/${idInexistant}`), {
+      params: Promise.resolve({ id: idInexistant }),
+    });
+
+    expect(croise.status).toBe(404);
+    expect(inexistant.status).toBe(croise.status);
+    expect(await croise.text()).toBe(await inexistant.text());
+    expect(espion).not.toHaveBeenCalled();
+    espion.mockRestore();
+  });
+
+  it("le même document redevient lisible depuis SON workspace : le refus vient du périmètre, pas de la ligne", async () => {
+    const documentB = await creerDocumentTest("[test réel] DOCUMENT-WORKSPACE-B-RETOUR", "contenu B", await autreWorkspace());
+    const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
+    await creerSessionAtlas({ sub: "google-sub-123", email: "conseiller@example.com" });
+    workspaceCourantMock = WORKSPACE_B;
+
+    const { GET } = await import("./route");
+    const reponse = await GET(new Request(`http://localhost/api/documents/${documentB.id}`), {
+      params: Promise.resolve({ id: documentB.id }),
+    });
+
+    expect(reponse.status).toBe(200);
+    expect(await reponse.text()).toBe("contenu B");
   });
 
   // ADR-050 : stockage indisponible/mal configuré ≠ document absent — 503 honnête, jamais un faux

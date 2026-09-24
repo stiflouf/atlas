@@ -256,7 +256,7 @@ describe("enregistrerTransmissionDossierNotaireAction — comportement métier",
   it("Bien archivé : refus explicite d'une nouvelle transmission", async () => {
     const { bien, compromis } = await creerCompromisDeTest("ARCHIVE");
     const document = await creerDocumentDeTest(bien.id, "ARCHIVE", "contenu bien archive");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const resultat = await enregistrerTransmissionDossierNotaireAction(
       null,

@@ -108,7 +108,7 @@ describe("ajouterPhotoBienAction (ADR-052)", () => {
     vi.stubEnv("ATLAS_DOCUMENT_STORAGE_DIR", dirStockageTest);
 
     const bien = await bienTest("ARCHIVE");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const resultat = await ajouterPhotoBienAction(formDataAvecFichier(bien.id, await fichierJpegTest()));
     expect(resultat.succes).toBe(false);

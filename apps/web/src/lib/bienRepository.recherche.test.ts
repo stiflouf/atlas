@@ -42,7 +42,7 @@ describe("rechercherBiensPage (ADR-048)", () => {
     idsCrees.push(actif.id);
     const archive = await creerBien(bienTest("ARCHIVES-2"), WORKSPACE_TEST);
     idsCrees.push(archive.id);
-    await archiverBien(archive.id);
+    await archiverBien(archive.id, WORKSPACE_TEST);
 
     const { lignes: actifs } = await rechercherBiensPage({ archives: false, page: 1, parPage: 50 });
     expect(actifs.some((b) => b.id === actif.id)).toBe(true);

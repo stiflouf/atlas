@@ -4,8 +4,8 @@ import { LABEL_CHARGE_HONORAIRES } from "@/types/bien";
 import { LABEL_TYPE_DOCUMENT, type DocumentBien } from "@/types/documentBien";
 import type { ProfilAcquereur } from "@/types/client";
 import type { Compromis } from "@/types/compromis";
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { listerDocumentsPourBien } from "@/lib/documentBienRepository";
 import { getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
@@ -91,13 +91,21 @@ export async function chargerContextePackNotaire(
   bienId: string,
   workspaceId: string
 ): Promise<{ ctx: ContextePackNotaire; documents: DocumentBien[] } | undefined> {
-  const bien = await getBienById(bienId);
+  // WORKSPACE_SCOPING_V1 (ADR-054) — le bien est résolu DANS le périmètre. Avant, un bien d'un
+  // autre workspace était résolu puis butait plus loin sur l'absence de compromis scopé : le ZIP
+  // n'était pas produit, mais la réponse (409) différait de celle d'un bien inexistant (404) et
+  // révélait donc l'existence de la ressource. Ici, hors périmètre = introuvable, point.
+  //
+  // Tout le reste découle d'un bien déjà prouvé : documents, prospect d'origine et compromis sont
+  // ses feuilles. Seul l'acquéreur est une autre racine — il est donc résolu dans le périmètre lui
+  // aussi, jamais par id nu.
+  const bien = await getBienDuWorkspace(bienId, workspaceId);
   if (!bien) return undefined;
   const documents = await listerDocumentsPourBien(bien.id);
   const compromis = await listerCompromisPourBien(bien.id, workspaceId);
   const compromisActuel = determinerCompromisActuel(compromis);
   const prospectVendeurOrigine = await getProspectVendeurParBien(bien.id);
-  const acquereur = compromisActuel ? await getClientById(compromisActuel.acquereurId) : undefined;
+  const acquereur = compromisActuel ? await getAcquereurDuWorkspace(compromisActuel.acquereurId, workspaceId) : undefined;
   const ctx: ContextePackNotaire = { bien, compromisActuel, prospectVendeurOrigine, acquereur };
   return { ctx, documents };
 }

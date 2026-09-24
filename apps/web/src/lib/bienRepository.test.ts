@@ -52,12 +52,12 @@ function bienTest(surcharge: Partial<Parameters<typeof creerBien>[0]> = {}) {
 
 describe("bienRepository (intégration Postgres)", () => {
   it("modifierBien() retourne undefined pour un id non-UUID (bien mocké)", async () => {
-    await expect(modifierBien("bien-001", bienTest())).resolves.toBeUndefined();
+    await expect(modifierBien("bien-001", bienTest(), WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("modifierBien() retourne undefined pour un UUID inexistant", async () => {
     await expect(
-      modifierBien("00000000-0000-0000-0000-000000000000", bienTest())
+      modifierBien("00000000-0000-0000-0000-000000000000", bienTest(), WORKSPACE_TEST)
     ).resolves.toBeUndefined();
   });
 
@@ -73,7 +73,7 @@ describe("bienRepository (intégration Postgres)", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date(modifieLeAvant + 1000));
 
-    const modifie = await modifierBien(cree.id, bienTest({ titre: "Titre modifié", ascenseur: true }));
+    const modifie = await modifierBien(cree.id, bienTest({ titre: "Titre modifié", ascenseur: true }), WORKSPACE_TEST);
 
     vi.useRealTimers();
 
@@ -89,16 +89,16 @@ describe("bienRepository (intégration Postgres)", () => {
     const cree = await creerBien(bienTest(), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
-    const modifie = await modifierBien(cree.id, bienTest());
+    const modifie = await modifierBien(cree.id, bienTest(), WORKSPACE_TEST);
 
     expect(modifie?.ascenseur).toBeUndefined();
     expect(modifie?.parking).toBeUndefined();
   });
 
   it("archiverBien()/desarchiverBien() retournent undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(archiverBien("bien-001")).resolves.toBeUndefined();
-    await expect(archiverBien("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
-    await expect(desarchiverBien("bien-001")).resolves.toBeUndefined();
+    await expect(archiverBien("bien-001", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(archiverBien("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(desarchiverBien("bien-001", WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   it("archiver un bien : posé archiveLe, exclu de listerBiens(), présent dans listerBiensArchives(), toujours résolu par getBienById()", async () => {
@@ -106,7 +106,7 @@ describe("bienRepository (intégration Postgres)", () => {
     idsCrees.push(cree.id);
     expect(cree.archiveLe).toBeUndefined();
 
-    const archive = await archiverBien(cree.id);
+    const archive = await archiverBien(cree.id, WORKSPACE_TEST);
     expect(archive?.archiveLe).toBeDefined();
 
     const actifs = await listerBiens();
@@ -123,9 +123,9 @@ describe("bienRepository (intégration Postgres)", () => {
   it("désarchiver un bien : archiveLe redevient undefined, réapparaît dans listerBiens()", async () => {
     const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-002" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
-    await archiverBien(cree.id);
+    await archiverBien(cree.id, WORKSPACE_TEST);
 
-    const desarchive = await desarchiverBien(cree.id);
+    const desarchive = await desarchiverBien(cree.id, WORKSPACE_TEST);
     expect(desarchive?.archiveLe).toBeUndefined();
 
     const actifs = await listerBiens();
@@ -135,7 +135,7 @@ describe("bienRepository (intégration Postgres)", () => {
   it("le comptage de bascule démo->réel inclut les biens archivés (pas de repli mock)", async () => {
     const cree = await creerBien(bienTest({ reference: "[test réel] ARCHIVE-003" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
-    await archiverBien(cree.id);
+    await archiverBien(cree.id, WORKSPACE_TEST);
 
     // Même si CE bien est archivé, tant qu'au moins une ligne réelle existe (lui ou un autre),
     // listerBiens() ne doit jamais retomber sur les mocks data/biens.ts (ids "bien-00x").
@@ -149,19 +149,19 @@ describe("bienRepository (intégration Postgres)", () => {
     expect(cree.offreEnCoursLe).toBeUndefined();
     expect(cree.compromisSigneLe).toBeUndefined();
 
-    const avecOffre = await marquerOffreEnCours(cree.id);
+    const avecOffre = await marquerOffreEnCours(cree.id, WORKSPACE_TEST);
     expect(avecOffre?.offreEnCoursLe).toBeDefined();
     expect(avecOffre?.compromisSigneLe).toBeUndefined();
 
-    const avecCompromis = await marquerCompromisSigne(cree.id);
+    const avecCompromis = await marquerCompromisSigne(cree.id, WORKSPACE_TEST);
     expect(avecCompromis?.compromisSigneLe).toBeDefined();
     expect(avecCompromis?.offreEnCoursLe).toBeDefined();
 
-    const sansCompromis = await annulerCompromis(cree.id);
+    const sansCompromis = await annulerCompromis(cree.id, WORKSPACE_TEST);
     expect(sansCompromis?.compromisSigneLe).toBeUndefined();
     expect(sansCompromis?.offreEnCoursLe).toBeDefined();
 
-    const sansOffre = await retirerOffre(cree.id);
+    const sansOffre = await retirerOffre(cree.id, WORKSPACE_TEST);
     expect(sansOffre?.offreEnCoursLe).toBeUndefined();
 
     const parId = await getBienById(cree.id);
@@ -173,16 +173,16 @@ describe("bienRepository (intégration Postgres)", () => {
     const cree = await creerBien(bienTest({ reference: "[test réel] STATUT-COMM-002" }), WORKSPACE_TEST);
     idsCrees.push(cree.id);
 
-    const avecCompromis = await marquerCompromisSigne(cree.id);
+    const avecCompromis = await marquerCompromisSigne(cree.id, WORKSPACE_TEST);
     expect(avecCompromis?.compromisSigneLe).toBeDefined();
     expect(avecCompromis?.offreEnCoursLe).toBeUndefined();
   });
 
   it("les jalons commerciaux retournent undefined pour un id non-UUID ou inexistant", async () => {
-    await expect(marquerOffreEnCours("bien-001")).resolves.toBeUndefined();
-    await expect(retirerOffre("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
-    await expect(marquerCompromisSigne("bien-001")).resolves.toBeUndefined();
-    await expect(annulerCompromis("00000000-0000-0000-0000-000000000000")).resolves.toBeUndefined();
+    await expect(marquerOffreEnCours("bien-001", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(retirerOffre("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(marquerCompromisSigne("bien-001", WORKSPACE_TEST)).resolves.toBeUndefined();
+    await expect(annulerCompromis("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toBeUndefined();
   });
 
   // ADR-035 : codeInseeCommune est un champ purement écrit par le repository (résolution IGN
@@ -207,7 +207,7 @@ describe("bienRepository (intégration Postgres)", () => {
 
     // Simule une adresse modifiée dont la nouvelle résolution IGN a échoué : l'appelant
     // (modifierBienAction) transmet codeInseeCommune undefined, jamais l'ancienne valeur.
-    const modifie = await modifierBien(cree.id, bienTest({ reference: "[test réel] INSEE-003", ville: "Nouvelleville" }));
+    const modifie = await modifierBien(cree.id, bienTest({ reference: "[test réel] INSEE-003", ville: "Nouvelleville" }), WORKSPACE_TEST);
     expect(modifie?.codeInseeCommune).toBeUndefined();
 
     const relu = await getBienById(cree.id);
@@ -220,7 +220,8 @@ describe("bienRepository (intégration Postgres)", () => {
 
     const modifie = await modifierBien(
       cree.id,
-      bienTest({ reference: "[test réel] INSEE-004", codeInseeCommune: "75108" })
+      bienTest({ reference: "[test réel] INSEE-004", codeInseeCommune: "75108" }),
+      WORKSPACE_TEST
     );
     expect(modifie?.codeInseeCommune).toBe("75108");
   });

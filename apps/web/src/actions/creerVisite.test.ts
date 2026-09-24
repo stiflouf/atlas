@@ -169,7 +169,7 @@ describe("creerVisiteAction — refus rendus au formulaire (jamais levés)", () 
   it("bien archivé : refus contrôlé", async () => {
     const bien = await unBien("ARCHIVE-BIEN");
     const acquereur = await unAcquereur("ARCHIVE-BIEN");
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     const { resultat } = await soumettre({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-10-01" });
 
@@ -180,7 +180,7 @@ describe("creerVisiteAction — refus rendus au formulaire (jamais levés)", () 
   it("acquéreur archivé : refus contrôlé", async () => {
     const bien = await unBien("ARCHIVE-ACQ");
     const acquereur = await unAcquereur("ARCHIVE-ACQ");
-    await archiverAcquereur(acquereur.id);
+    await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
     const { resultat } = await soumettre({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-10-01" });
 

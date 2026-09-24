@@ -65,7 +65,7 @@ describe("ajouterNoteBienAction — garde-fou entité archivée", () => {
       description: "",
     }, WORKSPACE_TEST);
     idsCrees.push(bien.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await ajouterNoteBienAction(formData({ bienId: bien.id, contenu: "Tentative sur bien archivé" })).catch(
       () => {}

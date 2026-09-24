@@ -74,7 +74,7 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
   it("refuse explicitement (throw) marquerOffreEnCoursAction sur un bien archivé", async () => {
     const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-001"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(marquerOffreEnCoursAction(formData(bien.id))).rejects.toThrow(/archivé/);
   });
@@ -82,8 +82,8 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
   it("refuse explicitement (throw) retirerOffreAction sur un bien archivé", async () => {
     const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-002"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
-    await marquerOffreEnCours(bien.id);
-    await archiverBien(bien.id);
+    await marquerOffreEnCours(bien.id, WORKSPACE_TEST);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(retirerOffreAction(formData(bien.id))).rejects.toThrow(/archivé/);
   });
@@ -91,7 +91,7 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
   it("refuse explicitement (throw) marquerCompromisSigneAction sur un bien archivé", async () => {
     const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-003"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
-    await archiverBien(bien.id);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(marquerCompromisSigneAction(formData(bien.id))).rejects.toThrow(/archivé/);
   });
@@ -99,8 +99,8 @@ describe("statutCommercialBien — garde-fou bien archivé", () => {
   it("refuse explicitement (throw) annulerCompromisAction sur un bien archivé", async () => {
     const bien = await creerBien(bienTest("[test réel] STATUT-ARCHIVE-004"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
-    await marquerCompromisSigne(bien.id);
-    await archiverBien(bien.id);
+    await marquerCompromisSigne(bien.id, WORKSPACE_TEST);
+    await archiverBien(bien.id, WORKSPACE_TEST);
 
     await expect(annulerCompromisAction(formData(bien.id))).rejects.toThrow(/archivé/);
   });
@@ -110,8 +110,8 @@ describe("statutCommercialBien — garde-fou compromis actif", () => {
   it("refuse explicitement (throw) retirerOffreAction si un compromis est déjà signé", async () => {
     const bien = await creerBien(bienTest("[test réel] STATUT-COMPROMIS-001"), WORKSPACE_TEST);
     idsCrees.push(bien.id);
-    await marquerOffreEnCours(bien.id);
-    await marquerCompromisSigne(bien.id);
+    await marquerOffreEnCours(bien.id, WORKSPACE_TEST);
+    await marquerCompromisSigne(bien.id, WORKSPACE_TEST);
 
     await expect(retirerOffreAction(formData(bien.id))).rejects.toThrow(/compromis/);
 
@@ -140,7 +140,7 @@ describe("actions legacy neutralisées par le canonique (ADR-061)", () => {
     await marquerOffreEnCoursAction(formData(bien.id)).catch(() => {});
     expect((await getBienById(bien.id))!.offreEnCoursLe, "aucune écriture legacy en mode canonique").toBeUndefined();
 
-    await marquerOffreEnCours(bien.id);
+    await marquerOffreEnCours(bien.id, WORKSPACE_TEST);
     await retirerOffreAction(formData(bien.id)).catch(() => {});
     expect((await getBienById(bien.id))!.offreEnCoursLe, "le jalon stocké n'est pas non plus retiré").toBeDefined();
 

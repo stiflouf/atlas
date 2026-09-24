@@ -1,6 +1,6 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
-import { documentsBien as documentsBienTable } from "@/db/schema";
+import { biens as biensTable, documentsBien as documentsBienTable } from "@/db/schema";
 import type {
   CategorieDocument,
   ChampsCorrectionDocumentBien,
@@ -58,9 +58,39 @@ export async function listerDocumentsPourBien(bienId: string): Promise<DocumentB
   }
 }
 
-// Résolution directe par id, utilisée par le Route Handler de téléchargement — continue de
-// résoudre un document même si le bien associé a depuis été archivé (ADR-012), jamais si le bien
-// mocké n'a pas d'id UUID.
+// WORKSPACE_SCOPING_V1 — LA résolution d'un document par id pour tout chemin où l'identifiant vient
+// du client (Route Handler de téléchargement, correction de classement). `documents_bien` est une
+// FEUILLE de `biens` (ADR-054) : son appartenance se prouve par la jointure, jamais par une colonne
+// `workspace_id` dupliquée. Une seule requête — charger puis comparer en JS laisserait la ligne
+// d'un autre périmètre transiter en mémoire, et ouvrirait une fenêtre entre la lecture et le
+// contrôle. Hors périmètre = INTROUVABLE : l'appelant ne peut pas distinguer ce cas d'un id qui
+// n'a jamais existé.
+//
+// Continue de résoudre un document dont le bien a été archivé (ADR-012) : l'archivage est un état
+// métier, pas une frontière d'appartenance.
+export async function getDocumentBienDuWorkspace(
+  id: string,
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<DocumentBien | undefined> {
+  if (!UUID_REGEX.test(id)) return undefined;
+  try {
+    const [ligne] = await executeur
+      .select({ document: documentsBienTable })
+      .from(documentsBienTable)
+      .innerJoin(biensTable, eq(documentsBienTable.bienId, biensTable.id))
+      .where(and(eq(documentsBienTable.id, id), eq(biensTable.workspaceId, workspaceId)))
+      .limit(1);
+    return ligne ? ligneVersDocumentBien(ligne.document) : undefined;
+  } catch (erreur) {
+    console.error("[documents-bien] lecture Postgres indisponible :", erreur);
+    return undefined;
+  }
+}
+
+// INTERNE, NON SCOPÉ — ne jamais appeler depuis `src/app/**` ni `src/actions/**` avec un id venant
+// du client : préférer `getDocumentBienDuWorkspace`. Garde d'import : demoUxHardening… voir
+// `src/db/frontiereWorkspace.structurel.test.ts`.
 export async function getDocumentBienById(id: string): Promise<DocumentBien | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   try {

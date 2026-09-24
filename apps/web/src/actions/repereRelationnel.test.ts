@@ -189,7 +189,7 @@ describe("ajouterRepereRelationnelAction — validations, jamais d'écriture dou
 
   it("acquéreur archivé : aucun nouveau repère", async () => {
     const acquereurId = await creerAcquereurDeTest("ARCHIVE-CIBLE");
-    await archiverAcquereur(acquereurId);
+    await archiverAcquereur(acquereurId, WORKSPACE_TEST);
 
     const resultat = await ajouterRepereRelationnelAction(
       null,
