@@ -304,3 +304,210 @@ describe("Frontière workspace — lecteurs non scopés hors des écrans et des 
     }
   });
 });
+
+// ───────────────────────── 4. LECTEURS DE LISTE GLOBAUX ─────────────────────────
+
+// WORKSPACE_SCOPING_V2B4 — les trois gardes précédentes surveillent les lecteurs UNITAIRES par id
+// et les écritures. Aucune ne voyait les lecteurs de LISTE, qui sont pourtant la fuite la plus
+// large : un `SELECT` sans `WHERE` ne révèle pas une entité, il révèle un catalogue. Les lots
+// V2B1 à V2B3 les ont refermés un par un ; ce bloc empêche qu'un nouveau chemin les rouvre.
+//
+// Deux principes, tirés de ce que les audits ont montré :
+//
+//   1. Un catalogue NOMMÉ, jamais une regex sur `lister.*` — le dépôt compte une quarantaine de
+//      lecteurs déjà scopés par leur parent (`listerNotesPourBien`, `listerOffresPourBien`…) qui
+//      produiraient un bruit tel que la garde finirait désactivée.
+//   2. Le périmètre protégé dépasse `app/**` et `actions/**`. Plusieurs fuites vivaient dans des
+//      MODULES-RELAIS : des helpers de `lib/` qui chargent les données d'un écran. Les scanner
+//      tous serait faux (les moteurs machine sont légitimement globaux), d'où une liste explicite.
+
+// Lecteurs qui lisent une table entière, sans périmètre. Les noms viennent du code réel.
+const LECTEURS_LISTE_GLOBAUX = [
+  "listerBiens",
+  "listerClients",
+  "listerTaches",
+  "listerVisites",
+  "listerComptesRendus",
+  "listerProspectsVendeursPourMachine",
+  "listerProspectsVendeursPerdus",
+  "listerProspectsVendeursConvertis",
+  "listerProspectsVendeursArchives",
+  "listerBiensActifsPersistes",
+  "listerClientsActifsPersistes",
+];
+
+// Alternative scopée à proposer dans le message d'erreur. Une garde qui dit seulement « interdit »
+// fait perdre du temps ; celle-ci dit quoi écrire à la place.
+const ALTERNATIVE_SCOPEE: Record<string, string> = {
+  listerBiens: "listerBiensActifsDuWorkspace(workspaceId)",
+  listerClients: "listerAcquereursActifsDuWorkspace(workspaceId)",
+  listerTaches: "listerTachesDuWorkspace(workspaceId)",
+  listerVisites: "listerVisitesDuWorkspace(workspaceId)",
+  listerComptesRendus: "listerComptesRendusDuWorkspace(workspaceId)",
+  listerProspectsVendeursPourMachine: 'listerProspectsVendeursDuWorkspace(workspaceId, "en_cours")',
+  listerProspectsVendeursPerdus: 'listerProspectsVendeursDuWorkspace(workspaceId, "perdus")',
+  listerProspectsVendeursConvertis: 'listerProspectsVendeursDuWorkspace(workspaceId, "convertis")',
+  listerProspectsVendeursArchives: 'listerProspectsVendeursDuWorkspace(workspaceId, "archives")',
+  listerBiensActifsPersistes: "réservé au synchroniseur de compatibilité (ADR-036)",
+  listerClientsActifsPersistes: "réservé au synchroniseur de compatibilité (ADR-036)",
+};
+
+// MODULES-RELAIS : des helpers de `lib/` qui assemblent les données d'un écran. Ils ne sont ni
+// dans `app/**` ni dans `actions/**`, et c'est précisément pourquoi les fuites y ont survécu le
+// plus longtemps. Une nouvelle entrée ici chaque fois qu'un module charge pour un écran.
+const MODULES_CONTEXTE_ECRAN = [
+  "lib/alertes/contexte.ts",
+  "lib/opportunites/contexte.ts",
+  "lib/communications/contexteEcranCommunication.ts",
+  "lib/compatibilite/orchestration.ts",
+  "lib/dashboardRepository.ts",
+  "lib/rendezVousContexte.ts",
+];
+
+// ALLOWLIST MACHINE, par FICHIER et non par nom : un lecteur global n'est jamais « sûr » en soi,
+// il l'est à un endroit précis. `listerProspectsVendeursPourMachine` porte « machine » dans son
+// nom et reste interdit partout ailleurs que dans son scanner.
+const LECTEURS_MACHINE_AUTORISES_PAR_FICHIER: Record<string, { lecteurs: string[]; raison: string }> = {
+  "lib/automatisations/scanners/inactiviteProspectVendeur.ts": {
+    lecteurs: ["listerProspectsVendeursPourMachine"],
+    raison: "scanner d'inactivité, trans-workspace par conception (ADR-062), gardé par le Bearer de la route de scan",
+  },
+  "lib/compatibilite/synchronisation.ts": {
+    lecteurs: ["listerBiensActifsPersistes", "listerClientsActifsPersistes"],
+    raison: "synchroniseur de compatibilité (ADR-036) : croise le parc entier, jamais appelé depuis une session",
+  },
+  "lib/compatibilite/baseline.ts": {
+    lecteurs: ["listerBiensActifsPersistes", "listerClientsActifsPersistes"],
+    raison: "calcul de baseline de compatibilité (ADR-036), route machine à Bearer",
+  },
+};
+
+// Dette V2C/V2D, nommée surface par surface. Ces pages lisent encore un catalogue global ; elles
+// seront traitées avec les autres surfaces par id (V2C) et la frontière Calendar (V2D).
+const EXCEPTIONS_LISTE_JUSTIFIEES: Record<string, string[]> = {
+  // V2C — surfaces par id : le panneau de matching et les formulaires de création lisent encore
+  // le catalogue complet pour alimenter un `<select>` ou une liste de compatibilité.
+  "app/biens/[id]/page.tsx": ["listerClients"],
+  "app/clients/[id]/page.tsx": ["listerBiens", "listerTaches", "listerComptesRendus"],
+  "app/compromis/nouveau/page.tsx": ["listerClients"],
+  "app/offres/nouveau/page.tsx": ["listerClients"],
+  // V2D — le matching des rendez-vous Google travaille sur le référentiel complet, et la
+  // connexion Calendar est elle-même un singleton sans notion de workspace.
+  "lib/rendezVousContexte.ts": ["listerBiens", "listerClients"],
+};
+
+// Détecte un appel ou un import du lecteur, jamais une simple mention en commentaire (les
+// commentaires sont retirés en amont par `codeSeul`).
+function lecteursUtilises(source: string): string[] {
+  return LECTEURS_LISTE_GLOBAUX.filter((lecteur) => new RegExp(`\\b${lecteur}\\b`).test(source));
+}
+
+function verifierSurface(relatif: string, source: string): string[] {
+  const autorisesMachine = LECTEURS_MACHINE_AUTORISES_PAR_FICHIER[relatif]?.lecteurs ?? [];
+  const exceptions = EXCEPTIONS_LISTE_JUSTIFIEES[relatif] ?? [];
+  return lecteursUtilises(source)
+    .filter((lecteur) => !autorisesMachine.includes(lecteur) && !exceptions.includes(lecteur))
+    .map(
+      (lecteur) =>
+        `${relatif} utilise ${lecteur}, lecteur global interdit dans une surface utilisateur — utiliser ${
+          ALTERNATIVE_SCOPEE[lecteur] ?? "un lecteur scopé workspace"
+        }`
+    );
+}
+
+describe("Frontière workspace — lecteurs de liste globaux", () => {
+  const surfacesUtilisateur = [
+    ...listerFichiers(join(SRC, "app"), (c) => /\.tsx?$/.test(c) && !/\.test\.tsx?$/.test(c)),
+    ...listerFichiers(join(SRC, "actions"), (c) => /\.ts$/.test(c) && !/\.test\.ts$/.test(c)),
+    ...listerFichiers(join(SRC, "components"), (c) => /\.tsx?$/.test(c) && !/\.test\.tsx?$/.test(c)),
+  ].map((chemin) => relative(SRC, chemin).split(sep).join("/"));
+
+  it("aucun écran, action ou composant n'utilise un lecteur de liste global, hors exceptions nommées", () => {
+    const fautifs = surfacesUtilisateur.flatMap((relatif) =>
+      verifierSurface(relatif, codeSeul(join(SRC, ...relatif.split("/"))))
+    );
+    expect(fautifs).toEqual([]);
+  });
+
+  it("les modules-relais de contexte d'écran sont soumis à la même règle", () => {
+    const fautifs = MODULES_CONTEXTE_ECRAN.flatMap((relatif) =>
+      verifierSurface(relatif, codeSeul(join(SRC, ...relatif.split("/"))))
+    );
+    expect(fautifs).toEqual([]);
+  });
+
+  // Prouver la CAPACITÉ DE DÉTECTION, pas seulement que le dépôt est propre aujourd'hui : un test
+  // qui ne fait que constater l'état actuel passerait encore si la garde était vide.
+  it("détecte un lecteur global introduit dans une page utilisateur", () => {
+    const faux = `import { listerBiens } from "@/lib/bienRepository";
+      export default async function Page() { const biens = await listerBiens(); return biens.length; }`;
+    const fautifs = verifierSurface("app/faux-ecran/page.tsx", faux);
+    expect(fautifs).toHaveLength(1);
+    expect(fautifs[0]).toContain("listerBiens");
+    expect(fautifs[0]).toContain("listerBiensActifsDuWorkspace(workspaceId)");
+  });
+
+  it("détecte un lecteur MACHINE utilisé depuis une surface utilisateur, malgré son nom", () => {
+    const faux = `import { listerProspectsVendeursPourMachine } from "@/lib/prospectVendeurRepository";
+      export default async function Page() { return (await listerProspectsVendeursPourMachine()).length; }`;
+    const fautifs = verifierSurface("app/faux-ecran/page.tsx", faux);
+    expect(fautifs).toHaveLength(1);
+    expect(fautifs[0]).toContain("listerProspectsVendeursPourMachine");
+  });
+
+  it("laisse passer un lecteur machine dans le fichier machine qui l'autorise", () => {
+    const relatif = "lib/automatisations/scanners/inactiviteProspectVendeur.ts";
+    const faux = `const p = await listerProspectsVendeursPourMachine();`;
+    expect(verifierSurface(relatif, faux)).toEqual([]);
+    // …et le même fichier ne reçoit pas pour autant un blanc-seing sur les autres lecteurs.
+    expect(verifierSurface(relatif, `const b = await listerBiens();`)).toHaveLength(1);
+  });
+
+  it("ne se déclenche pas sur une simple mention en commentaire", () => {
+    const source = codeSeul(join(SRC, "lib", "automatisations", "scanners", "inactiviteProspectVendeur.ts"));
+    expect(source).not.toContain("// `listerProspectsVendeursPourMachine()`");
+  });
+
+  it("chaque allowlist machine correspond à un usage réel : une entrée morte doit être retirée", () => {
+    const mortes: string[] = [];
+    for (const [relatif, { lecteurs }] of Object.entries(LECTEURS_MACHINE_AUTORISES_PAR_FICHIER)) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      for (const lecteur of lecteurs) {
+        if (!new RegExp(`\\b${lecteur}\\b`).test(source)) mortes.push(`${relatif} → ${lecteur}`);
+      }
+    }
+    expect(mortes).toEqual([]);
+  });
+
+  it("chaque exception V2C/V2D correspond à un usage réel : une exception périmée doit être retirée", () => {
+    const perimees: string[] = [];
+    for (const [relatif, lecteurs] of Object.entries(EXCEPTIONS_LISTE_JUSTIFIEES)) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      for (const lecteur of lecteurs) {
+        if (!new RegExp(`\\b${lecteur}\\b`).test(source)) perimees.push(`${relatif} → ${lecteur}`);
+      }
+    }
+    expect(perimees).toEqual([]);
+  });
+
+  it("les lecteurs scopés qui remplacent les globaux exigent tous un workspaceId", () => {
+    // Le nom ne prouve rien : on vérifie la signature réelle. `workspaceId?` serait un compromis
+    // qui viderait la garde de son sens.
+    const aVerifier: [string, string][] = [
+      ["lib/bienRepository.ts", "listerBiensActifsDuWorkspace"],
+      ["lib/clientRepository.ts", "listerAcquereursActifsDuWorkspace"],
+      ["lib/tacheRepository.ts", "listerTachesDuWorkspace"],
+      ["lib/visiteRepository.ts", "listerVisitesDuWorkspace"],
+      ["lib/compteRenduVisiteRepository.ts", "listerComptesRendusDuWorkspace"],
+      ["lib/prospectVendeurRepository.ts", "listerProspectsVendeursDuWorkspace"],
+    ];
+    for (const [relatif, nom] of aVerifier) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      const signature = new RegExp(`export async function ${nom}\\(([^)]*)\\)`).exec(source)?.[1] ?? "";
+      expect(signature, `${relatif} → ${nom}`).toContain("workspaceId: string");
+      expect(signature, `${relatif} → ${nom} : workspaceId ne doit jamais être optionnel`).not.toContain(
+        "workspaceId?"
+      );
+    }
+  });
+});
