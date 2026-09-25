@@ -157,7 +157,7 @@ describe("calculerProjectionPluriannuelle — correction obligatoire n° 1 (jama
   });
 
   it("le pipeline (18 000 €) et le run-rate (72 000 €) restent deux blocs séparés, jamais 90 000 €", async () => {
-    const projections = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, 1);
+    const projections = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, WORKSPACE_TEST, 1);
     expect(projections).toHaveLength(1);
     const annee = projections[0];
 
@@ -175,7 +175,7 @@ describe("calculerProjectionPluriannuelle — correction obligatoire n° 1 (jama
   });
 
   it("les conséquences fiscales du pipeline et du run-rate sont calculées séparément", async () => {
-    const [annee] = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, 1);
+    const [annee] = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, WORKSPACE_TEST, 1);
     expect(annee.pipeline.consequencesFiscales?.cotisations.statut).toBe("calcule");
     expect(annee.statistique.consequencesFiscales?.cotisations.statut).toBe("calcule");
     if (annee.pipeline.consequencesFiscales?.cotisations.statut === "calcule") {

@@ -31,10 +31,14 @@ export type ProjectionFinAnnee = {
 // dashboardRepository.chargerProjectionAnnuelle() n'a pas de paramètre année : elle est ancrée sur
 // CURRENT_DATE côté Postgres (ADR-022). Cette fonction n'a donc de sens que pour l'année civile en
 // cours, cohérent avec le périmètre V1 d'ADR-024 (aucune projection N+1 à N+5, réservée à ADR-025).
-export async function calculerProjectionFinAnnee(dossierFiscalId: string, annee: number): Promise<ProjectionFinAnnee> {
+export async function calculerProjectionFinAnnee(
+  dossierFiscalId: string,
+  annee: number,
+  workspaceId: string
+): Promise<ProjectionFinAnnee> {
   const [encaisseReel, dashboard] = await Promise.all([
     calculerAssietteAnnuelle(dossierFiscalId, annee),
-    chargerProjectionAnnuelle(),
+    chargerProjectionAnnuelle(workspaceId),
   ]);
 
   const finaliseNonEncaisseRestant: BlocProjection = {

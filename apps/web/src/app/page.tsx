@@ -97,12 +97,7 @@ export default async function AujourdHui() {
     listerAcquereursActifsDuWorkspace(workspaceId),
     listerTachesDuWorkspace(workspaceId),
     listerProspectsVendeursDuWorkspace(workspaceId, "archives"),
-    // DETTE V2B3, explicitement non traitée ici : `chargerContexteAlertes` s'appuie sur
-    // `chargerRemuneration` et `chargerProjectionAnnuelle` du tableau de bord, qui n'ont pas de
-    // périmètre. Leur en donner un obligerait à toucher `app/dashboard/page.tsx` et les projections
-    // fiscales — deux surfaces hors du périmètre de ce lot. Les alertes de cet écran agrègent donc
-    // encore tous les workspaces, et c'est le lot dashboard/fiscal qui refermera ce chemin.
-    chargerContexteAlertes(),
+    chargerContexteAlertes(workspaceId),
   ]);
   const alertes = produireAlertes(contexteAlertes);
   const alertesPrioritaires = alertes.slice(0, NB_ALERTES_PRIORITAIRES);

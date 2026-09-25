@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 // Fichier séparé de dashboardRepository.test.ts (déjà volumineux) : ne teste que
-// chargerPipelineVendeur() (ADR-027), même repli DATABASE_URL que les autres suites
+// chargerPipelineVendeur(WORKSPACE_TEST) (ADR-027), même repli DATABASE_URL que les autres suites
 // d'intégration.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
@@ -48,11 +48,11 @@ describe("chargerPipelineVendeur (intégration Postgres)", () => {
     // On ne peut pas signer sans créer un bien à chaque fois dans ce test (hors-scope ici) : on
     // vérifie seulement, via une mesure AVANT/APRÈS, que le nombre de clôturés grandit avec une
     // perte mais pas avec un prospect en cours.
-    const avant = await chargerPipelineVendeur();
+    const avant = await chargerPipelineVendeur(WORKSPACE_TEST);
 
     const perdu2 = await creerProspectDeTest(`${suffixe}-perdu2`);
     await marquerProspectVendeurPerdu(perdu2.id, "autre", "2026-09-01", WORKSPACE_TEST);
-    const apres = await chargerPipelineVendeur();
+    const apres = await chargerPipelineVendeur(WORKSPACE_TEST);
 
     expect(apres.nombrePerdus).toBe(avant.nombrePerdus + 1);
     expect(apres.nombreEnCours).toBeGreaterThanOrEqual(1);
@@ -62,22 +62,22 @@ describe("chargerPipelineVendeur (intégration Postgres)", () => {
   });
 
   it("les prospects en cours n'entrent jamais dans le taux de conversion (dénominateur = signés + perdus uniquement)", async () => {
-    const avant = await chargerPipelineVendeur();
+    const avant = await chargerPipelineVendeur(WORKSPACE_TEST);
     await creerProspectDeTest(`taux-encours-${Date.now()}`);
-    const apres = await chargerPipelineVendeur();
+    const apres = await chargerPipelineVendeur(WORKSPACE_TEST);
 
     // Ajouter un prospect EN COURS ne doit jamais changer le taux de conversion.
     expect(apres.tauxConversionOpportunitesCloturees).toBe(avant.tauxConversionOpportunitesCloturees);
   });
 
   it("volumeEstimationsEnCoursCentimes ne compte que les prospects en cours avec une estimation renseignée", async () => {
-    const avant = await chargerPipelineVendeur();
+    const avant = await chargerPipelineVendeur(WORKSPACE_TEST);
 
     const prospect = await creerProspectDeTest(`estimation-${Date.now()}`);
     await qualifierProspectVendeur(prospect.id, WORKSPACE_TEST);
     await enregistrerEstimationProspectVendeur(prospect.id, 300_000_00, "2026-09-01", WORKSPACE_TEST);
 
-    const apres = await chargerPipelineVendeur();
+    const apres = await chargerPipelineVendeur(WORKSPACE_TEST);
     expect(apres.nombreEstimationsEnCoursRenseignees).toBe(avant.nombreEstimationsEnCoursRenseignees + 1);
     expect(apres.volumeEstimationsEnCoursCentimes ?? 0).toBe((avant.volumeEstimationsEnCoursCentimes ?? 0) + 300_000_00);
     expect(apres.nombreParStatutEnCours.estimation).toBeGreaterThanOrEqual(1);

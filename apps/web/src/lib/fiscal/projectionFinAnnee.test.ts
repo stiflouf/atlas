@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
-// Test d'intégration — chargerProjectionAnnuelle() (dashboardRepository) est un agrégat global
+// Test d'intégration — chargerProjectionAnnuelle(WORKSPACE_TEST) (dashboardRepository) est un agrégat global
 // ancré sur CURRENT_DATE, non filtré par dossier fiscal : mêmes contraintes que
 // dashboardRepository.test.ts (delta avant/après, jamais une valeur absolue). encaisseReel, lui, est
 // scopé par dossier fiscal — un dossier de test dédié avec amorçage confirmé isole ce bloc.
@@ -88,7 +88,7 @@ describe("calculerProjectionFinAnnee — trois blocs jamais fusionnés silencieu
   });
 
   it("le bloc encaissé réel reflète calculerAssietteAnnuelle, indépendamment des deux autres blocs", async () => {
-    const avant = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee);
+    const avant = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee, WORKSPACE_TEST);
     expect(avant.encaisseReel.couverture).toBe("complete");
 
     const { bien, acquereur } = await creerBienEtAcquereurDeTest("001");
@@ -98,7 +98,7 @@ describe("calculerProjectionFinAnnee — trois blocs jamais fusionnés silencieu
     await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 100000 });
     await marquerRemunerationEncaissee(c.id, "2026-02-01");
 
-    const apres = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee);
+    const apres = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee, WORKSPACE_TEST);
     expect(apres.encaisseReel.montantConnuCentimes).toBe(avant.encaisseReel.montantConnuCentimes + 100000);
     // Aucun effet sur les deux autres blocs — un encaissement réel n'est ni un "restant" ni un "en cours".
     expect(apres.finaliseNonEncaisseRestant).toEqual(avant.finaliseNonEncaisseRestant);
@@ -106,7 +106,7 @@ describe("calculerProjectionFinAnnee — trois blocs jamais fusionnés silencieu
   });
 
   it("le bloc finalisé non encaissé restant et le bloc compromis en cours restant sont mutuellement exclusifs", async () => {
-    const avantDashboard = await chargerProjectionAnnuelle();
+    const avantDashboard = await chargerProjectionAnnuelle(WORKSPACE_TEST);
 
     const { bien: bienFinalise, acquereur: acquereurFinalise } = await creerBienEtAcquereurDeTest("002");
     const compromisFinalise = await enregistrerCompromis({
@@ -137,8 +137,8 @@ describe("calculerProjectionFinAnnee — trois blocs jamais fusionnés silencieu
       dateEncaissementPrevue: `${annee}-12-30`,
     });
 
-    const apresDashboard = await chargerProjectionAnnuelle();
-    const apres = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee);
+    const apresDashboard = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+    const apres = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee, WORKSPACE_TEST);
 
     expect(apresDashboard.finaliseNonEncaisseRestantCentimes).toBe(
       (avantDashboard.finaliseNonEncaisseRestantCentimes ?? 0) + 150000
@@ -149,7 +149,7 @@ describe("calculerProjectionFinAnnee — trois blocs jamais fusionnés silencieu
   });
 
   it("la projection couverte fin d'année est la somme exacte des trois blocs quand tous sont connus", async () => {
-    const resultat = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee);
+    const resultat = await calculerProjectionFinAnnee(DOSSIER_TEST_ID, annee, WORKSPACE_TEST);
     if (
       resultat.finaliseNonEncaisseRestant.montantCentimes !== undefined &&
       resultat.compromisEnCoursRestant.montantCentimes !== undefined

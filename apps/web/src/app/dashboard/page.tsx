@@ -17,6 +17,7 @@ import {
 import { LABEL_MOTIF_PERTE } from "@/types/motifPerte";
 import { formatMontantCentimes } from "@/types/remuneration";
 import { LABEL_STATUT_PROSPECT_VENDEUR } from "@/types/prospectVendeur";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, le tableau de bord figerait au moment du build.
@@ -159,15 +160,19 @@ function ParMotifListe({ items }: { items: PerteParMotif[] }) {
 }
 
 export default async function DashboardPage() {
+  // WORKSPACE_SCOPING_V2B3 (ADR-054) — cette page ne résolvait aucun périmètre : ses huit agrégats
+  // portaient sur la totalité du produit. Le workspace est résolu ICI, à la frontière de l'écran,
+  // puis transmis explicitement — jamais récupéré au milieu d'un module de `lib/`.
+  const workspaceId = await exigerWorkspaceCourant();
   const [resultats, pipeline, activite, delais, pertes, remuneration, projection, pipelineVendeur] = await Promise.all([
-    chargerResultats(),
-    chargerPipeline(),
-    chargerActivite(),
-    chargerDelais(),
-    chargerPertes(),
-    chargerRemuneration(),
-    chargerProjectionAnnuelle(),
-    chargerPipelineVendeur(),
+    chargerResultats(workspaceId),
+    chargerPipeline(workspaceId),
+    chargerActivite(workspaceId),
+    chargerDelais(workspaceId),
+    chargerPertes(workspaceId),
+    chargerRemuneration(workspaceId),
+    chargerProjectionAnnuelle(workspaceId),
+    chargerPipelineVendeur(workspaceId),
   ]);
 
   return (

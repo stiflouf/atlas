@@ -23,6 +23,7 @@ import { formatMontantCentimes, parseMontantCentimes } from "@/types/remuneratio
 import { Landmark } from "lucide-react";
 import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, la page figerait au moment du build.
@@ -36,6 +37,12 @@ type PageProps = { searchParams: Promise<Record<string, string | string[] | unde
 // provenance (ExplicationCalcul/ExplicationCalculProjection).
 export default async function FiscalPage({ searchParams }: PageProps) {
   const params = await searchParams;
+  // WORKSPACE_SCOPING_V2B3 (ADR-054) — le dossier fiscal reste MONO-DOSSIER par conception (il
+  // décrit la situation personnelle du conseiller, pas un périmètre de données). Ce qui est scopé
+  // ici, ce sont les données d'ACTIVITÉ immobilière qui nourrissent les projections : sans ce
+  // périmètre, le chiffre d'affaires d'un autre workspace entrait dans une projection fiscale
+  // personnelle.
+  const workspaceId = await exigerWorkspaceCourant();
   const dossierFiscalId = await obtenirDossierFiscalDefaut();
   const [profilActuel, historique, rfr] = await Promise.all([
     chargerProfilFiscalActuel(dossierFiscalId),
@@ -51,7 +58,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
         verifierEligibiliteRfr(dossierFiscalId, anneeCourante),
         calculerMicroBnc(dossierFiscalId, anneeCourante),
         calculerFranchiseTva(dossierFiscalId, anneeCourante),
-        calculerProjectionFinAnnee(dossierFiscalId, anneeCourante),
+        calculerProjectionFinAnnee(dossierFiscalId, anneeCourante, workspaceId),
       ])
     : [];
 
@@ -64,7 +71,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
     if (valeur !== undefined) hypotheses[annee] = valeur;
   }
   const projectionsPluriannuelles = profilActuel
-    ? await calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, HORIZON_PROJECTION_ANNEES, hypotheses)
+    ? await calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, workspaceId, HORIZON_PROJECTION_ANNEES, hypotheses)
     : undefined;
 
   return (

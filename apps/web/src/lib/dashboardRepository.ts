@@ -9,9 +9,7 @@ import {
   remuneration as remunerationTable,
 } from "@/db/schema";
 import {
-  listerProspectsVendeursPourMachine,
-  listerProspectsVendeursPerdus,
-  listerProspectsVendeursConvertis,
+  listerProspectsVendeursDuWorkspace,
 } from "@/lib/prospectVendeurRepository";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import type { MotifPerte } from "@/types/motifPerte";
@@ -96,21 +94,43 @@ export type DashboardPertes = {
   pertesCompromisParMois: MontantParMois[];
 };
 
-export async function chargerResultats(): Promise<DashboardResultats> {
+// WORKSPACE_SCOPING_V2B3 (ADR-054) — aucune des tables agrégées par ce fichier ne porte de
+// `workspace_id` : `compromis`, `offres`, `remuneration`, `comptes_rendus_visite` et
+// `offre_visites` sont toutes des feuilles de `biens`. Le périmètre passe donc par une jointure,
+// ajoutée ici là où elle manquait. Un agrégat ne « fuite » pas une ligne : il FUSIONNE des
+// chiffres d'affaires en une valeur unique, indétectable une fois affichée — d'où la règle
+// absolue de ce lot : filtrer dans le SQL, jamais après.
+//
+// La jointure sert UNIQUEMENT au périmètre : elle n'importe pas `isNull(biens.archiveLe)`.
+// Plusieurs métriques incluent délibérément les biens archivés (une vente reste une vente après
+// archivage du dossier) et cette sémantique reste strictement inchangée.
+export async function chargerResultats(workspaceId: string): Promise<DashboardResultats> {
   const [{ nombreVentes, volumeVendu }] = await getDb()
     .select({
       nombreVentes: sql<number>`count(*)::int`,
       volumeVendu: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
     })
     .from(compromisTable)
-    .where(and(eq(compromisTable.statut, "realise"), isNotNull(compromisTable.dateActeReelle)));
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        isNotNull(compromisTable.dateActeReelle),
+        eq(biensTable.workspaceId, workspaceId)
+      )
+    );
 
+  // Cette requête n'avait AUCUN `where` : le taux de transformation était calculé sur la totalité
+  // des compromis du produit. Numérateur et dénominateur sont ici comptés sur la même population
+  // scopée, dans la même requête — la seule forme qui garantit un ratio cohérent.
   const [{ realises, resolus }] = await getDb()
     .select({
       realises: sql<number>`count(*) filter (where ${compromisTable.statut} = 'realise' and ${compromisTable.dateActeReelle} is not null)::int`,
       resolus: sql<number>`count(*) filter (where ${compromisTable.statut} in ('realise','annule'))::int`,
     })
-    .from(compromisTable);
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
 
   const realiseParMois = await getDb()
     .select({
@@ -118,7 +138,14 @@ export async function chargerResultats(): Promise<DashboardResultats> {
       montant: sql<number>`sum(${compromisTable.prixConvenu})::int`,
     })
     .from(compromisTable)
-    .where(and(eq(compromisTable.statut, "realise"), isNotNull(compromisTable.dateActeReelle)))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        isNotNull(compromisTable.dateActeReelle),
+        eq(biensTable.workspaceId, workspaceId)
+      )
+    )
     .groupBy(sql`date_trunc('month', ${compromisTable.dateActeReelle})`)
     .orderBy(sql`date_trunc('month', ${compromisTable.dateActeReelle})`);
 
@@ -130,7 +157,10 @@ export async function chargerResultats(): Promise<DashboardResultats> {
   };
 }
 
-export async function chargerPipeline(): Promise<DashboardPipeline> {
+// Les trois requêtes de cette fonction joignent DÉJÀ `biens` (pour l'archivage) : seul le
+// prédicat de périmètre manquait. `isNull(biens.archiveLe)` est conservé tel quel — c'est le
+// contrat du pipeline (un bien archivé sort des flux actifs), pas une décision de ce lot.
+export async function chargerPipeline(workspaceId: string): Promise<DashboardPipeline> {
   const [{ compromisEnCours, volumeSousCompromis }] = await getDb()
     .select({
       compromisEnCours: sql<number>`count(*)::int`,
@@ -138,7 +168,7 @@ export async function chargerPipeline(): Promise<DashboardPipeline> {
     })
     .from(compromisTable)
     .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
-    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe)));
+    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe), eq(biensTable.workspaceId, workspaceId)));
 
   const pipelinePrevisionnelParMois = await getDb()
     .select({
@@ -151,7 +181,8 @@ export async function chargerPipeline(): Promise<DashboardPipeline> {
       and(
         eq(compromisTable.statut, "en_cours"),
         isNotNull(compromisTable.dateActe),
-        isNull(biensTable.archiveLe)
+        isNull(biensTable.archiveLe),
+        eq(biensTable.workspaceId, workspaceId)
       )
     )
     .groupBy(sql`date_trunc('month', ${compromisTable.dateActe})`)
@@ -164,7 +195,7 @@ export async function chargerPipeline(): Promise<DashboardPipeline> {
     })
     .from(offresTable)
     .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
-    .where(and(eq(offresTable.statut, "en_cours"), isNull(biensTable.archiveLe)));
+    .where(and(eq(offresTable.statut, "en_cours"), isNull(biensTable.archiveLe), eq(biensTable.workspaceId, workspaceId)));
 
   return {
     compromisEnCours,
@@ -175,16 +206,25 @@ export async function chargerPipeline(): Promise<DashboardPipeline> {
   };
 }
 
-export async function chargerActivite(): Promise<DashboardActivite> {
+// Les trois compteurs, la moyenne et le ratio portaient tous sur la totalité du produit : aucune
+// de ces cinq requêtes n'avait de `where`. Chacune joint désormais `biens` par sa propre chaîne —
+// directe pour les comptes rendus, les offres et les compromis ; en deux sauts pour `offre_visites`.
+export async function chargerActivite(workspaceId: string): Promise<DashboardActivite> {
   const [{ visitesEnregistrees }] = await getDb()
     .select({ visitesEnregistrees: sql<number>`count(*)::int` })
-    .from(comptesRendusVisite);
+    .from(comptesRendusVisite)
+    .innerJoin(biensTable, eq(comptesRendusVisite.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
   const [{ offresEnregistrees }] = await getDb()
     .select({ offresEnregistrees: sql<number>`count(*)::int` })
-    .from(offresTable);
+    .from(offresTable)
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
   const [{ compromisEnregistres }] = await getDb()
     .select({ compromisEnregistres: sql<number>`count(*)::int` })
-    .from(compromisTable);
+    .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
 
   // Sous-requête corrélée (nombre de comptes rendus par vente) non exprimable proprement via le
   // query builder — SQL brut paramétré (avec chargerProjectionAnnuelle, ADR-022, l'un des deux
@@ -197,7 +237,9 @@ export async function chargerActivite(): Promise<DashboardActivite> {
         where v.bien_id = c.bien_id and v.acquereur_id = c.acquereur_id and v.date_visite < c.date_signature
       ) as visite_count
       from compromis c
+      join biens b on b.id = c.bien_id
       where c.statut = 'realise' and c.date_acte_reelle is not null
+        and b.workspace_id = ${workspaceId}
     ) sous_requete
     where visite_count > 0
   `);
@@ -207,28 +249,48 @@ export async function chargerActivite(): Promise<DashboardActivite> {
   // Numérateur : comptes rendus distincts référencés par au moins une ligne offre_visites
   // (ADR-019) — un lien explicite, jamais une proximité de date. Dénominateur : tous les comptes
   // rendus enregistrés (visitesEnregistrees ci-dessus).
+  //
+  // Les deux sont scopés PAR LA MÊME frontière, et c'est le point critique de cette fonction : un
+  // numérateur restreint à un workspace divisé par un dénominateur global produirait un taux
+  // silencieusement faux — plausible à l'œil, et faux. Le `count(distinct)` reste exact malgré la
+  // jointure : `offre_visites → offres` est 1:1 par ligne de liaison, aucun gonflement.
   const [{ visitesAvecOffre }] = await getDb()
     .select({
       visitesAvecOffre: sql<number>`count(distinct ${offreVisitesTable.compteRenduVisiteId})::int`,
     })
-    .from(offreVisitesTable);
+    .from(offreVisitesTable)
+    .innerJoin(offresTable, eq(offreVisitesTable.offreId, offresTable.id))
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
   const tauxVisiteOffre = visitesEnregistrees > 0 ? visitesAvecOffre / visitesEnregistrees : undefined;
 
   return { visitesEnregistrees, offresEnregistrees, compromisEnregistres, moyenneVisitesAvantVente, tauxVisiteOffre };
 }
 
-export async function chargerDelais(): Promise<DashboardDelais> {
+// Trois moyennes, dont deux n'avaient aucun `where`. Une moyenne ne double pas quand les
+// périmètres se mélangent — elle se déplace, discrètement : c'est la métrique où un défaut de
+// périmètre est le plus difficile à repérer à l'œil.
+export async function chargerDelais(workspaceId: string): Promise<DashboardDelais> {
   const offreCompromisResultat = await getDb()
     .select({ moyenne: sql<string | null>`avg(${compromisTable.dateSignature} - ${offresTable.dateOffre})` })
     .from(compromisTable)
-    .innerJoin(offresTable, eq(compromisTable.offreId, offresTable.id));
+    .innerJoin(offresTable, eq(compromisTable.offreId, offresTable.id))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
   const delaiMoyenOffreCompromisJours =
     offreCompromisResultat[0]?.moyenne == null ? undefined : Number(offreCompromisResultat[0].moyenne);
 
   const compromisActeResultat = await getDb()
     .select({ moyenne: sql<string | null>`avg(${compromisTable.dateActeReelle} - ${compromisTable.dateSignature})` })
     .from(compromisTable)
-    .where(and(eq(compromisTable.statut, "realise"), isNotNull(compromisTable.dateActeReelle)));
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        isNotNull(compromisTable.dateActeReelle),
+        eq(biensTable.workspaceId, workspaceId)
+      )
+    );
   const delaiMoyenCompromisActeJours =
     compromisActeResultat[0]?.moyenne == null ? undefined : Number(compromisActeResultat[0].moyenne);
 
@@ -238,21 +300,27 @@ export async function chargerDelais(): Promise<DashboardDelais> {
     .select({ moyenne: sql<string | null>`avg(${offresTable.dateOffre} - ${comptesRendusVisite.dateVisite})` })
     .from(offreVisitesTable)
     .innerJoin(offresTable, eq(offreVisitesTable.offreId, offresTable.id))
-    .innerJoin(comptesRendusVisite, eq(offreVisitesTable.compteRenduVisiteId, comptesRendusVisite.id));
+    .innerJoin(comptesRendusVisite, eq(offreVisitesTable.compteRenduVisiteId, comptesRendusVisite.id))
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
   const delaiMoyenVisiteOffreJours =
     visiteOffreResultat[0]?.moyenne == null ? undefined : Number(visiteOffreResultat[0].moyenne);
 
   return { delaiMoyenOffreCompromisJours, delaiMoyenCompromisActeJours, delaiMoyenVisiteOffreJours };
 }
 
-export async function chargerPertes(): Promise<DashboardPertes> {
+// Six requêtes, toutes mono-table avant ce lot. Les `groupBy` restent inchangés : `biens` n'entre
+// jamais dans la projection, uniquement dans la jointure de périmètre.
+export async function chargerPertes(workspaceId: string): Promise<DashboardPertes> {
   const [{ offresRefusees, offresRetirees, volumeOffresPerdues }] = await getDb()
     .select({
       offresRefusees: sql<number>`count(*) filter (where ${offresTable.statut} = 'refusee')::int`,
       offresRetirees: sql<number>`count(*) filter (where ${offresTable.statut} = 'retiree')::int`,
       volumeOffresPerdues: sql<number>`coalesce(sum(${offresTable.montant}) filter (where ${offresTable.statut} in ('refusee','retiree')), 0)::int`,
     })
-    .from(offresTable);
+    .from(offresTable)
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(eq(biensTable.workspaceId, workspaceId));
 
   const [{ compromisAnnules, volumeCompromisAnnules }] = await getDb()
     .select({
@@ -260,7 +328,8 @@ export async function chargerPertes(): Promise<DashboardPertes> {
       volumeCompromisAnnules: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
     })
     .from(compromisTable)
-    .where(eq(compromisTable.statut, "annule"));
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.statut, "annule"), eq(biensTable.workspaceId, workspaceId)));
 
   // motif_perte/motif_annulation non nul uniquement (ADR-020) — une perte historique sans motif
   // compte dans offresRefusees/offresRetirees/compromisAnnules ci-dessus, jamais ici : ne jamais
@@ -272,7 +341,8 @@ export async function chargerPertes(): Promise<DashboardPertes> {
       volume: sql<number>`coalesce(sum(${offresTable.montant}), 0)::int`,
     })
     .from(offresTable)
-    .where(and(inArray(offresTable.statut, ["refusee", "retiree"]), isNotNull(offresTable.motifPerte)))
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(and(inArray(offresTable.statut, ["refusee", "retiree"]), isNotNull(offresTable.motifPerte), eq(biensTable.workspaceId, workspaceId)))
     .groupBy(offresTable.motifPerte);
   const pertesOffresParMotif: PerteParMotif[] = pertesOffresParMotifBrut.map((ligne) => ({
     motif: ligne.motif as MotifPerte,
@@ -287,7 +357,8 @@ export async function chargerPertes(): Promise<DashboardPertes> {
       volume: sql<number>`coalesce(sum(${compromisTable.prixConvenu}), 0)::int`,
     })
     .from(compromisTable)
-    .where(and(eq(compromisTable.statut, "annule"), isNotNull(compromisTable.motifAnnulation)))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.statut, "annule"), isNotNull(compromisTable.motifAnnulation), eq(biensTable.workspaceId, workspaceId)))
     .groupBy(compromisTable.motifAnnulation);
   const pertesCompromisParMotif: PerteParMotif[] = pertesCompromisParMotifBrut.map((ligne) => ({
     motif: ligne.motif as MotifPerte,
@@ -303,7 +374,8 @@ export async function chargerPertes(): Promise<DashboardPertes> {
       montant: sql<number>`sum(${offresTable.montant})::int`,
     })
     .from(offresTable)
-    .where(and(inArray(offresTable.statut, ["refusee", "retiree"]), isNotNull(offresTable.dateDecision)))
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(and(inArray(offresTable.statut, ["refusee", "retiree"]), isNotNull(offresTable.dateDecision), eq(biensTable.workspaceId, workspaceId)))
     .groupBy(sql`date_trunc('month', ${offresTable.dateDecision})`)
     .orderBy(sql`date_trunc('month', ${offresTable.dateDecision})`);
 
@@ -313,7 +385,8 @@ export async function chargerPertes(): Promise<DashboardPertes> {
       montant: sql<number>`sum(${compromisTable.prixConvenu})::int`,
     })
     .from(compromisTable)
-    .where(and(eq(compromisTable.statut, "annule"), isNotNull(compromisTable.dateAnnulation)))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(and(eq(compromisTable.statut, "annule"), isNotNull(compromisTable.dateAnnulation), eq(biensTable.workspaceId, workspaceId)))
     .groupBy(sql`date_trunc('month', ${compromisTable.dateAnnulation})`)
     .orderBy(sql`date_trunc('month', ${compromisTable.dateAnnulation})`);
 
@@ -364,7 +437,12 @@ export type DashboardRemuneration = {
   remunerationEncaisseeParMoisCentimes: MontantCentimesParMois[];
 };
 
-export async function chargerRemuneration(): Promise<DashboardRemuneration> {
+// Cette fonction alimente DEUX écrans : le tableau de bord et les alertes de l'accueil. Piège
+// propre à elle : la première requête joint déjà `biens` AVEC `isNull(archiveLe)`, les deux autres
+// ne joignaient pas `biens` du tout — et leur contrat inclut volontairement les biens archivés
+// (une vente finalisée reste due même après archivage du dossier, ADR-021). La jointure ajoutée
+// ici sert donc au seul périmètre : surtout ne pas y greffer le filtre d'archivage.
+export async function chargerRemuneration(workspaceId: string): Promise<DashboardRemuneration> {
   const [previsionnel] = await getDb()
     .select({
       nombreRenseignees: sql<number>`count(*) filter (where ${remunerationTable.id} is not null)::int`,
@@ -374,7 +452,7 @@ export async function chargerRemuneration(): Promise<DashboardRemuneration> {
     .from(compromisTable)
     .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
     .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
-    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe)));
+    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe), eq(biensTable.workspaceId, workspaceId)));
 
   const [venteFinalisee] = await getDb()
     .select({
@@ -384,8 +462,9 @@ export async function chargerRemuneration(): Promise<DashboardRemuneration> {
       sommeEncaissee: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes}) filter (where ${remunerationTable.dateEncaissementReelle} is not null)::int`,
     })
     .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
     .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
-    .where(eq(compromisTable.statut, "realise"));
+    .where(and(eq(compromisTable.statut, "realise"), eq(biensTable.workspaceId, workspaceId)));
 
   const remunerationEncaisseeParMoisCentimes = await getDb()
     .select({
@@ -394,7 +473,14 @@ export async function chargerRemuneration(): Promise<DashboardRemuneration> {
     })
     .from(remunerationTable)
     .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
-    .where(and(eq(compromisTable.statut, "realise"), isNotNull(remunerationTable.dateEncaissementReelle)))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        isNotNull(remunerationTable.dateEncaissementReelle),
+        eq(biensTable.workspaceId, workspaceId)
+      )
+    )
     .groupBy(sql`date_trunc('month', ${remunerationTable.dateEncaissementReelle})`)
     .orderBy(sql`date_trunc('month', ${remunerationTable.dateEncaissementReelle})`);
 
@@ -469,18 +555,24 @@ export type DashboardProjectionAnnuelle = {
   ventilationMensuelle: MontantCentimesParMoisAnnuel[]; // toujours 12 entrées, zero-remplies
 };
 
-export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAnnuelle> {
+// Trois consommateurs : le tableau de bord, les alertes de l'accueil et la projection fiscale de
+// fin d'année. Un chiffre non scopé ici se propage donc à trois écrans, dont un qui sert à décider
+// d'une situation fiscale personnelle. Même précaution d'archivage que `chargerRemuneration` : le
+// `previsionnel` filtre les biens archivés (contrat existant), `depasse` et `restant` non.
+export async function chargerProjectionAnnuelle(workspaceId: string): Promise<DashboardProjectionAnnuelle> {
   const [{ somme: encaisseDepuisJanvierBrut }] = await getDb()
     .select({
       somme: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes})::int`,
     })
     .from(remunerationTable)
     .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
     .where(
       and(
         eq(compromisTable.statut, "realise"),
         isNotNull(remunerationTable.dateEncaissementReelle),
-        sql`date_trunc('year', ${remunerationTable.dateEncaissementReelle}) = date_trunc('year', current_date)`
+        sql`date_trunc('year', ${remunerationTable.dateEncaissementReelle}) = date_trunc('year', current_date)`,
+        eq(biensTable.workspaceId, workspaceId)
       )
     );
 
@@ -492,7 +584,7 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
     .from(compromisTable)
     .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
     .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
-    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe)));
+    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe), eq(biensTable.workspaceId, workspaceId)));
 
   const [depasse] = await getDb()
     .select({
@@ -502,8 +594,15 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
       sommeDepassee: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes}) filter (where ${remunerationTable.dateEncaissementPrevue} is not null and ${remunerationTable.dateEncaissementPrevue} < current_date)::int`,
     })
     .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
     .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
-    .where(and(eq(compromisTable.statut, "realise"), isNull(remunerationTable.dateEncaissementReelle)));
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        isNull(remunerationTable.dateEncaissementReelle),
+        eq(biensTable.workspaceId, workspaceId)
+      )
+    );
 
   // ADR-024 : même sous-population que `depasse` (realise, non encaissée), fenêtre inverse —
   // date_encaissement_prevue entre aujourd'hui et le 31/12, jamais fusionnée avec `depasse`
@@ -515,8 +614,15 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
       sommeFenetre: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes}) filter (where ${remunerationTable.dateEncaissementPrevue} >= current_date and ${remunerationTable.dateEncaissementPrevue} <= date_trunc('year', current_date) + interval '1 year' - interval '1 day')::int`,
     })
     .from(compromisTable)
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
     .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
-    .where(and(eq(compromisTable.statut, "realise"), isNull(remunerationTable.dateEncaissementReelle)));
+    .where(
+      and(
+        eq(compromisTable.statut, "realise"),
+        isNull(remunerationTable.dateEncaissementReelle),
+        eq(biensTable.workspaceId, workspaceId)
+      )
+    );
 
   // Deuxième usage de SQL brut paramétré du fichier (avec chargerActivite) : generate_series
   // fournit une spine de 12 mois (janvier -> décembre de l'année en cours), les trois LEFT JOIN
@@ -545,6 +651,7 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
       join biens b on b.id = c.bien_id
       where c.statut = 'en_cours'
         and b.archive_le is null
+        and b.workspace_id = ${workspaceId}
         and r.date_encaissement_prevue is not null
         and date_trunc('year', r.date_encaissement_prevue) = date_trunc('year', current_date)
       group by 1
@@ -554,7 +661,9 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
              sum(r.montant_remuneration_conseiller_centimes) as somme
       from remuneration r
       join compromis c on c.id = r.compromis_id
+      join biens b on b.id = c.bien_id
       where c.statut = 'realise'
+        and b.workspace_id = ${workspaceId}
         and r.date_encaissement_reelle is null
         and r.date_encaissement_prevue is not null
         and date_trunc('year', r.date_encaissement_prevue) = date_trunc('year', current_date)
@@ -565,7 +674,9 @@ export async function chargerProjectionAnnuelle(): Promise<DashboardProjectionAn
              sum(r.montant_remuneration_conseiller_centimes) as somme
       from remuneration r
       join compromis c on c.id = r.compromis_id
+      join biens b on b.id = c.bien_id
       where c.statut = 'realise'
+        and b.workspace_id = ${workspaceId}
         and r.date_encaissement_reelle is not null
         and date_trunc('year', r.date_encaissement_reelle) = date_trunc('year', current_date)
       group by 1
@@ -622,7 +733,11 @@ export type ItemPipelineDate = { montantCentimes: number; datePrevue: string };
 // l'année civile en cours. Mêmes filtres exacts (statut, archivage) mais chaque élément retourné
 // individuellement daté, pour que le moteur fiscal rattache chacun à la règle applicable à SA date
 // plutôt qu'à un total agrégé traité au dernier taux connu.
+// Alimente la projection fiscale pluriannuelle. Contrairement aux autres fonctions du fichier,
+// elle rend des LIGNES et non un agrégat : le filtrage JS qui suit (`versItemPipelineDate`) ne
+// sert qu'à écarter les dates nulles — le périmètre, lui, reste en SQL, jamais greffé là.
 export async function listerPipelineDate(
+  workspaceId: string,
   anneeDebut: number,
   anneeFin: number
 ): Promise<{ finaliseNonEncaisse: ItemPipelineDate[]; compromisEnCours: ItemPipelineDate[] }> {
@@ -636,12 +751,14 @@ export async function listerPipelineDate(
     })
     .from(remunerationTable)
     .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
     .where(
       and(
         eq(compromisTable.statut, "realise"),
         isNull(remunerationTable.dateEncaissementReelle),
         isNotNull(remunerationTable.dateEncaissementPrevue),
-        between(remunerationTable.dateEncaissementPrevue, debut, fin)
+        between(remunerationTable.dateEncaissementPrevue, debut, fin),
+        eq(biensTable.workspaceId, workspaceId)
       )
     );
 
@@ -658,7 +775,8 @@ export async function listerPipelineDate(
         eq(compromisTable.statut, "en_cours"),
         isNull(biensTable.archiveLe),
         isNotNull(remunerationTable.dateEncaissementPrevue),
-        between(remunerationTable.dateEncaissementPrevue, debut, fin)
+        between(remunerationTable.dateEncaissementPrevue, debut, fin),
+        eq(biensTable.workspaceId, workspaceId)
       )
     );
 
@@ -693,11 +811,16 @@ export type DashboardPipelineVendeur = {
   delaiMoyenProspectMandatSigneJours: number | undefined;
 };
 
-export async function chargerPipelineVendeur(): Promise<DashboardPipelineVendeur> {
+// Seule fonction du fichier qui ne fait aucun SQL : elle compose trois lectures du repository
+// Prospect et agrège en mémoire (le statut vendeur est dérivé, jamais stocké — exception
+// documentée). Le périmètre descend donc dans ces lectures, jamais dans un filtre JS posé ici :
+// charger tous les prospects du produit pour n'en garder qu'une partie serait exactement ce que
+// ce lot interdit.
+export async function chargerPipelineVendeur(workspaceId: string): Promise<DashboardPipelineVendeur> {
   const [enCours, perdus, convertis] = await Promise.all([
-    listerProspectsVendeursPourMachine(),
-    listerProspectsVendeursPerdus(),
-    listerProspectsVendeursConvertis(),
+    listerProspectsVendeursDuWorkspace(workspaceId, "en_cours"),
+    listerProspectsVendeursDuWorkspace(workspaceId, "perdus"),
+    listerProspectsVendeursDuWorkspace(workspaceId, "convertis"),
   ]);
 
   const nombreParStatutEnCours: DashboardPipelineVendeur["nombreParStatutEnCours"] = {

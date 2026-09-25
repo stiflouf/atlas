@@ -16,12 +16,13 @@ export const HORIZON_PROJECTION_ANNEES = 5;
 export async function calculerProjectionPluriannuelle(
   dossierFiscalId: string,
   anneeDebut: number,
+  workspaceId: string,
   nombreAnnees: number = HORIZON_PROJECTION_ANNEES,
   hypotheses?: Record<number, number>
 ): Promise<ProjectionAnneeFiscale[]> {
   const anneeFin = anneeDebut + nombreAnnees - 1;
   const [{ finaliseNonEncaisse, compromisEnCours }, fiabiliteRunRate] = await Promise.all([
-    listerPipelineDate(anneeDebut, anneeFin),
+    listerPipelineDate(workspaceId, anneeDebut, anneeFin),
     evaluerRunRate(dossierFiscalId),
   ]);
 

@@ -48,14 +48,20 @@ export type ContexteAlertes = {
 
 // Point d'entrée unique consommé par moteur.ts : assemble les résultats déjà exposés par les
 // moteurs ADR-022→025 — aucun nouveau repository, aucune requête Drizzle écrite ici (ADR-026).
-export async function chargerContexteAlertes(): Promise<ContexteAlertes> {
+// WORKSPACE_SCOPING_V2B3 (ADR-054) — dette laissée ouverte par V2B2, refermée ici : les alertes de
+// l'accueil s'appuient sur `chargerRemuneration` et `chargerProjectionAnnuelle`, partagées avec le
+// tableau de bord et le fiscal. Les trois écrans devaient être scopés ensemble, sinon ils auraient
+// affiché des chiffres calculés sur des périmètres différents. Le volet FISCAL PERSONNEL
+// (dossier, profil, RFR, règles) reste mono-dossier par conception : ce lot ne touche qu'aux
+// données d'ACTIVITÉ immobilière qui alimentent les projections.
+export async function chargerContexteAlertes(workspaceId: string): Promise<ContexteAlertes> {
   const dossierFiscalId = await obtenirDossierFiscalDefaut();
   const anneeCourante = new Date().getFullYear();
 
   const [profil, remuneration, projectionAnnuelle] = await Promise.all([
     chargerProfilFiscalActuel(dossierFiscalId),
-    chargerRemuneration(),
-    chargerProjectionAnnuelle(),
+    chargerRemuneration(workspaceId),
+    chargerProjectionAnnuelle(workspaceId),
   ]);
 
   let fiscal: ContexteFiscalAlertes | undefined;
@@ -79,7 +85,7 @@ export async function chargerContexteAlertes(): Promise<ContexteAlertes> {
       calculerMicroBnc(dossierFiscalId, anneeCourante),
       calculerFranchiseTva(dossierFiscalId, anneeCourante),
       evaluerRunRate(dossierFiscalId),
-      calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, HORIZON_PROJECTION_ANNEES),
+      calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, workspaceId, HORIZON_PROJECTION_ANNEES),
     ]);
     fiscal = {
       dossierFiscalId,
