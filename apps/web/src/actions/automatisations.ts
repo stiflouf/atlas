@@ -35,15 +35,20 @@ export async function basculerAutomatisationAction(formData: FormData): Promise<
   }
   const active = formData.get("active") === "1";
 
+  // WORKSPACE_SCOPING_V2B5 — résolu AVANT la garde de seuil, pas seulement avant l'écriture : la
+  // garde interroge la configuration, et une lecture par `regleCode` seul aurait autorisé (ou
+  // refusé) une activation ici sur la foi du seuil renseigné dans un AUTRE workspace.
+  const workspaceId = await exigerWorkspaceCourant();
+
   if (active && REGLES_AVEC_SEUIL_OBLIGATOIRE.includes(regleCode as CodeRegleAutomatisation)) {
-    const configuration = await getConfigurationAutomatisation(regleCode as CodeRegleAutomatisation);
+    const configuration = await getConfigurationAutomatisation(regleCode as CodeRegleAutomatisation, workspaceId);
     if (configuration.seuilJours == null) {
       throw new Error("Impossible d'activer cette règle sans seuil configuré.");
     }
   }
 
   // ADR-054 — l'activation d'une règle appartient au workspace qui la configure.
-  await definirActivationAutomatisation(regleCode as CodeRegleAutomatisation, active, await exigerWorkspaceCourant());
+  await definirActivationAutomatisation(regleCode as CodeRegleAutomatisation, active, workspaceId);
   redirect("/automatisations");
 }
 

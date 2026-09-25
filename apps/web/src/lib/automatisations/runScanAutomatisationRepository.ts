@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { runsScanAutomatisation } from "@/db/schema";
 import type { CodeRegleAutomatisation, RunScanAutomatisation } from "@/types/automatisation";
@@ -63,11 +63,19 @@ export async function terminerRunScanAutomatisation(
 //
 // `demarreLe` reste le critère PRINCIPAL : c'est lui qui porte le sens métier (« quand ce scan
 // a-t-il démarré »), `ordre` ne fait que trancher ce qu'il ne sait pas trancher.
-export async function getDernierRunScanPourRegle(regleCode: CodeRegleAutomatisation): Promise<RunScanAutomatisation | undefined> {
+//
+// WORKSPACE_SCOPING_V2B5 — `workspaceId` OBLIGATOIRE (lecture d'écran). `runs_scan_automatisation`
+// porte déjà la colonne depuis 0032 : le filtre tient dans le `WHERE`, sans jointure. Il doit
+// s'appliquer AVANT l'ordre et le `limit(1)`, sinon « le dernier run de A » serait celui de B dès
+// que le scan de B est plus récent — ce qu'un filtrage en mémoire après lecture ne saurait rendre.
+export async function getDernierRunScanPourRegle(
+  regleCode: CodeRegleAutomatisation,
+  workspaceId: string
+): Promise<RunScanAutomatisation | undefined> {
   const [ligne] = await getDb()
     .select()
     .from(runsScanAutomatisation)
-    .where(eq(runsScanAutomatisation.regleCode, regleCode))
+    .where(and(eq(runsScanAutomatisation.regleCode, regleCode), eq(runsScanAutomatisation.workspaceId, workspaceId)))
     .orderBy(desc(runsScanAutomatisation.demarreLe), desc(runsScanAutomatisation.ordre))
     .limit(1);
   return ligne ? ligneVersRun(ligne) : undefined;

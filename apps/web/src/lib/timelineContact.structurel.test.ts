@@ -11,13 +11,17 @@ const lire = (chemin: string) => readFileSync(join(SRC, chemin), "utf8");
 const codeSeul = (chemin: string) => lire(chemin).replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^\s*\/\/.*$/gm, " ");
 
 describe("CRM_TIMELINE_V1 — read model, jamais une table", () => {
-  it("aucune table timeline dans le schéma, aucune migration ajoutée (54 fichiers SQL, dernière = 0053)", () => {
+  // Le compteur est une TRIPWIRE volontaire : il oblige quiconque ajoute une migration à venir dire
+  // ici qu'elle n'est pas celle de ce lot. Dernier passage : WORKSPACE_SCOPING_V2B5 (0054, clé
+  // primaire de `configurations_automatisation`) — sans aucun rapport avec l'historique de contact,
+  // qui reste un read model sans table ni migration.
+  it("aucune table timeline dans le schéma, aucune migration ajoutée (55 fichiers SQL, dernière = 0054)", () => {
     const schema = lire("db/schema.ts");
     expect(schema).not.toMatch(/pgTable\(\s*"(timeline|historique_contact|historique_echange)/i);
     expect(schema).not.toMatch(/timeline_contact|historique_contact|timelineContact/);
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrations).toHaveLength(54);
-    expect(migrations[migrations.length - 1]).toBe("0053_seller_feedback_interaction_v1.sql");
+    expect(migrations).toHaveLength(55);
+    expect(migrations[migrations.length - 1]).toBe("0054_automation_config_per_workspace.sql");
   });
 
   it("le read model lit les deux sources bornées, trie en mémoire, et n'écrit jamais", () => {

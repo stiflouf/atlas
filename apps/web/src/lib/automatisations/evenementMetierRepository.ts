@@ -96,10 +96,11 @@ export type ResultatEmissionEvenement = {
 // tel qu'il est maintenant) — jamais réévaluée plus tard : activer une règle après coup ne traite
 // jamais rétroactivement les événements déjà survenus, faute de ligne d'exécution prévue pour eux.
 // ADR-054 — `workspaceId` est un paramètre OBLIGATOIRE, jamais une valeur que ce repository
-// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou du contexte
-// d'exécution machine (`resoudreWorkspaceExecutionMachine()`). Aucun repli, aucun `?? "default"` —
-// la migration 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au
-// lieu d'être silencieusement rangé dans le workspace historique.
+// choisirait : il vient du contexte authentifié (`exigerWorkspaceCourant()`) ou, pour un scan
+// temporel, du workspace en cours de traitement par la passe machine (WORKSPACE_SCOPING_V2B5 —
+// `listerTousLesWorkspaceIds()`, scanTemporel.ts). Aucun repli, aucun `?? "default"` — la migration
+// 0033 a retiré le DEFAULT SQL précisément pour qu'un oubli échoue immédiatement au lieu d'être
+// silencieusement rangé dans le workspace historique.
 export async function emettreEvenementEtPreparerExecutions(
   input: NouvelEvenementMetier,
   workspaceId: string,
@@ -187,11 +188,25 @@ export async function emettreEvenementEtPreparerExecutions(
   const reglesCandidates = reglesPourTypeEvenement(evenement.typeEvenement);
   if (reglesCandidates.length === 0) return { evenement, idsExecutionsATraiter: [] };
 
+  // WORKSPACE_SCOPING_V2B5 — la configuration consultée est celle DU WORKSPACE de l'événement,
+  // jamais celle d'un autre. `workspaceId` est le paramètre déjà reçu par cette fonction (celui qui
+  // vient d'être posé sur la ligne d'événement) : aucun contexte de session n'est lu ici, ce chemin
+  // est aussi celui des scanners machine.
+  //
+  // C'est ICI, et seulement ici, que l'activation est consultée : la décision "cette règle devait-
+  // elle réagir ?" est figée au moment de l'événement (ADR-032), jamais relue au traitement ni à la
+  // reprise. Une exécution n'a donc pas besoin de retrouver sa configuration plus tard.
   const codes = reglesCandidates.map((r) => r.code);
   const configsActives = await executeur
     .select({ regleCode: configurationsAutomatisation.regleCode })
     .from(configurationsAutomatisation)
-    .where(and(inArray(configurationsAutomatisation.regleCode, codes), eq(configurationsAutomatisation.active, true)));
+    .where(
+      and(
+        inArray(configurationsAutomatisation.regleCode, codes),
+        eq(configurationsAutomatisation.workspaceId, workspaceId),
+        eq(configurationsAutomatisation.active, true)
+      )
+    );
 
   const idsExecutionsATraiter: string[] = [];
   for (const { regleCode } of configsActives) {

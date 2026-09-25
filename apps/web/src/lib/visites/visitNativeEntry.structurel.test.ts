@@ -113,11 +113,14 @@ describe("VISIT_NATIVE_ENTRY_V1 — gardes structurelles", () => {
     expect(repo).not.toContain("insert(partiesMandatTable)");
   });
 
+  // Même tripwire volontaire que timelineContact.structurel.test.ts : le compteur force tout lot
+  // qui ajoute une migration à confirmer ici qu'elle ne vient pas de celui-ci. Dernier passage :
+  // WORKSPACE_SCOPING_V2B5 (0054), qui ne touche ni les Visites ni un quelconque BuyerProject.
   it("aucun BuyerProject, aucune migration ajoutée par ce lot", () => {
     const fichiers = readdirSync(join(SRC, "lib")).concat(readdirSync(join(SRC, "actions")), readdirSync(join(SRC, "types")));
     expect(fichiers.filter((f) => /buyerProject/i.test(f))).toEqual([]);
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql"));
-    expect(migrations.length).toBe(54);
-    expect(migrations.at(-1)).toBe("0053_seller_feedback_interaction_v1.sql");
+    expect(migrations.length).toBe(55);
+    expect(migrations.at(-1)).toBe("0054_automation_config_per_workspace.sql");
   });
 });

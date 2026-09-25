@@ -1164,9 +1164,11 @@ existe désormais, et ce qui n'existe toujours pas :
   `workspace_membres` n'est lue par aucun chemin d'**authentification** — l'allowlist à une seule
   adresse reste seule maîtresse de qui peut entrer ; l'appartenance ne sert qu'à nommer le
   périmètre d'écriture.
-- **Dette connue, à payer au passage multi-workspace** : `configurations_automatisation` garde sa PK
-  `regle_code` seule, ce qui empêcherait deux workspaces de configurer la même règle. C'est la seule
-  contrainte d'unicité du schéma dans ce cas (vérifié table par table).
+- **Dette fermée par WORKSPACE_SCOPING_V2B5 (migration `0054`)** : `configurations_automatisation`
+  avait pour PK `regle_code` seule, ce qui empêchait deux workspaces de configurer la même règle — et
+  faisait écraser la configuration de l'un par l'upsert de l'autre. Sa clé primaire est désormais
+  `(workspace_id, regle_code)`. C'était la seule contrainte d'unicité du schéma dans ce cas (vérifié
+  table par table) ; il n'en reste aucune.
 - **Toujours pas de "qui a fait quoi"** : aucune colonne d'auteur sur `taches`/`notes_bien`/
   `comptes_rendus_visite`, et aucun backfill d'auteur ne serait honnête sur l'historique.
 - **Toujours mono-conseiller côté secrets** : `connexions_google` ne porte volontairement aucun

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { workspaces, workspaceMembres } from "@/db/schema";
 
@@ -34,6 +34,20 @@ export async function resoudreWorkspaceExecutionMachine(executeur: Executeur = g
     );
   }
   return lignes[0].id;
+}
+
+// WORKSPACE_SCOPING_V2B5 — ce que `resoudreWorkspaceExecutionMachine()` forçait à écrire le jour où
+// un second workspace apparaîtrait : la passe PAR WORKSPACE. Un runner machine (scan temporel)
+// reste global — sa garde est le secret Bearer de sa route, jamais une session — mais il ne traite
+// plus "le" workspace : il les traite tous, l'un après l'autre, chacun avec SA configuration et SES
+// candidats.
+//
+// MACHINE UNIQUEMENT : ne jamais l'appeler depuis un écran ni une Server Action, qui ont un
+// périmètre de session (`exigerWorkspaceCourant`). Ordre par `id` : déterministe, pour que deux
+// exécutions du même scan parcourent les workspaces dans le même ordre (journaux comparables).
+export async function listerTousLesWorkspaceIds(executeur: Executeur = getDb()): Promise<string[]> {
+  const lignes = await executeur.select({ id: workspaces.id }).from(workspaces).orderBy(asc(workspaces.id));
+  return lignes.map((ligne) => ligne.id);
 }
 
 export async function listerWorkspaceIdsPourIdentite(

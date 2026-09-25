@@ -6,7 +6,6 @@ import { getConfigurationAutomatisation } from "../configurationAutomatisationRe
 import { emettreEvenementEtPreparerExecutions } from "../evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "../moteur";
 import { demarrerRunScanAutomatisation, terminerRunScanAutomatisation } from "../runScanAutomatisationRepository";
-import { resoudreWorkspaceExecutionMachine } from "@/lib/workspaceRepository";
 import type { ResultatScanRegle } from "../scanTemporel";
 
 const REGLE_CODE = "offre_acceptee_sans_compromis" as const;
@@ -29,13 +28,12 @@ function categoriserErreur(erreur: unknown): string {
 // du filtre `statut = 'acceptee'`. Dans les deux cas l'offre sort du jeu de candidats du scan en
 // cours — `cloturerTachesAutomatiquesObsoletes` "NOT IN candidats" couvre donc les deux causes en
 // une seule requête, sans distinguer laquelle s'est produite.
-export async function scannerOffreAccepteeSansCompromis(maintenant: Date = new Date()): Promise<ResultatScanRegle> {
-  const configuration = await getConfigurationAutomatisation(REGLE_CODE);
+export async function scannerOffreAccepteeSansCompromis(workspaceId: string, maintenant: Date = new Date()): Promise<ResultatScanRegle> {
+  const configuration = await getConfigurationAutomatisation(REGLE_CODE, workspaceId);
   if (!configuration.active || configuration.seuilJours == null) {
-    return { codeRegle: REGLE_CODE, execute: false };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: false };
   }
 
-  const workspaceId = await resoudreWorkspaceExecutionMachine();
   const runId = await demarrerRunScanAutomatisation(REGLE_CODE, workspaceId);
   let nombreCandidats = 0;
   let nombreOccurrencesCreees = 0;
@@ -61,14 +59,15 @@ export async function scannerOffreAccepteeSansCompromis(maintenant: Date = new D
     nombreTachesObsoletes = await cloturerTachesAutomatiquesObsoletes(
       REGLE_CODE,
       "offreId",
-      candidats.map((o) => o.id)
+      candidats.map((o) => o.id),
+      workspaceId
     );
 
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
   } catch (erreur) {
     const erreurTechnique = categoriserErreur(erreur);
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees, erreurTechnique });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
   }
 }

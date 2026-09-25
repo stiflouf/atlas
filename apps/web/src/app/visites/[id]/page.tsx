@@ -116,7 +116,9 @@ export default async function VisitePage({ params, searchParams }: PageProps) {
     ? await Promise.all([
         getTachesPourAcquereur(acquereur.id),
         prospectVendeur ? getTachesPourProspectVendeur(prospectVendeur.id) : Promise.resolve([]),
-        listerConfigurationsAutomatisation(),
+        // WORKSPACE_SCOPING_V2B5 — scopée comme les autres lectures de cet écran : la suite
+        // recommandée dépend des règles actives DE CE workspace, jamais de celles d'un autre.
+        listerConfigurationsAutomatisation(workspaceId),
       ])
     : [[], [], []];
 

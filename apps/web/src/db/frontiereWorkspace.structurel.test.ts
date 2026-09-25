@@ -187,11 +187,12 @@ const REPOSITORIES_USER_FACING = [
 // Écritures dont le périmètre est porté autrement. Chaque entrée dit pourquoi — une exception sans
 // justification est un oubli, pas une décision.
 const WRITERS_SANS_WORKSPACE_JUSTIFIES: Record<string, string> = {
-  // MACHINE (ADR-062) : les scanners d'automatisation balayent délibérément le parc. Leur garde
-  // est le secret Bearer de la route de scan, jamais une session — leur imposer un périmètre de
-  // session n'aurait aucun sens et casserait la clôture des tâches devenues obsolètes.
-  cloturerTachesAutomatiquesObsoletes: "scanner d'automatisation, trans-workspace par conception",
-  cloturerTachesParIds: "scanner d'automatisation, ids déjà produits par le scan de ce workspace",
+  // (WORKSPACE_SCOPING_V2B5 a refermé `cloturerTachesAutomatiquesObsoletes` et `cloturerTachesParIds` :
+  // leurs exceptions ont été RETIRÉES, pas commentées. Elles disaient « trans-workspace par
+  // conception » ; c'était vrai d'un scan qui ne connaissait qu'un workspace, et c'était devenu la
+  // fuite la plus sévère du moteur dès qu'il y en avait deux — le scan de A annulait les tâches
+  // automatiques de B. Les deux reçoivent désormais un `workspaceId` obligatoire, posé en SQL.)
+
   // Feuilles de `biens` : ces deux writers ne sont jamais atteints qu'après que l'appelant a prouvé
   // le bien dans son périmètre (V1 — ajouterDocumentBienAction / corrigerClassementDocumentBienAction
   // passent par getBienDuWorkspace et getDocumentBienDuWorkspace), ou depuis le domaine Bon de
@@ -334,6 +335,10 @@ const LECTEURS_LISTE_GLOBAUX = [
   "listerProspectsVendeursArchives",
   "listerBiensActifsPersistes",
   "listerClientsActifsPersistes",
+  // WORKSPACE_SCOPING_V2B5 — ne rend pas des données métier, mais la LISTE DES PÉRIMÈTRES. Un écran
+  // qui l'appelle est en train de se construire une boucle « pour chaque workspace », c'est-à-dire
+  // exactement la fuite que les lots V2B ont refermée, une itération plus loin.
+  "listerTousLesWorkspaceIds",
 ];
 
 // Alternative scopée à proposer dans le message d'erreur. Une garde qui dit seulement « interdit »
@@ -348,6 +353,7 @@ const ALTERNATIVE_SCOPEE: Record<string, string> = {
   listerProspectsVendeursPerdus: 'listerProspectsVendeursDuWorkspace(workspaceId, "perdus")',
   listerProspectsVendeursConvertis: 'listerProspectsVendeursDuWorkspace(workspaceId, "convertis")',
   listerProspectsVendeursArchives: 'listerProspectsVendeursDuWorkspace(workspaceId, "archives")',
+  listerTousLesWorkspaceIds: "exigerWorkspaceCourant() — un écran n'a qu'un périmètre, celui de sa session",
   listerBiensActifsPersistes: "réservé au synchroniseur de compatibilité (ADR-036)",
   listerClientsActifsPersistes: "réservé au synchroniseur de compatibilité (ADR-036)",
 };
@@ -368,10 +374,10 @@ const MODULES_CONTEXTE_ECRAN = [
 // il l'est à un endroit précis. `listerProspectsVendeursPourMachine` porte « machine » dans son
 // nom et reste interdit partout ailleurs que dans son scanner.
 const LECTEURS_MACHINE_AUTORISES_PAR_FICHIER: Record<string, { lecteurs: string[]; raison: string }> = {
-  "lib/automatisations/scanners/inactiviteProspectVendeur.ts": {
-    lecteurs: ["listerProspectsVendeursPourMachine"],
-    raison: "scanner d'inactivité, trans-workspace par conception (ADR-062), gardé par le Bearer de la route de scan",
-  },
+  // (WORKSPACE_SCOPING_V2B5 a retiré l'entrée du scanner d'inactivité : il lit désormais
+  // `listerProspectsVendeursDuWorkspace(workspaceId, "en_cours")`, au contrat métier strictement
+  // identique, et le scan temporel est devenu une passe PAR workspace. Plus aucun lecteur global
+  // n'est autorisé dans `lib/automatisations/**`.)
   "lib/compatibilite/synchronisation.ts": {
     lecteurs: ["listerBiensActifsPersistes", "listerClientsActifsPersistes"],
     raison: "synchroniseur de compatibilité (ADR-036) : croise le parc entier, jamais appelé depuis une session",
@@ -456,16 +462,23 @@ describe("Frontière workspace — lecteurs de liste globaux", () => {
   });
 
   it("laisse passer un lecteur machine dans le fichier machine qui l'autorise", () => {
-    const relatif = "lib/automatisations/scanners/inactiviteProspectVendeur.ts";
-    const faux = `const p = await listerProspectsVendeursPourMachine();`;
+    const relatif = "lib/compatibilite/synchronisation.ts";
+    const faux = `const b = await listerBiensActifsPersistes();`;
     expect(verifierSurface(relatif, faux)).toEqual([]);
     // …et le même fichier ne reçoit pas pour autant un blanc-seing sur les autres lecteurs.
-    expect(verifierSurface(relatif, `const b = await listerBiens();`)).toHaveLength(1);
+    expect(verifierSurface(relatif, `const t = await listerTaches();`)).toHaveLength(1);
   });
 
+  // WORKSPACE_SCOPING_V2B5 — le scanner d'inactivité CITE encore le lecteur global en commentaire
+  // pour expliquer ce qu'il a cessé d'utiliser. C'est de la documentation, pas un appel : la garde
+  // doit le laisser passer, et elle n'a plus aucune entrée d'allowlist pour ce fichier.
   it("ne se déclenche pas sur une simple mention en commentaire", () => {
-    const source = codeSeul(join(SRC, "lib", "automatisations", "scanners", "inactiviteProspectVendeur.ts"));
-    expect(source).not.toContain("// `listerProspectsVendeursPourMachine()`");
+    const relatif = "lib/automatisations/scanners/inactiviteProspectVendeur.ts";
+    const chemin = join(SRC, ...relatif.split("/"));
+    expect(lire(chemin)).toContain("listerProspectsVendeursPourMachine");
+    expect(codeSeul(chemin)).not.toContain("listerProspectsVendeursPourMachine");
+    expect(LECTEURS_MACHINE_AUTORISES_PAR_FICHIER[relatif]).toBeUndefined();
+    expect(verifierSurface(relatif, codeSeul(chemin))).toEqual([]);
   });
 
   it("chaque allowlist machine correspond à un usage réel : une entrée morte doit être retirée", () => {
@@ -509,5 +522,196 @@ describe("Frontière workspace — lecteurs de liste globaux", () => {
         "workspaceId?"
       );
     }
+  });
+});
+
+// ───────────────── 5. MOTEUR D'AUTOMATISATION MULTI-WORKSPACE ─────────────────
+
+// WORKSPACE_SCOPING_V2B5 — les quatre gardes précédentes raisonnent sur des lectures et des
+// écritures d'entités métier. Aucune ne voyait le moteur d'automatisation, qui a sa propre façon de
+// perdre une frontière, en quatre points que ce lot vient de refermer :
+//
+//   1. un `ON CONFLICT` dont la cible n'inclut pas le workspace — l'upsert d'un workspace écrase
+//      alors la ligne d'un autre (corruption silencieuse, jamais une simple fuite de lecture) ;
+//   2. un scanner qui résout « le » workspace au lieu de recevoir celui qu'il traite ;
+//   3. un chemin MACHINE qui se met à dépendre d'une session ;
+//   4. un lecteur de configuration qui accepte de travailler sans périmètre.
+//
+// Chaque garde prouve aussi sa CAPACITÉ DE DÉTECTION sur une source fabriquée : une garde qui ne
+// ferait que constater l'état actuel du dépôt passerait encore si elle était vide.
+
+const FICHIERS_MOTEUR_AUTOMATISATION = listerFichiers(
+  join(SRC, "lib", "automatisations"),
+  (c) => /\.ts$/.test(c) && !/\.test\.ts$/.test(c)
+).map((chemin) => relative(SRC, chemin).split(sep).join("/"));
+
+const CONFIG_REPOSITORY = "lib/automatisations/configurationAutomatisationRepository.ts";
+
+// `onConflictDoUpdate({ target: ... })` sur `configurationsAutomatisation` : la cible doit être le
+// COUPLE. Détecté sur le texte de l'option `target`, car c'est exactement ce qui s'écrit à la main.
+function ciblesOnConflictConfiguration(source: string): string[] {
+  return [...source.matchAll(/onConflictDoUpdate\(\{\s*(?:\/\/[^\n]*\n\s*)*target:\s*([^\n]*)/g)].map((m) => m[1]);
+}
+
+describe("Frontière workspace — configuration d'automatisation par workspace", () => {
+  it("tout ON CONFLICT sur les configurations cible (workspaceId, regleCode), jamais regleCode seul", () => {
+    const fautifs: string[] = [];
+    for (const relatif of FICHIERS_MOTEUR_AUTOMATISATION) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      if (!/configurationsAutomatisation/.test(source)) continue;
+      for (const cible of ciblesOnConflictConfiguration(source)) {
+        const porteLeWorkspace = /configurationsAutomatisation\.workspaceId/.test(cible);
+        const porteLaRegle = /configurationsAutomatisation\.regleCode/.test(cible);
+        if (!porteLeWorkspace || !porteLaRegle) {
+          fautifs.push(
+            `${relatif} : ON CONFLICT ciblant ${cible.trim()} — la clé d'une configuration est le couple ` +
+              `[configurationsAutomatisation.workspaceId, configurationsAutomatisation.regleCode] (PK depuis la migration 0054). ` +
+              `Cibler regle_code seul fait écraser la configuration d'un autre workspace.`
+          );
+        }
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  // La garde ci-dessus ne voit que le Drizzle de `lib/automatisations/**`. Le SQL BRUT écrit
+  // ailleurs (le seed de démonstration, par exemple) écrit dans la même table sans passer par ce
+  // repository : c'est exactement par là que la migration 0054 a cassé un `on conflict (regle_code)`
+  // resté en texte, invisible pour le typecheck comme pour la garde Drizzle.
+  it("tout ON CONFLICT en SQL brut sur cette table cible aussi le couple", () => {
+    // Les fichiers de TEST sont exclus : ils citent volontiers du SQL en clair (celui de ce
+    // message d'erreur, par exemple). La garde protège les chemins de production — src/ et le seed.
+    const estTest = (c: string) => /\.test\.[cm]?[jt]sx?$/.test(c);
+    const fichiers = [
+      ...listerFichiers(join(SRC, "..", "scripts"), (c) => /\.(mjs|js|ts)$/.test(c) && !estTest(c)),
+      ...listerFichiers(SRC, (c) => /\.tsx?$/.test(c) && !estTest(c)),
+    ];
+    const fautifs: string[] = [];
+    for (const chemin of fichiers) {
+      const source = codeSeul(chemin);
+      if (!/configurations_automatisation/.test(source)) continue;
+      for (const m of source.matchAll(/on conflict\s*\(([^)]*)\)/gi)) {
+        // Seuls les ON CONFLICT qui visent CETTE table nous concernent : on exige que l'instruction
+        // qui les porte la nomme, en remontant jusqu'au `insert into` qui précède.
+        const avant = source.slice(0, m.index ?? 0);
+        const insertion = avant.lastIndexOf("insert into");
+        if (insertion === -1) continue;
+        if (!/configurations_automatisation/.test(avant.slice(insertion))) continue;
+        const colonnes = m[1];
+        if (!/workspace_id/.test(colonnes) || !/regle_code/.test(colonnes)) {
+          fautifs.push(
+            `${relative(SRC, chemin).split(sep).join("/")} : on conflict (${colonnes.trim()}) — depuis la ` +
+              `migration 0054 la clé primaire est (workspace_id, regle_code) ; cibler regle_code seul lève ` +
+              `« there is no unique or exclusion constraint matching the ON CONFLICT specification ».`
+          );
+        }
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  it("détecte un ON CONFLICT revenu à regleCode seul", () => {
+    const faux = `await getDb().insert(configurationsAutomatisation).values({ regleCode, active, workspaceId })
+      .onConflictDoUpdate({ target: configurationsAutomatisation.regleCode, set: { active } });`;
+    const cibles = ciblesOnConflictConfiguration(faux);
+    expect(cibles).toHaveLength(1);
+    expect(/configurationsAutomatisation\.workspaceId/.test(cibles[0])).toBe(false);
+  });
+
+  it("les deux writers de configuration existent et ciblent bien le couple", () => {
+    const source = codeSeul(join(SRC, ...CONFIG_REPOSITORY.split("/")));
+    for (const writer of ["definirActivationAutomatisation", "definirSeuilAutomatisation"]) {
+      expect(source, writer).toContain(`export async function ${writer}`);
+    }
+    const cibles = ciblesOnConflictConfiguration(source);
+    expect(cibles).toHaveLength(2);
+    for (const cible of cibles) {
+      expect(cible).toContain("configurationsAutomatisation.workspaceId");
+      expect(cible).toContain("configurationsAutomatisation.regleCode");
+    }
+  });
+
+  // Le nom d'une fonction ne prouve rien : on lit la signature réelle. `workspaceId?` serait un
+  // compromis qui viderait la garde de son sens — un appelant qui l'oublie retomberait sur une
+  // lecture globale sans qu'aucun type ne proteste.
+  it("toute fonction exportée du repository de configuration exige un workspaceId non optionnel", () => {
+    const source = codeSeul(join(SRC, ...CONFIG_REPOSITORY.split("/")));
+    const fautifs: string[] = [];
+    for (const bloc of source.split(/(?=export async function )/)) {
+      const nom = /^export async function (\w+)/.exec(bloc)?.[1];
+      if (!nom) continue;
+      // Seules les fonctions qui parlent réellement à Postgres sont concernées : un helper pur
+      // (conversion de ligne, constante) n'a aucun périmètre à recevoir.
+      if (!/getDb\(\)/.test(bloc)) continue;
+      const signature = bloc.slice(0, bloc.indexOf("): Promise"));
+      if (!/workspaceId: string/.test(signature)) fautifs.push(`${CONFIG_REPOSITORY} → ${nom} : workspaceId manquant`);
+      if (/workspaceId\?/.test(signature)) fautifs.push(`${CONFIG_REPOSITORY} → ${nom} : workspaceId ne doit jamais être optionnel`);
+    }
+    expect(fautifs).toEqual([]);
+  });
+});
+
+describe("Frontière workspace — runners machine du moteur d'automatisation", () => {
+  const CHEMINS_MACHINE = [
+    ...FICHIERS_MOTEUR_AUTOMATISATION,
+    ...listerFichiers(join(SRC, "app", "api", "automatisations"), (c) => /\.ts$/.test(c) && !/\.test\.ts$/.test(c)).map(
+      (chemin) => relative(SRC, chemin).split(sep).join("/")
+    ),
+  ];
+
+  // Aucune exception : ces chemins sont déclenchés par un cron externe porteur d'un secret Bearer.
+  // Il n'y a pas de session à lire, et en simuler une reviendrait à attribuer le travail de tous au
+  // périmètre du dernier humain connecté.
+  it("aucun chemin machine ne dépend d'un workspace de session", () => {
+    const fautifs = CHEMINS_MACHINE.filter((relatif) =>
+      /\bexigerWorkspaceCourant\b/.test(codeSeul(join(SRC, ...relatif.split("/"))))
+    ).map(
+      (relatif) =>
+        `${relatif} appelle exigerWorkspaceCourant() — chemin MACHINE (garde Bearer, aucune session) : ` +
+        `le périmètre doit venir des données traitées ou de listerTousLesWorkspaceIds()`
+    );
+    expect(fautifs).toEqual([]);
+  });
+
+  // `resoudreWorkspaceExecutionMachine()` suppose qu'il n'existe QU'UN workspace et lève une
+  // exception dès le second. La laisser dans un scanner rendrait le moteur muet pour tout le monde
+  // le jour où un second workspace apparaît — exactement l'échec que ce lot supprime.
+  it("aucun scanner ne suppose qu'il n'existe qu'un seul workspace", () => {
+    const fautifs = FICHIERS_MOTEUR_AUTOMATISATION.filter((relatif) =>
+      /\bresoudreWorkspaceExecutionMachine\b/.test(codeSeul(join(SRC, ...relatif.split("/"))))
+    ).map(
+      (relatif) =>
+        `${relatif} appelle resoudreWorkspaceExecutionMachine(), qui échoue dès qu'un second workspace existe — ` +
+        `le scan temporel est une passe PAR workspace (listerTousLesWorkspaceIds(), scanTemporel.ts)`
+    );
+    expect(fautifs).toEqual([]);
+  });
+
+  it("chaque scanner reçoit son workspace en premier paramètre, jamais optionnel", () => {
+    const scanners = FICHIERS_MOTEUR_AUTOMATISATION.filter((relatif) =>
+      relatif.startsWith("lib/automatisations/scanners/")
+    );
+    // La liste n'est pas vide : sinon la garde passerait en ne vérifiant rien.
+    expect(scanners.length).toBeGreaterThanOrEqual(6);
+    for (const relatif of scanners) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      const signature = /export async function scanner\w+\(([^)]*)\)/.exec(source)?.[1];
+      expect(signature, `${relatif} : aucun scanner exporté trouvé`).toBeDefined();
+      expect(signature, relatif).toContain("workspaceId: string");
+      expect(signature?.trim().startsWith("workspaceId: string"), `${relatif} : workspaceId doit être le premier paramètre`).toBe(true);
+    }
+  });
+
+  it("le registre de scan parcourt bien tous les workspaces", () => {
+    const source = codeSeul(join(SRC, "lib", "automatisations", "scanTemporel.ts"));
+    expect(source).toContain("listerTousLesWorkspaceIds");
+    expect(source).not.toContain("resoudreWorkspaceExecutionMachine");
+  });
+
+  it("détecte un chemin machine qui se remettrait à lire la session", () => {
+    // Même prédicat que la garde ci-dessus, appliqué à une source fabriquée.
+    const faux = `const workspaceId = await exigerWorkspaceCourant();`;
+    expect(/\bexigerWorkspaceCourant\b/.test(faux)).toBe(true);
+    expect(/\bexigerWorkspaceCourant\b/.test(`const ids = await listerTousLesWorkspaceIds();`)).toBe(false);
   });
 });

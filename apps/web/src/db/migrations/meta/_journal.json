@@ -379,6 +379,13 @@
       "when": 1789912897707,
       "tag": "0053_seller_feedback_interaction_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1790338387252,
+      "tag": "0054_automation_config_per_workspace",
+      "breakpoints": true
     }
   ]
 }

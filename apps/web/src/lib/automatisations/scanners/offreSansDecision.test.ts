@@ -121,14 +121,14 @@ describe("scannerOffreSansDecision", () => {
     const offre = await uneOffreEnCours("2026-06-01");
     const maintenant = new Date("2026-06-10T10:00:00Z");
 
-    const premier = await scannerOffreSansDecision(maintenant);
+    const premier = await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(premier).toMatchObject({ execute: true, nombreOccurrencesCreees: 1 });
     const ouvertes = await tachesOuvertesDeLOffre(offre.id);
     expect(ouvertes).toHaveLength(1);
     expect(ouvertes[0].titre).toBe("Offre en attente de décision");
     expect(ouvertes[0].origineCode).toBe(REGLE);
 
-    const second = await scannerOffreSansDecision(maintenant);
+    const second = await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(second).toMatchObject({ execute: true, nombreOccurrencesCreees: 0 });
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(1);
 
@@ -141,12 +141,12 @@ describe("scannerOffreSansDecision", () => {
 
     const offre = await uneOffreEnCours("2026-06-01");
     const maintenant = new Date("2026-06-10T10:00:00Z");
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(1);
 
     const { accepterOffre } = await import("./../../offreRepository");
     await accepterOffre(offre.id, "2026-06-11", WORKSPACE_TEST);
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -158,11 +158,11 @@ describe("scannerOffreSansDecision", () => {
 
     const offre = await uneOffreEnCours("2026-06-01");
     const maintenant = new Date("2026-06-10T10:00:00Z");
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(1);
 
     await refuserOffre(offre.id, "2026-06-11", "autre", WORKSPACE_TEST);
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -174,21 +174,21 @@ describe("scannerOffreSansDecision", () => {
 
     const offre = await uneOffreEnCours("2026-06-01");
     const maintenant = new Date("2026-06-10T10:00:00Z");
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(1);
 
     const { retirerOffre } = await import("./../../offreRepository");
     await retirerOffre(offre.id, "2026-06-11", "autre", WORKSPACE_TEST);
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
-  // F. "autre workspace → invisible" (brief §43) n'est pas testable au niveau du scanner, pour la
-  // même raison structurelle que mandatExpireBientot.test.ts : `resoudreWorkspaceExecutionMachine()`
-  // exige qu'un seul workspace existe. Déjà prouvé au niveau requête par
-  // `offresEnCoursDepasseesSeuil` ("autre workspace → invisible", offreRepository.automation.test.ts).
+  // F. "autre workspace → invisible" (brief §43) : prouvé au niveau requête par
+  // `offresEnCoursDepasseesSeuil` ("autre workspace → invisible", offreRepository.automation.test.ts),
+  // et bout en bout sur CETTE règle avec deux workspaces réels par lib/automatisations/multiWorkspace.test.ts
+  // (WORKSPACE_SCOPING_V2B5 — T5/T11, qui s'appuie précisément sur `offre_sans_decision`).
 
   // §45/§46 — mécanisme d'idempotence + politique de fermeture manuelle, testé UNE FOIS ici
   // (identique par construction pour offre_acceptee_sans_compromis et mandat_expire_bientot, déjà
@@ -200,13 +200,13 @@ describe("scannerOffreSansDecision", () => {
 
     const offre = await uneOffreEnCours("2026-06-01");
     const maintenant = new Date("2026-06-10T10:00:00Z");
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     const [tache] = await tachesOuvertesDeLOffre(offre.id);
     expect(tache).toBeDefined();
 
     const { annulerTache } = await import("./../../tacheRepository");
     await annulerTache(tache.id, WORKSPACE_TEST);
-    await scannerOffreSansDecision(maintenant);
+    await scannerOffreSansDecision(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(0);
     const toutes = await getDb().select().from(tachesTable).where(eq(tachesTable.offreId, offre.id));
     expect(toutes).toHaveLength(1); // jamais un doublon recréé

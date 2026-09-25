@@ -135,13 +135,13 @@ describe("scannerOffreAccepteeSansCompromis", () => {
     const { offre, bien, acquereur } = await uneOffreAcceptee("2026-06-01");
     const maintenant = new Date("2026-06-10T10:00:00Z");
 
-    const premier = await scannerOffreAccepteeSansCompromis(maintenant);
+    const premier = await scannerOffreAccepteeSansCompromis(WORKSPACE_TEST, maintenant);
     expect(premier).toMatchObject({ execute: true, nombreOccurrencesCreees: 1 });
     const ouvertes = await tachesOuvertesDeLOffre(offre.id);
     expect(ouvertes).toHaveLength(1);
     expect(ouvertes[0].titre).toBe("Offre acceptée : préparer le compromis");
 
-    const second = await scannerOffreAccepteeSansCompromis(maintenant);
+    const second = await scannerOffreAccepteeSansCompromis(WORKSPACE_TEST, maintenant);
     expect(second).toMatchObject({ execute: true, nombreOccurrencesCreees: 0 });
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(1);
 
@@ -150,7 +150,7 @@ describe("scannerOffreAccepteeSansCompromis", () => {
       WORKSPACE_TEST
     );
     if (resultatCompromis.statut === "cree") idsCompromis.push(resultatCompromis.compromis.id);
-    await scannerOffreAccepteeSansCompromis(maintenant);
+    await scannerOffreAccepteeSansCompromis(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -162,11 +162,11 @@ describe("scannerOffreAccepteeSansCompromis", () => {
 
     const { offre } = await uneOffreAcceptee("2026-06-01");
     const maintenant = new Date("2026-06-10T10:00:00Z");
-    await scannerOffreAccepteeSansCompromis(maintenant);
+    await scannerOffreAccepteeSansCompromis(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(1);
 
     await rendreOffreCaduque(offre.id, "autre", WORKSPACE_TEST);
-    await scannerOffreAccepteeSansCompromis(maintenant);
+    await scannerOffreAccepteeSansCompromis(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLOffre(offre.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);

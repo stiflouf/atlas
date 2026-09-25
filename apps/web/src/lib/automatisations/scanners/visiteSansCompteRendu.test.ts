@@ -121,7 +121,7 @@ describe("scannerVisiteSansCompteRendu", () => {
     const { visite } = await uneVisiteNative("2026-08-01");
     const maintenant = new Date("2026-08-03T10:00:00Z"); // 2 jours après, seuil 1 jour franchi
 
-    const premier = await scannerVisiteSansCompteRendu(maintenant);
+    const premier = await scannerVisiteSansCompteRendu(WORKSPACE_TEST, maintenant);
     expect(premier).toMatchObject({ execute: true, nombreOccurrencesCreees: 1 });
     const ouvertes1 = await tachesOuvertesDeLaVisite(visite.id);
     expect(ouvertes1).toHaveLength(1);
@@ -129,7 +129,7 @@ describe("scannerVisiteSansCompteRendu", () => {
     expect(ouvertes1[0].origine).toBe("automatique");
     expect(ouvertes1[0].origineCode).toBe(REGLE);
 
-    const second = await scannerVisiteSansCompteRendu(maintenant);
+    const second = await scannerVisiteSansCompteRendu(WORKSPACE_TEST, maintenant);
     expect(second).toMatchObject({ execute: true, nombreOccurrencesCreees: 0 });
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
@@ -143,7 +143,7 @@ describe("scannerVisiteSansCompteRendu", () => {
     const { visite } = await uneVisiteNative("2026-08-10");
     const maintenant = new Date("2026-08-10T10:00:00Z"); // le jour même, pas encore de seuil franchi
 
-    await scannerVisiteSansCompteRendu(maintenant);
+    await scannerVisiteSansCompteRendu(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -155,14 +155,14 @@ describe("scannerVisiteSansCompteRendu", () => {
 
     const { visite, bien, acquereur } = await uneVisiteNative("2026-08-20");
     const maintenant = new Date("2026-08-22T10:00:00Z");
-    await scannerVisiteSansCompteRendu(maintenant);
+    await scannerVisiteSansCompteRendu(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
     await creerCompteRenduEtRealiserVisite(
       { bienId: bien.id, acquereurId: acquereur.id, visiteId: visite.id, dateVisite: "2026-08-20", retour: "R.", interet: "interesse" },
       WORKSPACE_TEST
     );
-    await scannerVisiteSansCompteRendu(maintenant);
+    await scannerVisiteSansCompteRendu(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -174,11 +174,11 @@ describe("scannerVisiteSansCompteRendu", () => {
 
     const { visite } = await uneVisiteNative("2026-08-25");
     const maintenant = new Date("2026-08-27T10:00:00Z");
-    await scannerVisiteSansCompteRendu(maintenant);
+    await scannerVisiteSansCompteRendu(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
     await annulerVisite(visite.id, WORKSPACE_TEST);
-    await scannerVisiteSansCompteRendu(maintenant);
+    await scannerVisiteSansCompteRendu(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);

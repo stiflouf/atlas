@@ -94,7 +94,7 @@ describe("scannerMandatExpireBientot", () => {
     await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
     const maintenant = new Date("2026-06-15T10:00:00Z");
 
-    const premier = await scannerMandatExpireBientot(maintenant);
+    const premier = await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     expect(premier).toMatchObject({ execute: true, nombreOccurrencesCreees: 1 });
 
     const ouvertes1 = await tachesOuvertesDuBien(bien.id);
@@ -103,7 +103,7 @@ describe("scannerMandatExpireBientot", () => {
     expect(ouvertes1[0].origine).toBe("automatique");
     expect(ouvertes1[0].origineCode).toBe(REGLE);
 
-    const second = await scannerMandatExpireBientot(maintenant);
+    const second = await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     expect(second).toMatchObject({ execute: true, nombreOccurrencesCreees: 0 });
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(1);
 
@@ -117,11 +117,11 @@ describe("scannerMandatExpireBientot", () => {
     const bien = await unBien();
     const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
     const maintenant = new Date("2026-06-15T10:00:00Z");
-    await scannerMandatExpireBientot(maintenant);
+    await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(1);
 
     await getDb().update(mandatsTable).set({ dateFin: "2026-12-31" }).where(eq(mandatsTable.id, mandat.id));
-    await scannerMandatExpireBientot(maintenant);
+    await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(0);
     const toutes = await tachesDuBien(bien.id);
     expect(toutes[0].annuleeLe).not.toBeNull();
@@ -136,14 +136,14 @@ describe("scannerMandatExpireBientot", () => {
     const bien = await unBien();
     const mandat = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
     const maintenant = new Date("2026-06-15T10:00:00Z");
-    await scannerMandatExpireBientot(maintenant);
+    await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(1);
 
     // Résiliation effective au 16/06 : un scan à cette même date (ou après) doit la voir prendre
     // effet — `mandatCourantDuBien`/`mandatsCourantsExpirantBientot` comptent un mandat résilié une
     // date FUTURE comme encore courant jusqu'à cette date (même sémantique partout, ADR-060 §10).
     await resilierMandat(mandat.id, { resilieLe: "2026-06-16" }, WORKSPACE_TEST);
-    await scannerMandatExpireBientot(new Date("2026-06-16T10:00:00Z"));
+    await scannerMandatExpireBientot(WORKSPACE_TEST, new Date("2026-06-16T10:00:00Z"));
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -156,11 +156,11 @@ describe("scannerMandatExpireBientot", () => {
     const bien = await unBien();
     const ancien = await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
     const maintenant = new Date("2026-06-15T10:00:00Z");
-    await scannerMandatExpireBientot(maintenant);
+    await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(1);
 
     const successeur = await creerMandatSuccesseur(ancien.id, { dateDebut: "2026-07-05", dateFin: "2026-07-10", type: "simple" });
-    const rescan = await scannerMandatExpireBientot(maintenant);
+    const rescan = await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     // Nouvelle occurrence légitime pour le successeur (identité de mandat différente), jamais un
     // rejeu de celle de l'ancien.
     expect(rescan).toMatchObject({ execute: true, nombreOccurrencesCreees: 1, nombreTachesObsoletes: 1 });
@@ -178,14 +178,13 @@ describe("scannerMandatExpireBientot", () => {
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 
-  // F. "autre workspace → aucune fuite" (brief §42) n'est PAS testable au niveau du scanner :
-  // `resoudreWorkspaceExecutionMachine()` (ADR-054) exige structurellement qu'un SEUL workspace
-  // existe pour qu'un traitement machine s'exécute — insérer un second workspace ici casserait
-  // l'appel lui-même (et tout scan concurrent dans la même base de test), jamais un scénario de
-  // fuite silencieuse. Le workspace-safety du candidat est déjà prouvé au niveau requête par
-  // `mandatsCourantsExpirantBientot` ("autre workspace → invisible", mandatRepository.lifecycle.test.ts)
-  // — même convention que scanTemporel.test.ts, qui ne teste pas non plus le cross-workspace au
-  // niveau scanner pour la même raison structurelle.
+  // F. "autre workspace → aucune fuite" (brief §42). Ce fichier n'en fait pas la preuve, et la
+  // raison a CHANGÉ avec WORKSPACE_SCOPING_V2B5 : elle n'est plus structurelle (les scanners
+  // reçoivent désormais leur workspace en paramètre, un second workspace ne casse plus rien), elle
+  // est de répartition. La preuve bout en bout avec deux workspaces réellement présents vit dans
+  // lib/automatisations/multiWorkspace.test.ts (T5/T11) ; le workspace-safety du candidat reste
+  // prouvé au niveau requête par `mandatsCourantsExpirantBientot` ("autre workspace → invisible",
+  // mandatRepository.lifecycle.test.ts).
 
   it("tâche fermée manuellement pendant que le fait persiste : jamais rouverte par un scan ultérieur", async () => {
     await definirSeuilAutomatisation(REGLE, 30, WORKSPACE_TEST);
@@ -194,12 +193,12 @@ describe("scannerMandatExpireBientot", () => {
     const bien = await unBien();
     await creerMandat({ bienId: bien.id, dateDebut: "2026-01-01", dateFin: "2026-07-05", type: "simple" });
     const maintenant = new Date("2026-06-15T10:00:00Z");
-    await scannerMandatExpireBientot(maintenant);
+    await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     const [tache] = await tachesOuvertesDuBien(bien.id);
     expect(tache).toBeDefined();
 
     await annulerTache(tache.id, WORKSPACE_TEST);
-    await scannerMandatExpireBientot(maintenant);
+    await scannerMandatExpireBientot(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDuBien(bien.id)).toHaveLength(0);
     expect(await tachesDuBien(bien.id)).toHaveLength(1);
 

@@ -121,11 +121,12 @@ export const IDS = {
 };
 
 // Règles d'automatisation activées pour le workspace de démonstration, avec leur seuil (jours).
-// `configurations_automatisation` a pour clé primaire `regle_code` seul et porte un `workspace_id`
-// NOT NULL : le produit est mono-workspace par conception (ADR-054, dette documentée), et ce seed
-// n'écrit que lorsqu'EXACTEMENT un workspace existe (garde n°2) — l'activation ne peut donc
-// concerner aucun autre workspace. Les valeurs par défaut du produit (règle inactive à la création)
-// ne sont pas modifiées : seule cette base de démo reçoit ces lignes de configuration.
+// `configurations_automatisation` a pour clé primaire le COUPLE (workspace_id, regle_code) depuis
+// la migration 0054 (WORKSPACE_SCOPING_V2B5) : l'activation posée ici ne concerne QUE le workspace
+// de démonstration, et ne peut plus, structurellement, écraser celle d'un autre. Ce seed n'écrit
+// de toute façon que lorsqu'EXACTEMENT un workspace existe (garde n°2). Les valeurs par défaut du
+// produit (règle inactive à la création) ne sont pas modifiées : seule cette base de démo reçoit
+// ces lignes de configuration.
 export const REGLES_DEMO = [
   { regleCode: "visite_j_1", seuilJours: 1 },
   { regleCode: "visite_sans_compte_rendu", seuilJours: 1 },
@@ -1050,8 +1051,10 @@ async function insererDataset(sql, dataset, faits, workspaceId) {
       values (${c.bienId}, ${c.acquereurId}, ${c.statut}, true, 0, now())`;
   }
 
-  // Règles de démonstration : upsert sur `regle_code` (PK), périmètre = l'unique workspace lu. Une
-  // ligne existante rattachée à un AUTRE workspace serait une incohérence (garde n°2) — refusée.
+  // Règles de démonstration : upsert sur la PK réelle, le COUPLE (workspace_id, regle_code)
+  // — migration 0054. La garde n°2 ci-dessous reste utile et devient une vérification de
+  // cohérence du dataset plutôt qu'une protection contre un écrasement : depuis 0054, l'upsert ne
+  // PEUT plus toucher la ligne d'un autre workspace, puisque le workspace fait partie de la clé.
   for (const regle of dataset.reglesDemo) {
     const [existante] = await sql`select workspace_id from configurations_automatisation where regle_code = ${regle.regleCode}`;
     if (existante && existante.workspace_id !== workspaceId) {
@@ -1060,7 +1063,7 @@ async function insererDataset(sql, dataset, faits, workspaceId) {
     await sql`
       insert into configurations_automatisation (regle_code, active, seuil_jours, workspace_id, modifie_le)
       values (${regle.regleCode}, true, ${regle.seuilJours}, ${workspaceId}, now())
-      on conflict (regle_code) do update set active = true, seuil_jours = excluded.seuil_jours, modifie_le = now()
+      on conflict (workspace_id, regle_code) do update set active = true, seuil_jours = excluded.seuil_jours, modifie_le = now()
     `;
   }
 }

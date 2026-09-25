@@ -6,7 +6,6 @@ import { getConfigurationAutomatisation } from "../configurationAutomatisationRe
 import { emettreEvenementEtPreparerExecutions } from "../evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "../moteur";
 import { demarrerRunScanAutomatisation, terminerRunScanAutomatisation } from "../runScanAutomatisationRepository";
-import { resoudreWorkspaceExecutionMachine } from "@/lib/workspaceRepository";
 import type { ResultatScanRegle } from "../scanTemporel";
 
 const REGLE_CODE = "visite_sans_compte_rendu" as const;
@@ -29,13 +28,12 @@ function categoriserErreur(erreur: unknown): string {
 // Obsolescence : ferme toute tâche automatique dont la Visite n'est plus candidate à CE scan —
 // couvre la création du CR (Visite → `realisee`, sort du filtre `statut = 'planifiee'`) et
 // l'annulation (brief §7), sans distinguer la cause.
-export async function scannerVisiteSansCompteRendu(maintenant: Date = new Date()): Promise<ResultatScanRegle> {
-  const configuration = await getConfigurationAutomatisation(REGLE_CODE);
+export async function scannerVisiteSansCompteRendu(workspaceId: string, maintenant: Date = new Date()): Promise<ResultatScanRegle> {
+  const configuration = await getConfigurationAutomatisation(REGLE_CODE, workspaceId);
   if (!configuration.active || configuration.seuilJours == null) {
-    return { codeRegle: REGLE_CODE, execute: false };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: false };
   }
 
-  const workspaceId = await resoudreWorkspaceExecutionMachine();
   const runId = await demarrerRunScanAutomatisation(REGLE_CODE, workspaceId);
   let nombreCandidats = 0;
   let nombreOccurrencesCreees = 0;
@@ -61,14 +59,15 @@ export async function scannerVisiteSansCompteRendu(maintenant: Date = new Date()
     nombreTachesObsoletes = await cloturerTachesAutomatiquesObsoletes(
       REGLE_CODE,
       "visiteCanoniqueId",
-      candidats.map((v) => v.id)
+      candidats.map((v) => v.id),
+      workspaceId
     );
 
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
   } catch (erreur) {
     const erreurTechnique = categoriserErreur(erreur);
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees, erreurTechnique });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
   }
 }

@@ -54,7 +54,7 @@ describe("getDernierRunScanPourRegle — ordre total du journal (ADR-033)", () =
     // L'égalité est bien réelle, sinon ce test ne prouverait rien du cas qu'il prétend couvrir.
     expect(await demarreLeDe(premier)).toBe(await demarreLeDe(second));
 
-    const dernier = await getDernierRunScanPourRegle(REGLE);
+    const dernier = await getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST);
     expect(dernier?.id).toBe(second);
   });
 
@@ -67,7 +67,7 @@ describe("getDernierRunScanPourRegle — ordre total du journal (ADR-033)", () =
     const recent = "00000000-0000-4000-8000-000000000000";
     await deuxRunsAuMemeInstant([ancien, recent]);
 
-    const dernier = await getDernierRunScanPourRegle(REGLE);
+    const dernier = await getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST);
     expect(dernier?.id).toBe(recent);
   });
 
@@ -79,7 +79,7 @@ describe("getDernierRunScanPourRegle — ordre total du journal (ADR-033)", () =
     const recent = "ffffffff-ffff-4fff-8fff-ffffffffffff";
     await deuxRunsAuMemeInstant([ancien, recent]);
 
-    const dernier = await getDernierRunScanPourRegle(REGLE);
+    const dernier = await getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST);
     expect(dernier?.id).toBe(recent);
   });
 
@@ -95,9 +95,9 @@ describe("getDernierRunScanPourRegle — ordre total du journal (ADR-033)", () =
     ]);
 
     const lectures = await Promise.all([
-      getDernierRunScanPourRegle(REGLE),
-      getDernierRunScanPourRegle(REGLE),
-      getDernierRunScanPourRegle(REGLE),
+      getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST),
+      getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST),
+      getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST),
     ]);
     const ids = new Set(lectures.map((r) => r?.id));
     expect(ids.size, "la réponse ne doit pas varier d'une lecture à l'autre").toBe(1);
@@ -118,14 +118,14 @@ describe("getDernierRunScanPourRegle — ordre total du journal (ADR-033)", () =
       .returning({ id: runsTable.id });
 
     expect(ancien.id).toBeDefined();
-    const dernier = await getDernierRunScanPourRegle(REGLE);
+    const dernier = await getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST);
     expect(dernier?.id).toBe(recent);
   });
 
   it("aucun run pour la règle : rien, jamais le run d'une autre règle", async () => {
     await purger();
     await demarrerRunScanAutomatisation("suivi_apres_visite", WORKSPACE_TEST);
-    const dernier = await getDernierRunScanPourRegle(REGLE);
+    const dernier = await getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST);
     expect(dernier).toBeUndefined();
     await getDb().delete(runsTable).where(eq(runsTable.regleCode, "suivi_apres_visite"));
   });

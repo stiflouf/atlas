@@ -8,7 +8,6 @@ import { getConfigurationAutomatisation } from "../configurationAutomatisationRe
 import { emettreEvenementEtPreparerExecutions } from "../evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "../moteur";
 import { demarrerRunScanAutomatisation, terminerRunScanAutomatisation } from "../runScanAutomatisationRepository";
-import { resoudreWorkspaceExecutionMachine } from "@/lib/workspaceRepository";
 import type { ResultatScanRegle } from "../scanTemporel";
 
 const REGLE_CODE = "mandat_expire_bientot" as const;
@@ -27,7 +26,11 @@ function categoriserErreur(erreur: unknown): string {
 // mandat D'ORIGINE de chaque tâche ouverte, puis fermeture par identifiants (`cloturerTachesParIds`)
 // des seules tâches dont le mandat d'origine n'est plus un candidat. Deux requêtes, jamais une par
 // tâche.
-async function idsTachesObsoletes(candidatsMandatIds: string[]): Promise<string[]> {
+// WORKSPACE_SCOPING_V2B5 — `workspaceId` obligatoire et posé en SQL. Sans lui, la jointure
+// remontait les tâches automatiques de CETTE règle pour TOUS les workspaces, et le scan de A
+// fermait donc les tâches de B dont le mandat n'était (évidemment) pas dans les candidats de A.
+// Le filtre porte sur `taches.workspace_id` : c'est la ligne effectivement écrite ensuite.
+async function idsTachesObsoletes(candidatsMandatIds: string[], workspaceId: string): Promise<string[]> {
   const lignes = await getDb()
     .select({ id: tachesTable.id })
     .from(tachesTable)
@@ -35,6 +38,7 @@ async function idsTachesObsoletes(candidatsMandatIds: string[]): Promise<string[
     .innerJoin(evenementsMetierTable, eq(evenementsMetierTable.id, executionsAutomatisationTable.evenementId))
     .where(
       and(
+        eq(tachesTable.workspaceId, workspaceId),
         eq(tachesTable.origine, "automatique"),
         eq(tachesTable.origineCode, REGLE_CODE),
         isNull(tachesTable.termineeLe),
@@ -59,13 +63,12 @@ async function idsTachesObsoletes(candidatsMandatIds: string[]): Promise<string[
 // par jointure, voir `idsTachesObsoletes` ci-dessus) n'est plus dans le jeu de candidats de CE scan
 // — couvre la résiliation, le remplacement (renouvellement) et un report de `date_fin` hors fenêtre
 // (brief §12), sans distinguer la cause (elle n'a pas besoin de l'être : le fait a disparu, point).
-export async function scannerMandatExpireBientot(maintenant: Date = new Date()): Promise<ResultatScanRegle> {
-  const configuration = await getConfigurationAutomatisation(REGLE_CODE);
+export async function scannerMandatExpireBientot(workspaceId: string, maintenant: Date = new Date()): Promise<ResultatScanRegle> {
+  const configuration = await getConfigurationAutomatisation(REGLE_CODE, workspaceId);
   if (!configuration.active || configuration.seuilJours == null) {
-    return { codeRegle: REGLE_CODE, execute: false };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: false };
   }
 
-  const workspaceId = await resoudreWorkspaceExecutionMachine();
   const runId = await demarrerRunScanAutomatisation(REGLE_CODE, workspaceId);
   let nombreCandidats = 0;
   let nombreOccurrencesCreees = 0;
@@ -92,13 +95,19 @@ export async function scannerMandatExpireBientot(maintenant: Date = new Date()):
       }
     }
 
-    nombreTachesObsoletes = await cloturerTachesParIds(await idsTachesObsoletes(candidats.map((m) => m.id)));
+    nombreTachesObsoletes = await cloturerTachesParIds(
+      await idsTachesObsoletes(
+        candidats.map((m) => m.id),
+        workspaceId
+      ),
+      workspaceId
+    );
 
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
   } catch (erreur) {
     const erreurTechnique = categoriserErreur(erreur);
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees, erreurTechnique });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
   }
 }

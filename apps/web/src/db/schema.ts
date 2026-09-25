@@ -2429,24 +2429,21 @@ export const executionsAutomatisation = pgTable(
   ]
 );
 
-// Activation mono-conseiller par règle (ADR-032). Absence de ligne = INACTIF (jamais actif par
-// défaut) : une règle ajoutée au catalogue TypeScript n'entre jamais en production silencieusement
-// du seul fait d'une migration/déploiement — seule une ligne explicite `active = true` (posée ici
-// par un geste délibéré, humain ou de seed documenté) fait réagir le moteur. Bascule visible et
-// explicite depuis /automatisations.
+// Activation par WORKSPACE et par règle (ADR-032, portée multi-workspace par
+// WORKSPACE_SCOPING_V2B5). Absence de ligne = INACTIF (jamais actif par défaut) : une règle ajoutée
+// au catalogue TypeScript n'entre jamais en production silencieusement du seul fait d'une
+// migration/déploiement — seule une ligne explicite `active = true` (posée ici par un geste
+// délibéré, humain ou de seed documenté) fait réagir le moteur POUR CE WORKSPACE. Bascule visible
+// et explicite depuis /automatisations. Un workspace nouvellement créé n'a donc aucune ligne, donc
+// aucune règle active : la création reste paresseuse, au premier geste d'activation.
 export const configurationsAutomatisation = pgTable(
   "configurations_automatisation",
   {
-    regleCode: text("regle_code").primaryKey(),
-    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`.
-    // ATTENTION, dette assumée et documentée : la PK reste `regleCode` SEULE. Elle est correcte
-    // tant qu'il n'existe qu'un workspace (une configuration par règle), mais elle empêcherait deux
-    // workspaces de configurer la même règle. Elle devra devenir PRIMARY KEY (workspace_id,
-    // regle_code) DANS le lot qui active réellement le multi-workspace — jamais avant : la changer
-    // ici serait une mutation de contrainte sans aucun bénéfice observable, dans un lot qui doit
-    // rester additif. C'est la SEULE contrainte d'unicité du schéma qui soit dans ce cas (vérifié
-    // table par table : toutes les autres portent sur des colonnes déjà rattachées à une entité
-    // elle-même possédée).
+    regleCode: text("regle_code").notNull(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`. Ici la
+    // colonne fait aussi partie de la CLÉ : l'identité d'une configuration est le couple
+    // (workspace, règle), jamais la règle seule. La règle, elle, reste globale (catalogue
+    // TypeScript) ; seule sa configuration se décline par workspace.
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => workspaces.id),
@@ -2456,9 +2453,10 @@ export const configurationsAutomatisation = pgTable(
     // servait qu'à une seule règle) : n'a de sens que pour les règles temporelles à seuil
     // (`inactivite_prospect_vendeur`, `mandat_expire_bientot`, `offre_sans_decision`,
     // `offre_acceptee_sans_compromis`), NULL pour les autres règles ET par défaut. Chaque règle
-    // possède sa PROPRE ligne (PK = regleCode) : un même nom de colonne réutilisé par plusieurs
-    // lignes n'est jamais ambigu, sa signification ("jours d'inactivité", "jours avant échéance",
-    // "jours sans décision"...) se lit au niveau de la ligne, jamais de la colonne. Une règle qui a
+    // possède sa PROPRE ligne par workspace (PK = (workspaceId, regleCode)) : un même nom de colonne
+    // réutilisé par plusieurs lignes n'est jamais ambigu, sa signification ("jours d'inactivité",
+    // "jours avant échéance", "jours sans décision"...) se lit au niveau de la ligne, jamais de la
+    // colonne. Une règle qui a
     // besoin d'un seuil ne peut jamais être activée tant qu'il n'est pas renseigné (garde
     // applicative dans la Server Action, pas un CHECK croisé avec `active` ici — cohérent avec
     // ADR-007, la validation métier vit dans la Server Action, pas dans le schéma).
@@ -2466,6 +2464,10 @@ export const configurationsAutomatisation = pgTable(
     modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // WORKSPACE_SCOPING_V2B5 (migration 0054) — l'identité d'une configuration est le COUPLE. Avant
+    // ce lot la PK portait sur `regle_code` seul : deux workspaces ne pouvaient pas configurer la
+    // même règle, et l'`ON CONFLICT` des writers faisait écraser la ligne de l'un par l'autre.
+    primaryKey({ columns: [table.workspaceId, table.regleCode] }),
     check(
       "configurations_automatisation_regle_code_check",
       sql`${table.regleCode} IN (

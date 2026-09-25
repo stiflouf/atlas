@@ -286,6 +286,12 @@ export async function annulerTache(id: string, workspaceId: string): Promise<Tac
 // ultérieur (politique A, brief §41) — aucune colonne ni logique dédiée n'est nécessaire.
 //
 // Une seule requête UPDATE, jamais une par tâche (brief §38).
+//
+// WORKSPACE_SCOPING_V2B5 — `workspaceId` OBLIGATOIRE, et présent dans le `WHERE` SQL. Le jeu de
+// candidats est celui d'UN workspace (le scan est désormais une passe par workspace) ; sans ce
+// filtre, « toute tâche de cette règle qui n'est pas dans les candidats » englobait les tâches
+// automatiques des AUTRES workspaces, que le scan de A aurait donc annulées en bloc. C'est la
+// fuite la plus sévère du lot : elle ne révèle pas une donnée, elle en détruit une.
 const COLONNES_CIBLE_OBSOLESCENCE = {
   bienId: tachesTable.bienId,
   offreId: tachesTable.offreId,
@@ -296,6 +302,7 @@ export async function cloturerTachesAutomatiquesObsoletes(
   regleCode: CodeRegleAutomatisation,
   colonneCible: keyof typeof COLONNES_CIBLE_OBSOLESCENCE,
   idsCiblesValides: string[],
+  workspaceId: string,
   executeur: Executeur = getDb()
 ): Promise<number> {
   const colonne = COLONNES_CIBLE_OBSOLESCENCE[colonneCible];
@@ -305,6 +312,7 @@ export async function cloturerTachesAutomatiquesObsoletes(
     .set({ annuleeLe: new Date() })
     .where(
       and(
+        eq(tachesTable.workspaceId, workspaceId),
         eq(tachesTable.origine, "automatique"),
         eq(tachesTable.origineCode, regleCode),
         isNull(tachesTable.termineeLe),
@@ -324,13 +332,29 @@ export async function cloturerTachesAutomatiquesObsoletes(
 // via une jointure execution -> événement, quelles tâches précises sont concernées (voir
 // scanners/mandatExpireBientot.ts). Même garde `annulee_le/terminee_le IS NULL` : ne rouvre jamais
 // une tâche déjà close, humainement ou automatiquement.
-export async function cloturerTachesParIds(ids: string[], executeur: Executeur = getDb()): Promise<number> {
+//
+// WORKSPACE_SCOPING_V2B5 — `workspaceId` OBLIGATOIRE ici AUSSI, alors même que les identifiants
+// sont déjà produits par le scan de ce workspace. Ce n'est pas une double ceinture inutile : la
+// liste d'ids traverse une frontière de module (le scanner la calcule, ce repository l'applique),
+// et la garde doit vivre là où l'écriture a lieu. Le coût est nul, la preuve devient locale.
+export async function cloturerTachesParIds(
+  ids: string[],
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<number> {
   const idsValides = ids.filter((id) => UUID_REGEX.test(id));
   if (idsValides.length === 0) return 0;
   const lignes = await executeur
     .update(tachesTable)
     .set({ annuleeLe: new Date() })
-    .where(and(inArray(tachesTable.id, idsValides), isNull(tachesTable.termineeLe), isNull(tachesTable.annuleeLe)))
+    .where(
+      and(
+        eq(tachesTable.workspaceId, workspaceId),
+        inArray(tachesTable.id, idsValides),
+        isNull(tachesTable.termineeLe),
+        isNull(tachesTable.annuleeLe)
+      )
+    )
     .returning({ id: tachesTable.id });
   return lignes.length;
 }

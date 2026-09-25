@@ -5,6 +5,7 @@ import { listerConfigurationsAutomatisation } from "@/lib/automatisations/config
 import { getDerniereExecutionPourRegle } from "@/lib/automatisations/executionAutomatisationRepository";
 import { getDernierRunScanPourRegle } from "@/lib/automatisations/runScanAutomatisationRepository";
 import { basculerAutomatisationAction, definirSeuilAutomatisationAction } from "@/actions/automatisations";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import {
   deriverEtatExecutionAutomatisation,
   deriverEtatRunScanAutomatisation,
@@ -72,15 +73,24 @@ function formatDate(iso: string): string {
 // le commit métier et le traitement synchrone reste visible, jamais invisible, mais son retraitement
 // reste hors périmètre V1 (aucun worker).
 export default async function PageAutomatisations() {
-  const configurations = await listerConfigurationsAutomatisation();
+  // WORKSPACE_SCOPING_V2B5 — le périmètre est résolu UNE FOIS, à la frontière de l'écran, et passé
+  // aux trois lectures. Les trois lisaient auparavant sans filtre : un conseiller voyait
+  // l'activation, la dernière exécution et le dernier scan d'un autre workspace. Chacune filtre
+  // maintenant en SQL (jamais un tri en mémoire après lecture globale : l'activation, le « dernier »
+  // et le `limit(1)` n'ont de sens qu'à l'intérieur du périmètre).
+  const workspaceId = await exigerWorkspaceCourant();
+
+  const configurations = await listerConfigurationsAutomatisation(workspaceId);
   const configParCode = new Map(configurations.map((c) => [c.regleCode, c]));
 
   const lignes = await Promise.all(
     CATALOGUE_REGLES_AUTOMATISATION.map(async (regle) => ({
       regle,
       config: configParCode.get(regle.code),
-      derniereExecution: await getDerniereExecutionPourRegle(regle.code),
-      dernierRun: REGLES_TEMPORELLES.includes(regle.code) ? await getDernierRunScanPourRegle(regle.code) : undefined,
+      derniereExecution: await getDerniereExecutionPourRegle(regle.code, workspaceId),
+      dernierRun: REGLES_TEMPORELLES.includes(regle.code)
+        ? await getDernierRunScanPourRegle(regle.code, workspaceId)
+        : undefined,
     }))
   );
 

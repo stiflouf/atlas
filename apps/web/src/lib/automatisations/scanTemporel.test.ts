@@ -127,8 +127,8 @@ async function recupererEvenementsEtTaches(prospectVendeurId: string) {
 describe("scannerInactiviteProspectVendeur — règle inactive ou non configurée", () => {
   it("règle inactive : aucun run créé, execute=false", async () => {
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
-    const resultat = await scannerInactiviteProspectVendeur(new Date("2026-08-14T10:00:00Z"));
-    expect(resultat).toEqual({ codeRegle: REGLE, execute: false });
+    const resultat = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, new Date("2026-08-14T10:00:00Z"));
+    expect(resultat).toEqual({ codeRegle: REGLE, workspaceId: WORKSPACE_TEST, execute: false });
   });
 
   it("règle active mais sans seuil configuré : aucun run créé, execute=false", async () => {
@@ -140,8 +140,8 @@ describe("scannerInactiviteProspectVendeur — règle inactive ou non configuré
       .set({ seuilJours: null })
       .where(eq(configurationsAutomatisationTable.regleCode, REGLE));
     await definirActivationAutomatisation(REGLE, true, WORKSPACE_TEST);
-    const resultat = await scannerInactiviteProspectVendeur(new Date("2026-08-14T10:00:00Z"));
-    expect(resultat).toEqual({ codeRegle: REGLE, execute: false });
+    const resultat = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, new Date("2026-08-14T10:00:00Z"));
+    expect(resultat).toEqual({ codeRegle: REGLE, workspaceId: WORKSPACE_TEST, execute: false });
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
   });
 });
@@ -154,7 +154,7 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     const maintenant = new Date("2026-08-20T10:00:00Z");
     const prospectId = await creerProspectAvecAncre("OCCURRENCE", new Date("2026-08-01T10:00:00Z"), true);
 
-    const premier = await scannerInactiviteProspectVendeur(maintenant);
+    const premier = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, maintenant);
     expect(premier).toMatchObject({ execute: true, nombreCandidats: expect.any(Number), nombreOccurrencesCreees: 1 });
     if (premier.execute) idsRunsCrees.push(premier.runId);
 
@@ -168,7 +168,7 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     expect(tachesApres1[0].titre).toContain("Sophie");
 
     // Deuxième scan, même prospect, même seuil franchi : aucun doublon.
-    const second = await scannerInactiviteProspectVendeur(maintenant);
+    const second = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, maintenant);
     expect(second).toMatchObject({ execute: true, nombreOccurrencesCreees: 0 });
     if (second.execute) idsRunsCrees.push(second.runId);
 
@@ -185,7 +185,7 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
 
     const prospectId = await creerProspectAvecAncre("NOUVEAU-CYCLE", new Date("2026-01-01T10:00:00Z"), true);
 
-    const premierScan = await scannerInactiviteProspectVendeur(new Date("2026-01-10T10:00:00Z"));
+    const premierScan = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, new Date("2026-01-10T10:00:00Z"));
     if (premierScan.execute) idsRunsCrees.push(premierScan.runId);
     const { evenements: evt1, taches: tache1 } = await recupererEvenementsEtTaches(prospectId);
     expect(evt1).toHaveLength(1);
@@ -201,7 +201,7 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
       .set({ dernierContactLe: new Date("2026-02-01T10:00:00Z") })
       .where(eq(prospectsVendeursTable.id, prospectId));
 
-    const secondScan = await scannerInactiviteProspectVendeur(new Date("2026-02-10T10:00:00Z"));
+    const secondScan = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, new Date("2026-02-10T10:00:00Z"));
     if (secondScan.execute) idsRunsCrees.push(secondScan.runId);
 
     const { evenements: evt2, taches: tache2 } = await recupererEvenementsEtTaches(prospectId);
@@ -221,8 +221,8 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     const prospectId = await creerProspectAvecAncre("CONCURRENCE", new Date("2026-08-01T10:00:00Z"), true);
 
     const [resultatA, resultatB] = await Promise.all([
-      scannerInactiviteProspectVendeur(maintenant),
-      scannerInactiviteProspectVendeur(maintenant),
+      scannerInactiviteProspectVendeur(WORKSPACE_TEST, maintenant),
+      scannerInactiviteProspectVendeur(WORKSPACE_TEST, maintenant),
     ]);
     if (resultatA.execute) idsRunsCrees.push(resultatA.runId);
     if (resultatB.execute) idsRunsCrees.push(resultatB.runId);
@@ -254,7 +254,7 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
       return emettreEvenementReel(input, executeur);
     });
 
-    const resultat = await scannerInactiviteProspectVendeur(maintenant);
+    const resultat = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, maintenant);
     emettreEvenementMock.mockImplementation((...args: Parameters<typeof emettreEvenementReel>) => emettreEvenementReel(...args));
 
     expect(resultat.execute).toBe(true);
@@ -262,7 +262,7 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
       idsRunsCrees.push(resultat.runId);
       expect(resultat.nombreOccurrencesCreees).toBeGreaterThanOrEqual(1);
       expect(resultat.erreurTechnique).toBeUndefined();
-      const run = await getDernierRunScanPourRegle(REGLE);
+      const run = await getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST);
       expect(run?.id).toBe(resultat.runId);
       expect(deriverEtatRunScanAutomatisation(run!)).toBe("termine");
     }
@@ -285,12 +285,12 @@ describe("scannerInactiviteProspectVendeur — création d'occurrence et idempot
     // Simule un run laissé sans jamais être complété (process arrêté en plein scan).
     const runInacheveId = await demarrerRunScanAutomatisation(REGLE, WORKSPACE_TEST);
     idsRunsCrees.push(runInacheveId);
-    const runInacheve = await getDernierRunScanPourRegle(REGLE);
+    const runInacheve = await getDernierRunScanPourRegle(REGLE, WORKSPACE_TEST);
     expect(runInacheve?.id).toBe(runInacheveId);
     expect(deriverEtatRunScanAutomatisation(runInacheve!)).toBe("en_cours");
 
     const prospectId = await creerProspectAvecAncre("REPRISE", new Date("2026-08-01T10:00:00Z"), true);
-    const resultat = await scannerInactiviteProspectVendeur(new Date("2026-08-20T10:00:00Z"));
+    const resultat = await scannerInactiviteProspectVendeur(WORKSPACE_TEST, new Date("2026-08-20T10:00:00Z"));
     expect(resultat.execute).toBe(true);
     if (resultat.execute) idsRunsCrees.push(resultat.runId);
 

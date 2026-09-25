@@ -1,11 +1,10 @@
 import { getDb } from "@/db/client";
-import { listerProspectsVendeursPourMachine } from "@/lib/prospectVendeurRepository";
+import { listerProspectsVendeursDuWorkspace } from "@/lib/prospectVendeurRepository";
 import { calculerOccurrencesInactiviteDues } from "../calculOccurrencesInactivite";
 import { getConfigurationAutomatisation } from "../configurationAutomatisationRepository";
 import { emettreEvenementEtPreparerExecutions } from "../evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "../moteur";
 import { demarrerRunScanAutomatisation, terminerRunScanAutomatisation } from "../runScanAutomatisationRepository";
-import { resoudreWorkspaceExecutionMachine } from "@/lib/workspaceRepository";
 import type { ResultatScanRegle } from "../scanTemporel";
 
 const REGLE_CODE = "inactivite_prospect_vendeur" as const;
@@ -26,28 +25,28 @@ function categoriserErreur(erreur: unknown): string {
 // Si la règle est inactive ou son seuil non configuré, AUCUN run n'est créé — un run représente
 // une tentative de scan réellement effectuée, pas la consultation d'un feature flag.
 //
-// `listerProspectsVendeursPourMachine()` (déjà existant, ADR-027) exclut prospects archivés/perdus/mandat
-// déjà signé — jamais un filtre réinventé ici (ADR-033, point 9). Chaque occurrence est émise dans
-// sa PROPRE transaction courte : un scan portant sur des centaines de prospects ne dépend jamais
-// d'un seul verrou long, et une erreur sur un prospect n'affecte jamais les autres.
-export async function scannerInactiviteProspectVendeur(maintenant: Date = new Date()): Promise<ResultatScanRegle> {
-  const configuration = await getConfigurationAutomatisation(REGLE_CODE);
+// WORKSPACE_SCOPING_V2B5 — ce scanner lisait `listerProspectsVendeursPourMachine()`, qui balaye le
+// parc entier. Il lit désormais `listerProspectsVendeursDuWorkspace(workspaceId, "en_cours")` : le
+// contrat métier est STRICTEMENT le même (même `predicatVue("en_cours")`, donc la même exclusion
+// des prospects archivés/perdus/mandat déjà signé d'ADR-027, jamais un filtre réinventé ici —
+// ADR-033 point 9), à ceci près que le périmètre est posé dans le `WHERE` SQL plutôt qu'absent.
+// Aucun filtrage en mémoire après une lecture globale : c'est précisément ce qu'il fallait éviter.
+//
+// Chaque occurrence est émise dans sa PROPRE transaction courte : un scan portant sur des centaines
+// de prospects ne dépend jamais d'un seul verrou long, et une erreur sur un prospect n'affecte
+// jamais les autres.
+export async function scannerInactiviteProspectVendeur(workspaceId: string, maintenant: Date = new Date()): Promise<ResultatScanRegle> {
+  const configuration = await getConfigurationAutomatisation(REGLE_CODE, workspaceId);
   if (!configuration.active || configuration.seuilJours == null) {
-    return { codeRegle: REGLE_CODE, execute: false };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: false };
   }
-
-  // ADR-054 — contexte d'exécution MACHINE : ce chemin n'a ni session ni identité humaine et ne
-  // doit surtout pas en simuler une. Le périmètre est lu en base et échouera bruyamment le jour où
-  // plusieurs workspaces existeront — un scan multi-workspace est une passe PAR workspace, une
-  // conception à part entière, jamais un contournement silencieux.
-  const workspaceId = await resoudreWorkspaceExecutionMachine();
 
   const runId = await demarrerRunScanAutomatisation(REGLE_CODE, workspaceId);
   let nombreCandidats = 0;
   let nombreOccurrencesCreees = 0;
 
   try {
-    const prospects = await listerProspectsVendeursPourMachine();
+    const prospects = await listerProspectsVendeursDuWorkspace(workspaceId, "en_cours");
     nombreCandidats = prospects.length;
     const candidats = prospects.map((p) => ({
       prospectVendeurId: p.id,
@@ -84,10 +83,10 @@ export async function scannerInactiviteProspectVendeur(maintenant: Date = new Da
     }
 
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees };
   } catch (erreur) {
     const erreurTechnique = categoriserErreur(erreur);
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees, erreurTechnique });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, erreurTechnique };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, erreurTechnique };
   }
 }

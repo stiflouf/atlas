@@ -6,8 +6,9 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // idempotence, obsolescence (annulation/réalisation/report), identité d'occurrence cyclique
 // (report → nouvelle occurrence possible, §31/§38/§40), fermeture humaine (§33/§39), parité
 // native/Calendar (§44), bornage requêtes (§21). Isolation workspace testée au niveau requête
-// (visiteRepository.automation.test.ts) — pas au niveau scanner, même convention documentée dans
-// scanners/mandatExpireBientot.test.ts (resoudreWorkspaceExecutionMachine exige un seul workspace).
+// (visiteRepository.automation.test.ts) et, depuis WORKSPACE_SCOPING_V2B5, bout en bout avec deux
+// workspaces réels dans lib/automatisations/multiWorkspace.test.ts — ce fichier reste mono-workspace
+// par répartition, plus par impossibilité structurelle.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas_test";
 
 const { getDb } = await import("@/db/client");
@@ -138,7 +139,7 @@ describe("scannerVisiteJ1", () => {
     const { visite } = await uneVisiteNative("2026-08-11");
     const maintenant = new Date("2026-08-10T10:00:00Z");
 
-    const premier = await scannerVisiteJ1(maintenant);
+    const premier = await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(premier).toMatchObject({ execute: true, nombreOccurrencesCreees: 1 });
     const ouvertes1 = await tachesOuvertesDeLaVisite(visite.id);
     expect(ouvertes1).toHaveLength(1);
@@ -146,7 +147,7 @@ describe("scannerVisiteJ1", () => {
     expect(ouvertes1[0].origine).toBe("automatique");
     expect(ouvertes1[0].origineCode).toBe(REGLE);
 
-    const second = await scannerVisiteJ1(maintenant);
+    const second = await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(second).toMatchObject({ execute: true, nombreOccurrencesCreees: 0 });
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
@@ -159,11 +160,11 @@ describe("scannerVisiteJ1", () => {
 
     const { visite } = await uneVisiteNative("2026-08-21");
     const maintenant = new Date("2026-08-20T10:00:00Z");
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
     await annulerVisite(visite.id, WORKSPACE_TEST);
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -175,14 +176,14 @@ describe("scannerVisiteJ1", () => {
 
     const { visite, bien, acquereur } = await uneVisiteNative("2026-08-31");
     const maintenant = new Date("2026-08-30T10:00:00Z");
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
     await creerCompteRenduEtRealiserVisite(
       { bienId: bien.id, acquereurId: acquereur.id, visiteId: visite.id, dateVisite: "2026-08-31", retour: "R.", interet: "interesse" },
       WORKSPACE_TEST
     );
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
 
     await definirActivationAutomatisation(REGLE, false, WORKSPACE_TEST);
@@ -194,16 +195,16 @@ describe("scannerVisiteJ1", () => {
 
     const { visite } = await uneVisiteNative("2026-09-11");
     const maintenant = new Date("2026-09-10T10:00:00Z");
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
     await modifierDatePrevueVisite(visite.id, "2026-09-16", WORKSPACE_TEST);
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
 
     // Nouvelle veille, après le report.
     const nouvelleVeille = new Date("2026-09-15T10:00:00Z");
-    const rescan = await scannerVisiteJ1(nouvelleVeille);
+    const rescan = await scannerVisiteJ1(WORKSPACE_TEST, nouvelleVeille);
     expect(rescan).toMatchObject({ execute: true, nombreOccurrencesCreees: 1 });
     const ouvertes = await tachesOuvertesDeLaVisite(visite.id);
     expect(ouvertes).toHaveLength(1);
@@ -222,12 +223,12 @@ describe("scannerVisiteJ1", () => {
 
     const { visite } = await uneVisiteNative("2026-10-11");
     const maintenant = new Date("2026-10-10T10:00:00Z");
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     const [tache] = await tachesOuvertesDeLaVisite(visite.id);
     expect(tache).toBeDefined();
 
     await annulerTache(tache.id, WORKSPACE_TEST);
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(0);
     expect(await tachesDeLaVisite(visite.id)).toHaveLength(1);
 
@@ -240,13 +241,13 @@ describe("scannerVisiteJ1", () => {
 
     const { visite } = await uneVisiteNative("2026-10-21");
     const maintenant = new Date("2026-10-20T10:00:00Z");
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     const [tache] = await tachesOuvertesDeLaVisite(visite.id);
     await annulerTache(tache.id, WORKSPACE_TEST);
 
     await modifierDatePrevueVisite(visite.id, "2026-10-26", WORKSPACE_TEST);
     const nouvelleVeille = new Date("2026-10-25T10:00:00Z");
-    const rescan = await scannerVisiteJ1(nouvelleVeille);
+    const rescan = await scannerVisiteJ1(WORKSPACE_TEST, nouvelleVeille);
     expect(rescan).toMatchObject({ execute: true, nombreOccurrencesCreees: 1 });
     expect(await tachesOuvertesDeLaVisite(visite.id)).toHaveLength(1);
 
@@ -267,7 +268,7 @@ describe("scannerVisiteJ1", () => {
     idsVisites.push(resultat.visite.id);
 
     const maintenant = new Date("2026-11-10T10:00:00Z");
-    await scannerVisiteJ1(maintenant);
+    await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
     const ouvertes = await tachesOuvertesDeLaVisite(resultat.visite.id);
     expect(ouvertes).toHaveLength(1);
     expect(ouvertes[0].titre).toBe("Préparer la visite de demain");
@@ -281,11 +282,11 @@ describe("scannerVisiteJ1", () => {
 
     const maintenant = new Date("2026-12-10T10:00:00Z");
     for (let i = 0; i < 3; i++) await uneVisiteNative("2026-12-11");
-    const resultatPetit = await scannerVisiteJ1(maintenant);
+    const resultatPetit = await scannerVisiteJ1(WORKSPACE_TEST, maintenant);
 
     const maintenant2 = new Date("2026-12-20T10:00:00Z");
     for (let i = 0; i < 15; i++) await uneVisiteNative("2026-12-21");
-    const resultatGrand = await scannerVisiteJ1(maintenant2);
+    const resultatGrand = await scannerVisiteJ1(WORKSPACE_TEST, maintenant2);
 
     // Le nombre de candidats scale, mais le scanner reste une requête candidats + une émission par
     // occurrence due (jamais une requête de LECTURE supplémentaire par candidat) — assertion

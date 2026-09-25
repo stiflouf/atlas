@@ -26,14 +26,24 @@ export async function getExecutionAutomatisationById(id: string): Promise<Execut
   return ligne ? ligneVersExecution(ligne) : undefined;
 }
 
-export async function getDerniereExecutionPourRegle(regleCode: CodeRegleAutomatisation): Promise<ExecutionAutomatisation | undefined> {
+// WORKSPACE_SCOPING_V2B5 — lecture d'écran (/automatisations), donc SCOPÉE. `executions_automatisation`
+// ne porte volontairement PAS de `workspace_id` : son périmètre est celui de son événement, dérivé
+// par une FK NOT NULL (`evenement_id`). Le filtre passe donc par la jointure — jamais par une
+// colonne dupliquée qu'il faudrait ensuite garder cohérente, jamais par un filtrage en mémoire
+// après une lecture globale (l'ordre et le `limit(1)` doivent s'appliquer DANS le périmètre, sinon
+// « la dernière exécution de A » serait celle de B quand B est plus récente).
+export async function getDerniereExecutionPourRegle(
+  regleCode: CodeRegleAutomatisation,
+  workspaceId: string
+): Promise<ExecutionAutomatisation | undefined> {
   const [ligne] = await getDb()
-    .select()
+    .select({ execution: executionsAutomatisation })
     .from(executionsAutomatisation)
-    .where(eq(executionsAutomatisation.regleCode, regleCode))
+    .innerJoin(evenementsMetier, eq(executionsAutomatisation.evenementId, evenementsMetier.id))
+    .where(and(eq(executionsAutomatisation.regleCode, regleCode), eq(evenementsMetier.workspaceId, workspaceId)))
     .orderBy(desc(executionsAutomatisation.demarreeLe))
     .limit(1);
-  return ligne ? ligneVersExecution(ligne) : undefined;
+  return ligne ? ligneVersExecution(ligne.execution) : undefined;
 }
 
 // Verrouille la ligne pour le traitement (ADR-032, correction n°6) — appelée à l'intérieur d'une

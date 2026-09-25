@@ -1,0 +1,22 @@
+-- WORKSPACE_SCOPING_V2B5 (ADR-054) — `configurations_automatisation` passe de
+-- PRIMARY KEY (regle_code) à PRIMARY KEY (workspace_id, regle_code).
+--
+-- Pourquoi maintenant : jusqu'ici l'identité d'une configuration était la règle SEULE. Deux
+-- workspaces ne pouvaient donc pas configurer la même règle, et l'`ON CONFLICT (regle_code)` des
+-- writers faisait silencieusement écraser la ligne d'un workspace par celle d'un autre. C'est le
+-- lot qui active réellement le multi-workspace ; la dette était nommée dans schema.ts depuis 0032.
+--
+-- Pourquoi AUCUN backfill : `workspace_id` existe depuis 0032 et est NOT NULL sans DEFAULT depuis
+-- 0033. L'ancienne clé était STRICTEMENT plus contraignante que la nouvelle (une ligne par règle,
+-- tous workspaces confondus), donc aucune ligne existante ne peut violer la nouvelle — la
+-- migration ne peut ni échouer sur les données ni en réinterpréter une seule.
+--
+-- Aucun ADD COLUMN, aucune autre table touchée : `executions_automatisation` ne reçoit PAS de
+-- `workspace_id`, son périmètre reste dérivé de `evenement_id -> evenements_metier.workspace_id`
+-- (FK NOT NULL, dérivation totale et déterministe).
+--
+-- `configurations_automatisation_pkey` est le nom attribué par Postgres à la contrainte inline
+-- `"regle_code" text PRIMARY KEY NOT NULL` de la migration 0020. DROP CONSTRAINT sur une PK ne
+-- retire jamais le NOT NULL des colonnes : `regle_code` reste NOT NULL entre les deux instructions.
+ALTER TABLE "configurations_automatisation" DROP CONSTRAINT "configurations_automatisation_pkey";--> statement-breakpoint
+ALTER TABLE "configurations_automatisation" ADD CONSTRAINT "configurations_automatisation_workspace_id_regle_code_pk" PRIMARY KEY("workspace_id","regle_code");

@@ -6,7 +6,6 @@ import { getConfigurationAutomatisation } from "../configurationAutomatisationRe
 import { emettreEvenementEtPreparerExecutions } from "../evenementMetierRepository";
 import { traiterExecutionsEnAttente } from "../moteur";
 import { demarrerRunScanAutomatisation, terminerRunScanAutomatisation } from "../runScanAutomatisationRepository";
-import { resoudreWorkspaceExecutionMachine } from "@/lib/workspaceRepository";
 import type { ResultatScanRegle } from "../scanTemporel";
 
 const REGLE_CODE = "visite_j_1" as const;
@@ -33,13 +32,12 @@ function categoriserErreur(erreur: unknown): string {
 // sans distinguer la cause. Colonne cible = `visiteCanoniqueId` = identité d'occurrence ici (jamais
 // de dérivation comme pour `mandat_expire_bientot`) : `cloturerTachesAutomatiquesObsoletes`
 // générique suffit.
-export async function scannerVisiteJ1(maintenant: Date = new Date()): Promise<ResultatScanRegle> {
-  const configuration = await getConfigurationAutomatisation(REGLE_CODE);
+export async function scannerVisiteJ1(workspaceId: string, maintenant: Date = new Date()): Promise<ResultatScanRegle> {
+  const configuration = await getConfigurationAutomatisation(REGLE_CODE, workspaceId);
   if (!configuration.active || configuration.seuilJours == null) {
-    return { codeRegle: REGLE_CODE, execute: false };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: false };
   }
 
-  const workspaceId = await resoudreWorkspaceExecutionMachine();
   const runId = await demarrerRunScanAutomatisation(REGLE_CODE, workspaceId);
   let nombreCandidats = 0;
   let nombreOccurrencesCreees = 0;
@@ -70,14 +68,15 @@ export async function scannerVisiteJ1(maintenant: Date = new Date()): Promise<Re
     nombreTachesObsoletes = await cloturerTachesAutomatiquesObsoletes(
       REGLE_CODE,
       "visiteCanoniqueId",
-      candidats.map((v) => v.id)
+      candidats.map((v) => v.id),
+      workspaceId
     );
 
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes };
   } catch (erreur) {
     const erreurTechnique = categoriserErreur(erreur);
     await terminerRunScanAutomatisation(runId, { nombreCandidats, nombreOccurrencesCreees, erreurTechnique });
-    return { codeRegle: REGLE_CODE, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
+    return { codeRegle: REGLE_CODE, workspaceId, execute: true, runId, nombreCandidats, nombreOccurrencesCreees, nombreTachesObsoletes, erreurTechnique };
   }
 }
