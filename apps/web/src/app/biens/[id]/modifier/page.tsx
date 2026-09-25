@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { modifierBienAction } from "@/actions/modifierBien";
 import BienFormulaire from "@/components/bien/BienFormulaire";
-import { getBienById } from "@/lib/bienRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
 import { existeMandatCanoniqueDuBien } from "@/lib/mandatRepository";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
@@ -16,10 +16,15 @@ export default async function ModifierBienPage({ params }: PageProps) {
   const { id } = await params;
   if (!UUID_REGEX.test(id)) notFound();
 
-  const bien = await getBienById(id);
+  // WORKSPACE_SCOPING_V2C1 — ROOT-FIRST : le périmètre est résolu AVANT la racine, et la racine
+  // est lue scopée. Un bien d'un autre workspace est INTROUVABLE, indistinguable d'un id inexistant
+  // — jamais un message qui confirmerait son existence. Le workspace était déjà résolu ici, mais
+  // seulement APRÈS avoir chargé et validé le bien : l'ordre était l'unique faille.
+  const workspaceId = await exigerWorkspaceCourant();
+  const bien = await getBienDuWorkspace(id, workspaceId);
   if (!bien) notFound();
   // ADR-060 §2 — décidé côté serveur, dans le workspace de session : le formulaire ne le devine pas.
-  const mandatCanonique = await existeMandatCanoniqueDuBien(bien.id, await exigerWorkspaceCourant());
+  const mandatCanonique = await existeMandatCanoniqueDuBien(bien.id, workspaceId);
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">

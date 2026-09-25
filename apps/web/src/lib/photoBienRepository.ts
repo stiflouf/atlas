@@ -55,13 +55,6 @@ export async function getPhotoBienDuWorkspace(
   return ligne ? ligneVersPhotoBien(ligne.photo) : undefined;
 }
 
-// INTERNE, NON SCOPÉ — voir `getPhotoBienDuWorkspace` pour tout identifiant venant du client.
-export async function getPhotoBien(photoId: string): Promise<PhotoBien | undefined> {
-  if (!UUID_REGEX.test(photoId)) return undefined;
-  const [ligne] = await getDb().select().from(photosBienTable).where(eq(photosBienTable.id, photoId)).limit(1);
-  return ligne ? ligneVersPhotoBien(ligne) : undefined;
-}
-
 export async function getPhotoPrincipaleBien(bienId: string): Promise<PhotoBien | undefined> {
   if (!UUID_REGEX.test(bienId)) return undefined;
   const [ligne] = await getDb()

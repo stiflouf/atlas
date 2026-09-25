@@ -3,13 +3,19 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { modifierProspectVendeurAction } from "@/actions/prospectVendeur";
 import ProspectVendeurFormulaire from "@/components/prospectVendeur/ProspectVendeurFormulaire";
-import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
+import { getProspectVendeurDuWorkspace } from "@/lib/prospectVendeurRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 type PageProps = { params: Promise<{ id: string }> };
 
 export default async function ModifierProspectVendeurPage({ params }: PageProps) {
   const { id } = await params;
-  const prospect = await getProspectVendeurById(id);
+  // WORKSPACE_SCOPING_V2C1 — ROOT-FIRST. Cette page n'avait AUCUNE notion de workspace : elle
+  // préremplissait le formulaire avec l'identité entière d'un prospect quelconque (nom, téléphone,
+  // e-mail, adresse du bien potentiel, origine du lead). Les writers, eux, étaient déjà fermés par
+  // V2A — seule la lecture fuyait.
+  const workspaceId = await exigerWorkspaceCourant();
+  const prospect = await getProspectVendeurDuWorkspace(id, workspaceId);
   if (!prospect) notFound();
 
   return (

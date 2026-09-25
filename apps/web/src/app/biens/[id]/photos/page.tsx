@@ -5,8 +5,9 @@ import { ArrowLeft, ChevronDown, ChevronUp, Images, Star, Trash2 } from "lucide-
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
 import PhotosUploader from "@/components/bien/PhotosUploader";
-import { getBienById } from "@/lib/bienRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
 import { listerPhotosBien } from "@/lib/photoBienRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { deplacerPhotoBienAction, supprimerPhotoBienAction } from "@/actions/gererPhotosBien";
 import { NOMBRE_MAX_PHOTOS_PAR_BIEN } from "@/types/photoBien";
 
@@ -18,7 +19,12 @@ type PageProps = { params: Promise<{ id: string }> };
 
 export default async function PhotosBienPage({ params }: PageProps) {
   const { id } = await params;
-  const bien = await getBienById(id);
+  // WORKSPACE_SCOPING_V2C1 — ROOT-FIRST. V1 avait déjà fermé les PIXELS (la route
+  // /api/photos-bien/[photoId] lit scopé) ; cette page, elle, exposait encore les MÉTADONNÉES d'un
+  // bien d'un autre workspace : son titre, le nombre de photos, leurs identifiants, leur ordre et
+  // la photo principale. Rien de tout cela n'est chargé tant que le bien n'est pas prouvé.
+  const workspaceId = await exigerWorkspaceCourant();
+  const bien = await getBienDuWorkspace(id, workspaceId);
   if (!bien) notFound();
 
   const photos = await listerPhotosBien(id);

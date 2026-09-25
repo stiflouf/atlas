@@ -86,8 +86,16 @@ describe("précédence canonique > legacy : une seule règle, centralisée", () 
     const formulaire = codeSeul(join(SRC, "components", "bien", "BienFormulaire.tsx"));
     expect(formulaire).toContain("mandatCanonique ? (");
     expect(formulaire).not.toMatch(/Repository|@\/db\//);
+    // WORKSPACE_SCOPING_V2C1 — l'assertion portait sur la forme INLINE de l'appel
+    // (`..., await exigerWorkspaceCourant())`). La page résout désormais son périmètre AVANT de
+    // charger sa racine (root-first) et réutilise la variable : la forme inline a disparu, l'INTENTION
+    // — la page décide, avec une existence scopée, jamais le composant — est intacte et mieux servie.
+    // C'est donc elle que ce test vérifie maintenant, en deux points plutôt qu'en une chaîne.
     const page = codeSeul(join(SRC, "app", "biens", "[id]", "modifier", "page.tsx"));
-    expect(page).toContain("existeMandatCanoniqueDuBien(bien.id, await exigerWorkspaceCourant())");
+    expect(page).toContain("const workspaceId = await exigerWorkspaceCourant()");
+    expect(page).toContain("existeMandatCanoniqueDuBien(bien.id, workspaceId)");
+    // …et le périmètre est résolu avant la racine, jamais après : c'est l'ordre qui protège.
+    expect(page.indexOf("exigerWorkspaceCourant")).toBeLessThan(page.indexOf("getBienDuWorkspace(id"));
   });
 });
 

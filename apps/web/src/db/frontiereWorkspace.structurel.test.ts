@@ -95,7 +95,9 @@ describe("Frontière workspace — classification des Route Handlers", () => {
       // Elle doit appeler au moins un lecteur scopé…
       expect(LECTEURS_SCOPES.some((lecteur) => source.includes(lecteur)), `${route} : aucun lecteur scopé`).toBe(true);
       // …et aucun lecteur non scopé du domaine servi.
-      for (const interdit of ["getDocumentBienById", "getPhotoBien(", "getBienById", "getClientById"]) {
+      // (`getPhotoBien` retiré par WORKSPACE_SCOPING_V2C1 : la fonction n'existe plus, plus rien ne
+      // peut l'importer — une entrée de liste noire visant un symbole supprimé ne protège rien.)
+      for (const interdit of ["getDocumentBienById", "getBienById", "getClientById"]) {
         expect(source.includes(interdit), `${route} → ${interdit}`).toBe(false);
       }
     }
@@ -124,7 +126,6 @@ const LECTEURS_NON_SCOPES = [
   "getProspectVendeurById",
   "getTacheById",
   "getDocumentBienById",
-  "getPhotoBien",
   "getContactById",
 ];
 
@@ -146,16 +147,18 @@ const EXCEPTIONS_JUSTIFIEES: Record<string, string[]> = {
   // ── V2, écrans de lecture seule : ce lot durcit les MUTATIONS et les routes qui servent des
   // fichiers. Une page hors périmètre affiche aujourd'hui une fiche qu'elle ne devrait pas
   // montrer ; elle ne permet plus, depuis ce lot, de la modifier.
+  //
+  // (WORKSPACE_SCOPING_V2C1 a refermé cinq de ces surfaces — biens/[id]/modifier, biens/[id]/photos,
+  // clients/[id]/modifier, prospects-vendeurs/[id]/modifier et prospects-vendeurs/[id]/signer-mandat :
+  // leurs exceptions ont été RETIRÉES, pas commentées. Chacune résout désormais le workspace AVANT
+  // sa racine et la lit par un reader scopé. Les surfaces restantes ci-dessous relèvent de V2C2 —
+  // elles ne sont pas de simples substitutions de racine : elles croisent aussi des lecteurs de
+  // liste globaux qui alimentent des moteurs (matching, opportunités, reprise de contact).)
   "app/biens/[id]/page.tsx": ["getBienById", "getClientById"],
-  "app/biens/[id]/modifier/page.tsx": ["getBienById"],
-  "app/biens/[id]/photos/page.tsx": ["getBienById"],
   "app/clients/[id]/page.tsx": ["getClientById", "getBienById"],
-  "app/clients/[id]/modifier/page.tsx": ["getClientById"],
   "app/compromis/nouveau/page.tsx": ["getBienById", "getClientById"],
   "app/offres/nouveau/page.tsx": ["getBienById", "getClientById"],
   "app/prospects-vendeurs/[id]/page.tsx": ["getProspectVendeurById", "getBienById"],
-  "app/prospects-vendeurs/[id]/modifier/page.tsx": ["getProspectVendeurById"],
-  "app/prospects-vendeurs/[id]/signer-mandat/page.tsx": ["getProspectVendeurById"],
   "app/visites/[id]/page.tsx": ["getBienById", "getClientById"],
   "app/visites/[id]/preparer/page.tsx": ["getBienById", "getClientById"],
   "app/visites/[id]/bon-de-visite/[bonId]/page.tsx": ["getClientById"],

@@ -3,8 +3,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { modifierAcquereurAction } from "@/actions/modifierAcquereur";
 import AcquereurFormulaire from "@/components/client/AcquereurFormulaire";
-import { getClientById } from "@/lib/clientRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { nomComplet } from "@/lib/identite/nomPersonne";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -16,7 +17,11 @@ export default async function ModifierAcquereurPage({ params }: PageProps) {
   const { id } = await params;
   if (!UUID_REGEX.test(id)) notFound();
 
-  const acquereur = await getClientById(id);
+  // WORKSPACE_SCOPING_V2C1 — ROOT-FIRST : périmètre d'abord, racine scopée ensuite. Cette page
+  // préremplissait le formulaire avec l'identité complète d'un acquéreur d'un autre workspace
+  // (nom, coordonnées, budget, critères) ; la mutation, elle, était déjà gardée depuis V2.
+  const workspaceId = await exigerWorkspaceCourant();
+  const acquereur = await getAcquereurDuWorkspace(id, workspaceId);
   if (!acquereur) notFound();
 
   return (

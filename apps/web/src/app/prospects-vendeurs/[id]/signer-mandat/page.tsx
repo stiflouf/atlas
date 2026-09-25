@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
+import { getProspectVendeurDuWorkspace } from "@/lib/prospectVendeurRepository";
+import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import { signerMandatProspectVendeurAction } from "@/actions/prospectVendeur";
 import ProspectVendeurConversionFormulaire from "@/components/prospectVendeur/ProspectVendeurConversionFormulaire";
@@ -10,7 +11,14 @@ type PageProps = { params: Promise<{ id: string }> };
 
 export default async function SignerMandatPage({ params }: PageProps) {
   const { id } = await params;
-  const prospect = await getProspectVendeurById(id);
+  // WORKSPACE_SCOPING_V2C1 — ROOT-FIRST, et ici l'ORDRE fait tout : la condition métier ci-dessous
+  // ne doit jamais être évaluée sur un prospect qu'on n'a pas prouvé appartenir au workspace.
+  // Sinon le statut devient un ORACLE : « perdu »/« mandat signé » renvoie notFound, tout autre
+  // état affiche le formulaire — deux réponses distinctes qui révèlent l'état d'une donnée
+  // étrangère, alors même que la page semblait refuser l'accès. Le refus de périmètre vient donc
+  // AVANT, et rend exactement la même chose qu'un id inexistant.
+  const workspaceId = await exigerWorkspaceCourant();
+  const prospect = await getProspectVendeurDuWorkspace(id, workspaceId);
   if (!prospect) notFound();
 
   const statut = deriverStatutProspectVendeur(prospect);
