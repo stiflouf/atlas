@@ -57,6 +57,19 @@ export async function listerTaches(): Promise<Tache[]> {
   return tachesDemo;
 }
 
+// WORKSPACE_SCOPING_V2B2 (ADR-054) — LA lecture d'ensemble des tâches pour une surface
+// UTILISATEUR (l'écran Aujourd'hui et ses compteurs). `taches` est une table racine : le périmètre
+// est une colonne. Aucun repli de démonstration : un workspace sans tâche en a zéro.
+export async function listerTachesDuWorkspace(workspaceId: string): Promise<Tache[]> {
+  try {
+    const lignes = await getDb().select().from(tachesTable).where(eq(tachesTable.workspaceId, workspaceId));
+    return lignes.map(ligneVersTache);
+  } catch (erreur) {
+    console.error("[taches] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
 // bien/acquéreur peuvent encore être mockés (id non-UUID) tant que la bascule démo->réel n'est pas
 // complète pour ces catalogues — filtrage sur listerTaches() (avec repli mock) plutôt qu'une
 // requête directe, même principe que l'ancien getActionsPourBien/getActionsPourAcquereur.

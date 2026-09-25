@@ -4,8 +4,8 @@ import type { RendezVous, TypeRdv } from "@/types/agenda";
 import type { StatutRendezVous } from "@/lib/rendezVous";
 import type { ContexteRendezVous, TypeMetierRdv } from "@/types/contexteRendezVous";
 import { SEUIL_AMBIGU, SEUIL_FORT } from "@/lib/matching/resoudre";
-import { getClientById } from "@/lib/clientRepository";
-import { getBienById } from "@/lib/bienRepository";
+import type { ProfilAcquereur } from "@/types/client";
+import type { Bien } from "@/types/bien";
 import ConfirmationBienRdv from "./ConfirmationBienRdv";
 import { nomComplet } from "@/lib/identite/nomPersonne";
 
@@ -48,12 +48,21 @@ export default async function AgendaCard({
   statut,
   contexte,
   dateLabel,
+  biensParId,
+  acquereursParId,
   dernier = false,
 }: {
   rdv: RendezVous;
   statut: StatutRendezVous;
   contexte?: ContexteRendezVous;
   dateLabel?: string;
+  // WORKSPACE_SCOPING_V2B2 — les entités viennent du PARENT, qui les a déjà chargées dans le
+  // périmètre de session. Cette carte les relisait une par une par identifiant nu : un N+1 par
+  // rendez-vous, et surtout des lectures globales là où l'écran était par ailleurs scopé. Passer
+  // les maps règle les deux d'un coup — le périmètre est hérité, et plus aucune requête n'est
+  // émise ici.
+  biensParId: Map<string, Bien>;
+  acquereursParId: Map<string, ProfilAcquereur>;
   // Timeline (passe enrichissement visuel) — omet le rail de connexion sous le dernier item d'une
   // liste, purement décoratif.
   dernier?: boolean;
@@ -65,7 +74,7 @@ export default async function AgendaCard({
       ? typeMetierConfig[contexte.typeMetier.type]
       : undefined;
   const { label, variant } = typeDeduit ?? typeConfig[rdv.type];
-  const client = rdv.client ? await getClientById(rdv.client.id) : undefined;
+  const client = rdv.client ? acquereursParId.get(rdv.client.id) : undefined;
   // ADR-057 — l'identité effective vient du Contact quand le dossier y est rattaché, et un Contact
   // peut n'avoir aucun numéro connu. Pas de bouton d'appel dans ce cas, jamais un `tel:` vide.
   const callHref = client?.telephone ? `tel:${client.telephone.replace(/\s+/g, "")}` : undefined;
@@ -84,12 +93,10 @@ export default async function AgendaCard({
 
   const candidatsBanniereBruts =
     !preparationDisponible && contexteExploitable && contexte?.necessiteConfirmationBien
-      ? await Promise.all(
-          (contexte.bienCandidats ?? []).map(async (c) => {
-            const bien = await getBienById(c.bienId);
-            return bien ? { bienId: c.bienId, titre: labelCourtBien(bien.titre) } : undefined;
-          })
-        )
+      ? (contexte.bienCandidats ?? []).map((c) => {
+          const bien = biensParId.get(c.bienId);
+          return bien ? { bienId: c.bienId, titre: labelCourtBien(bien.titre) } : undefined;
+        })
       : [];
   const candidatsBanniere = candidatsBanniereBruts.filter(
     (c): c is { bienId: string; titre: string } => Boolean(c)

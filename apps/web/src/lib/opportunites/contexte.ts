@@ -5,9 +5,9 @@ import type { Tache } from "@/types/tache";
 import type { Visite } from "@/types/visite";
 import type { CompteRenduVisite } from "@/types/compteRenduVisite";
 import type { ResultatCompatibilite } from "@/lib/compatibilite/types";
-import { listerProspectsVendeursPourMachine } from "@/lib/prospectVendeurRepository";
-import { listerVisites } from "@/lib/visiteRepository";
-import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
+import { listerProspectsVendeursDuWorkspace } from "@/lib/prospectVendeurRepository";
+import { listerVisitesDuWorkspace } from "@/lib/visiteRepository";
+import { listerComptesRendusDuWorkspace } from "@/lib/compteRenduVisiteRepository";
 import { listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
 import { evaluerCompatibilite } from "@/lib/compatibilite/evaluerCompatibilite";
 import { resoudreProfilsCompatibilite } from "@/lib/compatibilite/profilCompatibiliteRepository";
@@ -33,15 +33,24 @@ export type ContexteOpportunites = {
 // Assemblage du contexte — seul point d'accès aux repositories pour ce moteur, exactement comme
 // chargerContexteAlertes() (ADR-026). `deja` reçoit les collections que l'écran Aujourd'hui a déjà
 // chargées pour ses autres sections : les relire ici doublerait trois requêtes sans rien apporter.
-export async function chargerContexteOpportunites(deja: {
-  biens: Bien[];
-  acquereurs: ProfilAcquereur[];
-  tachesActives: Tache[];
-}): Promise<ContexteOpportunites> {
+// WORKSPACE_SCOPING_V2B2 (ADR-054) — le croisement ci-dessous est un produit cartésien
+// bien × acquéreur : si l'une des deux collections franchit la frontière, le moteur FABRIQUE des
+// opportunités inter-workspaces — un bien d'ici proposé à une personne d'ailleurs, nommément.
+// Deux conditions, et les deux sont nécessaires : les collections `deja` doivent être scopées par
+// l'appelant (elles le sont depuis V2B1/V2B2), et les trois lectures faites ICI doivent l'être
+// aussi. Filtrer le résultat final ne suffirait pas : les paires auraient déjà existé.
+export async function chargerContexteOpportunites(
+  deja: {
+    biens: Bien[];
+    acquereurs: ProfilAcquereur[];
+    tachesActives: Tache[];
+  },
+  workspaceId: string
+): Promise<ContexteOpportunites> {
   const [prospectsVendeurs, visites, comptesRendus, secteursParAcquereur, profils] = await Promise.all([
-    listerProspectsVendeursPourMachine(),
-    listerVisites(),
-    listerComptesRendus(),
+    listerProspectsVendeursDuWorkspace(workspaceId),
+    listerVisitesDuWorkspace(workspaceId),
+    listerComptesRendusDuWorkspace(workspaceId),
     listerSecteursPourAcquereurs(deja.acquereurs.map((a) => a.id)),
     // ADR-055 §B — critères effectifs : projet acquéreur canonique dès que le dossier est rattaché,
     // dossier historique sinon, résolus en une requête pour toute la liste. `acquereurs` reste

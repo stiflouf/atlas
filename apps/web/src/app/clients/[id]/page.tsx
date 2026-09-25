@@ -121,7 +121,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   // BienAcquereursCompatibles (evaluerCompatibiliteBien) mais inversé. listerBiens() exclut déjà
   // les biens archivés (ADR-012) et porte photoPrincipaleId (sous-requête corrélée, ADR-052) —
   // jamais une seconde logique photo/filtrage ici.
-  const compatibilites = await evaluerCompatibiliteAcquereur(client.id);
+  const compatibilites = await evaluerCompatibiliteAcquereur(client.id, workspaceId);
   const biensActifs = await listerBiens();
 
   // VALUE-03 — chargement des faits de la mémoire relationnelle. Tout ce qui suit alimente une
@@ -145,7 +145,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
       biens: biensActifs,
       acquereurs: [client],
       tachesActives: toutesTaches.filter((t) => deriverStatutTache(t) === "a_faire"),
-    })
+    }, workspaceId)
   );
 
   // VALUE-04 — projection communicationnelle : au plus une reprise de contact, dérivée de

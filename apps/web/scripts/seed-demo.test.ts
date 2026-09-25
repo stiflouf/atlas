@@ -1,3 +1,4 @@
+import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 import { createHash } from "node:crypto";
@@ -484,7 +485,7 @@ describe("seed-demo — matching produit par le vrai moteur", () => {
 
     const calcules = new Map<string, string>();
     for (const bienId of IDS.biens) {
-      for (const r of await evaluerCompatibiliteBien(bienId)) calcules.set(`${bienId}|${r.acquereurId}`, r.statutGlobal);
+      for (const r of await evaluerCompatibiliteBien(bienId, WORKSPACE_TEST)) calcules.set(`${bienId}|${r.acquereurId}`, r.statutGlobal);
     }
     for (const attendu of dataset.compatibilitesAttendues) {
       expect(calcules.get(`${attendu.bienId}|${attendu.acquereurId}`), `${attendu.bienId}|${attendu.acquereurId}`).toBe(attendu.statut);
@@ -518,7 +519,10 @@ describe("seed-demo — Aujourd'hui et automatisations", () => {
     const { chargerContexteOpportunites } = await import("@/lib/opportunites/contexte");
     const { detecterOpportunites } = await import("@/lib/opportunites/moteur");
     const opportunites = detecterOpportunites(
-      await chargerContexteOpportunites({ biens: await listerBiens(), acquereurs: await listerClients(), tachesActives: [] }),
+      await chargerContexteOpportunites(
+        { biens: await listerBiens(), acquereurs: await listerClients(), tachesActives: [] },
+        WORKSPACE_TEST
+      ),
       maintenant
     );
     // La visite passée sans compte rendu reste `planifiee` (un CR fait toujours transiter la visite) :

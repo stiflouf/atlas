@@ -12,11 +12,11 @@ import Card from "@/components/ui/Card";
 import StatTile from "@/components/ui/StatTile";
 import IconTile from "@/components/ui/IconTile";
 import EmptyState from "@/components/ui/EmptyState";
-import { listerBiens } from "@/lib/bienRepository";
-import { listerClients } from "@/lib/clientRepository";
-import { listerTaches } from "@/lib/tacheRepository";
+import { listerBiensActifsDuWorkspace } from "@/lib/bienRepository";
+import { listerAcquereursActifsDuWorkspace } from "@/lib/clientRepository";
+import { listerTachesDuWorkspace } from "@/lib/tacheRepository";
 import { bienIdsPourOffres } from "@/lib/offreRepository";
-import { listerProspectsVendeursArchives } from "@/lib/prospectVendeurRepository";
+import { listerProspectsVendeursDuWorkspace } from "@/lib/prospectVendeurRepository";
 import type { Bien } from "@/types/bien";
 import { deriverStatutTache, type Tache } from "@/types/tache";
 import { formatDateISO, formatDateRelative, heureDuJour, minutesDepuisMinuit } from "@/lib/temps";
@@ -86,11 +86,22 @@ export default async function AujourdHui() {
   // getAgendaSemaine() garantit déjà une fenêtre de 7 jours : pas besoin de la recalculer ici.
   const rdvAVenir = rendezVousAVenir(rendezVous, aujourdHuiISO);
 
+  // WORKSPACE_SCOPING_V2B2 (ADR-054) — tout ce qui nourrit cet écran vient désormais du périmètre
+  // de session. Ce n'est pas qu'une question d'affichage : ces quatre collections alimentent les
+  // COMPTEURS, les maps d'exclusion et le référentiel de matching des rendez-vous. Une liste
+  // globale ne se contente pas d'en montrer trop — elle peut aussi MASQUER à tort une tâche d'ici,
+  // en la croyant rattachée à un acquéreur archivé qui, en réalité, appartient à un autre
+  // workspace. Aucun repli de démonstration : un workspace vide affiche un écran vide (V2B1).
   const [biens, clients, taches, prospectsVendeursArchives, contexteAlertes] = await Promise.all([
-    listerBiens(),
-    listerClients(),
-    listerTaches(),
-    listerProspectsVendeursArchives(),
+    listerBiensActifsDuWorkspace(workspaceId),
+    listerAcquereursActifsDuWorkspace(workspaceId),
+    listerTachesDuWorkspace(workspaceId),
+    listerProspectsVendeursDuWorkspace(workspaceId, "archives"),
+    // DETTE V2B3, explicitement non traitée ici : `chargerContexteAlertes` s'appuie sur
+    // `chargerRemuneration` et `chargerProjectionAnnuelle` du tableau de bord, qui n'ont pas de
+    // périmètre. Leur en donner un obligerait à toucher `app/dashboard/page.tsx` et les projections
+    // fiscales — deux surfaces hors du périmètre de ce lot. Les alertes de cet écran agrègent donc
+    // encore tous les workspaces, et c'est le lot dashboard/fiscal qui refermera ce chemin.
     chargerContexteAlertes(),
   ]);
   const alertes = produireAlertes(contexteAlertes);
@@ -146,7 +157,7 @@ export default async function AujourdHui() {
   // déduplication contre `tachesActives` vit dans le moteur : une action déjà portée par une tâche
   // ouverte n'est jamais montrée deux fois.
   const opportunites = detecterOpportunites(
-    await chargerContexteOpportunites({ biens, acquereurs: clients, tachesActives }),
+    await chargerContexteOpportunites({ biens, acquereurs: clients, tachesActives }, workspaceId),
     maintenant
   );
 
@@ -176,7 +187,7 @@ export default async function AujourdHui() {
   // pointe à la place vers le bien qui héberge cette offre (BienTabs). Résolution EN LOT (une seule
   // requête pour toutes les tâches offre de cette page), jamais une par tâche.
   const idsOffresDesTaches = autresTaches.map((t) => t.offreId).filter((id): id is string => Boolean(id));
-  const bienIdParOffre = await bienIdsPourOffres(idsOffresDesTaches);
+  const bienIdParOffre = await bienIdsPourOffres(idsOffresDesTaches, workspaceId);
   const lienCibleParTache = new Map<string, string>();
   for (const tache of autresTaches) {
     if (!tache.offreId) continue;
@@ -236,6 +247,8 @@ export default async function AujourdHui() {
                 ))}
                 {rdvActifs.map(({ rdv, statut, contexte }, i) => (
                   <AgendaCard
+                    biensParId={biensParId}
+                    acquereursParId={acquereursParId}
                     key={rdv.id}
                     rdv={rdv}
                     statut={statut}
@@ -274,6 +287,8 @@ export default async function AujourdHui() {
               <div className="flex flex-col">
                 {rdvAVenirAvecContexte.map(({ rdv, contexte, dateLabel }, i) => (
                   <AgendaCard
+                    biensParId={biensParId}
+                    acquereursParId={acquereursParId}
                     key={rdv.id}
                     rdv={rdv}
                     statut="a_venir"

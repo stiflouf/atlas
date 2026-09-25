@@ -4,11 +4,11 @@
 // Dupliquer cette résolution laisserait dériver deux vérités sur « quels faits sont légitimes pour
 // cet écran », exactement ce que le lot doit empêcher.
 
-import { getTacheById, listerTaches } from "@/lib/tacheRepository";
-import { getBienById, listerBiens } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
+import { getTacheById, listerTachesDuWorkspace } from "@/lib/tacheRepository";
+import { getBienById, listerBiensActifsDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { listerVisitesPourAcquereur } from "@/lib/visiteRepository";
-import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
+import { listerComptesRendusDuWorkspace } from "@/lib/compteRenduVisiteRepository";
 import { listerOffresPourAcquereur } from "@/lib/offreRepository";
 import { listerCompromisPourAcquereur } from "@/lib/compromisRepository";
 import { evaluerCompatibiliteAcquereur } from "@/lib/compatibilite/orchestration";
@@ -130,20 +130,24 @@ async function resoudreDepuisConstat(bienId: string, exigenceCode: string, works
 // Aucune tâche n'est créée pour obtenir un tacheId : `envois_email.tache_id` est nullable et toute
 // la chaîne d'envoi (ADR-031-bis) l'accepte déjà absent — rien n'a été modifié côté Gmail.
 async function resoudreDepuisAcquereur(acquereurId: string, workspaceId: string): Promise<ResultatContexte | undefined> {
-  const acquereur = await getClientById(acquereurId);
+  // WORKSPACE_SCOPING_V2B2 (ADR-054) — ce contexte recevait déjà un `workspaceId` et s'en servait
+  // pour trois lectures, mais en laissait quatre autres globales : l'acquéreur lui-même, les
+  // comptes rendus, les biens et les tâches. Un écran de communication assemblé sur ce mélange
+  // pouvait proposer, dans un message, un bien ou une relance appartenant à un autre périmètre.
+  const acquereur = await getAcquereurDuWorkspace(acquereurId, workspaceId);
   if (!acquereur || acquereur.archiveLe) return undefined;
 
   const [visites, tousComptesRendus, offres, compromis, compatibilites, biens] = await Promise.all([
     listerVisitesPourAcquereur(acquereur.id, workspaceId),
-    listerComptesRendus(),
+    listerComptesRendusDuWorkspace(workspaceId),
     listerOffresPourAcquereur(acquereur.id, workspaceId),
     listerCompromisPourAcquereur(acquereur.id, workspaceId),
-    evaluerCompatibiliteAcquereur(acquereur.id),
-    listerBiens(),
+    evaluerCompatibiliteAcquereur(acquereur.id, workspaceId),
+    listerBiensActifsDuWorkspace(workspaceId),
   ]);
-  const tachesActives = (await listerTaches()).filter((t) => deriverStatutTache(t) === "a_faire");
+  const tachesActives = (await listerTachesDuWorkspace(workspaceId)).filter((t) => deriverStatutTache(t) === "a_faire");
   const opportunites = detecterOpportunites(
-    await chargerContexteOpportunites({ biens, acquereurs: [acquereur], tachesActives })
+    await chargerContexteOpportunites({ biens, acquereurs: [acquereur], tachesActives }, workspaceId)
   );
 
   const reprise = construireRepriseContactAcquereur({

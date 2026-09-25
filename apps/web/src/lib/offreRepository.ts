@@ -221,16 +221,23 @@ export async function offresAccepteesSansCompromis(
 // aucune fiche Offre dédiée, la navigation reste `/biens/{bienId}`, où BienTabs héberge l'onglet
 // Offres). Jamais utilisée pour une décision métier — une simple projection id -> bienId.
 //
-// Volontairement NON scopée par workspace : `app/page.tsx` (Aujourd'hui), son unique appelant,
-// lit déjà `listerTaches()`/`listerBiens()`/`listerClients()` sans filtre de workspace — limitation
-// pré-existante et documentée (KNOWN_LIMITATIONS.md, ADR-054 §"aucune lecture scoped sur Aujourd'hui").
-// Scoper cette seule projection isolément n'améliorerait rien (les tâches elles-mêmes restent
-// non scopées juste avant) et introduirait une dépendance de session que cette page n'a nulle part
-// ailleurs — cohérence avec l'existant, jamais une régression.
-export async function bienIdsPourOffres(offreIds: string[], executeur: Executeur = getDb()): Promise<Map<string, string>> {
+// WORKSPACE_SCOPING_V2B2 — la raison invoquée jusqu'ici pour laisser cette projection non scopée
+// (« les tâches elles-mêmes restent non scopées juste avant ») a disparu : l'écran Aujourd'hui lit
+// désormais des tâches, des biens et des acquéreurs du workspace de session. La projection porte
+// donc son périmètre comme le reste du fichier — une offre d'un autre workspace ne résout plus
+// aucun bien, et le lien « Voir la fiche » ne pointe jamais hors périmètre.
+export async function bienIdsPourOffres(
+  offreIds: string[],
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<Map<string, string>> {
   const ids = offreIds.filter((id) => UUID_REGEX.test(id));
   if (ids.length === 0) return new Map();
-  const lignes = await executeur.select({ id: offresTable.id, bienId: offresTable.bienId }).from(offresTable).where(inArray(offresTable.id, ids));
+  const lignes = await executeur
+    .select({ id: offresTable.id, bienId: offresTable.bienId })
+    .from(offresTable)
+    .innerJoin(biensTable, eq(offresTable.bienId, biensTable.id))
+    .where(and(inArray(offresTable.id, ids), eq(biensTable.workspaceId, workspaceId)));
   return new Map(lignes.map((l) => [l.id, l.bienId]));
 }
 

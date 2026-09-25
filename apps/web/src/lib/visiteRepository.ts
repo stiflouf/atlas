@@ -73,6 +73,23 @@ export async function listerVisitesPourBien(bienId: string, workspaceId: string,
   return lignes.map((l) => ligneVersVisite(l.visite));
 }
 
+// WORKSPACE_SCOPING_V2B2 (ADR-054) — LA lecture d'ensemble des Visites pour une surface
+// UTILISATEUR. `visites` n'a pas de `workspace_id` propre : l'appartenance se prouve par la
+// jointure vers `biens`, exactement comme `listerVisitesPourBien` juste au-dessus.
+export async function listerVisitesDuWorkspace(workspaceId: string): Promise<Visite[]> {
+  try {
+    const lignes = await getDb()
+      .select({ visite: visitesTable })
+      .from(visitesTable)
+      .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
+      .where(eq(biensTable.workspaceId, workspaceId));
+    return lignes.map((l) => ligneVersVisite(l.visite));
+  } catch (erreur) {
+    console.error("[visites] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
 // Lecture globale (VALUE-01) — voir l'exception documentée en tête de fichier : volontairement NON
 // scopée, même contrat qu'avant ce lot.
 export async function listerVisites(): Promise<Visite[]> {

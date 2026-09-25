@@ -28,8 +28,18 @@ function contexteConfiant(): ContexteRendezVous {
   };
 }
 
-async function renderCard(props: Parameters<typeof AgendaCard>[0]): Promise<string> {
-  const element = await AgendaCard(props);
+// WORKSPACE_SCOPING_V2B2 — la carte ne lit plus la base : elle reçoit du parent les entités déjà
+// résolues dans le périmètre. Les tests fournissent donc des maps, vides par défaut (ces cas-là
+// portent sur l'affichage de l'heure et des libellés, pas sur les entités rattachées).
+async function renderCard(
+  props: Omit<Parameters<typeof AgendaCard>[0], "biensParId" | "acquereursParId"> &
+    Partial<Pick<Parameters<typeof AgendaCard>[0], "biensParId" | "acquereursParId">>
+): Promise<string> {
+  const element = await AgendaCard({
+    biensParId: new Map(),
+    acquereursParId: new Map(),
+    ...props,
+  });
   return renderToStaticMarkup(element);
 }
 

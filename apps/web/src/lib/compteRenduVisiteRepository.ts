@@ -24,6 +24,23 @@ function ligneVersCompteRendu(ligne: LigneCompteRendu): CompteRenduVisite {
   };
 }
 
+// WORKSPACE_SCOPING_V2B2 (ADR-054) — pendant scopé de `listerComptesRendus`, pour les surfaces
+// utilisateur : feuille de `biens`, appartenance prouvée par la jointure.
+export async function listerComptesRendusDuWorkspace(workspaceId: string): Promise<CompteRenduVisite[]> {
+  try {
+    const lignes = await getDb()
+      .select({ compteRendu: comptesRendusVisiteTable })
+      .from(comptesRendusVisiteTable)
+      .innerJoin(biensTable, eq(comptesRendusVisiteTable.bienId, biensTable.id))
+      .where(eq(biensTable.workspaceId, workspaceId))
+      .orderBy(desc(comptesRendusVisiteTable.dateVisite));
+    return lignes.map((l) => ligneVersCompteRendu(l.compteRendu));
+  } catch (erreur) {
+    console.error("[comptes-rendus-visite] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
 // Lecture globale (VALUE-01), même exception documentée que listerVisites() (visiteRepository.ts) :
 // volontairement NON scopée, mêmes appelants déjà globalement non scopés aujourd'hui.
 export async function listerComptesRendus(): Promise<CompteRenduVisite[]> {

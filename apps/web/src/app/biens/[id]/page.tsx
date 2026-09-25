@@ -105,7 +105,7 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
     await Promise.all(compromis.map(async (c) => [c.id, await listerTransmissionsPourCompromis(c.id)] as const))
   );
   const acquereursActifs = await listerClients();
-  const compatibilites = await evaluerCompatibiliteBien(bien.id);
+  const compatibilites = await evaluerCompatibiliteBien(bien.id, workspaceId);
   const acquereurIds = [
     ...new Set([
       ...comptesRendus.map((cr) => cr.acquereurId),

@@ -185,7 +185,7 @@ async function unBien(suffixe: string) {
 }
 
 async function statutBudget(acquereurId: string, bienId: string) {
-  const resultats = await evaluerCompatibiliteAcquereur(acquereurId);
+  const resultats = await evaluerCompatibiliteAcquereur(acquereurId, WORKSPACE_TEST);
   const pourCeBien = resultats.find((r) => r.bienId === bienId);
   expect(pourCeBien).toBeDefined();
   return pourCeBien!.criteres.find((c) => c.critere === "budget_max")!.statut;

@@ -77,7 +77,7 @@ export default async function NouvelleVisitePage({ searchParams }: PageProps) {
     : {
         mode: "selection",
         groupes: acquereurValide
-          ? grouperParCompatibilite(await listerBiensActifsDuWorkspace(workspaceId), await evaluerCompatibiliteAcquereur(acquereurValide.id), "bienId", optionBien)
+          ? grouperParCompatibilite(await listerBiensActifsDuWorkspace(workspaceId), await evaluerCompatibiliteAcquereur(acquereurValide.id, workspaceId), "bienId", optionBien)
           : [{ label: "Biens", options: (await listerBiensActifsDuWorkspace(workspaceId)).map(optionBien) }],
       };
   const acquereur: ChoixPlanification = acquereurValide
@@ -85,7 +85,7 @@ export default async function NouvelleVisitePage({ searchParams }: PageProps) {
     : {
         mode: "selection",
         groupes: bienValide
-          ? grouperParCompatibilite(await listerAcquereursActifsDuWorkspace(workspaceId), await evaluerCompatibiliteBien(bienValide.id), "acquereurId", optionAcquereur)
+          ? grouperParCompatibilite(await listerAcquereursActifsDuWorkspace(workspaceId), await evaluerCompatibiliteBien(bienValide.id, workspaceId), "acquereurId", optionAcquereur)
           : [{ label: "Acquéreurs", options: (await listerAcquereursActifsDuWorkspace(workspaceId)).map(optionAcquereur) }],
       };
 

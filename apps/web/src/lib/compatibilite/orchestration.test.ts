@@ -67,8 +67,8 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
     const bien = await creerBienDeTest("001", { prix: 350000, pieces: 3, surface: 50 });
     const acquereur = await creerAcquereurDeTest("001", { budgetMax: 400000, piecesMin: 2 });
 
-    const depuisBien = await evaluerCompatibiliteBien(bien.id);
-    const depuisAcquereur = await evaluerCompatibiliteAcquereur(acquereur.id);
+    const depuisBien = await evaluerCompatibiliteBien(bien.id, WORKSPACE_TEST);
+    const depuisAcquereur = await evaluerCompatibiliteAcquereur(acquereur.id, WORKSPACE_TEST);
 
     const resultatDepuisBien = depuisBien.find((r) => r.acquereurId === acquereur.id);
     const resultatDepuisAcquereur = depuisAcquereur.find((r) => r.bienId === bien.id);
@@ -79,11 +79,11 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
   });
 
   it("évaluerCompatibiliteBien() retourne un tableau vide pour un id inconnu", async () => {
-    await expect(evaluerCompatibiliteBien("00000000-0000-0000-0000-000000000000")).resolves.toEqual([]);
+    await expect(evaluerCompatibiliteBien("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("évaluerCompatibiliteAcquereur() retourne un tableau vide pour un id inconnu", async () => {
-    await expect(evaluerCompatibiliteAcquereur("00000000-0000-0000-0000-000000000000")).resolves.toEqual([]);
+    await expect(evaluerCompatibiliteAcquereur("00000000-0000-0000-0000-000000000000", WORKSPACE_TEST)).resolves.toEqual([]);
   });
 
   it("un acquéreur archivé n'apparaît jamais comme candidat dans évaluerCompatibiliteBien()", async () => {
@@ -91,7 +91,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
     const acquereur = await creerAcquereurDeTest("002");
     await archiverAcquereur(acquereur.id, WORKSPACE_TEST);
 
-    const resultats = await evaluerCompatibiliteBien(bien.id);
+    const resultats = await evaluerCompatibiliteBien(bien.id, WORKSPACE_TEST);
     expect(resultats.some((r) => r.acquereurId === acquereur.id)).toBe(false);
   });
 
@@ -100,7 +100,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
     const acquereur = await creerAcquereurDeTest("003");
     await archiverBien(bien.id, WORKSPACE_TEST);
 
-    const resultats = await evaluerCompatibiliteAcquereur(acquereur.id);
+    const resultats = await evaluerCompatibiliteAcquereur(acquereur.id, WORKSPACE_TEST);
     expect(resultats.some((r) => r.bienId === bien.id)).toBe(false);
   });
 
@@ -109,7 +109,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
     const acquereur = await creerAcquereurDeTest("004");
     await archiverBien(bien.id, WORKSPACE_TEST);
 
-    const resultats = await evaluerCompatibiliteBien(bien.id);
+    const resultats = await evaluerCompatibiliteBien(bien.id, WORKSPACE_TEST);
     expect(resultats.some((r) => r.acquereurId === acquereur.id)).toBe(true);
   });
 
@@ -132,7 +132,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
       contexte: "",
     }, WORKSPACE_TEST);
 
-    const resultats = await evaluerCompatibiliteBien(bien.id);
+    const resultats = await evaluerCompatibiliteBien(bien.id, WORKSPACE_TEST);
 
     const critereGeo = (acquereurId: string) => {
       const resultat = resultats.find((r) => r.acquereurId === acquereurId);
@@ -150,7 +150,7 @@ describe("orchestration compatibilite (intégration Postgres)", () => {
     const bienDansLeSecteur = await creerBienDeTest("006a", { codeInseeCommune: "78311" });
     const bienHorsSecteur = await creerBienDeTest("006b", { codeInseeCommune: "75056" });
 
-    const resultats = await evaluerCompatibiliteAcquereur(acquereur.id);
+    const resultats = await evaluerCompatibiliteAcquereur(acquereur.id, WORKSPACE_TEST);
 
     const critereGeo = (bienId: string) => {
       const resultat = resultats.find((r) => r.bienId === bienId);

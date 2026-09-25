@@ -1,5 +1,5 @@
-import { getBienById, listerBiens } from "@/lib/bienRepository";
-import { getClientById, listerClients } from "@/lib/clientRepository";
+import { getBienDuWorkspace, listerBiensActifsDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace, listerAcquereursActifsDuWorkspace } from "@/lib/clientRepository";
 import { listerSecteursPourAcquereur, listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
 import { evaluerCompatibilite } from "./evaluerCompatibilite";
 import { resoudreProfilCompatibilite, resoudreProfilsCompatibilite } from "./profilCompatibiliteRepository";
@@ -23,10 +23,16 @@ import type { ResultatCompatibilite } from "./types";
 // un et le dossier historique sinon. Le dossier reste chargé pour ce qu'il porte encore (identité,
 // archivage, id des secteurs) — jamais pour ses critères.
 
-export async function evaluerCompatibiliteBien(bienId: string): Promise<ResultatCompatibilite[]> {
-  const bien = await getBienById(bienId);
+// WORKSPACE_SCOPING_V2B2 (ADR-054) — MATCHING AFFICHÉ, donc user-facing de bout en bout : le bien
+// est résolu dans le périmètre, et le pool d'acquéreurs candidats aussi. Sans ce second filtre, le
+// panneau « acquéreurs compatibles » d'un bien parfaitement légitime proposait nommément les
+// acquéreurs de tous les workspaces. Le synchroniseur machine (lib/compatibilite/synchronisation.ts)
+// garde son propre chemin et ses lecteurs `*ActifsPersistes` : il croise le parc entier par
+// conception (ADR-036), et ce lot n'y touche pas.
+export async function evaluerCompatibiliteBien(bienId: string, workspaceId: string): Promise<ResultatCompatibilite[]> {
+  const bien = await getBienDuWorkspace(bienId, workspaceId);
   if (!bien) return [];
-  const acquereurs = await listerClients();
+  const acquereurs = await listerAcquereursActifsDuWorkspace(workspaceId);
   const [profils, secteursParAcquereur] = await Promise.all([
     resoudreProfilsCompatibilite(acquereurs),
     listerSecteursPourAcquereurs(acquereurs.map((a) => a.id)),
@@ -34,11 +40,14 @@ export async function evaluerCompatibiliteBien(bienId: string): Promise<Resultat
   return profils.map((profil) => evaluerCompatibilite(bien, profil, secteursParAcquereur.get(profil.id) ?? []));
 }
 
-export async function evaluerCompatibiliteAcquereur(acquereurId: string): Promise<ResultatCompatibilite[]> {
-  const acquereur = await getClientById(acquereurId);
+export async function evaluerCompatibiliteAcquereur(
+  acquereurId: string,
+  workspaceId: string
+): Promise<ResultatCompatibilite[]> {
+  const acquereur = await getAcquereurDuWorkspace(acquereurId, workspaceId);
   if (!acquereur) return [];
   const [biens, secteursRecherche, profil] = await Promise.all([
-    listerBiens(),
+    listerBiensActifsDuWorkspace(workspaceId),
     listerSecteursPourAcquereur(acquereurId),
     resoudreProfilCompatibilite(acquereur),
   ]);

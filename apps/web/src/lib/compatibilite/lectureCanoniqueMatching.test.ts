@@ -136,7 +136,7 @@ async function unBien(suffixe: string) {
 }
 
 async function critereBudget(acquereurId: string, bienId: string) {
-  const resultats = await evaluerCompatibiliteAcquereur(acquereurId);
+  const resultats = await evaluerCompatibiliteAcquereur(acquereurId, WORKSPACE_TEST);
   const pourCeBien = resultats.find((r) => r.bienId === bienId);
   expect(pourCeBien, "le bien de test doit figurer dans le croisement").toBeDefined();
   return pourCeBien!.criteres.find((c) => c.critere === "budget_max")!;
