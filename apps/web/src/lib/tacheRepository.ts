@@ -103,6 +103,24 @@ export async function listerTachesDuBienDuWorkspace(bienId: string, workspaceId:
   }
 }
 
+// WORKSPACE_SCOPING_V2D1 — pendant exact du lecteur par bien ci-dessus, pour l'acquéreur. Même
+// raison : `getTachesPourAcquereur` lit la table entière avant de filtrer en mémoire, ce qu'une
+// surface utilisateur n'a aucune raison de faire. Le lecteur global reste pour ses appelants
+// legacy (fiche Visite, action de prochaine étape), qui ne relèvent pas de ce lot.
+export async function listerTachesDeLAcquereurDuWorkspace(acquereurId: string, workspaceId: string): Promise<Tache[]> {
+  if (!UUID_REGEX.test(acquereurId)) return [];
+  try {
+    const lignes = await getDb()
+      .select()
+      .from(tachesTable)
+      .where(and(eq(tachesTable.acquereurId, acquereurId), eq(tachesTable.workspaceId, workspaceId)));
+    return lignes.map(ligneVersTache);
+  } catch (erreur) {
+    console.error("[taches] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
 // Un prospect vendeur n'a jamais de catalogue mocké (ADR-027) : requête directe, même patron que
 // listerNotesProspectVendeur, pas de repli sur listerTaches().
 export async function getTachesPourProspectVendeur(prospectVendeurId: string): Promise<Tache[]> {

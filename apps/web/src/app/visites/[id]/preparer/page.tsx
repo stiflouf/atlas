@@ -8,9 +8,9 @@ import VieAutourDuBien from "@/components/visite/VieAutourDuBien";
 import PatrimoineEtHistoire from "@/components/visite/PatrimoineEtHistoire";
 import { getPreparationPourBienEtClient } from "@/data/preparations";
 import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
-import { getTachesPourBien, getTachesPourAcquereur } from "@/lib/tacheRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
+import { listerTachesDuBienDuWorkspace, listerTachesDeLAcquereurDuWorkspace } from "@/lib/tacheRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import {
@@ -106,14 +106,43 @@ function EnTeteRetour() {
   );
 }
 
+// WORKSPACE_SCOPING_V2D1 (ADR-054) — ROOT-FIRST. L'identité de route reste `rendezVousCalendarId`
+// (ADR-063, `LEGACY_CALENDAR_COEXISTENCE`) : ce lot ne bascule PAS vers `visite.id`, il corrige
+// l'ORDRE. Avant, le périmètre était résolu à mi-page, après avoir rendu le titre de l'événement et
+// résolu bien et acquéreur par des lecteurs globaux — tout ce qui suivait héritait d'une racine non
+// prouvée, jusqu'aux appels vers des services tiers avec l'adresse d'un bien étranger.
+//
+// Deux chemins d'appartenance, dans cet ordre :
+//
+//   1. une Visite canonique existe pour cet événement DANS ce workspace : elle PROUVE
+//      l'appartenance, et bien/acquéreur en DÉRIVENT. Aucun rapprochement textuel n'est rejoué —
+//      un rendez-vous déjà matérialisé ne doit pas changer de contexte parce que le titre de
+//      l'événement a bougé, ni parce qu'un bien homonyme est apparu depuis ;
+//   2. aucune Visite (cas nominal de cette page, ADR-063) : le rapprochement a lieu, mais contre le
+//      seul référentiel du workspace de session (`getRendezVousAvecContexte(id, workspaceId)`).
+//
+// Ce que cette page ne prouve toujours pas : que l'ÉVÉNEMENT lui-même appartient à ce workspace.
+// Il vient du compte Google connecté, singleton d'instance — frontière laissée ouverte, V2D2.
 export default async function PreparerVisite({ params }: PageProps) {
   const { id } = await params;
-  const resultat = await getRendezVousAvecContexte(id);
+  // ADR-054 — AVANT toute lecture Calendar, tout rapprochement, tout rendu.
+  const workspaceId = await exigerWorkspaceCourant();
+
+  // Chemin 1 — preuve par la Visite canonique. Scopé (jointure sur `biens.workspace_id`) : une
+  // Visite d'un autre workspace est introuvable ici, exactement comme un événement inconnu.
+  const visiteProuvee = await getVisiteParRendezVousCalendarId(id, workspaceId);
+
+  const resultat = await getRendezVousAvecContexte(id, workspaceId);
   if (!resultat) notFound();
 
   const { rdv, contexte } = resultat;
 
-  if (!contexte.bien || !contexte.client) {
+  // Les ids retenus : ceux de la Visite quand elle existe, sinon ceux du rapprochement — lequel
+  // n'a de toute façon vu que le référentiel de ce workspace.
+  const bienIdRetenu = visiteProuvee?.bienId ?? contexte.bien?.bienId;
+  const acquereurIdRetenu = visiteProuvee?.acquereurId ?? contexte.client?.clientId;
+
+  if (!bienIdRetenu || !acquereurIdRetenu) {
     return (
       <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
         <EnTeteRetour />
@@ -128,23 +157,23 @@ export default async function PreparerVisite({ params }: PageProps) {
     );
   }
 
-  const bien = await getBienById(contexte.bien.bienId);
-  const acquereur = await getClientById(contexte.client.clientId);
+  // Ceinture et bretelles : même quand l'id vient d'une Visite déjà prouvée, les deux racines sont
+  // relues SCOPÉES. Aucune racine globale ne subsiste dans cette page.
+  const [bien, acquereur] = await Promise.all([
+    getBienDuWorkspace(bienIdRetenu, workspaceId),
+    getAcquereurDuWorkspace(acquereurIdRetenu, workspaceId),
+  ]);
   if (!bien || !acquereur) notFound();
-
-  // ADR-054 — résolu une seule fois, réutilisé par toutes les lectures scoped ci-dessous (Visite,
-  // comptes rendus du bien, mandat).
-  const workspaceId = await exigerWorkspaceCourant();
 
   // Lecture seule (ADR-041, correction du défaut GET-mutant d'ADR-040) : cette page ne matérialise
   // plus jamais de Visite Atlas dans son propre rendu — un GET (navigation, rafraîchissement,
   // aperçu de lien, prefetch éventuel) reste sans aucun effet de bord métier. Aucun fallback mock :
   // si bien/acquéreur ne sont pas de vrais UUID persistés, aucune visite ne pourra jamais exister
   // pour ce rendez-vous — comportement identique à avant ADR-040 dans ce cas.
+  // Déjà lue plus haut (elle sert de preuve d'appartenance) : jamais relue ici. La condition
+  // d'UUID reste la garde historique — aucun bien/acquéreur mocké ne peut porter une Visite.
   const visite: Visite | undefined =
-    UUID_REGEX.test(bien.id) && UUID_REGEX.test(acquereur.id)
-      ? await getVisiteParRendezVousCalendarId(rdv.id, workspaceId)
-      : undefined;
+    UUID_REGEX.test(bien.id) && UUID_REGEX.test(acquereur.id) ? visiteProuvee : undefined;
 
   // Aucune Visite Atlas matérialisée pour ce rendez-vous pourtant résolu sans ambiguïté : plutôt
   // que d'engager silencieusement tous les appels externes ci-dessous (géocodage, transports,
@@ -184,8 +213,8 @@ export default async function PreparerVisite({ params }: PageProps) {
   // rendus, notes, tâches), jamais interprété ni résumé. N'alimente ni pointsAttention ni
   // pointsForts.
   const [tachesDuBien, tachesDeLAcquereur, notesDuBien, comptesRendusDuBien] = await Promise.all([
-    getTachesPourBien(bien.id),
-    getTachesPourAcquereur(acquereur.id),
+    listerTachesDuBienDuWorkspace(bien.id, workspaceId),
+    listerTachesDeLAcquereurDuWorkspace(acquereur.id, workspaceId),
     listerNotesPourBien(bien.id),
     listerComptesRendusPourBien(bien.id, workspaceId),
   ]);

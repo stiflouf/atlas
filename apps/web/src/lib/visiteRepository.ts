@@ -313,13 +313,27 @@ async function creerVisiteEnBase(
         })
         .returning();
       if (ligneInseree) return { statut: "creee", visite: ligneVersVisite(ligneInseree) };
+      // WORKSPACE_SCOPING_V2D1 — la relecture porte la MÊME frontière que
+      // `getVisiteParRendezVousCalendarId` : l'index unique sur `rendez_vous_calendar_id` est
+      // GLOBAL (partiel, mais pas par workspace), donc un événement déjà matérialisé ailleurs fait
+      // entrer ce chemin, et un `WHERE rendezVousCalendarId` seul rendrait la Visite de l'autre
+      // périmètre. Le verrou posé plus haut refuse déjà un bien hors périmètre, ce qui rendait le
+      // cas inatteignable — mais une requête ne doit pas dépendre d'une garde située ailleurs pour
+      // être juste. Aucune ligne dans CE périmètre : le conflit vient d'un autre, traité comme un
+      // refus de matérialisation, indistinguable d'un bien introuvable.
       const [existante] = await tx
-        .select()
+        .select({ visite: visitesTable })
         .from(visitesTable)
-        .where(eq(visitesTable.rendezVousCalendarId, input.rendezVousCalendarId))
+        .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
+        .where(
+          and(
+            eq(visitesTable.rendezVousCalendarId, input.rendezVousCalendarId),
+            eq(biensTable.workspaceId, workspaceId)
+          )
+        )
         .limit(1);
-      if (!existante) throw new Error("Échec de matérialisation de la visite : ni insertion ni ligne existante retrouvée.");
-      return { statut: "creee", visite: ligneVersVisite(existante) };
+      if (!existante) return { statut: "bien_introuvable" };
+      return { statut: "creee", visite: ligneVersVisite(existante.visite) };
     }
 
     // Chemin natif (ADR-063) : aucun conflit possible, `rendez_vous_calendar_id` reste NULL —

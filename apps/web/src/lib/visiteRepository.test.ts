@@ -493,4 +493,38 @@ describe("isolation par workspace (ADR-054 — VISIT_NATIVE_LIFECYCLE_V1)", () =
     expect(await listerVisitesPourBien(bienB.id, autre)).toHaveLength(1);
     expect(await listerVisitesPourBien(bienB.id, WORKSPACE_TEST)).toEqual([]);
   });
+
+  // WORKSPACE_SCOPING_V2D1 — l'index unique sur `rendez_vous_calendar_id` est GLOBAL (partiel, mais
+  // pas par workspace) : un événement déjà matérialisé ailleurs fait entrer le chemin de conflit.
+  // La relecture qui suit `onConflictDoNothing` filtrait alors sur le seul calendarId et rendait la
+  // Visite de l'autre périmètre. Le verrou sur le bien refuse déjà l'écriture en amont, ce qui
+  // rendait le cas inatteignable — mais une requête ne doit pas dépendre d'une garde située
+  // ailleurs pour être juste, et ce test l'exerce directement.
+  it("un événement Calendar déjà matérialisé dans un autre workspace ne renvoie jamais sa Visite", async () => {
+    const autre = await unAutreWorkspace("relecture-calendar");
+    const bienA = await creerBienDeTest("RELECTURE-A", WORKSPACE_TEST);
+    const acquereurA = await creerAcquereurDeTest("RELECTURE-A", WORKSPACE_TEST);
+    const bienB = await creerBienDeTest("RELECTURE-B", autre);
+    const acquereurB = await creerAcquereurDeTest("RELECTURE-B", autre);
+    const calendarId = `gcal-relecture-${Date.now()}`;
+
+    const dansB = await materialiserVisite(
+      { bienId: bienB.id, acquereurId: acquereurB.id, datePrevue: "2026-09-01", rendezVousCalendarId: calendarId },
+      autre
+    );
+    if (dansB.statut !== "creee") throw new Error("création attendue dans B");
+
+    // Même événement, tentative depuis A avec un bien DE A : l'insertion conflicte sur l'index
+    // global, et la relecture ne doit trouver aucune ligne DANS CE PÉRIMÈTRE.
+    const depuisA = await materialiserVisite(
+      { bienId: bienA.id, acquereurId: acquereurA.id, datePrevue: "2026-09-01", rendezVousCalendarId: calendarId },
+      WORKSPACE_TEST
+    );
+    expect(depuisA.statut).toBe("bien_introuvable");
+    if (depuisA.statut === "creee") throw new Error("la Visite de B ne doit jamais être rendue à A");
+
+    // La Visite de B est intacte, et reste invisible de A par le lecteur dédié.
+    expect(await getVisiteParRendezVousCalendarId(calendarId, autre)).toBeDefined();
+    expect(await getVisiteParRendezVousCalendarId(calendarId, WORKSPACE_TEST)).toBeUndefined();
+  });
 });

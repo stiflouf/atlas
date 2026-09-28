@@ -109,7 +109,7 @@ export default async function AujourdHui() {
   const rendezVousPertinents = [...rendezVousDuJour, ...rdvAVenir];
   const contextes =
     source === "google_calendar"
-      ? await resoudreContextesPersistes(rendezVousPertinents, { biens, clients })
+      ? await resoudreContextesPersistes(rendezVousPertinents, { biens, clients }, workspaceId)
       : new Map(rendezVousPertinents.map((rdv) => [rdv.id, construireContexte(rdv, { biens, clients })]));
 
   const rdvAvecStatut = rendezVousDuJour.map((rdv) => ({

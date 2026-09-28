@@ -138,8 +138,12 @@ const EXCEPTIONS_JUSTIFIEES: Record<string, string[]> = {
   "actions/transmissionDossierNotaire.ts": ["getBienById"],
   // `visiteId` est validé par `getVisiteById(..., workspaceId)` ; bien et acquéreur en dérivent.
   "actions/creerTacheProchaineEtape.ts": ["getBienById", "getClientById"],
-  // L'identifiant vient du contexte Google Calendar du conseiller connecté, jamais d'un champ.
-  "actions/visite.ts": ["getBienById", "getClientById"],
+  // (WORKSPACE_SCOPING_V2D1 a retiré `actions/visite.ts`. Sa justification — « l'identifiant vient
+  // du contexte Google Calendar du conseiller connecté, jamais d'un champ » — ne tenait plus : ce
+  // contexte était produit par un rapprochement TEXTUEL contre le catalogue global, donc l'id
+  // pouvait parfaitement désigner un bien d'un autre workspace. Le contexte est désormais résolu
+  // dans le périmètre de session et les deux racines sont relues scopées. L'entrée a été RETIRÉE,
+  // pas commentée — c'est la garde d'exception périmée qui l'a exigé.)
 
   // (WORKSPACE_SCOPING_V2A a refermé actions/prospectVendeur.ts, actions/repereRelationnel.ts et
   // actions/secteurRecherche.ts : leurs exceptions ont été retirées, pas commentées.)
@@ -160,9 +164,13 @@ const EXCEPTIONS_JUSTIFIEES: Record<string, string[]> = {
   // de visite) déjà résolue dans le périmètre : la racine est prouvée, la feuille en découle. Elles
   // restent nommées ici précisément parce que « sûr par dérivation » est un raisonnement, pas une
   // garantie mécanique — le jour où la racine cesse d'être scopée, l'exception doit redevenir
-  // visible. `preparer` relève en plus de V2D (frontière Calendar).
+  // visible.
+  //
+  // (WORKSPACE_SCOPING_V2D1 a retiré `/visites/[id]/preparer` : elle n'était PAS sûre par
+  // dérivation — ses deux ids venaient d'un rapprochement TEXTUEL contre le catalogue global.
+  // Elle résout désormais son périmètre en tête, dérive de la Visite canonique quand elle existe,
+  // et relit ses deux racines scopées. L'exception a été RETIRÉE, pas commentée.)
   "app/visites/[id]/page.tsx": ["getBienById", "getClientById"],
-  "app/visites/[id]/preparer/page.tsx": ["getBienById", "getClientById"],
   "app/visites/[id]/bon-de-visite/[bonId]/page.tsx": ["getClientById"],
 };
 
@@ -393,19 +401,23 @@ const LECTEURS_MACHINE_AUTORISES_PAR_FICHIER: Record<string, { lecteurs: string[
   },
 };
 
-// Dette V2D, nommée surface par surface. Une seule entrée subsiste.
+// PLUS AUCUNE DETTE DE LECTEUR DE LISTE. Cet objet reste — vide — parce que c'est lui qui rend la
+// règle lisible : une exception future devra être écrite ici, nommée et justifiée, jamais glissée
+// dans un fichier.
 //
 // (WORKSPACE_SCOPING_V2C2 a retiré les quatre entrées V2C — biens/[id], clients/[id],
-// offres/nouveau et compromis/nouveau. Ces surfaces n'alimentaient pas seulement un `<select>` :
-// sur la fiche Acquéreur, le catalogue global entrait TEL QUEL dans le moteur d'opportunités et
-// dans la reprise de contact, qui croisent bien × acquéreur — ils fabriquaient donc des paires
-// inter-workspaces, nommément, avant tout filtrage possible. Chacune lit désormais un lecteur
-// scopé, et le périmètre est posé AVANT le croisement, jamais après.)
-const EXCEPTIONS_LISTE_JUSTIFIEES: Record<string, string[]> = {
-  // V2D — le matching des rendez-vous Google travaille sur le référentiel complet, et la
-  // connexion Calendar est elle-même un singleton sans notion de workspace.
-  "lib/rendezVousContexte.ts": ["listerBiens", "listerClients"],
-};
+// offres/nouveau et compromis/nouveau. WORKSPACE_SCOPING_V2D1 a retiré la dernière,
+// `lib/rendezVousContexte.ts` : le rapprochement des rendez-vous Google ne travaille plus sur le
+// catalogue complet mais sur le seul référentiel du workspace de session. Le périmètre borne
+// désormais le POOL DE CANDIDATS, pas le résultat — un bien d'un autre workspace n'est même plus
+// évalué, alors qu'un simple score d'homonymie suffisait à rendre un rapprochement ambigu et à
+// changer le verdict rendu à l'un à cause des données de l'autre.)
+//
+// ATTENTION — cela ne signifie PAS que la frontière Calendar est fermée : l'ÉVÉNEMENT lui-même
+// vient toujours du compte Google connecté, qui reste un singleton d'instance
+// (`connexions_google`, id 'default', ADR-054 §6). C'est la frontière DOMIORA qui est close ici ;
+// la frontière de compte Google reste ouverte et attend V2D2.
+const EXCEPTIONS_LISTE_JUSTIFIEES: Record<string, string[]> = {};
 
 // Détecte un appel ou un import du lecteur, jamais une simple mention en commentaire (les
 // commentaires sont retirés en amont par `codeSeul`).
@@ -538,6 +550,7 @@ describe("Frontière workspace — lecteurs de liste globaux", () => {
       ["lib/bienRepository.ts", "listerBiensActifsDuWorkspace"],
       ["lib/bienRepository.ts", "listerBiensActifsAvecPhotoDuWorkspace"],
       ["lib/tacheRepository.ts", "listerTachesDuBienDuWorkspace"],
+      ["lib/tacheRepository.ts", "listerTachesDeLAcquereurDuWorkspace"],
       ["lib/clientRepository.ts", "listerAcquereursActifsDuWorkspace"],
       ["lib/tacheRepository.ts", "listerTachesDuWorkspace"],
       ["lib/visiteRepository.ts", "listerVisitesDuWorkspace"],
@@ -552,6 +565,95 @@ describe("Frontière workspace — lecteurs de liste globaux", () => {
         "workspaceId?"
       );
     }
+  });
+});
+
+// `onConflictDoUpdate({ target: [...] })` sur `memoireContextuelle` : la cible doit porter les
+// TROIS colonnes. Même détection textuelle que pour les configurations d'automatisation — c'est
+// exactement ce qui s'écrit à la main, et c'est là que la clé se perd.
+function verifierCiblesMemoire(relatif: string, source: string): string[] {
+  const fautifs: string[] = [];
+  for (const m of source.matchAll(/onConflictDoUpdate\(\{\s*(?:\/\/[^\n]*\n\s*)*target:\s*(\[[^\]]*\]|[^\n]*)/g)) {
+    const cible = m[1];
+    const avant = source.slice(0, m.index ?? 0);
+    const insertion = avant.lastIndexOf(".insert(");
+    if (insertion === -1 || !/memoireContextuelle/.test(avant.slice(insertion))) continue;
+    for (const colonne of ["workspaceId", "source", "identifiantExterne"]) {
+      if (!new RegExp(`memoireContextuelle\\.${colonne}\\b`).test(cible)) {
+        fautifs.push(
+          `${relatif} : ON CONFLICT ciblant ${cible.trim()} — il manque memoireContextuelle.${colonne}. ` +
+            `Depuis la migration 0055 la clé est le TRIPLET (workspaceId, source, identifiantExterne) ; ` +
+            `cibler le couple ferait écraser la décision d'un autre workspace.`
+        );
+      }
+    }
+  }
+  return fautifs;
+}
+
+// ───────────────── 4bis. MÉMOIRE CONTEXTUELLE PAR WORKSPACE ─────────────────
+
+// WORKSPACE_SCOPING_V2D1 (migration 0055) — `memoire_contextuelle` mémorise, pour un élément
+// externe (un événement Google Calendar), à quel bien et à quel acquéreur il correspond. Son
+// unicité était GLOBALE : `(source, identifiant_externe)`. Deux workspaces ne pouvaient donc pas
+// mémoriser le même événement, et l'`ON CONFLICT` du writer faisait écraser la décision HUMAINE de
+// l'un par le cache automatique de l'autre — puis la relecture rendait à l'un le `bien_id` de
+// l'autre. Exactement la faille que 0054 a refermée pour `configurations_automatisation`.
+//
+// Deux gardes, parce que la clé peut se perdre de deux façons : par la CIBLE d'un upsert Drizzle,
+// et par une LECTURE qui oublierait le périmètre dans son `where`.
+const MEMOIRE_REPOSITORY = "lib/contexteRepository.ts";
+
+describe("Frontière workspace — mémoire contextuelle par workspace", () => {
+  const sourceMemoire = () => codeSeul(join(SRC, ...MEMOIRE_REPOSITORY.split("/")));
+
+  it("tout ON CONFLICT sur la mémoire cible le TRIPLET, jamais (source, identifiantExterne)", () => {
+    const fautifs = verifierCiblesMemoire(MEMOIRE_REPOSITORY, sourceMemoire());
+    expect(fautifs).toEqual([]);
+  });
+
+  // Prouver la CAPACITÉ DE DÉTECTION : une garde qui ne ferait que constater l'état du dépôt
+  // passerait encore si elle était vide.
+  it("détecte une cible d'upsert revenue au couple", () => {
+    const faux = `await getDb().insert(memoireContextuelle).values(v).onConflictDoUpdate({
+      target: [memoireContextuelle.source, memoireContextuelle.identifiantExterne],
+      set: v,
+    });`;
+    const fautifs = verifierCiblesMemoire("lib/faux.ts", faux);
+    expect(fautifs).toHaveLength(1);
+    expect(fautifs[0]).toContain("workspaceId");
+  });
+
+  it("aucune lecture de la mémoire ne filtre sans le périmètre", () => {
+    const source = sourceMemoire();
+    // Chaque `.from(memoireContextuelle)` doit être suivi, dans la même instruction, d'une
+    // contrainte sur `workspaceId`. Découpe à l'instruction : `;` termine chaque requête Drizzle.
+    const fautifs: string[] = [];
+    for (const instruction of source.split(";")) {
+      if (!/\.from\(memoireContextuelle\)/.test(instruction)) continue;
+      if (!/memoireContextuelle\.workspaceId/.test(instruction)) {
+        fautifs.push(
+          `${MEMOIRE_REPOSITORY} : lecture de memoire_contextuelle sans eq(memoireContextuelle.workspaceId, ...) — ` +
+            `la clé est le triplet (workspace_id, source, identifiant_externe) depuis la migration 0055.`
+        );
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  it("toute fonction exportée du repository de mémoire exige un workspaceId", () => {
+    const source = sourceMemoire();
+    const sansPerimetre: string[] = [];
+    for (const bloc of source.split(/(?=export async function )/)) {
+      const nom = /^export async function (\w+)/.exec(bloc)?.[1];
+      if (!nom) continue;
+      const signature = bloc.slice(0, bloc.indexOf(")", bloc.indexOf("(")) + 1);
+      const complete = bloc.slice(0, bloc.indexOf("): "));
+      if (!/workspaceId: string/.test(complete) && !/workspaceId: string/.test(signature)) {
+        sansPerimetre.push(`${MEMOIRE_REPOSITORY} → ${nom}`);
+      }
+    }
+    expect(sansPerimetre).toEqual([]);
   });
 });
 

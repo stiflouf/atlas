@@ -3,8 +3,8 @@
 import { redirect } from "next/navigation";
 import { annulerVisite, materialiserVisite, modifierDatePrevueVisite } from "@/lib/visiteRepository";
 import { getRendezVousAvecContexte } from "@/lib/rendezVousContexte";
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { formatDateISO } from "@/lib/temps";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
@@ -26,11 +26,16 @@ export async function materialiserVisiteAction(formData: FormData): Promise<void
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
 
   if (rendezVousCalendarId) {
-    const resultat = await getRendezVousAvecContexte(rendezVousCalendarId);
+    // WORKSPACE_SCOPING_V2D1 — le contexte est désormais résolu DANS le périmètre de session
+    // (référentiel de rapprochement scopé), et les deux racines sont relues scopées. Avant ce lot,
+    // le matching voyait le catalogue entier : c'est `creerVisiteEnBase` qui refusait l'écriture,
+    // en dernier recours, sur un bien hors périmètre. La défense en profondeur reste, mais elle
+    // n'est plus la seule.
+    const resultat = await getRendezVousAvecContexte(rendezVousCalendarId, workspaceId);
     if (resultat?.contexte.bien && resultat.contexte.client) {
       const [bien, acquereur] = await Promise.all([
-        getBienById(resultat.contexte.bien.bienId),
-        getClientById(resultat.contexte.client.clientId),
+        getBienDuWorkspace(resultat.contexte.bien.bienId, workspaceId),
+        getAcquereurDuWorkspace(resultat.contexte.client.clientId, workspaceId),
       ]);
       // Aucun fallback mock : seuls de vrais UUID persistés matérialisent une visite (même garde
       // que l'ancien comportement ADR-040, jamais régressée).

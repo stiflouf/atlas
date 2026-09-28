@@ -12,16 +12,17 @@ const codeSeul = (chemin: string) => lire(chemin).replace(/\/\*[\s\S]*?\*\//g, "
 
 describe("CRM_TIMELINE_V1 — read model, jamais une table", () => {
   // Le compteur est une TRIPWIRE volontaire : il oblige quiconque ajoute une migration à venir dire
-  // ici qu'elle n'est pas celle de ce lot. Dernier passage : WORKSPACE_SCOPING_V2B5 (0054, clé
-  // primaire de `configurations_automatisation`) — sans aucun rapport avec l'historique de contact,
-  // qui reste un read model sans table ni migration.
-  it("aucune table timeline dans le schéma, aucune migration ajoutée (55 fichiers SQL, dernière = 0054)", () => {
+  // ici qu'elle n'est pas celle de ce lot. Dernier passage : WORKSPACE_SCOPING_V2D1 (0055,
+  // `workspace_id` sur `memoire_contextuelle`) — la mémoire de rapprochement des rendez-vous
+  // Calendar, sans aucun rapport avec l'historique de contact, qui reste un read model sans table
+  // ni migration.
+  it("aucune table timeline dans le schéma, aucune migration ajoutée (56 fichiers SQL, dernière = 0055)", () => {
     const schema = lire("db/schema.ts");
     expect(schema).not.toMatch(/pgTable\(\s*"(timeline|historique_contact|historique_echange)/i);
     expect(schema).not.toMatch(/timeline_contact|historique_contact|timelineContact/);
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrations).toHaveLength(55);
-    expect(migrations[migrations.length - 1]).toBe("0054_automation_config_per_workspace.sql");
+    expect(migrations).toHaveLength(56);
+    expect(migrations[migrations.length - 1]).toBe("0055_contextual_memory_per_workspace.sql");
   });
 
   it("le read model lit les deux sources bornées, trie en mémoire, et n'écrit jamais", () => {

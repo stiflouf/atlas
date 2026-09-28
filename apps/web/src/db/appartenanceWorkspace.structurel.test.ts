@@ -50,6 +50,11 @@ const TABLES_RACINES = [
   // MÊME identifiant du MÊME fournisseur sans que ce soit une collision.
   "references_externes",
   "champs_verrouilles",
+  // WORKSPACE_SCOPING_V2D1 (ADR-054, question ouverte n°4) — appartenance TRANCHÉE : WORKSPACE.
+  // RACINE et non feuille : ses cibles (`bien_id`, `client_id`) sont du TEXTE sans FK (ADR-010,
+  // catalogues mockés) et sont nullables — aucune dérivation n'est possible, le périmètre doit
+  // donc être porté par sa propre colonne. Migration 0055.
+  "memoire_contextuelle",
 ];
 
 // FEUILLES — appartenance dérivée d'au moins une FK NOT NULL vers un parent possédé. Aucune ne
@@ -106,7 +111,10 @@ const TABLES_TECHNIQUES_GLOBALES = ["regle_fiscale"];
 
 // APPARTENANCE NON TRANCHÉE — volontairement sans `workspace_id`. Un doute ne doit pas être
 // transformé en modèle permanent : voir les commentaires dédiés dans schema.ts.
-const TABLES_APPARTENANCE_NON_TRANCHEE = ["memoire_contextuelle", "dossier_fiscal"];
+//
+// (WORKSPACE_SCOPING_V2D1 a retiré `memoire_contextuelle` : son appartenance est tranchée par
+// WORKSPACE et elle figure désormais dans TABLES_RACINES. L'entrée a été RETIRÉE, pas commentée.)
+const TABLES_APPARTENANCE_NON_TRANCHEE = ["dossier_fiscal"];
 
 // Feuilles dont la chaîne de FK NOT NULL remonte à une table d'appartenance NON TRANCHÉE plutôt
 // qu'à une racine. Épingler la liste rend le jour de la décision visible : elle doit devenir vide.

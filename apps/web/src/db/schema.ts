@@ -95,23 +95,32 @@ export const connexionsGoogle = pgTable("connexions_google", {
 // bienId/clientId restent des références texte vers le catalogue mocké (data/biens.ts,
 // data/clients.ts) — pas de FK : ces catalogues ne vivent pas encore en base (hors périmètre).
 //
-// ADR-054 — appartenance NON TRANCHÉE, volontairement : cette table ne reçoit PAS de `workspace_id`
-// dans le lot de fondation. Elle n'est pas non plus une feuille (aucune FK NOT NULL vers un parent
-// possédé — ses cibles sont du texte sans FK, ADR-010). Le doute est réel et documenté comme
-// question ouverte n°4 d'ADR-054 : elle mémorise des décisions HUMAINES portant sur des éléments
-// issus d'un Google Calendar PERSONNEL (`connexions_google`, secret d'identité, ADR-054 §6), ce qui
-// la tire vers l'identité, alors que son contenu (bien/acquéreur/type métier) est une donnée de
-// dossier, ce qui la tire vers le workspace. Aucune preuve du dépôt ne tranche.
-// Un doute ne doit pas être transformé en modèle permanent : poser la colonne "au cas où"
-// figerait la réponse sans l'avoir décidée. À trancher par une décision explicite avant tout
-// deuxième membre.
-// Note pour ce jour-là : `UNIQUE(source, identifiant_externe)` devra alors être étendue au
-// périmètre retenu (workspace ou identité), sans quoi deux périmètres ne pourraient pas mémoriser
-// le même élément externe.
+// WORKSPACE_SCOPING_V2D1 (ADR-054, question ouverte n°4) — appartenance TRANCHÉE : WORKSPACE.
+//
+// Le doute était réel : la table mémorise des décisions humaines portant sur des éléments issus
+// d'un Google Calendar PERSONNEL (`connexions_google`, secret d'identité, ADR-054 §6), ce qui la
+// tirait vers l'identité. Ce qui tranche, c'est ce qu'elle CONTIENT : `bien_id`/`client_id` sont
+// des données de dossier, et c'est exactement ce contenu qui fuyait d'un périmètre à l'autre. Une
+// appartenance par identité aurait de plus créé un silo entre membres d'un même workspace — une
+// correction faite par l'un n'aurait pas profité à l'autre, alors que c'est le même dossier.
+//
+// L'unicité porte donc sur le TRIPLET (migration 0055) : deux workspaces peuvent légitimement
+// mémoriser le même élément externe avec des conclusions différentes, puisqu'ils ne matchent plus
+// contre le même référentiel. `UNIQUE(source, identifiant_externe)` rendait cela impossible et
+// faisait écraser la décision d'un workspace par celle d'un autre.
+//
+// `bien_id`/`client_id` restent du texte sans FK (ADR-010, catalogues mockés) : le périmètre est
+// porté par la COLONNE de cette table, jamais dérivé de cibles qui ne sont pas des références.
 export const memoireContextuelle = pgTable(
   "memoire_contextuelle",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP), tranchée par WORKSPACE_SCOPING_V2D1. Aucun DEFAULT : un
+    // oubli doit échouer immédiatement, jamais être silencieusement rangé dans le workspace
+    // historique (même principe que les racines posées par 0033).
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
     source: text("source").notNull(),
     typeElement: text("type_element").notNull(),
     identifiantExterne: text("identifiant_externe").notNull(),
@@ -128,7 +137,8 @@ export const memoireContextuelle = pgTable(
     modifieLe: timestamp("modifie_le", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    unique("memoire_contextuelle_source_identifiant_externe_unique").on(
+    unique("memoire_contextuelle_workspace_source_identifiant_unique").on(
+      table.workspaceId,
       table.source,
       table.identifiantExterne
     ),

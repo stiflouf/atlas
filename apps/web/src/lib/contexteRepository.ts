@@ -54,12 +54,16 @@ function ligneVersContexte(ligne: LigneMemoire, rendezVousId: string): ContexteR
   };
 }
 
-async function lireLigne(identifiantExterne: string): Promise<LigneMemoire | undefined> {
+// WORKSPACE_SCOPING_V2D1 — la clé de lecture est le TRIPLET, jamais le couple. Un même événement
+// Calendar peut légitimement avoir une conclusion différente dans deux workspaces : ils ne matchent
+// plus contre le même référentiel. Lire sans périmètre rendait à l'un la décision de l'autre.
+async function lireLigne(identifiantExterne: string, workspaceId: string): Promise<LigneMemoire | undefined> {
   const [ligne] = await getDb()
     .select()
     .from(memoireContextuelle)
     .where(
       and(
+        eq(memoireContextuelle.workspaceId, workspaceId),
         eq(memoireContextuelle.source, SOURCE_GOOGLE_CALENDAR),
         eq(memoireContextuelle.identifiantExterne, identifiantExterne)
       )
@@ -68,8 +72,12 @@ async function lireLigne(identifiantExterne: string): Promise<LigneMemoire | und
   return ligne;
 }
 
+// La cible de l'`ON CONFLICT` est le TRIPLET — c'est ce point précis qui faisait écraser la
+// décision humaine d'un workspace par le cache automatique d'un autre (même faille que
+// `configurations_automatisation` avant la migration 0054). Une garde structurelle le verrouille.
 async function upsert(
   identifiantExterne: string,
+  workspaceId: string,
   valeurs: {
     bienId: string | null;
     clientId: string | null;
@@ -85,13 +93,14 @@ async function upsert(
   await getDb()
     .insert(memoireContextuelle)
     .values({
+      workspaceId,
       source: SOURCE_GOOGLE_CALENDAR,
       typeElement: TYPE_ELEMENT_EVENEMENT,
       identifiantExterne,
       ...valeurs,
     })
     .onConflictDoUpdate({
-      target: [memoireContextuelle.source, memoireContextuelle.identifiantExterne],
+      target: [memoireContextuelle.workspaceId, memoireContextuelle.source, memoireContextuelle.identifiantExterne],
       set: { ...valeurs, modifieLe: new Date() },
     });
 }
@@ -103,10 +112,11 @@ async function upsert(
 // Toute panne d'accès à la base dégrade silencieusement vers un calcul à la volée.
 export async function resoudreContextePersiste(
   rdv: RendezVous,
-  referentiel: Referentiel
+  referentiel: Referentiel,
+  workspaceId: string
 ): Promise<ContexteRendezVous> {
   try {
-    const ligne = await lireLigne(rdv.id);
+    const ligne = await lireLigne(rdv.id, workspaceId);
 
     if (ligne && (ligne.statutValidation === "confirme" || ligne.statutValidation === "corrige")) {
       return ligneVersContexte(ligne, rdv.id);
@@ -123,7 +133,7 @@ export async function resoudreContextePersiste(
 
     const contexte = construireContexte(rdv, referentiel);
     if (!contexte.necessiteConfirmationBien) {
-      await upsert(rdv.id, {
+      await upsert(rdv.id, workspaceId, {
         bienId: contexte.bien?.bienId ?? null,
         clientId: contexte.client?.clientId ?? null,
         typeMetier: contexte.typeMetier?.type ?? "autre",
@@ -144,10 +154,11 @@ export async function resoudreContextePersiste(
 
 export async function resoudreContextesPersistes(
   rendezVous: RendezVous[],
-  referentiel: Referentiel
+  referentiel: Referentiel,
+  workspaceId: string
 ): Promise<Map<string, ContexteRendezVous>> {
   const entrees = await Promise.all(
-    rendezVous.map(async (rdv) => [rdv.id, await resoudreContextePersiste(rdv, referentiel)] as const)
+    rendezVous.map(async (rdv) => [rdv.id, await resoudreContextePersiste(rdv, referentiel, workspaceId)] as const)
   );
   return new Map(entrees);
 }
@@ -159,14 +170,15 @@ export async function enregistrerDecisionHumaine(
   rdv: RendezVous,
   contexteActuel: ContexteRendezVous,
   decision: DecisionValidation,
-  bienIdChoisi: string | null
+  bienIdChoisi: string | null,
+  workspaceId: string
 ): Promise<void> {
   const bienRetenu = decision === "ignore" ? null : bienIdChoisi;
   const bienCandidat = bienRetenu
     ? { bienId: bienRetenu, confidence: 1, matchedBy: "validation_humaine" as const }
     : undefined;
 
-  await upsert(rdv.id, {
+  await upsert(rdv.id, workspaceId, {
     bienId: bienRetenu,
     clientId: contexteActuel.client?.clientId ?? null,
     typeMetier: contexteActuel.typeMetier?.type ?? "autre",
