@@ -1,8 +1,8 @@
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById, listerClients } from "@/lib/clientRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace, listerAcquereursActifsDuWorkspace } from "@/lib/clientRepository";
 import { getOffreById, listerOffresPourBien } from "@/lib/offreRepository";
 import { listerCompromisPourBien, getCompromisParOffreId } from "@/lib/compromisRepository";
 import CompromisFormulaire from "@/components/compromis/CompromisFormulaire";
@@ -51,7 +51,12 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
   const params = await searchParams;
   const bienId = params.bienId ?? "";
   const workspaceId = await exigerWorkspaceCourant();
-  const bien = bienId ? await getBienById(bienId) : undefined;
+  // WORKSPACE_SCOPING_V2C2 — bienId vient des searchParams, donc de l'utilisateur : il n'est
+  // jamais un fait. Le périmètre est résolu d'abord, le bien lu scopé, et RIEN du bien n'est rendu
+  // avant cette preuve. Un bien d'un autre workspace retombe sur le même écran honnête qu'un id
+  // inexistant — ni titre, ni prix, ni vendeur, et surtout aucun message qui distinguerait
+  // « ailleurs » de « nulle part ».
+  const bien = bienId ? await getBienDuWorkspace(bienId, workspaceId) : undefined;
 
   if (!bien || bien.archiveLe) {
     return (
@@ -77,7 +82,7 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
   }
 
   const [acquereurCandidat, offresDuBien] = await Promise.all([
-    params.acquereurId ? getClientById(params.acquereurId) : undefined,
+    params.acquereurId ? getAcquereurDuWorkspace(params.acquereurId, workspaceId) : undefined,
     listerOffresPourBien(bien.id, workspaceId),
   ]);
   const offresAcceptees = offresDuBien.filter((o) => o.statut === "acceptee");
@@ -141,7 +146,7 @@ export default async function NouveauCompromisPage({ searchParams }: PageProps) 
         <CompromisFormulaire
           bienId={bien.id}
           verrouille={false}
-          acquereurs={await listerClients()}
+          acquereurs={await listerAcquereursActifsDuWorkspace(workspaceId)}
           offresAcceptees={offresAcceptees}
         />
       )}

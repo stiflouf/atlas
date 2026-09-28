@@ -149,16 +149,18 @@ const EXCEPTIONS_JUSTIFIEES: Record<string, string[]> = {
   // montrer ; elle ne permet plus, depuis ce lot, de la modifier.
   //
   // (WORKSPACE_SCOPING_V2C1 a refermé cinq de ces surfaces — biens/[id]/modifier, biens/[id]/photos,
-  // clients/[id]/modifier, prospects-vendeurs/[id]/modifier et prospects-vendeurs/[id]/signer-mandat :
-  // leurs exceptions ont été RETIRÉES, pas commentées. Chacune résout désormais le workspace AVANT
-  // sa racine et la lit par un reader scopé. Les surfaces restantes ci-dessous relèvent de V2C2 —
-  // elles ne sont pas de simples substitutions de racine : elles croisent aussi des lecteurs de
-  // liste globaux qui alimentent des moteurs (matching, opportunités, reprise de contact).)
-  "app/biens/[id]/page.tsx": ["getBienById", "getClientById"],
-  "app/clients/[id]/page.tsx": ["getClientById", "getBienById"],
-  "app/compromis/nouveau/page.tsx": ["getBienById", "getClientById"],
-  "app/offres/nouveau/page.tsx": ["getBienById", "getClientById"],
-  "app/prospects-vendeurs/[id]/page.tsx": ["getProspectVendeurById", "getBienById"],
+  // clients/[id]/modifier, prospects-vendeurs/[id]/modifier et prospects-vendeurs/[id]/signer-mandat.
+  // WORKSPACE_SCOPING_V2C2 a refermé les cinq dernières — biens/[id], clients/[id],
+  // prospects-vendeurs/[id], offres/nouveau et compromis/nouveau. Dans les dix cas l'exception a été
+  // RETIRÉE, pas commentée : chacune résout désormais le workspace AVANT sa racine et la lit par un
+  // reader scopé.)
+  //
+  // Ce qui reste ci-dessous n'est PAS de la dette de même nature. Les deux surfaces Visite lisent
+  // encore getBienById/getClientById, mais avec des identifiants dérivés d'une Visite (ou d'un Bon
+  // de visite) déjà résolue dans le périmètre : la racine est prouvée, la feuille en découle. Elles
+  // restent nommées ici précisément parce que « sûr par dérivation » est un raisonnement, pas une
+  // garantie mécanique — le jour où la racine cesse d'être scopée, l'exception doit redevenir
+  // visible. `preparer` relève en plus de V2D (frontière Calendar).
   "app/visites/[id]/page.tsx": ["getBienById", "getClientById"],
   "app/visites/[id]/preparer/page.tsx": ["getBienById", "getClientById"],
   "app/visites/[id]/bon-de-visite/[bonId]/page.tsx": ["getClientById"],
@@ -391,15 +393,15 @@ const LECTEURS_MACHINE_AUTORISES_PAR_FICHIER: Record<string, { lecteurs: string[
   },
 };
 
-// Dette V2C/V2D, nommée surface par surface. Ces pages lisent encore un catalogue global ; elles
-// seront traitées avec les autres surfaces par id (V2C) et la frontière Calendar (V2D).
+// Dette V2D, nommée surface par surface. Une seule entrée subsiste.
+//
+// (WORKSPACE_SCOPING_V2C2 a retiré les quatre entrées V2C — biens/[id], clients/[id],
+// offres/nouveau et compromis/nouveau. Ces surfaces n'alimentaient pas seulement un `<select>` :
+// sur la fiche Acquéreur, le catalogue global entrait TEL QUEL dans le moteur d'opportunités et
+// dans la reprise de contact, qui croisent bien × acquéreur — ils fabriquaient donc des paires
+// inter-workspaces, nommément, avant tout filtrage possible. Chacune lit désormais un lecteur
+// scopé, et le périmètre est posé AVANT le croisement, jamais après.)
 const EXCEPTIONS_LISTE_JUSTIFIEES: Record<string, string[]> = {
-  // V2C — surfaces par id : le panneau de matching et les formulaires de création lisent encore
-  // le catalogue complet pour alimenter un `<select>` ou une liste de compatibilité.
-  "app/biens/[id]/page.tsx": ["listerClients"],
-  "app/clients/[id]/page.tsx": ["listerBiens", "listerTaches", "listerComptesRendus"],
-  "app/compromis/nouveau/page.tsx": ["listerClients"],
-  "app/offres/nouveau/page.tsx": ["listerClients"],
   // V2D — le matching des rendez-vous Google travaille sur le référentiel complet, et la
   // connexion Calendar est elle-même un singleton sans notion de workspace.
   "lib/rendezVousContexte.ts": ["listerBiens", "listerClients"],
@@ -495,6 +497,29 @@ describe("Frontière workspace — lecteurs de liste globaux", () => {
     expect(mortes).toEqual([]);
   });
 
+  // WORKSPACE_SCOPING_V2C2 — les cinq surfaces refermées par ce lot, nommées. La garde générique
+  // ci-dessus les couvre déjà (leurs exceptions ont été retirées) ; celle-ci dit POURQUOI elles ne
+  // doivent plus jamais en reprendre une, et échoue aussi si l'une d'elles cessait de résoudre son
+  // périmètre — un lecteur scopé sans `exigerWorkspaceCourant` en amont ne scope rien.
+  it("les cinq surfaces refermées par V2C2 n'ont plus aucune exception et résolvent leur périmètre", () => {
+    for (const durci of [
+      "app/biens/[id]/page.tsx",
+      "app/clients/[id]/page.tsx",
+      "app/prospects-vendeurs/[id]/page.tsx",
+      "app/offres/nouveau/page.tsx",
+      "app/compromis/nouveau/page.tsx",
+    ]) {
+      expect(EXCEPTIONS_LISTE_JUSTIFIEES[durci], durci).toBeUndefined();
+      expect(EXCEPTIONS_JUSTIFIEES[durci], durci).toBeUndefined();
+      const source = codeSeul(join(SRC, ...durci.split("/")));
+      expect(source, durci).toContain("exigerWorkspaceCourant");
+      expect(verifierSurface(durci, source), durci).toEqual([]);
+      for (const interdit of LECTEURS_NON_SCOPES) {
+        expect(new RegExp(`\\b${interdit}\\b`).test(source), `${durci} → ${interdit}`).toBe(false);
+      }
+    }
+  });
+
   it("chaque exception V2C/V2D correspond à un usage réel : une exception périmée doit être retirée", () => {
     const perimees: string[] = [];
     for (const [relatif, lecteurs] of Object.entries(EXCEPTIONS_LISTE_JUSTIFIEES)) {
@@ -511,6 +536,8 @@ describe("Frontière workspace — lecteurs de liste globaux", () => {
     // qui viderait la garde de son sens.
     const aVerifier: [string, string][] = [
       ["lib/bienRepository.ts", "listerBiensActifsDuWorkspace"],
+      ["lib/bienRepository.ts", "listerBiensActifsAvecPhotoDuWorkspace"],
+      ["lib/tacheRepository.ts", "listerTachesDuBienDuWorkspace"],
       ["lib/clientRepository.ts", "listerAcquereursActifsDuWorkspace"],
       ["lib/tacheRepository.ts", "listerTachesDuWorkspace"],
       ["lib/visiteRepository.ts", "listerVisitesDuWorkspace"],

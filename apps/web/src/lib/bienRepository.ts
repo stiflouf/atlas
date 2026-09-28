@@ -106,6 +106,24 @@ export async function listerBiensActifsDuWorkspace(workspaceId: string, executeu
   return lignes.map(ligneVersBien);
 }
 
+// WORKSPACE_SCOPING_V2C2 — même contrat que `listerBiensActifsDuWorkspace`, avec en plus la photo
+// principale (sous-requête corrélée, ADR-052). La fiche Acquéreur en a besoin : son panneau de
+// biens compatibles affiche une vignette, et c'est la SEULE raison pour laquelle elle lisait encore
+// `listerBiens()` — le catalogue entier, tous workspaces confondus. Deux lecteurs plutôt qu'un
+// `photoPrincipaleId` ajouté au lecteur existant : le formulaire de planification de visite n'a
+// jamais besoin de la photo, et lui imposer la sous-requête coûterait sans rien rendre.
+export async function listerBiensActifsAvecPhotoDuWorkspace(
+  workspaceId: string,
+  executeur: Executeur = getDb()
+): Promise<BienAvecPhotoPrincipale[]> {
+  const lignes = await executeur
+    .select({ ...getTableColumns(biensTable), photoPrincipaleId: photoPrincipaleIdSubquery })
+    .from(biensTable)
+    .where(and(eq(biensTable.workspaceId, workspaceId), isNull(biensTable.archiveLe)))
+    .orderBy(desc(biensTable.creeLe), desc(biensTable.id));
+  return lignes.map(ligneVersBienAvecPhoto);
+}
+
 // Un bien du workspace de session, par id — un id inconnu ou d'un autre workspace est INTROUVABLE,
 // indistinguable : rien de l'autre périmètre n'est jamais rendu (pas même l'existence).
 export async function getBienDuWorkspace(id: string, workspaceId: string, executeur: Executeur = getDb()): Promise<Bien | undefined> {

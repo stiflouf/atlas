@@ -11,11 +11,11 @@ import MandatBienPanel from "@/components/mandat/MandatBienPanel";
 import BienAcquereursCompatibles from "@/components/bien/BienAcquereursCompatibles";
 import BienTabs from "@/components/bien/BienTabs";
 import { ongletBienValide } from "@/types/ongletBien";
-import { getBienById } from "@/lib/bienRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
 import { getPhotoPrincipaleBien, listerPhotosBien } from "@/lib/photoBienRepository";
-import { getClientById, listerClients } from "@/lib/clientRepository";
+import { getAcquereurDuWorkspace, listerAcquereursActifsDuWorkspace } from "@/lib/clientRepository";
 import { getDossierByBienId, type StatutDossier } from "@/data/dossier";
-import { getTachesPourBien } from "@/lib/tacheRepository";
+import { listerTachesDuBienDuWorkspace } from "@/lib/tacheRepository";
 import { listerNotesPourBien } from "@/lib/noteBienRepository";
 import { listerComptesRendusPourBien } from "@/lib/compteRenduVisiteRepository";
 import { listerVisitesPourBien } from "@/lib/visiteRepository";
@@ -68,13 +68,17 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { onglet, mandat: refusMandat, qMandat } = await searchParams;
   const ongletInitial = ongletBienValide(onglet);
-  const bien = await getBienById(id);
+  // WORKSPACE_SCOPING_V2C2 — ROOT-FIRST : le périmètre est résolu AVANT la racine, et la racine
+  // est lue scopée. Un bien d'un autre workspace est INTROUVABLE, indistinguable d'un id inexistant
+  // — aucun titre, aucun prix, aucun compteur, rien de dérivé. Le workspace était déjà résolu ici,
+  // mais APRÈS le chargement du bien : tout ce qui suit héritait d'une racine non prouvée.
+  const workspaceId = await exigerWorkspaceCourant();
+  const bien = await getBienDuWorkspace(id, workspaceId);
   if (!bien) notFound();
 
   // ADR-054 / ADR-060 §1 — le mandat canonique se lit dans le workspace de SESSION, et la
   // précédence canonique > legacy est tranchée une seule fois ici (read model), jamais par les
-  // composants. Un bien mocké (id non-UUID) n'a aucun mandat canonique : mode legacy.
-  const workspaceId = await exigerWorkspaceCourant();
+  // composants.
   const presentationMandat = await chargerPresentationMandatBien(bien, workspaceId);
   const mandatEffectif = statutMandatEffectif(presentationMandat);
   const candidatsContactMandat =
@@ -88,7 +92,7 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
   // ordre ASC/cree_le ASC/id ASC) traversent la frontière vers BienGaleriePhotos.
   const photosBien = await listerPhotosBien(bien.id);
   const dossier = getDossierByBienId(bien.id);
-  const taches = await getTachesPourBien(bien.id);
+  const taches = await listerTachesDuBienDuWorkspace(bien.id, workspaceId);
   const notes = await listerNotesPourBien(bien.id);
   const comptesRendus = await listerComptesRendusPourBien(bien.id, workspaceId);
   const visites = await listerVisitesPourBien(bien.id, workspaceId);
@@ -104,7 +108,10 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
   const transmissionsParCompromis = new Map(
     await Promise.all(compromis.map(async (c) => [c.id, await listerTransmissionsPourCompromis(c.id)] as const))
   );
-  const acquereursActifs = await listerClients();
+  // Alimente à la fois le panneau de compatibilité et les sélecteurs de BienTabs — donc le
+  // périmètre doit être posé AVANT, pas vérifié après : un acquéreur d'un autre workspace ne doit
+  // apparaître ni dans un verdict de matching, ni dans une option de <select>.
+  const acquereursActifs = await listerAcquereursActifsDuWorkspace(workspaceId);
   const compatibilites = await evaluerCompatibiliteBien(bien.id, workspaceId);
   const acquereurIds = [
     ...new Set([
@@ -114,7 +121,7 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
       ...visites.map((v) => v.acquereurId),
     ]),
   ];
-  const acquereurs = await Promise.all(acquereurIds.map((id) => getClientById(id)));
+  const acquereurs = await Promise.all(acquereurIds.map((id) => getAcquereurDuWorkspace(id, workspaceId)));
   const acquereursParId = new Map(acquereurIds.map((id, i) => [id, acquereurs[i]]));
   const prospectVendeurOrigine = await getProspectVendeurParBien(bien.id);
   // Contexte du dossier (ADR-029) : le compromis en_cours, sinon le plus récent (garde le contexte
@@ -148,8 +155,7 @@ export default async function FicheBien({ params, searchParams }: PageProps) {
     </>
   );
 
-  // Dérivé de la tâche prioritaire réelle (tachePriority.ts, inchangé) — vide pour un bien mocké
-  // (getTachesPourBien ne retourne rien pour un id non-UUID), pas une régression de ce chantier.
+  // Dérivé de la tâche prioritaire réelle (tachePriority.ts, inchangé).
   const raisonTacheTexte = tachePrincipale ? raisonTache(tachePrincipale) : undefined;
   const prochaineVisiteHref = prochaineVisite ? `/visites/${prochaineVisite.id}/preparer` : undefined;
 

@@ -17,13 +17,13 @@ import AcquereurBiensCompatibles from "@/components/client/AcquereurBiensCompati
 import AcquereurVisites from "@/components/client/AcquereurVisites";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
 import SecteursRechercheSection from "@/components/client/SecteursRechercheSection";
-import { getClientById } from "@/lib/clientRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { getTachesPourAcquereur } from "@/lib/tacheRepository";
 import { deriverStatutTache } from "@/types/tache";
 import { listerOffresPourAcquereur } from "@/lib/offreRepository";
 import { listerCompromisPourAcquereur } from "@/lib/compromisRepository";
 import { listerVisitesPourAcquereur } from "@/lib/visiteRepository";
-import { getBienById, listerBiens } from "@/lib/bienRepository";
+import { getBienDuWorkspace, listerBiensActifsAvecPhotoDuWorkspace } from "@/lib/bienRepository";
 import { LABEL_STATUT_OFFRE } from "@/types/offre";
 import { LABEL_STATUT_COMPROMIS } from "@/types/compromis";
 import { evaluerCompatibiliteAcquereur } from "@/lib/compatibilite/orchestration";
@@ -34,8 +34,8 @@ import {
 } from "@/lib/repereRelationnelRepository";
 import AcquereurMemoireRelation from "@/components/client/AcquereurMemoireRelation";
 import AcquereurReperesRelationnels from "@/components/client/AcquereurReperesRelationnels";
-import { listerTaches } from "@/lib/tacheRepository";
-import { listerComptesRendus } from "@/lib/compteRenduVisiteRepository";
+import { listerTachesDuWorkspace } from "@/lib/tacheRepository";
+import { listerComptesRendusDuWorkspace } from "@/lib/compteRenduVisiteRepository";
 import { listerEnvoisEmailPourTaches } from "@/lib/envoiEmailRepository";
 import { chargerContexteOpportunites } from "@/lib/opportunites/contexte";
 import { detecterOpportunites } from "@/lib/opportunites/moteur";
@@ -74,7 +74,10 @@ type PageProps = {
 export default async function FicheClient({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { tacheTerminee, q, rattachement } = await searchParams;
-  const client = await getClientById(id);
+  // WORKSPACE_SCOPING_V2C2 — ROOT-FIRST : périmètre résolu d'abord, racine lue scopée. Un
+  // acquéreur d'un autre workspace est INTROUVABLE, indistinguable d'un id inexistant.
+  const workspaceId = await exigerWorkspaceCourant();
+  const client = await getAcquereurDuWorkspace(id, workspaceId);
   if (!client) notFound();
 
   // ADR-055 §H — le pont, lu pour savoir s'il reste un geste de rattachement à proposer. Les
@@ -84,7 +87,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   // résolu par le repository, jamais ici.
   const { contactId: contactCanonique, contactActifId } = await getNavigationContactDeLAcquereur(client.id);
   const candidatsContact =
-    contactCanonique === undefined && q ? await rechercherContactsCandidats(q, await exigerWorkspaceCourant()) : [];
+    contactCanonique === undefined && q ? await rechercherContactsCandidats(q, workspaceId) : [];
 
   const taches = await getTachesPourAcquereur(client.id);
   const tachesAFaire = taches.filter((t) => deriverStatutTache(t) === "a_faire");
@@ -96,7 +99,6 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   // confirmation.
   const tacheTermineeConfirmee = tachesTerminees.find((t) => t.id === tacheTerminee);
 
-  const workspaceId = await exigerWorkspaceCourant();
   const offres = (await listerOffresPourAcquereur(client.id, workspaceId)).sort((a, b) => (a.dateOffre < b.dateOffre ? 1 : -1));
   const compromis = (await listerCompromisPourAcquereur(client.id, workspaceId)).sort((a, b) =>
     a.dateSignature < b.dateSignature ? 1 : -1
@@ -106,7 +108,7 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
   const bienIds = [
     ...new Set([...offres.map((o) => o.bienId), ...compromis.map((c) => c.bienId), ...visites.map((v) => v.bienId)]),
   ];
-  const biensResolus = await Promise.all(bienIds.map((bienId) => getBienById(bienId)));
+  const biensResolus = await Promise.all(bienIds.map((bienId) => getBienDuWorkspace(bienId, workspaceId)));
   const biensParId = new Map(bienIds.map((bienId, i) => [bienId, biensResolus[i]]));
 
   const secteursRecherche = await listerSecteursPourAcquereur(client.id);
@@ -118,16 +120,24 @@ export default async function FicheClient({ params, searchParams }: PageProps) {
     listerReperesRelationnelsArchivesAcquereur(client.id),
   ]);
   // ADR-034 — moteur canonique et déterministe, déjà calculé côté serveur, même sens que
-  // BienAcquereursCompatibles (evaluerCompatibiliteBien) mais inversé. listerBiens() exclut déjà
-  // les biens archivés (ADR-012) et porte photoPrincipaleId (sous-requête corrélée, ADR-052) —
-  // jamais une seconde logique photo/filtrage ici.
+  // BienAcquereursCompatibles (evaluerCompatibiliteBien) mais inversé.
+  // WORKSPACE_SCOPING_V2C2 — cette liste n'alimente pas seulement un panneau : elle entre TELLE
+  // QUELLE dans chargerContexteOpportunites() et dans construireRepriseContactAcquereur(), qui
+  // croisent bien × acquéreur. Un catalogue global y aurait FABRIQUÉ des opportunités
+  // inter-workspaces — un bien d'ailleurs nommément proposé à une personne d'ici. Le périmètre est
+  // donc posé à la lecture, jamais en filtrant le résultat des moteurs. Le lecteur scopé exclut
+  // les archivés (ADR-012) et porte photoPrincipaleId (sous-requête corrélée, ADR-052), comme le
+  // lecteur global qu'il remplace.
   const compatibilites = await evaluerCompatibiliteAcquereur(client.id, workspaceId);
-  const biensActifs = await listerBiens();
+  const biensActifs = await listerBiensActifsAvecPhotoDuWorkspace(workspaceId);
 
   // VALUE-03 — chargement des faits de la mémoire relationnelle. Tout ce qui suit alimente une
   // fonction PURE (memoireAcquereur.ts) : aucune requête n'y est faite, aucun read model n'est
   // persisté.
-  const [toutesTaches, tousComptesRendus] = await Promise.all([listerTaches(), listerComptesRendus()]);
+  const [toutesTaches, tousComptesRendus] = await Promise.all([
+    listerTachesDuWorkspace(workspaceId),
+    listerComptesRendusDuWorkspace(workspaceId),
+  ]);
   const comptesRendusAcquereur = tousComptesRendus.filter((cr) => cr.acquereurId === client.id);
   // Tâches de la relation par FK réelle (l'acquéreur, mais aussi ses visites/offres/compromis) :
   // c'est ce qui fait remonter une tâche portée par le compromis comme prochaine action de

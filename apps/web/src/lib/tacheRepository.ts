@@ -83,6 +83,26 @@ export async function getTachesPourAcquereur(acquereurId: string): Promise<Tache
   return toutes.filter((t) => t.acquereurId === acquereurId);
 }
 
+// WORKSPACE_SCOPING_V2C2 — les tâches d'UN bien, dans le périmètre de session. `getTachesPourBien`
+// ci-dessus lisait la table entière avant de filtrer en mémoire : le résultat était juste (une
+// tâche ne porte qu'un bien), mais le `SELECT` ne l'était pas, et une surface utilisateur n'a
+// aucune raison de faire traverser un catalogue trans-workspace à son processus. Même patron que
+// `getTachesPourProspectVendeur` : requête directe, aucun repli mock — un bien mocké n'a pas de
+// tâche persistée, et sa fiche n'est de toute façon plus atteignable depuis un workspace.
+export async function listerTachesDuBienDuWorkspace(bienId: string, workspaceId: string): Promise<Tache[]> {
+  if (!UUID_REGEX.test(bienId)) return [];
+  try {
+    const lignes = await getDb()
+      .select()
+      .from(tachesTable)
+      .where(and(eq(tachesTable.bienId, bienId), eq(tachesTable.workspaceId, workspaceId)));
+    return lignes.map(ligneVersTache);
+  } catch (erreur) {
+    console.error("[taches] lecture Postgres indisponible :", erreur);
+    return [];
+  }
+}
+
 // Un prospect vendeur n'a jamais de catalogue mocké (ADR-027) : requête directe, même patron que
 // listerNotesProspectVendeur, pas de repli sur listerTaches().
 export async function getTachesPourProspectVendeur(prospectVendeurId: string): Promise<Tache[]> {

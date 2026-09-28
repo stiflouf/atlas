@@ -15,10 +15,10 @@ import ProspectVendeurProchaineEtape from "@/components/prospectVendeur/Prospect
 import ProspectVendeurJournal from "@/components/prospectVendeur/ProspectVendeurJournal";
 import ProspectVendeurTaches from "@/components/prospectVendeur/ProspectVendeurTaches";
 import ProspectVendeurBienCree from "@/components/prospectVendeur/ProspectVendeurBienCree";
-import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
+import { getProspectVendeurDuWorkspace } from "@/lib/prospectVendeurRepository";
 import { listerNotesProspectVendeur } from "@/lib/noteProspectVendeurRepository";
 import { getTachesPourProspectVendeur } from "@/lib/tacheRepository";
-import { getBienById } from "@/lib/bienRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
 import { chargerPresentationMandatBien, statutMandatEffectif } from "@/lib/presentationMandatBien";
 import { deriverStatutProspectVendeur } from "@/types/prospectVendeur";
 import { deriverStatutTache } from "@/types/tache";
@@ -65,7 +65,12 @@ type PageProps = {
 export default async function FicheProspectVendeur({ params, searchParams }: PageProps) {
   const { id } = await params;
   const { tacheTerminee, q, rattachement } = await searchParams;
-  const prospect = await getProspectVendeurById(id);
+  // WORKSPACE_SCOPING_V2C2 — ROOT-FIRST : le périmètre est résolu UNE fois, en tête, et la racine
+  // est lue scopée. Un prospect d'un autre workspace est INTROUVABLE, indistinguable d'un id
+  // inexistant — ni identité, ni stade, ni journal, ni mandat. Tout ce qui suit dérive de cette
+  // racine prouvée.
+  const workspaceId = await exigerWorkspaceCourant();
+  const prospect = await getProspectVendeurDuWorkspace(id, workspaceId);
   if (!prospect) notFound();
 
   // ADR-055 §H — même geste que côté acquéreur, mêmes primitives : une personne n'a pas deux
@@ -74,7 +79,7 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
   // repository.
   const { contactId: contactCanonique, contactActifId } = await getNavigationContactDuProspectVendeur(prospect.id);
   const candidatsContact =
-    contactCanonique === undefined && q ? await rechercherContactsCandidats(q, await exigerWorkspaceCourant()) : [];
+    contactCanonique === undefined && q ? await rechercherContactsCandidats(q, workspaceId) : [];
 
   const notes = await listerNotesProspectVendeur(prospect.id);
   const taches = await getTachesPourProspectVendeur(prospect.id);
@@ -89,11 +94,15 @@ export default async function FicheProspectVendeur({ params, searchParams }: Pag
 
   // Le bien n'est chargé que lorsqu'il existe réellement (bienId n'est posé qu'à la signature du
   // mandat, ADR-027) — jamais un lien construit à l'aveugle vers une fiche inexistante.
-  const bienCree = prospect.bienId ? await getBienById(prospect.bienId) : undefined;
+  // WORKSPACE_SCOPING_V2C2 — lu SCOPÉ plutôt que dérivé de la racine : `prospects_vendeurs.bien_id`
+  // référence `biens.id` sans aucune contrainte imposant le même workspace (schéma vérifié). La
+  // dérivation serait donc une hypothèse sur les données, pas une garantie du schéma — et une
+  // hypothèse de ce genre est exactement ce qui se brise sans bruit.
+  const bienCree = prospect.bienId ? await getBienDuWorkspace(prospect.bienId, workspaceId) : undefined;
   // ADR-060 §1 — même read model que la fiche Bien : le mandat canonique créé à la signature est
   // ce que cette synthèse montre, jamais le seul jalon legacy.
   const mandatEffectifBien = bienCree
-    ? statutMandatEffectif(await chargerPresentationMandatBien(bienCree, await exigerWorkspaceCourant()))
+    ? statutMandatEffectif(await chargerPresentationMandatBien(bienCree, workspaceId))
     : undefined;
 
   const jours = joursDepuisDernierEchange(prospect);
