@@ -120,6 +120,9 @@ describe("Frontière workspace — classification des Route Handlers", () => {
 //
 // Chaque exception ci-dessous est nommée et justifiée. Une exception sans justification est un
 // oubli, pas une décision.
+// Catalogue recalculé par GLOBAL_READER_GUARD_EXTENSION_V1 (grep sur les exports réels, jamais
+// recopié). `getEnvoiEmailById` n'y figure pas : il n'existe plus — il est devenu
+// `getEnvoiEmailDuWorkspace`, la clé d'idempotence venant du navigateur.
 const LECTEURS_NON_SCOPES = [
   "getBienById",
   "getClientById",
@@ -258,10 +261,38 @@ describe("Frontière workspace — writers des domaines user-facing", () => {
   });
 });
 
+// GLOBAL_READER_GUARD_EXTENSION_V1 — cette garde ne voyait que `app/**` et `actions/**`. C'était
+// son ANGLE MORT : les fuites les plus durables ne vivaient pas dans les écrans mais dans les
+// MODULES QUI LES ALIMENTENT. `lib/communications/contexteEcranCommunication.ts` recevait
+// `tacheId` et `bienId` directement des searchParams et les passait à des lecteurs globaux — la
+// garde des LISTES surveillait pourtant ce fichier, ce qui donnait l'illusion qu'il était couvert.
+//
+// La surface inclut donc désormais tout `lib/**`, à deux exclusions près :
+//   - les `*Repository.ts`, qui DÉFINISSENT ces lecteurs (les interdire chez eux n'a pas de sens) ;
+//   - les fichiers de test.
+// Couvrir `lib/**` en entier plutôt qu'une liste de modules « user-facing » est délibéré : une
+// liste à tenir à jour est exactement ce qui a produit l'angle mort. Le coût est une allowlist
+// machine, qui reste minuscule (une entrée) et doit le rester.
+const LECTEURS_MACHINE_UNITAIRES_AUTORISES: Record<string, { lecteurs: string[]; raison: string }> = {
+  // Moteur d'automatisation : `construireTache` reçoit un ÉVÉNEMENT qui porte son propre
+  // `workspaceId`, et chaque règle résout d'abord sa racine par un reader scopé
+  // (`getCompteRenduVisiteById(id, evenement.workspaceId)`, qui joint `biens.workspace_id`). Les
+  // lecteurs ci-dessous ne sont atteints qu'avec des ids DÉRIVÉS de cette racine prouvée. Aucune
+  // entrée utilisateur n'entre dans ce chemin : il n'est jamais appelé depuis une session.
+  "lib/automatisations/catalogueRegles.ts": {
+    lecteurs: ["getBienById", "getClientById", "getProspectVendeurById"],
+    raison: "moteur d'automatisation : ids dérivés d'un événement scopé, jamais d'une requête",
+  },
+};
+
 describe("Frontière workspace — lecteurs non scopés hors des écrans et des actions", () => {
   const surfaces = [
     ...listerFichiers(join(SRC, "app"), (c) => /\.tsx?$/.test(c) && !/\.test\.tsx?$/.test(c)),
     ...listerFichiers(join(SRC, "actions"), (c) => /\.ts$/.test(c) && !/\.test\.ts$/.test(c)),
+    ...listerFichiers(
+      join(SRC, "lib"),
+      (c) => /\.tsx?$/.test(c) && !/\.test\.tsx?$/.test(c) && !/[Rr]epository\.ts$/.test(c)
+    ),
   ];
 
   it("aucun écran ni aucune action n'importe un lecteur non scopé, hors exceptions nommées", () => {
@@ -275,6 +306,7 @@ describe("Frontière workspace — lecteurs non scopés hors des écrans et des 
         const motif = new RegExp(`\\b${lecteur}\\b`);
         if (!motif.test(source)) continue;
         if (EXCEPTIONS_JUSTIFIEES[relatif]?.includes(lecteur)) continue;
+        if (LECTEURS_MACHINE_UNITAIRES_AUTORISES[relatif]?.lecteurs.includes(lecteur)) continue;
         fautifs.push(`${relatif} → ${lecteur}`);
       }
     }
@@ -295,6 +327,58 @@ describe("Frontière workspace — lecteurs non scopés hors des écrans et des 
       }
     }
     expect(perimees).toEqual([]);
+  });
+
+  // GLOBAL_READER_GUARD_EXTENSION_V1 — prouver que l'EXTENSION elle-même mord. Sans ces trois cas,
+  // rien ne distinguerait « lib/** est couvert » de « lib/** est listé mais jamais lu ».
+  it("la surface couvre bien les modules de lib/, pas seulement app/ et actions/", () => {
+    const relatifs = surfaces.map((c) => relative(SRC, c).split(sep).join("/"));
+    expect(relatifs).toContain("lib/communications/contexteEcranCommunication.ts");
+    expect(relatifs).toContain("lib/communications/resoudreContexteCommunicationDepuisTache.ts");
+    expect(relatifs).toContain("lib/compatibilite/synchronisation.ts");
+    // …et n'inclut pas les repositories, qui DÉFINISSENT ces lecteurs.
+    expect(relatifs.some((r) => /[Rr]epository\.ts$/.test(r))).toBe(false);
+  });
+
+  it("détecte un lecteur global réintroduit dans un module de contexte de lib/", () => {
+    // Reproduit exactement la fuite refermée par ce lot : un id venu des searchParams passé à un
+    // lecteur racine global depuis un module qui n'est ni un écran ni une action.
+    const faux = `import { getTacheById } from "@/lib/tacheRepository";
+      export async function resoudre(tacheId: string) { return getTacheById(tacheId); }`;
+    const detectes = LECTEURS_NON_SCOPES.filter((lecteur) => new RegExp(`\\b${lecteur}\\b`).test(faux));
+    expect(detectes).toEqual(["getTacheById"]);
+    // Et ce fichier fictif n'a, par construction, aucune exception nommée qui le couvrirait.
+    expect(EXCEPTIONS_JUSTIFIEES["lib/communications/faux.ts"]).toBeUndefined();
+    expect(LECTEURS_MACHINE_UNITAIRES_AUTORISES["lib/communications/faux.ts"]).toBeUndefined();
+  });
+
+  it("chaque allowlist machine unitaire correspond à un usage réel : une entrée morte doit être retirée", () => {
+    const mortes: string[] = [];
+    for (const [relatif, { lecteurs }] of Object.entries(LECTEURS_MACHINE_UNITAIRES_AUTORISES)) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      for (const lecteur of lecteurs) {
+        if (!new RegExp(`\\b${lecteur}\\b`).test(source)) mortes.push(`${relatif} → ${lecteur}`);
+      }
+    }
+    expect(mortes).toEqual([]);
+  });
+
+  // Les trois modules de communication refermés par ce lot : plus aucune exception, et le périmètre
+  // réellement porté jusqu'aux lectures.
+  it("les modules de communication sont scopés et sans exception", () => {
+    for (const relatif of [
+      "lib/communications/contexteEcranCommunication.ts",
+      "lib/communications/resoudreContexteCommunicationDepuisTache.ts",
+      "lib/communications/destinataireCommunication.ts",
+    ]) {
+      expect(EXCEPTIONS_JUSTIFIEES[relatif], relatif).toBeUndefined();
+      expect(LECTEURS_MACHINE_UNITAIRES_AUTORISES[relatif], relatif).toBeUndefined();
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      for (const lecteur of LECTEURS_NON_SCOPES) {
+        expect(new RegExp(`\\b${lecteur}\\b`).test(source), `${relatif} → ${lecteur}`).toBe(false);
+      }
+      expect(source, `${relatif} doit porter le périmètre`).toContain("workspaceId");
+    }
   });
 
   it("les surfaces durcies par ce lot n'ont plus aucune exception", () => {

@@ -7,7 +7,7 @@ import { envoyerMessageGmail } from "@/lib/google/gmailClient";
 import {
   calculerContenuHash,
   demarrerTentativeEnvoi,
-  getEnvoiEmailById,
+  getEnvoiEmailDuWorkspace,
   marquerEnvoiEchoue,
   marquerEnvoiIncertain,
   marquerEnvoiReussi,
@@ -153,7 +153,7 @@ export async function envoyerEmailGmailAction(
   if (!tentative) {
     // Conflit sur la clé d'idempotence : une tentative existe déjà pour cet écran de confirmation
     // précis — jamais un second appel Gmail.
-    const existante = await getEnvoiEmailById(idempotencyKey);
+    const existante = await getEnvoiEmailDuWorkspace(idempotencyKey, workspaceId);
     if (!existante) return { statut: "echec", message: "Tentative introuvable." };
     const etat = deriverEtatEnvoiEmail(existante);
     if (etat === "envoye") return { statut: "deja_envoye" };
@@ -169,7 +169,7 @@ export async function envoyerEmailGmailAction(
     // Bugfix pilote : auparavant silencieux — soit aucune connexion en base, soit déchiffrement
     // impossible (déjà journalisé séparément par lireConnexionGoogle() dans ce second cas).
     console.error("[gmail] envoi échoué étape=connexion raison=absente_ou_indechiffrable");
-    await marquerEnvoiEchoue(idempotencyKey, "authentification_google_absente");
+    await marquerEnvoiEchoue(idempotencyKey, "authentification_google_absente", workspaceId);
     return { statut: "echec", message: "Gmail n'est plus connecté." };
   }
 
@@ -184,7 +184,7 @@ export async function envoyerEmailGmailAction(
       "[gmail] envoi échoué étape=refresh_token :",
       erreur instanceof Error ? erreur.message : "erreur inconnue"
     );
-    await marquerEnvoiEchoue(idempotencyKey, "authentification_google_invalide");
+    await marquerEnvoiEchoue(idempotencyKey, "authentification_google_invalide", workspaceId);
     return { statut: "echec", message: "La connexion Gmail a expiré — reconnectez Gmail." };
   }
 
@@ -193,7 +193,7 @@ export async function envoyerEmailGmailAction(
   if (resultat.type === "succes") {
     // L'audit d'abord, seul et dans sa propre transaction : c'est lui qui répond « l'email est-il
     // parti ? », et aucune écriture canonique ne doit pouvoir le faire mentir.
-    const envoi = await marquerEnvoiReussi(idempotencyKey, resultat.gmailMessageId);
+    const envoi = await marquerEnvoiReussi(idempotencyKey, resultat.gmailMessageId, workspaceId);
     if (envoi?.reussiLe) {
       // La MÊME date que `reussi_le`, relue de la ligne écrite — jamais une seconde lecture
       // d'horloge : les deux tables décrivent un seul fait temporel.
@@ -209,10 +209,10 @@ export async function envoyerEmailGmailAction(
   }
 
   if (resultat.type === "incertain") {
-    await marquerEnvoiIncertain(idempotencyKey, resultat.erreurTechnique);
+    await marquerEnvoiIncertain(idempotencyKey, resultat.erreurTechnique, workspaceId);
     return { statut: "incertain" };
   }
 
-  await marquerEnvoiEchoue(idempotencyKey, resultat.erreurTechnique);
+  await marquerEnvoiEchoue(idempotencyKey, resultat.erreurTechnique, workspaceId);
   return { statut: "echec", message: "L'envoi via Gmail a échoué." };
 }

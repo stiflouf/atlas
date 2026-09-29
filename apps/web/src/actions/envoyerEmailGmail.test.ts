@@ -45,7 +45,7 @@ const { creerProspectVendeur } = await import("@/lib/prospectVendeurRepository")
 const { creerContact } = await import("@/lib/contactRepository");
 const { listerInteractionsDuContact } = await import("@/lib/interactionRepository");
 const { listerNotesProspectVendeur } = await import("@/lib/noteProspectVendeurRepository");
-const { getEnvoiEmailById } = await import("@/lib/envoiEmailRepository");
+const { getEnvoiEmailDuWorkspace } = await import("@/lib/envoiEmailRepository");
 const { deriverEtatEnvoiEmail } = await import("@/types/envoiEmail");
 // WORKSPACE_SCOPING_V2D2 — la connexion Google appartient désormais à une IDENTITÉ : les fixtures
 // doivent écrire sous le `sub` de la session mockée ci-dessus, sinon l'action ne retrouve aucun
@@ -130,7 +130,7 @@ describe("envoyerEmailGmailAction", () => {
     }));
 
     expect(resultat.statut).toBe("envoye");
-    const envoi = await getEnvoiEmailById(id);
+    const envoi = await getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST);
     expect(deriverEtatEnvoiEmail(envoi!)).toBe("envoye");
     expect(envoi!.gmailMessageId).toBe("gmail-msg-succes");
 
@@ -154,7 +154,7 @@ describe("envoyerEmailGmailAction", () => {
 
     expect(resultat.statut).toBe("echec");
     expect(fetchMock).not.toHaveBeenCalled();
-    await expect(getEnvoiEmailById(id)).resolves.toBeUndefined();
+    await expect(getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST)).resolves.toBeUndefined();
 
     // Restaure le scope Gmail pour les tests suivants.
     await ecrireConnexionGoogle(SUB_SESSION_TEST, "refresh-token-test", `https://www.googleapis.com/auth/calendar.events.readonly ${SCOPE_GMAIL_SEND}`);
@@ -177,7 +177,7 @@ describe("envoyerEmailGmailAction", () => {
     }));
 
     expect(resultat.statut).toBe("echec");
-    const envoi = await getEnvoiEmailById(id);
+    const envoi = await getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST);
     expect(deriverEtatEnvoiEmail(envoi!)).toBe("echec");
     const notes = await listerNotesProspectVendeur(prospect.id);
     expect(notes).toHaveLength(0);
@@ -210,7 +210,7 @@ describe("envoyerEmailGmailAction", () => {
     }));
 
     expect(resultat.statut).toBe("incertain");
-    const envoi = await getEnvoiEmailById(id);
+    const envoi = await getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST);
     expect(deriverEtatEnvoiEmail(envoi!)).toBe("incertain");
     const notes = await listerNotesProspectVendeur(prospect.id);
     expect(notes).toHaveLength(0);
@@ -234,7 +234,7 @@ describe("envoyerEmailGmailAction", () => {
     }));
 
     expect(resultat.statut).toBe("envoye");
-    const envoi = await getEnvoiEmailById(id);
+    const envoi = await getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST);
     expect(envoi!.origineIntention).toBe("retour_vendeur_apres_visite");
     // Même mécanisme générique ADR-027 que toute autre intention envoyée à un prospect vendeur —
     // aucune nouvelle table/booléen "retour effectué" nécessaire (ADR-042 §29/34).
@@ -270,7 +270,7 @@ describe("envoyerEmailGmailAction", () => {
     if (resultat.statut === "echec") {
       expect(resultat.message).toBe("La connexion Gmail a expiré — reconnectez Gmail.");
     }
-    const envoi = await getEnvoiEmailById(id);
+    const envoi = await getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST);
     expect(deriverEtatEnvoiEmail(envoi!)).toBe("echec");
 
     const journalComplet = spy.mock.calls.map((appel) => appel.join(" ")).join("\n");
@@ -340,7 +340,7 @@ describe("envoyerEmailGmailAction — fait canonique et identité Gmail", () => 
     expect(resultat.statut).toBe("envoye");
 
     // L'audit technique reste intact et reste la source de vérité de l'envoi.
-    const envoi = await getEnvoiEmailById(id);
+    const envoi = await getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST);
     expect(deriverEtatEnvoiEmail(envoi!)).toBe("envoye");
     expect(envoi!.gmailMessageId).toBe(gmailMessageId);
 
@@ -428,7 +428,7 @@ describe("envoyerEmailGmailAction — fait canonique et identité Gmail", () => 
     }));
 
     expect(resultat.statut).toBe("envoye");
-    expect(deriverEtatEnvoiEmail((await getEnvoiEmailById(id))!)).toBe("envoye");
+    expect(deriverEtatEnvoiEmail((await getEnvoiEmailDuWorkspace(id, WORKSPACE_TEST))!)).toBe("envoye");
     const references = await getDb()
       .select()
       .from(referencesExternesTable)

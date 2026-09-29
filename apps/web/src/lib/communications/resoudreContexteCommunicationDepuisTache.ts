@@ -1,11 +1,11 @@
-import { getBienById } from "@/lib/bienRepository";
-import { getClientById } from "@/lib/clientRepository";
+import { getBienDuWorkspace } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { getCompteRenduVisiteById } from "@/lib/compteRenduVisiteRepository";
 import { getCompromisById } from "@/lib/compromisRepository";
 import { getEvenementMetierById } from "@/lib/automatisations/evenementMetierRepository";
 import { getExecutionAutomatisationParTacheId } from "@/lib/automatisations/executionAutomatisationRepository";
 import { getOffreById } from "@/lib/offreRepository";
-import { getProspectVendeurById } from "@/lib/prospectVendeurRepository";
+import { getProspectVendeurDuWorkspace } from "@/lib/prospectVendeurRepository";
 import { LABEL_INTERET } from "@/types/compteRenduVisite";
 import { deriverCibleTache, type Tache, type TypeCible } from "@/types/tache";
 import {
@@ -29,6 +29,11 @@ function formatDateFr(iso: string): string {
 // déjà réelles de la tâche (deriverCibleTache, ADR-028) — jamais titre/contexte (texte libre) pour
 // deviner une personne. Retourne 0, 1 ou plusieurs candidats ; jamais tranché arbitrairement ici,
 // l'appelant présente un choix humain si `candidats.length > 1`.
+// GLOBAL_READER_GUARD_EXTENSION_V1 — toutes les lectures de ce module passent désormais par des
+// readers SCOPÉS. Les identifiants dérivent d'une tâche déjà prouvée dans le périmètre, donc la
+// dérivation était défendable ; mais `workspaceId` est là, en paramètre, et une chaîne explicite
+// vaut mieux qu'un raisonnement à refaire à chaque relecture — surtout dans un module qui vivait
+// hors de portée de la garde.
 export async function resoudreContexteCommunicationDepuisTache(tache: Tache, workspaceId: string): Promise<ContexteCommunicationTache> {
   const cible = deriverCibleTache(tache);
   const base = { tacheContexte: tache.contexte };
@@ -36,9 +41,9 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
 
   switch (cible.type) {
     case "prospectVendeur": {
-      const p = await getProspectVendeurById(cible.id);
+      const p = await getProspectVendeurDuWorkspace(cible.id, workspaceId);
       if (!p) return { cibleType: cible.type, candidats: [], faits: base };
-      const bien = p.bienId ? await getBienById(p.bienId) : undefined;
+      const bien = p.bienId ? await getBienDuWorkspace(p.bienId, workspaceId) : undefined;
 
       // ADR-042/043 — distingué par origineCode (identifiant machine stable, ADR-028), jamais par
       // le seul cibleType : une tâche prospectVendeur manuelle ou issue d'une autre règle (mandat
@@ -86,14 +91,14 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
     }
 
     case "acquereur": {
-      const a = await getClientById(cible.id);
+      const a = await getAcquereurDuWorkspace(cible.id, workspaceId);
       return { cibleType: cible.type, candidats: a ? [versCandidatAcquereur(a)] : [], faits: base };
     }
 
     case "visite": {
       const visite = await getCompteRenduVisiteById(cible.id, workspaceId);
       if (!visite) return { cibleType: cible.type, candidats: [], faits: base };
-      const [a, bien] = await Promise.all([getClientById(visite.acquereurId), getBienById(visite.bienId)]);
+      const [a, bien] = await Promise.all([getAcquereurDuWorkspace(visite.acquereurId, workspaceId), getBienDuWorkspace(visite.bienId, workspaceId)]);
       return {
         cibleType: cible.type,
         candidats: a ? [versCandidatAcquereur(a)] : [],
@@ -109,7 +114,7 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
     case "offre": {
       const offre = await getOffreById(cible.id, workspaceId);
       if (!offre) return { cibleType: cible.type, candidats: [], faits: base };
-      const [a, bien] = await Promise.all([getClientById(offre.acquereurId), getBienById(offre.bienId)]);
+      const [a, bien] = await Promise.all([getAcquereurDuWorkspace(offre.acquereurId, workspaceId), getBienDuWorkspace(offre.bienId, workspaceId)]);
       return {
         cibleType: cible.type,
         candidats: a ? [versCandidatAcquereur(a)] : [],
@@ -120,7 +125,7 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
     case "compromis": {
       const compromis = await getCompromisById(cible.id, workspaceId);
       if (!compromis) return { cibleType: cible.type, candidats: [], faits: base };
-      const [a, bien] = await Promise.all([getClientById(compromis.acquereurId), getBienById(compromis.bienId)]);
+      const [a, bien] = await Promise.all([getAcquereurDuWorkspace(compromis.acquereurId, workspaceId), getBienDuWorkspace(compromis.bienId, workspaceId)]);
       return {
         cibleType: cible.type,
         candidats: a ? [versCandidatAcquereur(a)] : [],
@@ -134,7 +139,10 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
     }
 
     case "bien": {
-      const [candidats, bien] = await Promise.all([resoudreDestinatairesDepuisBien(cible.id, workspaceId), getBienById(cible.id)]);
+      const [candidats, bien] = await Promise.all([
+        resoudreDestinatairesDepuisBien(cible.id, workspaceId),
+        getBienDuWorkspace(cible.id, workspaceId),
+      ]);
       return { cibleType: cible.type, candidats, faits: { ...base, bienAdresse: bien?.adresse } };
     }
 

@@ -50,7 +50,7 @@ export type NouvelEnvoiEmail = {
 
 // Démarre une tentative d'envoi — `ON CONFLICT (id) DO NOTHING` : si une ligne existe déjà pour
 // cette clé (double clic, retry réseau, resoumission du même formulaire), retourne `undefined`
-// SANS RIEN ÉCRIRE — l'appelant doit alors relire l'état existant (getEnvoiEmailById) plutôt que
+// SANS RIEN ÉCRIRE — l'appelant doit alors relire l'état existant (getEnvoiEmailDuWorkspace) plutôt
 // de démarrer un nouvel appel Gmail. C'est tout le mécanisme d'idempotence (ADR-031-bis) : aucune
 // fenêtre de temps, aucune heuristique de contenu, uniquement une clé.
 export async function demarrerTentativeEnvoi(input: NouvelEnvoiEmail): Promise<EnvoiEmail | undefined> {
@@ -71,9 +71,17 @@ export async function demarrerTentativeEnvoi(input: NouvelEnvoiEmail): Promise<E
   return ligne ? ligneVersEnvoiEmail(ligne) : undefined;
 }
 
-export async function getEnvoiEmailById(id: string): Promise<EnvoiEmail | undefined> {
+// GLOBAL_READER_GUARD_EXTENSION_V1 — `id` est la CLÉ D'IDEMPOTENCE, fournie par le navigateur.
+// Cette lecture ne portait aucun périmètre alors que la table en a un : un id d'un autre workspace
+// rendait son état (`envoye` / `echec` / `incertain`), c'est-à-dire un oracle sur l'activité
+// d'autrui. Hors périmètre = introuvable, indistinguable d'un id jamais utilisé.
+export async function getEnvoiEmailDuWorkspace(id: string, workspaceId: string): Promise<EnvoiEmail | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
-  const [ligne] = await getDb().select().from(envoisEmailTable).where(eq(envoisEmailTable.id, id)).limit(1);
+  const [ligne] = await getDb()
+    .select()
+    .from(envoisEmailTable)
+    .where(and(eq(envoisEmailTable.id, id), eq(envoisEmailTable.workspaceId, workspaceId)))
+    .limit(1);
   return ligne ? ligneVersEnvoiEmail(ligne) : undefined;
 }
 
@@ -81,10 +89,14 @@ export async function getEnvoiEmailById(id: string): Promise<EnvoiEmail | undefi
 // terminerTache) : la clause WHERE ... IS NULL sur les trois timestamps garantit qu'une ligne déjà
 // résolue (succès, échec ou incertain) ne peut plus jamais être réécrite — retourne `undefined`
 // plutôt qu'un écrasement silencieux.
+// Le périmètre entre dans le MÊME `WHERE` que le gel concurrent : une tentative d'un autre
+// workspace n'est pas « déjà résolue », elle est inatteignable. `colonne` reste le marqueur de
+// transition, inchangé.
 async function resoudreTentative(
   id: string,
   colonne: "reussiLe" | "echoueLe" | "incertainLe",
-  valeurs: Record<string, unknown>
+  valeurs: Record<string, unknown>,
+  workspaceId: string
 ): Promise<EnvoiEmail | undefined> {
   if (!UUID_REGEX.test(id)) return undefined;
   const [ligne] = await getDb()
@@ -93,6 +105,7 @@ async function resoudreTentative(
     .where(
       and(
         eq(envoisEmailTable.id, id),
+        eq(envoisEmailTable.workspaceId, workspaceId),
         isNull(envoisEmailTable.reussiLe),
         isNull(envoisEmailTable.echoueLe),
         isNull(envoisEmailTable.incertainLe)
@@ -121,14 +134,14 @@ export async function listerEnvoisEmailPourTaches(tacheIds: string[]): Promise<E
   return lignes.map(ligneVersEnvoiEmail);
 }
 
-export async function marquerEnvoiReussi(id: string, gmailMessageId: string): Promise<EnvoiEmail | undefined> {
-  return resoudreTentative(id, "reussiLe", { reussiLe: new Date(), gmailMessageId });
+export async function marquerEnvoiReussi(id: string, gmailMessageId: string, workspaceId: string): Promise<EnvoiEmail | undefined> {
+  return resoudreTentative(id, "reussiLe", { reussiLe: new Date(), gmailMessageId }, workspaceId);
 }
 
-export async function marquerEnvoiEchoue(id: string, erreurTechnique: string): Promise<EnvoiEmail | undefined> {
-  return resoudreTentative(id, "echoueLe", { echoueLe: new Date(), erreurTechnique });
+export async function marquerEnvoiEchoue(id: string, erreurTechnique: string, workspaceId: string): Promise<EnvoiEmail | undefined> {
+  return resoudreTentative(id, "echoueLe", { echoueLe: new Date(), erreurTechnique }, workspaceId);
 }
 
-export async function marquerEnvoiIncertain(id: string, erreurTechnique: string): Promise<EnvoiEmail | undefined> {
-  return resoudreTentative(id, "incertainLe", { incertainLe: new Date(), erreurTechnique });
+export async function marquerEnvoiIncertain(id: string, erreurTechnique: string, workspaceId: string): Promise<EnvoiEmail | undefined> {
+  return resoudreTentative(id, "incertainLe", { incertainLe: new Date(), erreurTechnique }, workspaceId);
 }

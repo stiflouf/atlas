@@ -1,6 +1,6 @@
-import { getClientById } from "@/lib/clientRepository";
+import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { listerCompromisPourBien } from "@/lib/compromisRepository";
-import { getProspectVendeurById, getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
+import { getProspectVendeurDuWorkspace, getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import type { ProfilAcquereur } from "@/types/client";
 import type { DocumentBien } from "@/types/documentBien";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
@@ -32,7 +32,7 @@ export async function resoudreDestinatairesDepuisBien(bienId: string, workspaceI
     compromisListe.find((c) => c.statut === "en_cours") ??
     [...compromisListe].sort((a, b) => (a.dateSignature < b.dateSignature ? 1 : -1))[0];
   if (compromisActuel) {
-    const acquereur = await getClientById(compromisActuel.acquereurId);
+    const acquereur = await getAcquereurDuWorkspace(compromisActuel.acquereurId, workspaceId);
     if (acquereur) candidats.push(versCandidatAcquereur(acquereur));
   }
 
@@ -52,11 +52,11 @@ export async function resoudreDestinatairesDepuisDocument(
   workspaceId: string
 ): Promise<DestinataireCandidat[]> {
   if (document?.acquereurId && !document.prospectVendeurId) {
-    const acquereur = await getClientById(document.acquereurId);
+    const acquereur = await getAcquereurDuWorkspace(document.acquereurId, workspaceId);
     if (acquereur) return [versCandidatAcquereur(acquereur)];
   }
   if (document?.prospectVendeurId && !document.acquereurId) {
-    const prospectVendeur = await getProspectVendeurById(document.prospectVendeurId);
+    const prospectVendeur = await getProspectVendeurDuWorkspace(document.prospectVendeurId, workspaceId);
     if (prospectVendeur) return [versCandidatProspectVendeur(prospectVendeur)];
   }
   return resoudreDestinatairesDepuisBien(bienId, workspaceId);

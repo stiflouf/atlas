@@ -1,6 +1,6 @@
 import { getDb } from "@/db/client";
-import { getBienById, listerBiensActifsPersistes } from "@/lib/bienRepository";
-import { getClientById, listerClientsActifsPersistes } from "@/lib/clientRepository";
+import { getBienDuWorkspace, listerBiensActifsPersistes } from "@/lib/bienRepository";
+import { getAcquereurDuWorkspace, listerClientsActifsPersistes } from "@/lib/clientRepository";
 import { listerSecteursPourAcquereur, listerSecteursPourAcquereurs } from "@/lib/secteurRechercheRepository";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { evaluerCompatibilite } from "./evaluerCompatibilite";
@@ -101,7 +101,11 @@ export async function synchroniserCompatibilitesPourBien(
   bienId: string,
   workspaceId: string
 ): Promise<ResultatSynchronisation> {
-  const bien = await getBienById(bienId);
+  // GLOBAL_READER_GUARD_EXTENSION_V1 — le périmètre était déjà en paramètre, la racine se lisait
+  // quand même globalement. La paire (bienId, workspaceId) vient d'une même ligne de la file de
+  // resynchronisation, donc elle est cohérente par construction — mais une file est une donnée,
+  // pas une garantie : la relire scopée coûte le même appel.
+  const bien = await getBienDuWorkspace(bienId, workspaceId);
   // Garde défensive : normalement jamais appelée pour un bien archivé (voir ci-dessus), mais une
   // course avec un archivage concurrent reste possible entre l'enqueue et le traitement — dans ce
   // cas rien à synchroniser ici, l'archivage a déjà posé dans_perimetre_actif = false lui-même.
@@ -134,7 +138,7 @@ export async function synchroniserCompatibilitesPourAcquereur(
   acquereurId: string,
   workspaceId: string
 ): Promise<ResultatSynchronisation> {
-  const acquereur = await getClientById(acquereurId);
+  const acquereur = await getAcquereurDuWorkspace(acquereurId, workspaceId);
   if (!acquereur || acquereur.archiveLe) return { pairesTraitees: 0, evenementsEmis: 0, erreurs: [] };
 
   const [biens, secteursRecherche, profil] = await Promise.all([

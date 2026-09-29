@@ -4,8 +4,8 @@
 // Dupliquer cette résolution laisserait dériver deux vérités sur « quels faits sont légitimes pour
 // cet écran », exactement ce que le lot doit empêcher.
 
-import { getTacheById, listerTachesDuWorkspace } from "@/lib/tacheRepository";
-import { getBienById, listerBiensActifsDuWorkspace } from "@/lib/bienRepository";
+import { getTacheDuWorkspace, listerTachesDuWorkspace } from "@/lib/tacheRepository";
+import { getBienDuWorkspace, listerBiensActifsDuWorkspace } from "@/lib/bienRepository";
 import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { listerVisitesPourAcquereur } from "@/lib/visiteRepository";
 import { listerComptesRendusDuWorkspace } from "@/lib/compteRenduVisiteRepository";
@@ -69,8 +69,12 @@ export function trouverCandidatChoisi(candidats: DestinataireCandidat[], valeur:
   return candidats.find((c) => c.type === type && c.id === id);
 }
 
+// GLOBAL_READER_GUARD_EXTENSION_V1 — `bienId` arrive des searchParams : il n'est jamais un fait.
+// Ce module lisait la racine par un reader GLOBAL alors qu'il tenait déjà le périmètre en
+// paramètre. Il était hors de portée de la garde des lecteurs unitaires, qui ne scannait que
+// `app/**` et `actions/**` — c'est cet angle mort que le lot referme.
 async function chargerContexteDossier(bienId: string, workspaceId: string) {
-  const bien = await getBienById(bienId);
+  const bien = await getBienDuWorkspace(bienId, workspaceId);
   if (!bien) return undefined;
   const documents = await listerDocumentsPourBien(bien.id);
   const compromis = await listerCompromisPourBien(bien.id, workspaceId);
@@ -81,8 +85,11 @@ async function chargerContexteDossier(bienId: string, workspaceId: string) {
   return { bien, documents, compromisActuel, prospectVendeurOrigine };
 }
 
+// `tacheId` vient lui aussi des searchParams. Une tâche d'un autre workspace est INTROUVABLE :
+// l'écran retombe sur le même « contexte non résolu » qu'un id inexistant, sans jamais révéler le
+// titre de la tâche, le nom du destinataire ni son adresse email.
 async function resoudreDepuisTache(tacheId: string, workspaceId: string): Promise<ResultatContexte | undefined> {
-  const tache = await getTacheById(tacheId);
+  const tache = await getTacheDuWorkspace(tacheId, workspaceId);
   if (!tache) return undefined;
   const { cibleType, candidats, faits } = await resoudreContexteCommunicationDepuisTache(tache, workspaceId);
   return {

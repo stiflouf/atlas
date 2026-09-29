@@ -162,7 +162,7 @@ async function unEnvoiGmail(contactId: string, objet: string, survenuLe: string,
     bienId,
   });
   idsEnvois.push(envoi!.id);
-  await marquerEnvoiReussi(envoi!.id, gmailMessageId);
+  await marquerEnvoiReussi(envoi!.id, gmailMessageId, WORKSPACE_TEST);
   const interaction = await creerInteraction({ contactId, type: "email", sens: "sortant", survenuLe });
   await enregistrerReferenceExterne(
     { fournisseur: "gmail", typeEntiteExterne: "message", idExterne: gmailMessageId, cible: { type: "interaction", id: interaction.id } },
