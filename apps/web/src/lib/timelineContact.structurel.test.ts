@@ -12,16 +12,17 @@ const codeSeul = (chemin: string) => lire(chemin).replace(/\/\*[\s\S]*?\*\//g, "
 
 describe("CRM_TIMELINE_V1 — read model, jamais une table", () => {
   // Le compteur est une TRIPWIRE volontaire : il oblige quiconque ajoute une migration à venir dire
-  // ici qu'elle n'est pas celle de ce lot. Dernier passage : WORKSPACE_SCOPING_V2D2 (0056,
-  // `identite_sub` sur `connexions_google`) — le rattachement du secret OAuth à une personne, sans
+  // ici qu'elle n'est pas celle de ce lot. Dernier passage : FISCAL_IDENTITY_OWNERSHIP_V1 (0057,
+  // `identite_sub` sur `dossier_fiscal` et bénéficiaire sur `remuneration`) — le rattachement du dossier
+  // fiscal personnel à une personne, sans
   // aucun rapport avec l'historique de contact, qui reste un read model sans table ni migration.
-  it("aucune table timeline dans le schéma, aucune migration ajoutée (57 fichiers SQL, dernière = 0056)", () => {
+  it("aucune table timeline dans le schéma, aucune migration ajoutée (58 fichiers SQL, dernière = 0057)", () => {
     const schema = lire("db/schema.ts");
     expect(schema).not.toMatch(/pgTable\(\s*"(timeline|historique_contact|historique_echange)/i);
     expect(schema).not.toMatch(/timeline_contact|historique_contact|timelineContact/);
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrations).toHaveLength(57);
-    expect(migrations[migrations.length - 1]).toBe("0056_google_connection_per_identity.sql");
+    expect(migrations).toHaveLength(58);
+    expect(migrations[migrations.length - 1]).toBe("0057_fiscal_identity_ownership.sql");
   });
 
   it("le read model lit les deux sources bornées, trie en mémoire, et n'écrit jamais", () => {

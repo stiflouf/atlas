@@ -1,4 +1,4 @@
-import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
+import { obtenirDossierFiscalDeLIdentite } from "@/lib/dossierFiscalRepository";
 import { chargerProfilFiscalActuel } from "@/lib/profilFiscalRepository";
 import { calculerAssietteAnnuelle } from "@/lib/fiscal/assietteAnnuelle";
 import { calculerCotisationsSociales } from "@/lib/fiscal/cotisationsSociales";
@@ -54,14 +54,16 @@ export type ContexteAlertes = {
 // affiché des chiffres calculés sur des périmètres différents. Le volet FISCAL PERSONNEL
 // (dossier, profil, RFR, règles) reste mono-dossier par conception : ce lot ne touche qu'aux
 // données d'ACTIVITÉ immobilière qui alimentent les projections.
-export async function chargerContexteAlertes(workspaceId: string): Promise<ContexteAlertes> {
-  const dossierFiscalId = await obtenirDossierFiscalDefaut();
+// FISCAL_IDENTITY_OWNERSHIP_V1 — deux périmètres, jamais confondus : `workspaceId` borne
+// l'activité de l'agence (rémunération du dashboard), `identiteSub` borne le fiscal PERSONNEL.
+export async function chargerContexteAlertes(workspaceId: string, identiteSub: string): Promise<ContexteAlertes> {
+  const dossierFiscalId = await obtenirDossierFiscalDeLIdentite(identiteSub);
   const anneeCourante = new Date().getFullYear();
 
   const [profil, remuneration, projectionAnnuelle] = await Promise.all([
     chargerProfilFiscalActuel(dossierFiscalId),
     chargerRemuneration(workspaceId),
-    chargerProjectionAnnuelle(workspaceId),
+    chargerProjectionAnnuelle({ type: "workspace", workspaceId }),
   ]);
 
   let fiscal: ContexteFiscalAlertes | undefined;
@@ -77,15 +79,15 @@ export async function chargerContexteAlertes(workspaceId: string): Promise<Conte
       runRate,
       projectionsPluriannuelles,
     ] = await Promise.all([
-      calculerAssietteAnnuelle(dossierFiscalId, anneeCourante),
-      calculerCotisationsSociales(dossierFiscalId, anneeCourante),
-      calculerCfp(dossierFiscalId, anneeCourante),
-      calculerVersementLiberatoire(dossierFiscalId, anneeCourante),
+      calculerAssietteAnnuelle(dossierFiscalId, anneeCourante, identiteSub),
+      calculerCotisationsSociales(dossierFiscalId, anneeCourante, identiteSub),
+      calculerCfp(dossierFiscalId, anneeCourante, identiteSub),
+      calculerVersementLiberatoire(dossierFiscalId, anneeCourante, identiteSub),
       verifierEligibiliteRfr(dossierFiscalId, anneeCourante),
-      calculerMicroBnc(dossierFiscalId, anneeCourante),
-      calculerFranchiseTva(dossierFiscalId, anneeCourante),
-      evaluerRunRate(dossierFiscalId),
-      calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, workspaceId, HORIZON_PROJECTION_ANNEES),
+      calculerMicroBnc(dossierFiscalId, anneeCourante, identiteSub),
+      calculerFranchiseTva(dossierFiscalId, anneeCourante, identiteSub),
+      evaluerRunRate(dossierFiscalId, identiteSub),
+      calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, identiteSub, HORIZON_PROJECTION_ANNEES),
     ]);
     fiscal = {
       dossierFiscalId,

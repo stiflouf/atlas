@@ -16,8 +16,14 @@ export const resoudreCode: ResoudreCode = (profil) =>
 // moyen. Le résultat "calcule" peut porter une provenance dont statutVerification === "a_confirmer"
 // (c'est le cas de ce code) — à l'UI de le signaler, le moteur ne refuse pas de calculer pour ce
 // motif (seule l'absence totale de règle applicable bloque).
-export async function calculerCfp(dossierFiscalId: string, annee: number): Promise<ResultatFiscal<number>> {
-  const { assiette, tranches } = await resoudreAssietteAnnuelle(dossierFiscalId, annee);
+// FISCAL_IDENTITY_OWNERSHIP_V1 — `identiteSub` transporte l'assiette PERSONNELLE ; la règle
+// fiscale appliquée, elle, ne change pas (barèmes légaux, globaux par nature).
+export async function calculerCfp(
+  dossierFiscalId: string,
+  annee: number,
+  identiteSub: string
+): Promise<ResultatFiscal<number>> {
+  const { assiette, tranches } = await resoudreAssietteAnnuelle(dossierFiscalId, annee, identiteSub);
   const issues = await Promise.all(
     tranches.map((tranche) => resoudreTrancheAvecTaux(dossierFiscalId, annee, tranche, CATEGORIE_ACTIVITE, resoudreCode))
   );

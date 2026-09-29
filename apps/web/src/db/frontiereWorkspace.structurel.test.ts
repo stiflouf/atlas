@@ -845,6 +845,122 @@ describe("Frontière d'identité — connexion Google personnelle", () => {
   });
 });
 
+// ───────────────── 4quater. FRONTIÈRE FISCALE PERSONNELLE ─────────────────
+
+// FISCAL_IDENTITY_OWNERSHIP_V1 (ADR-054 §6 bis, ADR-023 §1) — le dossier fiscal appartient à une
+// PERSONNE, jamais à un workspace. Deux défauts distincts sont verrouillés ici, parce qu'ils se
+// réintroduisent de deux façons différentes :
+//
+//   1. le SINGLETON : un dossier résolu sans dire de qui (`obtenirDossierFiscalDefaut()`,
+//      `id = 'default'`) — deux conseillers partageaient alors un régime micro-BNC, une option TVA
+//      et un revenu fiscal de référence de FOYER, et la saisie de l'un écrasait celle de l'autre ;
+//   2. l'ASSIETTE GLOBALE : un calcul fiscal personnel alimenté par un lecteur d'encaissements sans
+//      bénéficiaire — le dossier serait nominativement personnel, mais nourri du chiffre d'affaires
+//      de tout le monde.
+const REPOSITORY_DOSSIER_FISCAL = "lib/dossierFiscalRepository.ts";
+
+// Lecteurs d'encaissements SANS bénéficiaire. Ils restent légitimes hors du fiscal (le dashboard
+// montre l'activité d'un workspace, pas le revenu d'une personne) : ce qui est interdit, c'est leur
+// usage depuis `lib/fiscal/**`.
+const LECTEURS_ENCAISSEMENTS_GLOBAUX = ["listerEncaissementsAnnee", "listerEncaissementsDepuis"];
+
+const MODULES_FISCAUX = listerFichiers(
+  join(SRC, "lib", "fiscal"),
+  (c) => /\.ts$/.test(c) && !/\.test\.ts$/.test(c)
+).map((chemin) => relative(SRC, chemin).split(sep).join("/"));
+
+describe("Frontière d'identité — dossier fiscal personnel", () => {
+  const sourceDossier = () => codeSeul(join(SRC, ...REPOSITORY_DOSSIER_FISCAL.split("/")));
+
+  it("toute fonction exportée du repository fiscal exige une identité", () => {
+    const sansIdentite: string[] = [];
+    for (const bloc of sourceDossier().split(/(?=export async function )/)) {
+      const nom = /^export async function (\w+)/.exec(bloc)?.[1];
+      if (!nom) continue;
+      const signature = bloc.slice(0, bloc.indexOf("): "));
+      if (!/identiteSub: string/.test(signature)) sansIdentite.push(`${REPOSITORY_DOSSIER_FISCAL} → ${nom}`);
+      expect(signature, `${nom} : identiteSub ne doit jamais être optionnel`).not.toContain("identiteSub?");
+    }
+    expect(sansIdentite).toEqual([]);
+  });
+
+  it("le singleton fiscal ne peut pas revenir", () => {
+    const source = sourceDossier();
+    expect(source, "obtenirDossierFiscalDefaut résolvait « le » dossier sans dire de qui").not.toContain(
+      "obtenirDossierFiscalDefaut"
+    );
+    // Ciblé : le littéral qui SERVAIT d'identité au dossier. On ne bannit pas toutes les chaînes
+    // "default" du dépôt — le workspace historique porte légitimement cet identifiant.
+    expect(source, "aucun dossier fiscal ne s'identifie par un littéral").not.toMatch(/["'`]default["'`]/);
+    expect(source, "DOSSIER_FISCAL_ID_DEFAUT était la constante du singleton").not.toContain(
+      "DOSSIER_FISCAL_ID_DEFAUT"
+    );
+  });
+
+  it("toute lecture du dossier fiscal porte l'identité", () => {
+    const fautifs: string[] = [];
+    for (const instruction of sourceDossier().split(";")) {
+      if (!/\.from\(dossierFiscalTable\)/.test(instruction)) continue;
+      if (!/dossierFiscalTable\.identiteSub/.test(instruction)) {
+        fautifs.push(
+          `${REPOSITORY_DOSSIER_FISCAL} : lecture de dossier_fiscal sans eq(dossierFiscalTable.identiteSub, ...) — ` +
+            `un dossier fiscal atteint sans identité est l'ancien singleton.`
+        );
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  it("aucun module fiscal n'utilise un lecteur d'encaissements sans bénéficiaire", () => {
+    const fautifs: string[] = [];
+    for (const relatif of MODULES_FISCAUX) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      for (const lecteur of LECTEURS_ENCAISSEMENTS_GLOBAUX) {
+        // `listerEncaissementsAnneePourIdentite` contient `listerEncaissementsAnnee` : on exige donc
+        // que le nom ne soit PAS suivi de `PourIdentite`.
+        if (new RegExp(`\\b${lecteur}\\b(?!PourIdentite)`).test(source)) {
+          fautifs.push(
+            `${relatif} → ${lecteur} : une assiette fiscale personnelle ne peut pas être alimentée par ` +
+              `un lecteur sans bénéficiaire — utiliser ${lecteur}PourIdentite(identiteSub, ...).`
+          );
+        }
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  it("tout module fiscal qui lit des encaissements porte une identité", () => {
+    const fautifs: string[] = [];
+    for (const relatif of MODULES_FISCAUX) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      if (!/listerEncaissements\w*PourIdentite/.test(source)) continue;
+      if (!/identiteSub/.test(source)) fautifs.push(`${relatif} : lit des encaissements sans porter identiteSub`);
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  // Capacité de détection, sur des sources fabriquées : une garde qui ne ferait que constater
+  // l'état du dépôt passerait encore si elle était vide.
+  it("détecte un singleton fiscal et un lecteur d'encaissements global réintroduits", () => {
+    const fauxSingleton = `const id = "default"; await obtenirDossierFiscalDefaut();`;
+    expect(/["'\`]default["'\`]/.test(fauxSingleton)).toBe(true);
+    expect(fauxSingleton.includes("obtenirDossierFiscalDefaut")).toBe(true);
+
+    const fauxCalcul = `const e = await listerEncaissementsAnnee(annee);`;
+    const detecte = LECTEURS_ENCAISSEMENTS_GLOBAUX.filter((l) =>
+      new RegExp(`\\b${l}\\b(?!PourIdentite)`).test(fauxCalcul)
+    );
+    expect(detecte).toEqual(["listerEncaissementsAnnee"]);
+
+    // …et la forme scopée ne doit PAS être détectée comme fautive.
+    const vraiCalcul = `const e = await listerEncaissementsAnneePourIdentite(identiteSub, annee);`;
+    const fauxPositifs = LECTEURS_ENCAISSEMENTS_GLOBAUX.filter((l) =>
+      new RegExp(`\\b${l}\\b(?!PourIdentite)`).test(vraiCalcul)
+    );
+    expect(fauxPositifs).toEqual([]);
+  });
+});
+
 // ───────────────── 5. MOTEUR D'AUTOMATISATION MULTI-WORKSPACE ─────────────────
 
 // WORKSPACE_SCOPING_V2B5 — les quatre gardes précédentes raisonnent sur des lectures et des

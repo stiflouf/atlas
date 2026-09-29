@@ -115,14 +115,14 @@ describe("VISIT_NATIVE_ENTRY_V1 — gardes structurelles", () => {
 
   // Même tripwire volontaire que timelineContact.structurel.test.ts : le compteur force tout lot
   // qui ajoute une migration à confirmer ici qu'elle ne vient pas de celui-ci. Dernier passage :
-  // WORKSPACE_SCOPING_V2D2 (0056, `identite_sub` sur `connexions_google`). Ce lot touche bien les
-  // chemins Google que la préparation de visite emprunte, mais sa migration ne porte que sur le
-  // rattachement du secret OAuth à une identité : aucune colonne de `visites`, aucun BuyerProject.
+  // FISCAL_IDENTITY_OWNERSHIP_V1 (0057, dossier fiscal par identité). Ce lot ne touche ni les
+  // Visites ni un quelconque BuyerProject : sa migration ne porte que sur `dossier_fiscal` et
+  // `remuneration`.
   it("aucun BuyerProject, aucune migration ajoutée par ce lot", () => {
     const fichiers = readdirSync(join(SRC, "lib")).concat(readdirSync(join(SRC, "actions")), readdirSync(join(SRC, "types")));
     expect(fichiers.filter((f) => /buyerProject/i.test(f))).toEqual([]);
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql"));
-    expect(migrations.length).toBe(57);
-    expect(migrations.at(-1)).toBe("0056_google_connection_per_identity.sql");
+    expect(migrations.length).toBe(58);
+    expect(migrations.at(-1)).toBe("0057_fiscal_identity_ownership.sql");
   });
 });

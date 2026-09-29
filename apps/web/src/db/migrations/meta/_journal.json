@@ -400,6 +400,13 @@
       "when": 1790672449064,
       "tag": "0056_google_connection_per_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1790758849064,
+      "tag": "0057_fiscal_identity_ownership",
+      "breakpoints": true
     }
   ]
 }

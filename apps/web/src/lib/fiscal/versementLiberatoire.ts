@@ -75,9 +75,10 @@ async function resoudreTrancheVfl(
 // n'intervient jamais ici (voir verifierEligibiliteRfr, fonction séparée ci-dessous).
 export async function calculerVersementLiberatoire(
   dossierFiscalId: string,
-  annee: number
+  annee: number,
+  identiteSub: string
 ): Promise<ResultatFiscal<number>> {
-  const { assiette, tranches } = await resoudreAssietteAnnuelle(dossierFiscalId, annee);
+  const { assiette, tranches } = await resoudreAssietteAnnuelle(dossierFiscalId, annee, identiteSub);
   const resolutions = await Promise.all(tranches.map((tranche) => resoudreTrancheVfl(dossierFiscalId, annee, tranche)));
   const issues = resolutions.filter((r): r is IssueTranche => r !== undefined);
   return construireResultatFiscal(assiette, issues);

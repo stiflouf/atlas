@@ -21,12 +21,21 @@ import { eq } from "drizzle-orm";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — l'action résout son dossier par le `sub` de la session mockée
+// ci-dessus. Le littéral "default" n'existe plus : c'était l'ancien singleton.
+const SUB_SESSION_TEST = "test-sub";
+
+async function dossierDeLaSession(): Promise<string> {
+  const { obtenirDossierFiscalDeLIdentite } = await import("@/lib/dossierFiscalRepository");
+  return obtenirDossierFiscalDeLIdentite(SUB_SESSION_TEST);
+}
+
 const { getDb } = await import("@/db/client");
 const { rfrFoyer: rfrFoyerTable } = await import("@/db/schema");
 const { enregistrerRfrFoyerAction } = await import("./rfrFoyer");
 
 afterAll(async () => {
-  await getDb().delete(rfrFoyerTable).where(eq(rfrFoyerTable.dossierFiscalId, "default"));
+  await getDb().delete(rfrFoyerTable).where(eq(rfrFoyerTable.dossierFiscalId, await dossierDeLaSession()));
 });
 
 const ETAT_FORMULAIRE_INITIAL = { statut: "idle" } as const;

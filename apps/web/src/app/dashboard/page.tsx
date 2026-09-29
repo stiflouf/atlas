@@ -171,7 +171,7 @@ export default async function DashboardPage() {
     chargerDelais(workspaceId),
     chargerPertes(workspaceId),
     chargerRemuneration(workspaceId),
-    chargerProjectionAnnuelle(workspaceId),
+    chargerProjectionAnnuelle({ type: "workspace", workspaceId }),
     chargerPipelineVendeur(workspaceId),
   ]);
 

@@ -68,6 +68,9 @@ function uuidDemo(index) {
 // Clés de stockage déterministes (fichiers physiques) : préfixées, jamais un UUID aléatoire, donc
 // localisables, recréables et supprimables — même arborescence que src/lib/stockageDocuments.ts et
 // src/lib/stockagePhotosBien.ts (racine, photos/originaux, photos/optimisees/<cle>.webp).
+// Identité de démonstration : jamais un `sub` Google réel. Préfixée comme les clés de stockage.
+const BENEFICIAIRE_DEMO = "demo-seed-beneficiaire";
+
 function cleStockageDemo(nom) {
   return `demo-seed-${nom}`;
 }
@@ -468,8 +471,12 @@ export function construireDataset(maintenant) {
     { id: c1, bienId: b2, acquereurId: a4, offreId: IDS.offres.acceptee, prixConvenu: 730_000, dateSignature: jour(maintenant, -2), dateActe: jour(maintenant, 75), dateActeReelle: null, dateAnnulation: null, motifAnnulation: null, statut: "en_cours", creeLe: instant(maintenant, -2, 14) },
   ];
   // Honoraires 3 % du prix convenu, part conseiller 70 % — montants en centimes entiers.
+  // FISCAL_IDENTITY_OWNERSHIP_V1 — le bénéficiaire est une identité de DÉMONSTRATION explicite.
+  // Le seed ne lit jamais `workspace_membres` : il tourne sur une base vierge, avant toute
+  // connexion, donc aucune identité réelle n'existe encore. Lui en inventer une serait pire
+  // qu'inutile — ces honoraires ne sont ceux de personne, et le nom le dit.
   const remunerations = [
-    { id: r1, compromisId: c1, montantHonorairesTotalCentimes: 2_190_000, montantRemunerationConseillerCentimes: 1_533_000, dateEncaissementPrevue: jour(maintenant, 75), dateEncaissementReelle: null, creeLe: instant(maintenant, -2, 14) },
+    { id: r1, compromisId: c1, beneficiaireIdentiteSub: BENEFICIAIRE_DEMO, montantHonorairesTotalCentimes: 2_190_000, montantRemunerationConseillerCentimes: 1_533_000, dateEncaissementPrevue: jour(maintenant, 75), dateEncaissementReelle: null, creeLe: instant(maintenant, -2, 14) },
   ];
 
   // Tâches manuelles : une en retard, une aujourd'hui, deux à venir, une terminée — assez pour
@@ -1019,8 +1026,8 @@ async function insererDataset(sql, dataset, faits, workspaceId) {
   }
   for (const r of dataset.remunerations) {
     await sql`
-      insert into remuneration (id, compromis_id, montant_honoraires_total_centimes, montant_remuneration_conseiller_centimes, date_encaissement_prevue, date_encaissement_reelle, cree_le)
-      values (${r.id}, ${r.compromisId}, ${r.montantHonorairesTotalCentimes}, ${r.montantRemunerationConseillerCentimes}, ${r.dateEncaissementPrevue}, ${r.dateEncaissementReelle}, ${r.creeLe})`;
+      insert into remuneration (id, compromis_id, beneficiaire_identite_sub, montant_honoraires_total_centimes, montant_remuneration_conseiller_centimes, date_encaissement_prevue, date_encaissement_reelle, cree_le)
+      values (${r.id}, ${r.compromisId}, ${r.beneficiaireIdentiteSub}, ${r.montantHonorairesTotalCentimes}, ${r.montantRemunerationConseillerCentimes}, ${r.dateEncaissementPrevue}, ${r.dateEncaissementReelle}, ${r.creeLe})`;
   }
 
   for (const t of dataset.taches) {

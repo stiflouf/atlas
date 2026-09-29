@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
+import { obtenirDossierFiscalDeLIdentite } from "@/lib/dossierFiscalRepository";
 import { enregistrerHistoriqueAmorcage } from "@/lib/historiqueAmorcageRepository";
 import { parseMontantCentimes } from "@/types/remuneration";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -13,7 +13,7 @@ import { ErreurSaisie, avecFeedbackFormulaire, type EtatFormulaire } from "@/lib
 // demandée (voir schema.ts, historique_amorcage) — seul le formulaire de l'année en cours expose
 // réellement le champ.
 export async function enregistrerHistoriqueAmorcageAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
-  await exigerSessionAtlas();
+  const session = await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
     const anneeEnCours = new Date().getFullYear();
     const annee = Number(formData.get("annee"));
@@ -35,7 +35,7 @@ export async function enregistrerHistoriqueAmorcageAction(_etatPrecedent: EtatFo
       throw new ErreurSaisie("La date de fin de couverture doit tomber dans l'année déclarée.");
     }
 
-    const dossierFiscalId = await obtenirDossierFiscalDefaut();
+    const dossierFiscalId = await obtenirDossierFiscalDeLIdentite(session.sub);
     await enregistrerHistoriqueAmorcage(dossierFiscalId, annee, montantEncaisseCentimes, dateFinCouverture);
 
     redirect("/fiscal");

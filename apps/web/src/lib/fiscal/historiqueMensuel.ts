@@ -1,5 +1,5 @@
 import { chargerHistoriqueAmorcage } from "@/lib/historiqueAmorcageRepository";
-import { listerEncaissementsDepuis } from "@/lib/remunerationRepository";
+import { listerEncaissementsDepuisPourIdentite } from "@/lib/remunerationRepository";
 import { lendemain } from "@/lib/fiscal/assietteAnnuelle";
 
 export type MoisHistorique = { mois: string; montantCentimes: number }; // mois au format "YYYY-MM"
@@ -30,7 +30,12 @@ function ajouterUnMois(moisIso: string): string {
 // partiel ne compte pas — le premier mois garanti est alors le suivant. Absence totale de ligne
 // historique_amorcage = aucune frontière garantie = aucun mois ne compte, quel que soit le volume de
 // faits Atlas disponibles (même principe que resoudreAssietteAnnuelle, ADR-024).
-export async function chargerHistoriqueMensuel(dossierFiscalId: string): Promise<MoisHistorique[]> {
+// FISCAL_IDENTITY_OWNERSHIP_V1 — même séparation que l'assiette : le dossier porte l'amorçage,
+// l'identité porte les encaissements.
+export async function chargerHistoriqueMensuel(
+  dossierFiscalId: string,
+  identiteSub: string
+): Promise<MoisHistorique[]> {
   const lignesAmorcage = await chargerHistoriqueAmorcage(dossierFiscalId);
   if (lignesAmorcage.length === 0) return [];
 
@@ -46,7 +51,7 @@ export async function chargerHistoriqueMensuel(dossierFiscalId: string): Promise
   const dernierMoisEcoule = moisPrecedent(moisDe(aujourdHuiIso()));
   if (premierMoisGaranti > dernierMoisEcoule) return [];
 
-  const encaissements = await listerEncaissementsDepuis(`${premierMoisGaranti}-01`);
+  const encaissements = await listerEncaissementsDepuisPourIdentite(identiteSub, `${premierMoisGaranti}-01`);
   const sommesParMois = new Map<string, number>();
   for (const e of encaissements) {
     const cle = moisDe(e.dateEncaissementReelle);

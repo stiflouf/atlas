@@ -4,6 +4,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -82,19 +84,19 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: dossierFiscalId, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, date);
 }
 
 describe("chargerHistoriqueMensuel — correction obligatoire n° 2 (série zero-remplie, frontière garantie)", () => {
   it("aucune ligne historique_amorcage : aucune frontière garantie, série vide", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_ZERO_LIGNE }).onConflictDoNothing();
-    const serie = await chargerHistoriqueMensuel(DOSSIER_ZERO_LIGNE);
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_ZERO_LIGNE, identiteSub: DOSSIER_ZERO_LIGNE }).onConflictDoNothing();
+    const serie = await chargerHistoriqueMensuel(DOSSIER_ZERO_LIGNE, DOSSIER_ZERO_LIGNE);
     expect(serie).toEqual([]);
   });
 
   it("amorçage confirmé au dernier jour d'un mois : le mois suivant est entièrement garanti, zero-rempli pour les mois sans encaissement", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_LIMITE }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_LIMITE, identiteSub: DOSSIER_LIMITE }).onConflictDoNothing();
     // Frontière au dernier jour du mois M-7 : les 6 mois M-6 à M-1 sont entièrement garantis
     // (M = mois courant, jamais inclus car pas encore entièrement écoulé).
     const moisFrontiere = ajouterMois(moisCourant, -7);
@@ -109,7 +111,7 @@ describe("chargerHistoriqueMensuel — correction obligatoire n° 2 (série zero
     await creerEncaissement(DOSSIER_LIMITE, "001", 100000, `${moisM6}-10`);
     await creerEncaissement(DOSSIER_LIMITE, "002", 200000, `${moisM4}-20`);
 
-    const serie = await chargerHistoriqueMensuel(DOSSIER_LIMITE);
+    const serie = await chargerHistoriqueMensuel(DOSSIER_LIMITE, DOSSIER_LIMITE);
     expect(serie.map((m) => m.mois)).toEqual([
       ajouterMois(moisCourant, -6),
       ajouterMois(moisCourant, -5),
@@ -126,12 +128,12 @@ describe("chargerHistoriqueMensuel — correction obligatoire n° 2 (série zero
   });
 
   it("amorçage confirmé en milieu de mois : ce mois-là ne compte pas, le suivant est le premier garanti", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_MILIEU }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_MILIEU, identiteSub: DOSSIER_MILIEU }).onConflictDoNothing();
     const moisFrontiere = ajouterMois(moisCourant, -7);
     // Le 15 du mois, pas le dernier jour : le mois frontière reste partiel.
     await enregistrerHistoriqueAmorcage(DOSSIER_MILIEU, Number(moisFrontiere.slice(0, 4)), 0, `${moisFrontiere}-15`);
 
-    const serie = await chargerHistoriqueMensuel(DOSSIER_MILIEU);
+    const serie = await chargerHistoriqueMensuel(DOSSIER_MILIEU, DOSSIER_MILIEU);
     // Le mois frontière (-7) ne doit jamais apparaître ; le premier mois garanti est -6, comme dans
     // le test précédent où la frontière tombait exactement à la fin du mois -7.
     expect(serie[0]?.mois).toBe(ajouterMois(moisCourant, -6));

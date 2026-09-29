@@ -28,6 +28,9 @@ import { ETAT_FORMULAIRE_INITIAL } from "@/lib/formulaires/etatFormulaire";
 // contrairement à un compromis en_cours.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — bénéficiaire des honoraires dans ces fixtures.
+const BENEFICIAIRE_TEST = "sub-beneficiaire-test";
+
 const { getDb } = await import("@/db/client");
 const {
   biens: biensTable,
@@ -174,6 +177,7 @@ describe("ajouterRemunerationAction — garde-fous", () => {
     const { compromis } = await creerCompromisDeTest("DOUBLON");
     const premiere = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(premiere.id);
@@ -192,6 +196,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
     await marquerCompromisRealise(compromis.id, "2026-09-01");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);
@@ -208,6 +213,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
     const { bien, compromis } = await creerCompromisDeTest("MODIF-EN-COURS-ARCHIVE");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);
@@ -225,6 +231,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
     await marquerCompromisRealise(compromis.id, "2026-09-01");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
       montantHonorairesTotalCentimes: 500000,
     });
@@ -243,6 +250,7 @@ describe("modifierRemunerationAction — garde-fous", () => {
     const { compromis } = await creerCompromisDeTest("MODIF-HONORAIRES-VIDE");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
       montantHonorairesTotalCentimes: 500000,
     });
@@ -262,6 +270,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     const { compromis } = await creerCompromisDeTest("ENCAISSE-EN-COURS");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);
@@ -277,6 +286,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     const { compromis } = await creerCompromisDeTest("ENCAISSE-SANS-DATE-ACTE");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);
@@ -296,6 +306,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     await marquerCompromisRealise(compromis.id, "2026-09-01");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);
@@ -314,6 +325,7 @@ describe("marquerRemunerationEncaisseeAction — garde-fous", () => {
     await marquerCompromisRealise(compromis.id, "2026-09-01");
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(r.id);

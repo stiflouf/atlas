@@ -16,6 +16,7 @@ function ligneVersRemuneration(ligne: LigneRemuneration): Remuneration {
   return {
     id: ligne.id,
     compromisId: ligne.compromisId,
+    beneficiaireIdentiteSub: ligne.beneficiaireIdentiteSub,
     montantHonorairesTotalCentimes: ligne.montantHonorairesTotalCentimes ?? undefined,
     montantRemunerationConseillerCentimes: ligne.montantRemunerationConseillerCentimes,
     dateEncaissementPrevue: ligne.dateEncaissementPrevue ?? undefined,
@@ -40,6 +41,64 @@ export async function listerRemunerationsPourBien(bienId: string): Promise<Remun
     console.error("[remuneration] lecture Postgres indisponible :", erreur);
     return [];
   }
+}
+
+// FISCAL_IDENTITY_OWNERSHIP_V1 — les encaissements d'UNE PERSONNE, ceux dont elle est le
+// BÉNÉFICIAIRE. C'est la seule assiette correcte pour un dossier fiscal personnel, et c'est
+// pourquoi le filtre porte sur `beneficiaire_identite_sub` et sur rien d'autre :
+//
+//   - pas le workspace COURANT : une assiette fiscale ne dépend pas du périmètre dans lequel on
+//     navigue au moment où l'on consulte l'écran ;
+//   - pas la LISTE des workspaces de l'identité : ce serait juste tant qu'un workspace n'a qu'un
+//     membre, et faux en silence au premier assistant ajouté — en produisant un montant d'impôt
+//     erroné plutôt qu'une erreur.
+//
+// Les deux lecteurs globaux ci-dessous (`listerEncaissementsAnnee`/`Depuis`) restent exportés pour
+// leurs usages non fiscaux ; une garde structurelle interdit de les rappeler depuis `lib/fiscal/**`.
+export async function listerEncaissementsAnneePourIdentite(
+  identiteSub: string,
+  annee: number
+): Promise<EncaissementAnnee[]> {
+  const lignes = await getDb()
+    .select({
+      montantCentimes: remunerationTable.montantRemunerationConseillerCentimes,
+      dateEncaissementReelle: remunerationTable.dateEncaissementReelle,
+    })
+    .from(remunerationTable)
+    .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(
+      and(
+        eq(remunerationTable.beneficiaireIdentiteSub, identiteSub),
+        eq(compromisTable.statut, "realise"),
+        between(remunerationTable.dateEncaissementReelle, `${annee}-01-01`, `${annee}-12-31`)
+      )
+    );
+  return lignes
+    .filter((l): l is { montantCentimes: number; dateEncaissementReelle: string } => l.dateEncaissementReelle !== null)
+    .sort((a, b) => a.dateEncaissementReelle.localeCompare(b.dateEncaissementReelle));
+}
+
+export async function listerEncaissementsDepuisPourIdentite(
+  identiteSub: string,
+  dateDebut: string
+): Promise<EncaissementAnnee[]> {
+  const lignes = await getDb()
+    .select({
+      montantCentimes: remunerationTable.montantRemunerationConseillerCentimes,
+      dateEncaissementReelle: remunerationTable.dateEncaissementReelle,
+    })
+    .from(remunerationTable)
+    .innerJoin(compromisTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .where(
+      and(
+        eq(remunerationTable.beneficiaireIdentiteSub, identiteSub),
+        eq(compromisTable.statut, "realise"),
+        gte(remunerationTable.dateEncaissementReelle, dateDebut)
+      )
+    );
+  return lignes
+    .filter((l): l is { montantCentimes: number; dateEncaissementReelle: string } => l.dateEncaissementReelle !== null)
+    .sort((a, b) => a.dateEncaissementReelle.localeCompare(b.dateEncaissementReelle));
 }
 
 // ADR-024. Encaissements réels de l'année, toutes fiches confondues, biens archivés inclus (même
@@ -102,11 +161,15 @@ export async function getRemunerationParCompromis(compromisId: string): Promise<
 // Validation (compromis non annulé, archivage, absence de doublon) déjà faite par l'appelant (Server
 // Action) — insertion pure ici. L'unicité compromisId est garantie par la contrainte UNIQUE en base
 // (doublon ⇒ erreur Postgres remontée telle quelle, pas de garde applicative dupliquée).
+// FISCAL_IDENTITY_OWNERSHIP_V1 — `beneficiaireIdentiteSub` est OBLIGATOIRE et vient de la session
+// de l'appelant, jamais d'un champ de formulaire : une personne ne déclare pas qui perçoit des
+// honoraires, elle les perçoit.
 export async function enregistrerRemuneration(input: NouvelleRemuneration): Promise<Remuneration> {
   const [ligne] = await getDb()
     .insert(remunerationTable)
     .values({
       compromisId: input.compromisId,
+      beneficiaireIdentiteSub: input.beneficiaireIdentiteSub,
       montantHonorairesTotalCentimes: input.montantHonorairesTotalCentimes ?? null,
       montantRemunerationConseillerCentimes: input.montantRemunerationConseillerCentimes,
       dateEncaissementPrevue: input.dateEncaissementPrevue ?? null,

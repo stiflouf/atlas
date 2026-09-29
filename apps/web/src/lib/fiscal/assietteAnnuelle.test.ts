@@ -7,6 +7,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // pour rester déterministes (finVisible = 31/12 quel que soit le jour d'exécution des tests).
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -86,18 +88,18 @@ async function creerEncaissement(suffixe: string, montantCentimes: number, dateE
   });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: DOSSIER_TEST_ID, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, dateEncaissementReelle);
 }
 
 describe("calculerAssietteAnnuelle — correction obligatoire n° 1 (aucune déduction depuis le premier encaissement Atlas)", () => {
   it("prépare le dossier fiscal de test", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID, identiteSub: DOSSIER_TEST_ID }).onConflictDoNothing();
     await preparerProfil("2019-01-01");
   });
 
   it("aucune ligne d'amorçage, aucun encaissement : montant 0, couverture partielle sur toute l'année", async () => {
-    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2020);
+    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2020, DOSSIER_TEST_ID);
     expect(assiette.montantConnuCentimes).toBe(0);
     expect(assiette.origines).toEqual([]);
     expect(assiette.couverture).toBe("partielle");
@@ -107,7 +109,7 @@ describe("calculerAssietteAnnuelle — correction obligatoire n° 1 (aucune déd
   it("aucune ligne d'amorçage mais un encaissement Atlas connu : le montant compte, la couverture reste partielle", async () => {
     await creerEncaissement("001", 500000, "2020-09-15");
 
-    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2020);
+    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2020, DOSSIER_TEST_ID);
 
     // Correction n° 1 : le premier encaissement Atlas n'est jamais un début de couverture.
     expect(assiette.montantConnuCentimes).toBe(500000);
@@ -129,7 +131,7 @@ describe("calculerAssietteAnnuelle — correction obligatoire n° 1 (aucune déd
   it("une ligne d'amorçage à 0 confirmé, sans encaissement après : couverture complète, montant 0", async () => {
     await enregistrerHistoriqueAmorcage(DOSSIER_TEST_ID, 2021, 0, "2021-08-31");
 
-    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2021);
+    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2021, DOSSIER_TEST_ID);
     expect(assiette.montantConnuCentimes).toBe(0);
     expect(assiette.couverture).toBe("complete");
     expect(assiette.periodesInconnues).toEqual([]);
@@ -145,7 +147,7 @@ describe("calculerAssietteAnnuelle — correction obligatoire n° 1 (aucune déd
     // Encaissement APRÈS dateFinCouverture : compté séparément.
     await creerEncaissement("003", 300000, "2022-09-01");
 
-    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2022);
+    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2022, DOSSIER_TEST_ID);
     expect(assiette.couverture).toBe("complete");
     expect(assiette.periodesInconnues).toEqual([]);
     expect(assiette.montantConnuCentimes).toBe(1300000); // 1 000 000 (amorçage) + 300 000 (après), jamais + 200 000
@@ -166,7 +168,7 @@ describe("calculerAssietteAnnuelle — correction obligatoire n° 1 (aucune déd
       affiliationRetraite: "ssi_regime_general",
     });
 
-    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2023);
+    const assiette = await calculerAssietteAnnuelle(DOSSIER_TEST_ID, 2023, DOSSIER_TEST_ID);
     expect(assiette.periodesInconnues).toEqual([{ debut: "2023-05-01", fin: "2023-12-31" }]);
   });
 });

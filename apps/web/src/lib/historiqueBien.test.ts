@@ -348,6 +348,7 @@ describe("deriverHistoriqueBien", () => {
     const r: Remuneration = {
       id: "remuneration-1",
       compromisId: "compromis-remuneration-1",
+      beneficiaireIdentiteSub: "sub-beneficiaire-test",
       montantRemunerationConseillerCentimes: 1000000,
       creeLe: "2026-08-05T10:00:00.000Z",
     };
@@ -371,6 +372,7 @@ describe("deriverHistoriqueBien", () => {
     const r: Remuneration = {
       id: "remuneration-2",
       compromisId: "compromis-remuneration-2",
+      beneficiaireIdentiteSub: "sub-beneficiaire-test",
       montantRemunerationConseillerCentimes: 1248736,
       dateEncaissementReelle: "2026-10-20",
       creeLe: "2026-08-05T10:00:00.000Z",

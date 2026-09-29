@@ -16,6 +16,9 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 //   donnée contribue bien, plutôt qu'une prédiction précise de la nouvelle moyenne globale.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — bénéficiaire des honoraires dans ces fixtures.
+const BENEFICIAIRE_TEST = "sub-beneficiaire-test";
+
 const { getDb } = await import("@/db/client");
 const { supprimerEvenementsDeTestPourOffres } = await import("@/db/nettoyageEvenementsDeTest");
 const {
@@ -45,7 +48,7 @@ const {
   chargerProjectionAnnuelle,
 } = await import("./dashboardRepository");
 
-// chargerProjectionAnnuelle(WORKSPACE_TEST) s'appuie sur CURRENT_DATE côté Postgres, jamais sur l'horloge Node —
+// chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST }) s'appuie sur CURRENT_DATE côté Postgres, jamais sur l'horloge Node —
 // les dates de fixture du describe ADR-022 ci-dessous sont donc dérivées de cette même date lue en
 // base une seule fois, pour ne jamais risquer un décalage jour/année entre le process Node qui
 // construit les fixtures et le serveur qui évalue les requêtes (fuseau horaire différent,
@@ -703,7 +706,7 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
       dateSignature: "2026-08-01",
     });
     idsCompromisCrees.push(c.id);
-    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 1000000 });
+    const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 1000000 });
     idsRemunerationCrees.push(r.id);
     await archiverBien(bien.id, WORKSPACE_TEST);
 
@@ -722,7 +725,7 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
       dateSignature: "2026-08-01",
     });
     idsCompromisCrees.push(c.id);
-    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 1500000 });
+    const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 1500000 });
     idsRemunerationCrees.push(r.id);
 
     const apres = await chargerRemuneration(WORKSPACE_TEST);
@@ -766,7 +769,7 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
     });
     idsCompromisCrees.push(c.id);
     await marquerCompromisRealise(c.id, "2026-09-01");
-    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 800000 });
+    const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 800000 });
     idsRemunerationCrees.push(r.id);
     await archiverBien(bien.id, WORKSPACE_TEST);
 
@@ -792,7 +795,7 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
     });
     idsCompromisCrees.push(c.id);
     await marquerCompromisRealise(c.id, "2026-09-01");
-    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 900000 });
+    const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 900000 });
     idsRemunerationCrees.push(r.id);
     await marquerRemunerationEncaissee(c.id, "2026-09-20");
 
@@ -814,7 +817,7 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
     });
     idsCompromisCrees.push(c.id);
     await marquerCompromisRealise(c.id, "2026-09-01");
-    const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 700000 });
+    const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 700000 });
     idsRemunerationCrees.push(r.id);
     await marquerRemunerationEncaissee(c.id, "2031-07-10");
 
@@ -826,12 +829,12 @@ describe("dashboardRepository — chargerRemuneration (ADR-021)", () => {
 
 describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
   it("annee correspond à l'année civile en cours côté serveur", async () => {
-    const { annee } = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+    const { annee } = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
     expect(annee).toBe(anneeCourante);
   });
 
   it("ventilationMensuelle contient toujours 12 mois consécutifs, janvier à décembre, zero-remplis", async () => {
-    const { ventilationMensuelle } = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+    const { ventilationMensuelle } = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
     expect(ventilationMensuelle).toHaveLength(12);
     expect(ventilationMensuelle.map((m) => m.mois)).toEqual(
@@ -846,7 +849,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
 
   describe("encaisseDepuisJanvierCentimes", () => {
     it("inclut une rémunération encaissée cette année (delta avant/après)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-001");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -856,17 +859,17 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       });
       idsCompromisCrees.push(c.id);
       await marquerCompromisRealise(c.id, hier);
-      const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 111100 });
+      const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 111100 });
       idsRemunerationCrees.push(r.id);
       await marquerRemunerationEncaissee(c.id, aujourdhui);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.encaisseDepuisJanvierCentimes).toBe((avant.encaisseDepuisJanvierCentimes ?? 0) + 111100);
     });
 
     it("exclut une rémunération encaissée une année différente (égalité avant/après)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-002");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -876,11 +879,11 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       });
       idsCompromisCrees.push(c.id);
       await marquerCompromisRealise(c.id, `${anneeDifferente}-06-10`);
-      const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 222200 });
+      const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 222200 });
       idsRemunerationCrees.push(r.id);
       await marquerRemunerationEncaissee(c.id, `${anneeDifferente}-06-15`);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.encaisseDepuisJanvierCentimes).toBe(avant.encaisseDepuisJanvierCentimes);
     });
@@ -888,7 +891,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
 
   describe("previsionnelRestantCentimes — en_cours uniquement, jamais fusionné avec finalisé non encaissé", () => {
     it("inclut une date prévue dans la fenêtre [aujourd'hui, 31/12] (delta sur le montant et le compteur)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-003");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -899,12 +902,13 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       idsCompromisCrees.push(c.id);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 150000,
         dateEncaissementPrevue: finAnnee,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreRemunerationsPrevisionnellesAvecDatePrevue).toBe(
         avant.nombreRemunerationsPrevisionnellesAvecDatePrevue + 1
@@ -913,7 +917,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
     });
 
     it("une date prévue déjà passée compte dans le compteur mais jamais dans le montant — jamais undefined dès qu'une date est connue (mapping ADR-022)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-004");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -924,12 +928,13 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       idsCompromisCrees.push(c.id);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 160000,
         dateEncaissementPrevue: hier,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreRemunerationsPrevisionnellesAvecDatePrevue).toBe(
         avant.nombreRemunerationsPrevisionnellesAvecDatePrevue + 1
@@ -939,7 +944,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
     });
 
     it("une date prévue après le 31/12 compte dans le compteur mais jamais dans le montant (même mapping)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-005");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -950,12 +955,13 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       idsCompromisCrees.push(c.id);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 170000,
         dateEncaissementPrevue: anneeSuivante,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreRemunerationsPrevisionnellesAvecDatePrevue).toBe(
         avant.nombreRemunerationsPrevisionnellesAvecDatePrevue + 1
@@ -964,7 +970,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
     });
 
     it("exclut un compromis en_cours sur un bien archivé, du montant et du compteur (égalité avant/après)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-006");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -975,13 +981,14 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       idsCompromisCrees.push(c.id);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 180000,
         dateEncaissementPrevue: finAnnee,
       });
       idsRemunerationCrees.push(r.id);
       await archiverBien(bien.id, WORKSPACE_TEST);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreRemunerationsPrevisionnellesAvecDatePrevue).toBe(
         avant.nombreRemunerationsPrevisionnellesAvecDatePrevue
@@ -992,7 +999,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
 
   describe("encaissementsAttendusDepassesCentimes — jamais 'retard'", () => {
     it("inclut une vente finalisée non encaissée avec une date prévue dépassée (delta montant et nombre)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-007");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -1004,12 +1011,13 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       await marquerCompromisRealise(c.id, hier);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 190000,
         dateEncaissementPrevue: hier,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreEncaissementsAttendusDepasses).toBe(avant.nombreEncaissementsAttendusDepasses + 1);
       expect(apres.nombreFinaliseNonEncaisseAvecDatePrevue).toBe(avant.nombreFinaliseNonEncaisseAvecDatePrevue + 1);
@@ -1019,7 +1027,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
     });
 
     it("une date prévue demain n'est pas dépassée — comptée dans la couverture mais jamais undefined (mapping ADR-022)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-008");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -1031,12 +1039,13 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       await marquerCompromisRealise(c.id, hier);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 200000,
         dateEncaissementPrevue: demain,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreFinaliseNonEncaisseAvecDatePrevue).toBe(avant.nombreFinaliseNonEncaisseAvecDatePrevue + 1);
       expect(apres.nombreEncaissementsAttendusDepasses).toBe(avant.nombreEncaissementsAttendusDepasses);
@@ -1045,7 +1054,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
     });
 
     it("une vente finalisée non encaissée sans date prévue compte dans le dénominateur mais pas dans la couverture ni le montant", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-009");
       const c = await enregistrerCompromis({
         bienId: bien.id,
@@ -1055,10 +1064,10 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       });
       idsCompromisCrees.push(c.id);
       await marquerCompromisRealise(c.id, hier);
-      const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 210000 });
+      const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 210000 });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreFinaliseNonEncaisseRenseignees).toBe(avant.nombreFinaliseNonEncaisseRenseignees + 1);
       expect(apres.nombreFinaliseNonEncaisseAvecDatePrevue).toBe(avant.nombreFinaliseNonEncaisseAvecDatePrevue);
@@ -1078,14 +1087,15 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       await marquerCompromisRealise(c.id, hier);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 220000,
         dateEncaissementPrevue: hier,
       });
       idsRemunerationCrees.push(r.id);
 
-      const avantArchivage = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avantArchivage = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       await archiverBien(bien.id, WORKSPACE_TEST);
-      const apresArchivage = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apresArchivage = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apresArchivage.encaissementsAttendusDepassesCentimes).toBe(avantArchivage.encaissementsAttendusDepassesCentimes);
       expect(apresArchivage.nombreEncaissementsAttendusDepasses).toBe(avantArchivage.nombreEncaissementsAttendusDepasses);
@@ -1094,38 +1104,40 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
 
   describe("finaliseNonEncaisseRestantCentimes — fenêtre symétrique de encaissementsAttendusDepassesCentimes (ADR-024)", () => {
     it("inclut une vente finalisée non encaissée avec une date prévue restant dans l'année (delta montant et nombre)", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-001");
       const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
       idsCompromisCrees.push(c.id);
       await marquerCompromisRealise(c.id, hier);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 230000,
         dateEncaissementPrevue: demain,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant + 1);
       expect(apres.finaliseNonEncaisseRestantCentimes).toBe((avant.finaliseNonEncaisseRestantCentimes ?? 0) + 230000);
     });
 
     it("une date prévue déjà dépassée (hier) est comptée dans la couverture mais jamais ajoutée à la fenêtre restante — connu, mais 0 mesuré sur cette fenêtre", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-002");
       const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
       idsCompromisCrees.push(c.id);
       await marquerCompromisRealise(c.id, hier);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 240000,
         dateEncaissementPrevue: hier,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       // Comptée dans le dénominateur de couverture (date connue)...
       expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant + 1);
@@ -1137,33 +1149,34 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
     });
 
     it("une vente finalisée non encaissée sans date prévue ne compte ni dans le nombre ni dans le montant — inconnu, jamais confondu avec un 0", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-003");
       const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
       idsCompromisCrees.push(c.id);
       await marquerCompromisRealise(c.id, hier);
-      const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 250000 });
+      const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 250000 });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant);
       expect(apres.finaliseNonEncaisseRestantCentimes).toBe(avant.finaliseNonEncaisseRestantCentimes ?? 0);
     });
 
     it("un compromis en_cours (prévisionnel) n'alimente jamais finaliseNonEncaisseRestantCentimes — mutuellement exclusif", async () => {
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-024-004");
       const c = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: hier });
       idsCompromisCrees.push(c.id);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 260000,
         dateEncaissementPrevue: demain,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
 
       expect(apres.nombreFinaliseNonEncaisseRestant).toBe(avant.nombreFinaliseNonEncaisseRestant);
       expect(apres.finaliseNonEncaisseRestantCentimes).toBe(avant.finaliseNonEncaisseRestantCentimes ?? 0);
@@ -1173,7 +1186,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
   describe("ventilationMensuelle — dateEncaissementPrevue pour prévisionnel/finalisé, dateEncaissementReelle pour encaissé", () => {
     it("ventile une rémunération finalisée non encaissée par dateEncaissementPrevue (pas dateEncaissementReelle)", async () => {
       const moisCible = `${anneeCourante}-03`;
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const avantLigne = avant.ventilationMensuelle.find((m) => m.mois === moisCible)!;
 
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-011");
@@ -1187,12 +1200,13 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       await marquerCompromisRealise(c.id, hier);
       const r = await enregistrerRemuneration({
         compromisId: c.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 230000,
         dateEncaissementPrevue: `${anneeCourante}-03-15`,
       });
       idsRemunerationCrees.push(r.id);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const apresLigne = apres.ventilationMensuelle.find((m) => m.mois === moisCible)!;
 
       expect(apresLigne.finaliseNonEncaisseCentimes).toBe(avantLigne.finaliseNonEncaisseCentimes + 230000);
@@ -1201,7 +1215,7 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
 
     it("ventile une rémunération encaissée par dateEncaissementReelle", async () => {
       const moisCible = `${anneeCourante}-04`;
-      const avant = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avant = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const avantLigne = avant.ventilationMensuelle.find((m) => m.mois === moisCible)!;
 
       const { bien, acquereur } = await creerBienEtAcquereurDeTest("PROJECTION-012");
@@ -1213,18 +1227,18 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
       });
       idsCompromisCrees.push(c.id);
       await marquerCompromisRealise(c.id, hier);
-      const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 240000 });
+      const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 240000 });
       idsRemunerationCrees.push(r.id);
       await marquerRemunerationEncaissee(c.id, `${anneeCourante}-04-20`);
 
-      const apres = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apres = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const apresLigne = apres.ventilationMensuelle.find((m) => m.mois === moisCible)!;
 
       expect(apresLigne.encaisseCentimes).toBe(avantLigne.encaisseCentimes + 240000);
     });
 
     it("une rémunération prévisionnelle sans dateEncaissementPrevue n'apparaît dans aucun mois mais reste dans le total global de chargerRemuneration(WORKSPACE_TEST)", async () => {
-      const avantProjection = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const avantProjection = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const avantRemuneration = await chargerRemuneration(WORKSPACE_TEST);
       const sommeMensuelleAvant = avantProjection.ventilationMensuelle.reduce(
         (acc, m) => acc + m.previsionnelCentimes,
@@ -1239,10 +1253,10 @@ describe("dashboardRepository — chargerProjectionAnnuelle (ADR-022)", () => {
         dateSignature: hier,
       });
       idsCompromisCrees.push(c.id);
-      const r = await enregistrerRemuneration({ compromisId: c.id, montantRemunerationConseillerCentimes: 250000 });
+      const r = await enregistrerRemuneration({ compromisId: c.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 250000 });
       idsRemunerationCrees.push(r.id);
 
-      const apresProjection = await chargerProjectionAnnuelle(WORKSPACE_TEST);
+      const apresProjection = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
       const apresRemuneration = await chargerRemuneration(WORKSPACE_TEST);
       const sommeMensuelleApres = apresProjection.ventilationMensuelle.reduce(
         (acc, m) => acc + m.previsionnelCentimes,

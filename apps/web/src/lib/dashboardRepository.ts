@@ -559,7 +559,45 @@ export type DashboardProjectionAnnuelle = {
 // fin d'année. Un chiffre non scopé ici se propage donc à trois écrans, dont un qui sert à décider
 // d'une situation fiscale personnelle. Même précaution d'archivage que `chargerRemuneration` : le
 // `previsionnel` filtre les biens archivés (contrat existant), `depasse` et `restant` non.
-export async function chargerProjectionAnnuelle(workspaceId: string): Promise<DashboardProjectionAnnuelle> {
+// FISCAL_IDENTITY_OWNERSHIP_V1 — cette projection sert DEUX lecteurs dont le périmètre diffère :
+//   - le dashboard, qui montre l'activité d'un WORKSPACE ;
+//   - la projection fiscale personnelle, qui ne doit porter que sur les honoraires dont la personne
+//     est BÉNÉFICIAIRE (sinon une moitié du calcul serait personnelle et l'autre celle de l'agence).
+//
+// Un seul corps, un périmètre paramétré : dupliquer ces quatre requêtes financières serait la
+// garantie qu'elles divergent un jour. Le discriminant impose de nommer le périmètre à l'appel.
+export type PerimetreProjection =
+  | { type: "workspace"; workspaceId: string }
+  | { type: "identite"; identiteSub: string };
+
+// Le périmètre WORKSPACE porte sur `biens` (INNER JOIN) : il va dans le WHERE. Le périmètre
+// IDENTITÉ porte sur `remuneration`, qui est parfois en LEFT JOIN — l'y mettre dans le WHERE
+// transformerait la jointure externe en jointure interne et ferait disparaître les compromis sans
+// rémunération saisie. D'où deux helpers distincts, jamais interchangeables.
+function conditionPerimetreWhere(perimetre: PerimetreProjection) {
+  return perimetre.type === "workspace"
+    ? eq(biensTable.workspaceId, perimetre.workspaceId)
+    : eq(remunerationTable.beneficiaireIdentiteSub, perimetre.identiteSub);
+}
+
+// La ventilation mensuelle est écrite en SQL BRUT : le périmètre y est un fragment, jamais une
+// interpolation de chaîne. `sql` paramètre la valeur, elle n'est pas concaténée.
+function fragmentPerimetreSql(perimetre: PerimetreProjection) {
+  return perimetre.type === "workspace"
+    ? sql`b.workspace_id = ${perimetre.workspaceId}`
+    : sql`r.beneficiaire_identite_sub = ${perimetre.identiteSub}`;
+}
+
+function conditionPerimetreJointureRemuneration(perimetre: PerimetreProjection) {
+  return perimetre.type === "identite"
+    ? and(
+        eq(remunerationTable.compromisId, compromisTable.id),
+        eq(remunerationTable.beneficiaireIdentiteSub, perimetre.identiteSub)
+      )
+    : eq(remunerationTable.compromisId, compromisTable.id);
+}
+
+export async function chargerProjectionAnnuelle(perimetre: PerimetreProjection): Promise<DashboardProjectionAnnuelle> {
   const [{ somme: encaisseDepuisJanvierBrut }] = await getDb()
     .select({
       somme: sql<number | null>`sum(${remunerationTable.montantRemunerationConseillerCentimes})::int`,
@@ -572,7 +610,7 @@ export async function chargerProjectionAnnuelle(workspaceId: string): Promise<Da
         eq(compromisTable.statut, "realise"),
         isNotNull(remunerationTable.dateEncaissementReelle),
         sql`date_trunc('year', ${remunerationTable.dateEncaissementReelle}) = date_trunc('year', current_date)`,
-        eq(biensTable.workspaceId, workspaceId)
+        conditionPerimetreWhere(perimetre)
       )
     );
 
@@ -583,8 +621,8 @@ export async function chargerProjectionAnnuelle(workspaceId: string): Promise<Da
     })
     .from(compromisTable)
     .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
-    .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
-    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe), eq(biensTable.workspaceId, workspaceId)));
+    .leftJoin(remunerationTable, conditionPerimetreJointureRemuneration(perimetre))
+    .where(and(eq(compromisTable.statut, "en_cours"), isNull(biensTable.archiveLe), conditionPerimetreWhere(perimetre)));
 
   const [depasse] = await getDb()
     .select({
@@ -595,12 +633,12 @@ export async function chargerProjectionAnnuelle(workspaceId: string): Promise<Da
     })
     .from(compromisTable)
     .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
-    .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .leftJoin(remunerationTable, conditionPerimetreJointureRemuneration(perimetre))
     .where(
       and(
         eq(compromisTable.statut, "realise"),
         isNull(remunerationTable.dateEncaissementReelle),
-        eq(biensTable.workspaceId, workspaceId)
+        conditionPerimetreWhere(perimetre)
       )
     );
 
@@ -615,12 +653,12 @@ export async function chargerProjectionAnnuelle(workspaceId: string): Promise<Da
     })
     .from(compromisTable)
     .innerJoin(biensTable, eq(compromisTable.bienId, biensTable.id))
-    .leftJoin(remunerationTable, eq(remunerationTable.compromisId, compromisTable.id))
+    .leftJoin(remunerationTable, conditionPerimetreJointureRemuneration(perimetre))
     .where(
       and(
         eq(compromisTable.statut, "realise"),
         isNull(remunerationTable.dateEncaissementReelle),
-        eq(biensTable.workspaceId, workspaceId)
+        conditionPerimetreWhere(perimetre)
       )
     );
 
@@ -651,7 +689,7 @@ export async function chargerProjectionAnnuelle(workspaceId: string): Promise<Da
       join biens b on b.id = c.bien_id
       where c.statut = 'en_cours'
         and b.archive_le is null
-        and b.workspace_id = ${workspaceId}
+        and ${fragmentPerimetreSql(perimetre)}
         and r.date_encaissement_prevue is not null
         and date_trunc('year', r.date_encaissement_prevue) = date_trunc('year', current_date)
       group by 1
@@ -663,7 +701,7 @@ export async function chargerProjectionAnnuelle(workspaceId: string): Promise<Da
       join compromis c on c.id = r.compromis_id
       join biens b on b.id = c.bien_id
       where c.statut = 'realise'
-        and b.workspace_id = ${workspaceId}
+        and ${fragmentPerimetreSql(perimetre)}
         and r.date_encaissement_reelle is null
         and r.date_encaissement_prevue is not null
         and date_trunc('year', r.date_encaissement_prevue) = date_trunc('year', current_date)
@@ -676,7 +714,7 @@ export async function chargerProjectionAnnuelle(workspaceId: string): Promise<Da
       join compromis c on c.id = r.compromis_id
       join biens b on b.id = c.bien_id
       where c.statut = 'realise'
-        and b.workspace_id = ${workspaceId}
+        and ${fragmentPerimetreSql(perimetre)}
         and r.date_encaissement_reelle is not null
         and date_trunc('year', r.date_encaissement_reelle) = date_trunc('year', current_date)
       group by 1
@@ -736,8 +774,11 @@ export type ItemPipelineDate = { montantCentimes: number; datePrevue: string };
 // Alimente la projection fiscale pluriannuelle. Contrairement aux autres fonctions du fichier,
 // elle rend des LIGNES et non un agrégat : le filtrage JS qui suit (`versItemPipelineDate`) ne
 // sert qu'à écarter les dates nulles — le périmètre, lui, reste en SQL, jamais greffé là.
+// FISCAL_IDENTITY_OWNERSHIP_V1 — même paramétrage de périmètre que `chargerProjectionAnnuelle` :
+// le pipeline d'une projection fiscale personnelle est celui des honoraires à venir DE CETTE
+// PERSONNE, jamais celui du workspace où elle navigue.
 export async function listerPipelineDate(
-  workspaceId: string,
+  perimetre: PerimetreProjection,
   anneeDebut: number,
   anneeFin: number
 ): Promise<{ finaliseNonEncaisse: ItemPipelineDate[]; compromisEnCours: ItemPipelineDate[] }> {
@@ -758,7 +799,7 @@ export async function listerPipelineDate(
         isNull(remunerationTable.dateEncaissementReelle),
         isNotNull(remunerationTable.dateEncaissementPrevue),
         between(remunerationTable.dateEncaissementPrevue, debut, fin),
-        eq(biensTable.workspaceId, workspaceId)
+        conditionPerimetreWhere(perimetre)
       )
     );
 
@@ -776,7 +817,7 @@ export async function listerPipelineDate(
         isNull(biensTable.archiveLe),
         isNotNull(remunerationTable.dateEncaissementPrevue),
         between(remunerationTable.dateEncaissementPrevue, debut, fin),
-        eq(biensTable.workspaceId, workspaceId)
+        conditionPerimetreWhere(perimetre)
       )
     );
 

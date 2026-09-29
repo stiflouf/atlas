@@ -31,14 +31,20 @@ export type ProjectionFinAnnee = {
 // dashboardRepository.chargerProjectionAnnuelle() n'a pas de paramètre année : elle est ancrée sur
 // CURRENT_DATE côté Postgres (ADR-022). Cette fonction n'a donc de sens que pour l'année civile en
 // cours, cohérent avec le périmètre V1 d'ADR-024 (aucune projection N+1 à N+5, réservée à ADR-025).
+// FISCAL_IDENTITY_OWNERSHIP_V1 — ASYMÉTRIE CORRIGÉE. Cette fonction additionnait jusqu'ici une
+// assiette sans périmètre et un pipeline scopé WORKSPACE : les deux moitiés d'une même projection
+// fiscale ne décrivaient pas le même monde. Sans conséquence tant qu'il n'existait qu'un workspace
+// et un conseiller ; faux dès le deuxième, et faux en silence. Les deux moitiés portent désormais
+// sur la même personne. `workspaceId` disparaît de la signature : une projection fiscale
+// PERSONNELLE ne doit pas dépendre du périmètre dans lequel on navigue.
 export async function calculerProjectionFinAnnee(
   dossierFiscalId: string,
   annee: number,
-  workspaceId: string
+  identiteSub: string
 ): Promise<ProjectionFinAnnee> {
   const [encaisseReel, dashboard] = await Promise.all([
-    calculerAssietteAnnuelle(dossierFiscalId, annee),
-    chargerProjectionAnnuelle(workspaceId),
+    calculerAssietteAnnuelle(dossierFiscalId, annee, identiteSub),
+    chargerProjectionAnnuelle({ type: "identite", identiteSub }),
   ]);
 
   const finaliseNonEncaisseRestant: BlocProjection = {

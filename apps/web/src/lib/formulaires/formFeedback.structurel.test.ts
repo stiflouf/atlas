@@ -73,8 +73,22 @@ describe("FORM_FEEDBACK_V1 — contrat", () => {
       const source = lire(chemin);
       expect(source, chemin).toContain('from "@/lib/formulaires/etatFormulaire"');
       for (const nom of noms) {
-        const signature = `export async function ${nom}(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {\n  await exigerSessionAtlas();\n  return avecFeedbackFormulaire(async () => {`;
-        expect(source, `${chemin} → ${nom}`).toContain(signature);
+        // FISCAL_IDENTITY_OWNERSHIP_V1 — deux formes acceptées pour la garde de tête : l'historique
+        // (`await exigerSessionAtlas();`, résultat jeté) et celle qui RETIENT l'identité
+        // (`const session = await exigerSessionAtlas();`). Ce que cette garde protège est l'ORDRE —
+        // session d'abord, corps ensuite — pas la mise au rebut du résultat : `ajouterRemunerationAction`
+        // a besoin du `sub` pour nommer le bénéficiaire des honoraires, et le relire ferait un second
+        // déchiffrement de cookie pour rien. Même assouplissement que gardeSessionAtlas.structurel.
+        const entete = `export async function ${nom}(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {\n`;
+        const corpsAttendu = `  return avecFeedbackFormulaire(async () => {`;
+        const formes = [
+          `${entete}  await exigerSessionAtlas();\n${corpsAttendu}`,
+          `${entete}  const session = await exigerSessionAtlas();\n${corpsAttendu}`,
+        ];
+        expect(
+          formes.some((forme) => source.includes(forme)),
+          `${chemin} → ${nom} : la garde de session doit être la PREMIÈRE instruction, suivie immédiatement de avecFeedbackFormulaire`
+        ).toBe(true);
       }
     }
   });

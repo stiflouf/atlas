@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
+import { obtenirDossierFiscalDeLIdentite } from "@/lib/dossierFiscalRepository";
 import { enregistrerRfrFoyer } from "@/lib/rfrFoyerRepository";
 import { parseMontantCentimes } from "@/types/remuneration";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -25,7 +25,7 @@ function parsePartsCentiemes(valeur: FormDataEntryValue | null): number | undefi
 // automatiquement, seulement si le conseiller choisit explicitement de renseigner son RFR pour
 // suivre son éligibilité au versement libératoire.
 export async function enregistrerRfrFoyerAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
-  await exigerSessionAtlas();
+  const session = await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
     const anneeRfr = Number(formData.get("anneeRfr"));
     if (!Number.isInteger(anneeRfr) || anneeRfr < 2000 || anneeRfr > new Date().getFullYear()) {
@@ -42,7 +42,7 @@ export async function enregistrerRfrFoyerAction(_etatPrecedent: EtatFormulaire, 
       throw new ErreurSaisie("Nombre de parts invalide — attendu un nombre strictement positif, par exemple 1,5.");
     }
 
-    const dossierFiscalId = await obtenirDossierFiscalDefaut();
+    const dossierFiscalId = await obtenirDossierFiscalDeLIdentite(session.sub);
     await enregistrerRfrFoyer(dossierFiscalId, anneeRfr, rfrFoyerCentimes, nombrePartsCentiemes);
 
     redirect("/fiscal");

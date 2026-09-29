@@ -27,7 +27,7 @@ function resoudreCodeTest(profil: { regimeFiscal: string }) {
 
 describe("resoudreTrancheAvecTaux — rattachement tranche par tranche, jamais un taux moyen", () => {
   it("prépare le dossier, le profil et deux règles consécutives (changement de taux au 1er juillet)", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID, identiteSub: DOSSIER_TEST_ID }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_TEST_ID,
       dateDebutValidite: "2019-01-01", // antérieur à la première règle (2020-01-01), pour isoler

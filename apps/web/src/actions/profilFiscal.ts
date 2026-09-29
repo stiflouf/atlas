@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
+import { obtenirDossierFiscalDeLIdentite } from "@/lib/dossierFiscalRepository";
 import { enregistrerProfilFiscal } from "@/lib/profilFiscalRepository";
 import { parseProfilFiscalFormData } from "@/lib/profilFiscalFormulaire";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
@@ -10,8 +10,8 @@ import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 // rétroactive (ADR-023, point 2) : la Server Action ne compare jamais dateDebutValidite à
 // l'existant, elle laisse la résolution par date départager (voir profilFiscalRepository).
 export async function enregistrerProfilFiscalAction(formData: FormData): Promise<void> {
-  await exigerSessionAtlas();
-  const dossierFiscalId = await obtenirDossierFiscalDefaut();
+  const session = await exigerSessionAtlas();
+  const dossierFiscalId = await obtenirDossierFiscalDeLIdentite(session.sub);
   const input = parseProfilFiscalFormData(dossierFiscalId, formData);
   await enregistrerProfilFiscal(input);
   redirect("/fiscal");

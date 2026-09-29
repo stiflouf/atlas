@@ -4,6 +4,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -79,13 +81,13 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: dossierFiscalId, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, date);
 }
 
 describe("evaluerRunRate — seuil des 6 mois entièrement couverts (correction n° 2)", () => {
   it("[1000, 0, 1000, 0, 1000, 0] sur 6 mois garantis : fiable, moyenne 500, utilise bien les 6 mois", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_SIX_MOIS }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_SIX_MOIS, identiteSub: DOSSIER_SIX_MOIS }).onConflictDoNothing();
     const moisFrontiere = ajouterMois(moisCourant, -7);
     await enregistrerHistoriqueAmorcage(
       DOSSIER_SIX_MOIS,
@@ -100,12 +102,12 @@ describe("evaluerRunRate — seuil des 6 mois entièrement couverts (correction 
       }
     }
 
-    const resultat = await evaluerRunRate(DOSSIER_SIX_MOIS);
+    const resultat = await evaluerRunRate(DOSSIER_SIX_MOIS, DOSSIER_SIX_MOIS);
     expect(resultat).toEqual({ fiable: true, moisHistoriqueUtilises: 6, moyenneMensuelleCentimes: 500 });
   });
 
   it("5 mois garantis seulement : non fiable, jamais un run-rate calculé sur un historique trop court", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_CINQ_MOIS }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_CINQ_MOIS, identiteSub: DOSSIER_CINQ_MOIS }).onConflictDoNothing();
     const moisFrontiere = ajouterMois(moisCourant, -6);
     await enregistrerHistoriqueAmorcage(
       DOSSIER_CINQ_MOIS,
@@ -115,7 +117,7 @@ describe("evaluerRunRate — seuil des 6 mois entièrement couverts (correction 
     );
     await creerEncaissement(DOSSIER_CINQ_MOIS, "001", 100000, `${ajouterMois(moisCourant, -5)}-10`);
 
-    const resultat = await evaluerRunRate(DOSSIER_CINQ_MOIS);
+    const resultat = await evaluerRunRate(DOSSIER_CINQ_MOIS, DOSSIER_CINQ_MOIS);
     expect(resultat).toEqual({ fiable: false, moisHistoriqueUtilises: SEUIL_MOIS_MINIMUM_RUN_RATE - 1 });
   });
 });

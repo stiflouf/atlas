@@ -1,5 +1,5 @@
 import { PRODUCT_NAME } from "@/lib/branding";
-import { obtenirDossierFiscalDefaut } from "@/lib/dossierFiscalRepository";
+import { obtenirDossierFiscalDeLIdentite } from "@/lib/dossierFiscalRepository";
 import { chargerProfilFiscalActuel } from "@/lib/profilFiscalRepository";
 import { chargerHistoriqueAmorcage } from "@/lib/historiqueAmorcageRepository";
 import { chargerRfrFoyer } from "@/lib/rfrFoyerRepository";
@@ -24,6 +24,7 @@ import { Landmark } from "lucide-react";
 import Card from "@/components/ui/Card";
 import IconTile from "@/components/ui/IconTile";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx) : sans ce
 // flag, la page figerait au moment du build.
@@ -42,8 +43,13 @@ export default async function FiscalPage({ searchParams }: PageProps) {
   // ici, ce sont les données d'ACTIVITÉ immobilière qui nourrissent les projections : sans ce
   // périmètre, le chiffre d'affaires d'un autre workspace entrait dans une projection fiscale
   // personnelle.
-  const workspaceId = await exigerWorkspaceCourant();
-  const dossierFiscalId = await obtenirDossierFiscalDefaut();
+  // FISCAL_IDENTITY_OWNERSHIP_V1 — le dossier fiscal et TOUS les calculs qu'il alimente sont
+  // désormais résolus par l'IDENTITÉ. `exigerWorkspaceCourant()` reste appelé pour la garde
+  // d'appartenance, mais plus aucune donnée fiscale personnelle n'en dépend : une projection
+  // fiscale ne doit pas changer selon le périmètre dans lequel on navigue.
+  const session = await exigerSessionAtlas();
+  await exigerWorkspaceCourant();
+  const dossierFiscalId = await obtenirDossierFiscalDeLIdentite(session.sub);
   const [profilActuel, historique, rfr] = await Promise.all([
     chargerProfilFiscalActuel(dossierFiscalId),
     chargerHistoriqueAmorcage(dossierFiscalId),
@@ -52,13 +58,13 @@ export default async function FiscalPage({ searchParams }: PageProps) {
   const anneeCourante = new Date().getFullYear();
   const [cotisations, cfp, vfl, eligibiliteRfr, microBnc, franchiseTva, projection] = profilActuel
     ? await Promise.all([
-        calculerCotisationsSociales(dossierFiscalId, anneeCourante),
-        calculerCfp(dossierFiscalId, anneeCourante),
-        calculerVersementLiberatoire(dossierFiscalId, anneeCourante),
+        calculerCotisationsSociales(dossierFiscalId, anneeCourante, session.sub),
+        calculerCfp(dossierFiscalId, anneeCourante, session.sub),
+        calculerVersementLiberatoire(dossierFiscalId, anneeCourante, session.sub),
         verifierEligibiliteRfr(dossierFiscalId, anneeCourante),
-        calculerMicroBnc(dossierFiscalId, anneeCourante),
-        calculerFranchiseTva(dossierFiscalId, anneeCourante),
-        calculerProjectionFinAnnee(dossierFiscalId, anneeCourante, workspaceId),
+        calculerMicroBnc(dossierFiscalId, anneeCourante, session.sub),
+        calculerFranchiseTva(dossierFiscalId, anneeCourante, session.sub),
+        calculerProjectionFinAnnee(dossierFiscalId, anneeCourante, session.sub),
       ])
     : [];
 
@@ -71,7 +77,7 @@ export default async function FiscalPage({ searchParams }: PageProps) {
     if (valeur !== undefined) hypotheses[annee] = valeur;
   }
   const projectionsPluriannuelles = profilActuel
-    ? await calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, workspaceId, HORIZON_PROJECTION_ANNEES, hypotheses)
+    ? await calculerProjectionPluriannuelle(dossierFiscalId, anneeCourante + 1, session.sub, HORIZON_PROJECTION_ANNEES, hypotheses)
     : undefined;
 
   return (

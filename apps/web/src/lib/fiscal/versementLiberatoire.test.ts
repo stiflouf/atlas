@@ -6,6 +6,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // seuil_rfr_versement_liberatoire_par_part (293 150,00 €, RFR N-2) depuis 2026-01-01.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -71,13 +73,13 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: dossierFiscalId, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, date);
 }
 
 describe("calculerVersementLiberatoire — actif seulement si le profil l'indique, jamais dérivé du RFR", () => {
   it("calcule le VFL quand le profil l'indique actif", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_ACTIF }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_ACTIF, identiteSub: DOSSIER_ACTIF }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_ACTIF,
       dateDebutValidite: "2026-01-01",
@@ -95,10 +97,10 @@ describe("calculerVersementLiberatoire — actif seulement si le profil l'indiqu
     // encaissements réels de l'année, y compris ceux d'autres dossiers/fixtures. Un delta reste
     // exact quelle que soit la donnée déjà présente en base pour 2026 (chaque tranche est arrondie
     // indépendamment, appliquerTauxPointsBase, donc additive).
-    const avant = await calculerVersementLiberatoire(DOSSIER_ACTIF, 2026);
+    const avant = await calculerVersementLiberatoire(DOSSIER_ACTIF, 2026, DOSSIER_ACTIF);
     await creerEncaissement(DOSSIER_ACTIF, "001", 1000000, "2026-03-01");
 
-    const resultat = await calculerVersementLiberatoire(DOSSIER_ACTIF, 2026);
+    const resultat = await calculerVersementLiberatoire(DOSSIER_ACTIF, 2026, DOSSIER_ACTIF);
     expect(avant.statut).toBe("calcule");
     expect(resultat.statut).toBe("calcule");
     if (resultat.statut === "calcule" && avant.statut === "calcule") {
@@ -107,7 +109,7 @@ describe("calculerVersementLiberatoire — actif seulement si le profil l'indiqu
   });
 
   it("reste à 0 quand le profil ne l'indique pas actif — même avec un RFR très favorable", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_INACTIF }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_INACTIF, identiteSub: DOSSIER_INACTIF }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_INACTIF,
       dateDebutValidite: "2026-01-01",
@@ -124,7 +126,7 @@ describe("calculerVersementLiberatoire — actif seulement si le profil l'indiqu
     await enregistrerHistoriqueAmorcage(DOSSIER_INACTIF, 2026, 0, "2026-01-01");
     await creerEncaissement(DOSSIER_INACTIF, "002", 1000000, "2026-03-01");
 
-    const resultat = await calculerVersementLiberatoire(DOSSIER_INACTIF, 2026);
+    const resultat = await calculerVersementLiberatoire(DOSSIER_INACTIF, 2026, DOSSIER_INACTIF);
     expect(resultat.statut).toBe("calcule");
     if (resultat.statut === "calcule") expect(resultat.valeur).toBe(0);
 
@@ -135,7 +137,7 @@ describe("calculerVersementLiberatoire — actif seulement si le profil l'indiqu
 
 describe("verifierEligibiliteRfr — contrôle informatif séparé", () => {
   it("indisponible quand aucune ligne RFR N-2 n'existe", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_RFR }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_RFR, identiteSub: DOSSIER_RFR }).onConflictDoNothing();
     const resultat = await verifierEligibiliteRfr(DOSSIER_RFR, 2026);
     expect(resultat).toEqual({ statut: "indisponible", raisons: [{ type: "rfr_absent", anneeRfrAttendue: 2024 }] });
   });

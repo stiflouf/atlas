@@ -7,6 +7,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // validité, sans jamais insérer de règle concurrente (0015_seed_referentiel_fiscal_2026.sql).
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -71,14 +73,14 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await getDb().insert(dossierFiscalTable).values({ id: dossierFiscalId }).onConflictDoNothing();
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await getDb().insert(dossierFiscalTable).values({ id: dossierFiscalId, identiteSub: dossierFiscalId }).onConflictDoNothing();
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: dossierFiscalId, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, date);
 }
 
 describe("calculerCotisationsSociales — correction obligatoire n° 2 (garde de régime)", () => {
   it("applique le taux micro-BNC régime général sur un profil couvert", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_MICRO_GENERAL }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_MICRO_GENERAL, identiteSub: DOSSIER_MICRO_GENERAL }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_MICRO_GENERAL,
       dateDebutValidite: "2026-01-01",
@@ -95,10 +97,10 @@ describe("calculerCotisationsSociales — correction obligatoire n° 2 (garde de
     // encaissements réels de l'année, y compris ceux d'autres dossiers/fixtures. Un delta reste
     // exact quelle que soit la donnée déjà présente en base pour 2026 (chaque tranche est arrondie
     // indépendamment, appliquerTauxPointsBase, donc additive).
-    const avant = await calculerCotisationsSociales(DOSSIER_MICRO_GENERAL, 2026);
+    const avant = await calculerCotisationsSociales(DOSSIER_MICRO_GENERAL, 2026, DOSSIER_MICRO_GENERAL);
     await creerEncaissement(DOSSIER_MICRO_GENERAL, "001", 1000000, "2026-03-01");
 
-    const resultat = await calculerCotisationsSociales(DOSSIER_MICRO_GENERAL, 2026);
+    const resultat = await calculerCotisationsSociales(DOSSIER_MICRO_GENERAL, 2026, DOSSIER_MICRO_GENERAL);
     expect(avant.statut).toBe("calcule");
     expect(resultat.statut).toBe("calcule");
     if (resultat.statut === "calcule" && avant.statut === "calcule") {
@@ -113,7 +115,7 @@ describe("calculerCotisationsSociales — correction obligatoire n° 2 (garde de
   // pas le résultat. Isole aussi ces tests de l'année 2026 utilisée par le test précédent
   // (remuneration n'est pas cloisonnée par dossier fiscal, mono-dossier V1, ADR-023).
   it("ne applique JAMAIS le taux micro à une déclaration contrôlée — regime_non_couvert", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_DECLARATION }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_DECLARATION, identiteSub: DOSSIER_DECLARATION }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_DECLARATION,
       dateDebutValidite: "2015-01-01",
@@ -127,7 +129,7 @@ describe("calculerCotisationsSociales — correction obligatoire n° 2 (garde de
     await enregistrerHistoriqueAmorcageComplet(DOSSIER_DECLARATION, 2019);
     await creerEncaissement(DOSSIER_DECLARATION, "002", 1000000, "2019-03-01");
 
-    const resultat = await calculerCotisationsSociales(DOSSIER_DECLARATION, 2019);
+    const resultat = await calculerCotisationsSociales(DOSSIER_DECLARATION, 2019, DOSSIER_DECLARATION);
     expect(resultat.statut).toBe("indisponible");
     if (resultat.statut === "indisponible") {
       expect(resultat.raisons).toContainEqual({
@@ -139,7 +141,7 @@ describe("calculerCotisationsSociales — correction obligatoire n° 2 (garde de
   });
 
   it("la Cipav n'a aucun code couvert en V1 — regime_non_couvert, jamais le taux du régime général", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_CIPAV }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_CIPAV, identiteSub: DOSSIER_CIPAV }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_CIPAV,
       dateDebutValidite: "2015-01-01",
@@ -153,7 +155,7 @@ describe("calculerCotisationsSociales — correction obligatoire n° 2 (garde de
     await enregistrerHistoriqueAmorcageComplet(DOSSIER_CIPAV, 2018);
     await creerEncaissement(DOSSIER_CIPAV, "003", 1000000, "2018-03-01");
 
-    const resultat = await calculerCotisationsSociales(DOSSIER_CIPAV, 2018);
+    const resultat = await calculerCotisationsSociales(DOSSIER_CIPAV, 2018, DOSSIER_CIPAV);
     expect(resultat.statut).toBe("indisponible");
   });
 });

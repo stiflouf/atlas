@@ -4,6 +4,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -83,6 +85,7 @@ async function creerCompromisPourPipeline(suffixe: string, montantCentimes: numb
   }
   await enregistrerRemuneration({
     compromisId: compromis.id,
+    beneficiaireIdentiteSub: DOSSIER_TEST_ID,
     montantRemunerationConseillerCentimes: montantCentimes,
     dateEncaissementPrevue: datePrevue,
   });
@@ -121,13 +124,13 @@ async function creerEncaissementReel(suffixe: string, montantCentimes: number, d
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: DOSSIER_TEST_ID, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, date);
 }
 
 describe("calculerProjectionPluriannuelle — correction obligatoire n° 1 (jamais pipeline + run-rate)", () => {
   it("prépare un dossier avec 6 mois d'historique garanti (600 000 centimes/mois -> run-rate 7 200 000) et un pipeline daté de 1 800 000 sur l'année cible", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID, identiteSub: DOSSIER_TEST_ID }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_TEST_ID,
       dateDebutValidite: "2020-01-01",
@@ -157,7 +160,7 @@ describe("calculerProjectionPluriannuelle — correction obligatoire n° 1 (jama
   });
 
   it("le pipeline (18 000 €) et le run-rate (72 000 €) restent deux blocs séparés, jamais 90 000 €", async () => {
-    const projections = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, WORKSPACE_TEST, 1);
+    const projections = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, DOSSIER_TEST_ID, 1);
     expect(projections).toHaveLength(1);
     const annee = projections[0];
 
@@ -175,7 +178,7 @@ describe("calculerProjectionPluriannuelle — correction obligatoire n° 1 (jama
   });
 
   it("les conséquences fiscales du pipeline et du run-rate sont calculées séparément", async () => {
-    const [annee] = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, WORKSPACE_TEST, 1);
+    const [annee] = await calculerProjectionPluriannuelle(DOSSIER_TEST_ID, anneeCible, DOSSIER_TEST_ID, 1);
     expect(annee.pipeline.consequencesFiscales?.cotisations.statut).toBe("calcule");
     expect(annee.statistique.consequencesFiscales?.cotisations.statut).toBe("calcule");
     if (annee.pipeline.consequencesFiscales?.cotisations.statut === "calcule") {

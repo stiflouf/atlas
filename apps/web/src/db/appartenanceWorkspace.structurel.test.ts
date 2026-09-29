@@ -104,7 +104,7 @@ const TABLES_FEUILLES = [
 ];
 
 // SECRET / DONNÉE PERSONNELLE À L'IDENTITÉ (ADR-054 §6) — ne devient jamais un actif du workspace.
-const TABLES_PRIVEES_IDENTITE = ["connexions_google"];
+const TABLES_PRIVEES_IDENTITE = ["connexions_google", "dossier_fiscal"];
 
 // RÉFÉRENTIEL NON POSSÉDÉ — barème légal valable pour tout le monde, aucune appartenance.
 const TABLES_TECHNIQUES_GLOBALES = ["regle_fiscale"];
@@ -112,13 +112,18 @@ const TABLES_TECHNIQUES_GLOBALES = ["regle_fiscale"];
 // APPARTENANCE NON TRANCHÉE — volontairement sans `workspace_id`. Un doute ne doit pas être
 // transformé en modèle permanent : voir les commentaires dédiés dans schema.ts.
 //
-// (WORKSPACE_SCOPING_V2D1 a retiré `memoire_contextuelle` : son appartenance est tranchée par
-// WORKSPACE et elle figure désormais dans TABLES_RACINES. L'entrée a été RETIRÉE, pas commentée.)
-const TABLES_APPARTENANCE_NON_TRANCHEE = ["dossier_fiscal"];
+// (WORKSPACE_SCOPING_V2D1 a retiré `memoire_contextuelle` : appartenance tranchée par WORKSPACE.
+// FISCAL_IDENTITY_OWNERSHIP_V1 a retiré `dossier_fiscal` : appartenance tranchée par IDENTITÉ,
+// il rejoint TABLES_PRIVEES_IDENTITE. Les deux entrées ont été RETIRÉES, pas commentées —
+// la liste est VIDE, et c'est le jalon qu'ADR-054 attendait.)
+const TABLES_APPARTENANCE_NON_TRANCHEE: string[] = [];
 
 // Feuilles dont la chaîne de FK NOT NULL remonte à une table d'appartenance NON TRANCHÉE plutôt
 // qu'à une racine. Épingler la liste rend le jour de la décision visible : elle doit devenir vide.
-const FEUILLES_RATTACHEES_A_UNE_APPARTENANCE_NON_TRANCHEE = ["profil_fiscal", "historique_amorcage", "rfr_foyer"];
+// Devenue vide avec FISCAL_IDENTITY_OWNERSHIP_V1 : les trois filles fiscales dérivent désormais
+// d'une racine dont l'appartenance est tranchée (identité). Elles n'ont PAS reçu de colonne propre
+// — ADR-023 §1 l'avait prévu : le rattachement s'ajoute sur `dossier_fiscal` SEULE.
+const FEUILLES_RATTACHEES_A_UNE_APPARTENANCE_NON_TRANCHEE: string[] = [];
 
 // Parcours récursif du code source, même patron que gardeSessionAtlas.structurel.test.ts (qui
 // lit un seul dossier) — étendu ici à tout `src/` parce que la règle porte sur le produit entier.
@@ -261,9 +266,14 @@ describe("ADR-054 — appartenance des tables (garantie structurelle)", () => {
       for (const racine of racinesStructurelles(nom)) {
         const estRacinePossedee = TABLES_RACINES.includes(racine);
         const estNonTranchee = TABLES_APPARTENANCE_NON_TRANCHEE.includes(racine);
+        // FISCAL_IDENTITY_OWNERSHIP_V1 — une feuille peut aussi remonter à une racine possédée par
+        // une IDENTITÉ, et non par un workspace : c'est le cas des trois filles fiscales depuis que
+        // `dossier_fiscal` porte `identite_sub`. Leur isolation vient de leur parent, exactement
+        // comme pour une feuille de workspace — seul le propriétaire diffère.
+        const estRacineIdentite = TABLES_PRIVEES_IDENTITE.includes(racine);
         expect(
-          estRacinePossedee || estNonTranchee,
-          `${nom} remonte à ${racine}, qui n'est ni une racine possédée ni une appartenance non tranchée`
+          estRacinePossedee || estRacineIdentite || estNonTranchee,
+          `${nom} remonte à ${racine}, qui n'est ni une racine possédée (workspace ou identité) ni une appartenance non tranchée`
         ).toBe(true);
         if (estNonTranchee) feuillesNonTranchees.push(nom);
       }
@@ -293,7 +303,18 @@ describe("ADR-054 — appartenance des tables (garantie structurelle)", () => {
       const identite = colonnes.find((c) => c.name === "identite_sub");
       expect(identite, `${nom} doit porter identite_sub : un secret sans propriétaire est un secret partagé`).toBeDefined();
       expect(identite!.notNull, `${nom}.identite_sub ne peut pas être nullable`).toBe(true);
-      expect(identite!.primary, `${nom}.identite_sub doit être la clé primaire : une ligne PAR personne`).toBe(true);
+      // Ce qui compte est UNE LIGNE PAR PERSONNE, pas la forme de la clé. `connexions_google` y
+      // parvient par sa PK (aucune table fille) ; `dossier_fiscal` par une contrainte UNIQUE, parce
+      // que trois filles référencent déjà son `id` et qu'y déplacer la PK imposerait de réécrire
+      // leurs FK sur des données non recalculables (ADR-023 §1). Les deux formes sont acceptées,
+      // l'absence d'unicité ne l'est pas.
+      const uniqueSurIdentite = config(nom).uniqueConstraints.some(
+        (contrainte) => contrainte.columns.length === 1 && contrainte.columns[0].name === "identite_sub"
+      );
+      expect(
+        identite!.primary || uniqueSurIdentite,
+        `${nom}.identite_sub doit être unique (PK ou contrainte UNIQUE) : une ligne PAR personne`
+      ).toBe(true);
       // Aucune FK : il n'existe pas de table d'utilisateurs, et workspace_membres.identite_sub n'est
       // pas unique. Une FK vers elle rattacherait le secret à une APPARTENANCE, pas à une personne.
       expect(config(nom).foreignKeys, `${nom} ne doit avoir aucune FK`).toHaveLength(0);

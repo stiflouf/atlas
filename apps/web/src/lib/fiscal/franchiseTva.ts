@@ -32,7 +32,13 @@ export type ResultatFranchiseTva =
 // 'redevable_reel_simplifie'/'redevable_reel_normal'/'inconnu' retournent un résultat indisponible
 // explicite plutôt qu'un chiffre construit sur une hypothèse HT/TTC non vérifiée. Aucune couche
 // TVA/facturation n'est créée ici — hors périmètre ADR-024.
-export async function calculerFranchiseTva(dossierFiscalId: string, annee: number): Promise<ResultatFranchiseTva> {
+// FISCAL_IDENTITY_OWNERSHIP_V1 — `identiteSub` transporte l'assiette PERSONNELLE ; la règle
+// fiscale appliquée, elle, ne change pas (barèmes légaux, globaux par nature).
+export async function calculerFranchiseTva(
+  dossierFiscalId: string,
+  annee: number,
+  identiteSub: string
+): Promise<ResultatFranchiseTva> {
   const dateResolution = `${annee}-12-31`;
   const profil = await chargerProfilFiscalADate(dossierFiscalId, dateResolution);
   if (!profil || profil.regimeTva !== "franchise") {
@@ -51,7 +57,7 @@ export async function calculerFranchiseTva(dossierFiscalId: string, annee: numbe
   if (!seuilMajore) raisons.push({ type: "regle_absente", code: CODE_SEUIL_MAJORE, date: dateResolution });
   if (!seuilBase || !seuilMajore) return { statut: "indisponible", raisons };
 
-  const assiette = await calculerAssietteAnnuelle(dossierFiscalId, annee);
+  const assiette = await calculerAssietteAnnuelle(dossierFiscalId, annee, identiteSub);
   if (assiette.couverture === "partielle") {
     raisons.push({ type: "assiette_incomplete", periodesInconnues: assiette.periodesInconnues });
   }

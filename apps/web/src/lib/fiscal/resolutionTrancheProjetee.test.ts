@@ -24,7 +24,7 @@ function resoudreCodeTest(profil: { regimeFiscal: string }) {
 
 describe("resoudreTrancheProjeteeAvecTaux — changement de taux en cours d'année projetée (correction n° 4)", () => {
   it("prépare le dossier, le profil et un changement de taux officiel au milieu de 2030", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID, identiteSub: DOSSIER_TEST_ID }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_TEST_ID,
       dateDebutValidite: "2020-01-01",

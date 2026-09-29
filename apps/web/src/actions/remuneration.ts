@@ -46,8 +46,10 @@ function parseDateOuNull(valeur: FormDataEntryValue | null): string | null {
 // aucun blocage d'archivage si le compromis est realise, ADR-021), si le montant de rémunération du
 // conseiller est absent/≤0, si les honoraires totaux sont renseignés mais ≤0, ou si une rémunération
 // existe déjà pour ce compromis (contrainte UNIQUE en base, vérifiée ici pour un message clair).
+// FISCAL_IDENTITY_OWNERSHIP_V1 — la session est RETENUE : son `sub` nomme le bénéficiaire des
+// honoraires. Jamais un champ du formulaire — une personne ne déclare pas qui perçoit quoi.
 export async function ajouterRemunerationAction(_etatPrecedent: EtatFormulaire, formData: FormData): Promise<EtatFormulaire> {
-  await exigerSessionAtlas();
+  const session = await exigerSessionAtlas();
   return avecFeedbackFormulaire(async () => {
     const compromisId = String(formData.get("compromisId") ?? "");
 
@@ -90,6 +92,7 @@ export async function ajouterRemunerationAction(_etatPrecedent: EtatFormulaire, 
 
     await enregistrerRemuneration({
       compromisId,
+      beneficiaireIdentiteSub: session.sub,
       montantRemunerationConseillerCentimes,
       montantHonorairesTotalCentimes,
       dateEncaissementPrevue,

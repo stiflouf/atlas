@@ -30,12 +30,21 @@ import { eq } from "drizzle-orm";
 // avant, tant qu'Atlas reste mono-dossier.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — l'action résout son dossier par le `sub` de la session mockée
+// ci-dessus. Le littéral "default" n'existe plus : c'était l'ancien singleton.
+const SUB_SESSION_TEST = "test-sub";
+
+async function dossierDeLaSession(): Promise<string> {
+  const { obtenirDossierFiscalDeLIdentite } = await import("@/lib/dossierFiscalRepository");
+  return obtenirDossierFiscalDeLIdentite(SUB_SESSION_TEST);
+}
+
 const { getDb } = await import("@/db/client");
 const { dossierFiscal: dossierFiscalTable, profilFiscal: profilFiscalTable } = await import("@/db/schema");
 const { enregistrerProfilFiscalAction } = await import("./profilFiscal");
 
 afterAll(async () => {
-  await getDb().delete(profilFiscalTable).where(eq(profilFiscalTable.dossierFiscalId, "default"));
+  await getDb().delete(profilFiscalTable).where(eq(profilFiscalTable.dossierFiscalId, await dossierDeLaSession()));
 });
 
 function formData(champs: Record<string, string>): FormData {
@@ -91,7 +100,7 @@ describe("enregistrerProfilFiscalAction — garde-fous", () => {
     const [ligne] = await getDb()
       .select()
       .from(profilFiscalTable)
-      .where(eq(profilFiscalTable.dossierFiscalId, "default"));
+      .where(eq(profilFiscalTable.dossierFiscalId, await dossierDeLaSession()));
     expect(ligne?.regimeComptable).toBe("engagement");
     expect(ligne?.optionDebits).toBe(true);
   });

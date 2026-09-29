@@ -1,6 +1,6 @@
 import { chargerProfilFiscalADate } from "@/lib/profilFiscalRepository";
 import { chargerCouvertureAnnee } from "@/lib/historiqueAmorcageRepository";
-import { listerEncaissementsAnnee } from "@/lib/remunerationRepository";
+import { listerEncaissementsAnneePourIdentite } from "@/lib/remunerationRepository";
 import type { AssietteAnnuelle, OrigineMontant, PeriodeInconnue } from "@/types/assietteFiscale";
 
 function aujourdHuiIso(): string {
@@ -29,9 +29,14 @@ export type TrancheAssiette =
 // (y compris à 0, un zéro confirmé) ne vient la borner. Seule une ligne historique_amorcage
 // explicite fait basculer couverture à "complete" — jamais une déduction depuis les faits Atlas
 // eux-mêmes.
+// FISCAL_IDENTITY_OWNERSHIP_V1 — `identiteSub` s'ajoute à `dossierFiscalId` plutôt que de le
+// remplacer : les deux ne disent pas la même chose. Le dossier porte la SITUATION fiscale (régime,
+// amorçage, RFR) ; l'identité porte les REVENUS. Le dossier est d'ailleurs déjà résolu par
+// l'identité en amont, mais le lui faire redériver ici masquerait cette distinction.
 export async function resoudreAssietteAnnuelle(
   dossierFiscalId: string,
-  annee: number
+  annee: number,
+  identiteSub: string
 ): Promise<{ assiette: AssietteAnnuelle; tranches: TrancheAssiette[] }> {
   const dateCalcul = aujourdHuiIso();
   const debutAnnee = `${annee}-01-01`;
@@ -67,7 +72,7 @@ export async function resoudreAssietteAnnuelle(
     if (lendemainCouverture > borneApresAmorcage) borneApresAmorcage = lendemainCouverture;
   }
 
-  const tousEncaissements = await listerEncaissementsAnnee(annee);
+  const tousEncaissements = await listerEncaissementsAnneePourIdentite(identiteSub, annee);
   const encaissementsPertinents = tousEncaissements.filter(
     (e) => e.dateEncaissementReelle >= borneApresAmorcage && e.dateEncaissementReelle <= finVisible
   );
@@ -106,6 +111,10 @@ export async function resoudreAssietteAnnuelle(
   };
 }
 
-export async function calculerAssietteAnnuelle(dossierFiscalId: string, annee: number): Promise<AssietteAnnuelle> {
-  return (await resoudreAssietteAnnuelle(dossierFiscalId, annee)).assiette;
+export async function calculerAssietteAnnuelle(
+  dossierFiscalId: string,
+  annee: number,
+  identiteSub: string
+): Promise<AssietteAnnuelle> {
+  return (await resoudreAssietteAnnuelle(dossierFiscalId, annee, identiteSub)).assiette;
 }

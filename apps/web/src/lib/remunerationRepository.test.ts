@@ -7,6 +7,9 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // dédiés à ce fichier pour éviter toute course avec d'autres suites d'intégration.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — bénéficiaire des honoraires dans ces fixtures.
+const BENEFICIAIRE_TEST = "sub-beneficiaire-test";
+
 const { getDb } = await import("@/db/client");
 const {
   biens: biensTable,
@@ -99,6 +102,7 @@ describe("remunerationRepository (intégration Postgres)", () => {
 
     const r = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 1248736,
     });
     idsRemunerationCrees.push(r.id);
@@ -117,7 +121,7 @@ describe("remunerationRepository (intégration Postgres)", () => {
     const { compromis } = await creerCompromisDeTest("002");
 
     await expect(
-      enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: 0 })
+      enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 0 })
     ).rejects.toThrow();
   });
 
@@ -127,6 +131,7 @@ describe("remunerationRepository (intégration Postgres)", () => {
     await expect(
       enregistrerRemuneration({
         compromisId: compromis.id,
+        beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
         montantRemunerationConseillerCentimes: 100000,
         montantHonorairesTotalCentimes: 0,
       })
@@ -137,12 +142,13 @@ describe("remunerationRepository (intégration Postgres)", () => {
     const { compromis } = await creerCompromisDeTest("004");
     const premiere = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(premiere.id);
 
     await expect(
-      enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: 200000 })
+      enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 200000 })
     ).rejects.toThrow();
   });
 
@@ -150,6 +156,7 @@ describe("remunerationRepository (intégration Postgres)", () => {
     const { compromis } = await creerCompromisDeTest("005");
     const creee = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
       montantHonorairesTotalCentimes: 500000,
       dateEncaissementPrevue: "2026-09-01",
@@ -172,6 +179,7 @@ describe("remunerationRepository (intégration Postgres)", () => {
     const { compromis } = await creerCompromisDeTest("006");
     const creee = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(creee.id);
@@ -192,6 +200,7 @@ describe("remunerationRepository (intégration Postgres)", () => {
     const { compromis } = await creerCompromisDeTest("007");
     const creee = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(creee.id);
@@ -206,6 +215,7 @@ describe("remunerationRepository (intégration Postgres)", () => {
     const { compromis } = await creerCompromisDeTest("008");
     const creee = await enregistrerRemuneration({
       compromisId: compromis.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 100000,
     });
     idsRemunerationCrees.push(creee.id);
@@ -223,11 +233,13 @@ describe("remunerationRepository (intégration Postgres)", () => {
     const { compromis: compromisB } = await creerCompromisDeTest("009-B");
     const rA = await enregistrerRemuneration({
       compromisId: compromisA.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 111100,
     });
     idsRemunerationCrees.push(rA.id);
     const rB = await enregistrerRemuneration({
       compromisId: compromisB.id,
+      beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
       montantRemunerationConseillerCentimes: 222200,
     });
     idsRemunerationCrees.push(rB.id);

@@ -12,6 +12,9 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // valeur n'est pas la somme des deux.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas_test";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — bénéficiaire des honoraires dans ces fixtures.
+const BENEFICIAIRE_TEST = "sub-beneficiaire-dashboard";
+
 const { getDb } = await import("@/db/client");
 const {
   acquereurs: acquereursTable,
@@ -117,6 +120,7 @@ async function uneVenteRealisee(bienId: string, acquereurId: string, prix: numbe
   idsCompromis.push(compromis.id);
   await getDb().insert(remunerationTable).values({
     compromisId: compromis.id,
+    beneficiaireIdentiteSub: BENEFICIAIRE_TEST,
     montantRemunerationConseillerCentimes: remunerationCentimes,
     dateEncaissementPrevue: `${ANNEE}-06-01`,
   });
@@ -249,8 +253,8 @@ describe("Frontière workspace — pertes, délais et pipeline", () => {
 
 describe("Frontière workspace — projections fiscales", () => {
   it("la projection annuelle de A ne voit que les encaissements de A", async () => {
-    const a = await chargerProjectionAnnuelle(WORKSPACE_TEST);
-    const b = await chargerProjectionAnnuelle(WORKSPACE_B);
+    const a = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_TEST });
+    const b = await chargerProjectionAnnuelle({ type: "workspace", workspaceId: WORKSPACE_B });
 
     // Les deux ventes sont réalisées, non encaissées, avec une date prévue cette année : chaque
     // workspace doit voir SA somme.
@@ -260,8 +264,8 @@ describe("Frontière workspace — projections fiscales", () => {
   });
 
   it("listerPipelineDate ne rend que les lignes du workspace, dates comprises", async () => {
-    const a = await listerPipelineDate(WORKSPACE_TEST, ANNEE, ANNEE);
-    const b = await listerPipelineDate(WORKSPACE_B, ANNEE, ANNEE);
+    const a = await listerPipelineDate({ type: "workspace", workspaceId: WORKSPACE_TEST }, ANNEE, ANNEE);
+    const b = await listerPipelineDate({ type: "workspace", workspaceId: WORKSPACE_B }, ANNEE, ANNEE);
 
     const montantsA = a.finaliseNonEncaisse.map((i) => i.montantCentimes);
     const montantsB = b.finaliseNonEncaisse.map((i) => i.montantCentimes);
@@ -276,7 +280,7 @@ describe("Frontière workspace — projections fiscales", () => {
   });
 
   it("une fenêtre d'années sans ligne rend un pipeline vide, jamais celui d'un autre workspace", async () => {
-    const horsFenetre = await listerPipelineDate(WORKSPACE_TEST, ANNEE + 5, ANNEE + 6);
+    const horsFenetre = await listerPipelineDate({ type: "workspace", workspaceId: WORKSPACE_TEST }, ANNEE + 5, ANNEE + 6);
     expect(horsFenetre.finaliseNonEncaisse).toEqual([]);
     expect(horsFenetre.compromisEnCours).toEqual([]);
   });

@@ -5,6 +5,7 @@ function remunerationTest(surcharge: Partial<Remuneration> = {}): Remuneration {
   return {
     id: "remuneration-test",
     compromisId: "compromis-test",
+    beneficiaireIdentiteSub: "sub-beneficiaire-test",
     montantRemunerationConseillerCentimes: 1000000,
     creeLe: "2026-08-01T10:00:00.000Z",
     ...surcharge,

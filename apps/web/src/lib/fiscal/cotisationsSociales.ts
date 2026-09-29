@@ -74,9 +74,10 @@ async function resoudreTrancheCotisations(
 // à la règle légale applicable à leur date (jamais un taux unique appliqué au total annuel).
 export async function calculerCotisationsSociales(
   dossierFiscalId: string,
-  annee: number
+  annee: number,
+  identiteSub: string
 ): Promise<ResultatFiscal<number>> {
-  const { assiette, tranches } = await resoudreAssietteAnnuelle(dossierFiscalId, annee);
+  const { assiette, tranches } = await resoudreAssietteAnnuelle(dossierFiscalId, annee, identiteSub);
   const issues = await Promise.all(tranches.map((tranche) => resoudreTrancheCotisations(dossierFiscalId, annee, tranche)));
   return construireResultatFiscal(assiette, issues);
 }

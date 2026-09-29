@@ -31,7 +31,7 @@ function profil(dateDebutValidite: string, regimeFiscal: "micro_bnc" | "declarat
 
 describe("profilFiscalRepository — résolution par date et corrections rétroactives", () => {
   it("prépare un dossier fiscal de test", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID, identiteSub: DOSSIER_TEST_ID }).onConflictDoNothing();
   });
 
   it("résout le bon instantané selon la date, y compris après insertion rétroactive dans le passé", async () => {

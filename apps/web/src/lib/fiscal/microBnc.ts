@@ -34,8 +34,12 @@ export type ResultatMicroBnc =
   | { statut: "partiel"; valeurConnue: ValeurMicroBnc; raisons: RaisonIndisponibilite[] }
   | { statut: "indisponible"; raisons: RaisonIndisponibilite[] };
 
-async function resoudreDonneesAnnee(dossierFiscalId: string, an: number): Promise<DonneesAnneeMicroBnc> {
-  const assiette = await calculerAssietteAnnuelle(dossierFiscalId, an);
+async function resoudreDonneesAnnee(
+  dossierFiscalId: string,
+  an: number,
+  identiteSub: string
+): Promise<DonneesAnneeMicroBnc> {
+  const assiette = await calculerAssietteAnnuelle(dossierFiscalId, an, identiteSub);
   const plafond = await resoudreRegle(CODE_PLAFOND, CATEGORIE_ACTIVITE, `${an}-12-31`);
   if (assiette.couverture === "complete" && plafond) {
     return { statut: "connue", assiette, depasse: assiette.montantConnuCentimes > plafond.valeur };
@@ -56,7 +60,13 @@ function raisonsDeAnnee(annee: number, donnees: DonneesAnneeMicroBnc): RaisonInd
 // statut des années N-1/N-2 : seuls des faits factuels (recettes connues vs plafond plein, par
 // année, avec leur propre état de couverture) sont exposés ; le mécanisme légal des deux années
 // consécutives et ses conséquences relèvent d'une évolution ultérieure, hors périmètre ADR-024.
-export async function calculerMicroBnc(dossierFiscalId: string, annee: number): Promise<ResultatMicroBnc> {
+// FISCAL_IDENTITY_OWNERSHIP_V1 — `identiteSub` transporte l'assiette PERSONNELLE ; la règle
+// fiscale appliquée, elle, ne change pas (barèmes légaux, globaux par nature).
+export async function calculerMicroBnc(
+  dossierFiscalId: string,
+  annee: number,
+  identiteSub: string
+): Promise<ResultatMicroBnc> {
   const dateResolution = `${annee}-12-31`;
   const profil = await chargerProfilFiscalADate(dossierFiscalId, dateResolution);
   if (!profil || profil.regimeFiscal !== "micro_bnc") {
@@ -71,7 +81,7 @@ export async function calculerMicroBnc(dossierFiscalId: string, annee: number): 
     return { statut: "indisponible", raisons: [{ type: "regle_absente", code: CODE_PLAFOND, date: dateResolution }] };
   }
 
-  const anneeCourante = await resoudreDonneesAnnee(dossierFiscalId, annee);
+  const anneeCourante = await resoudreDonneesAnnee(dossierFiscalId, annee, identiteSub);
   const raisons: RaisonIndisponibilite[] = [...raisonsDeAnnee(annee, anneeCourante)];
 
   const debutAnnee = `${annee}-01-01`;
@@ -85,12 +95,12 @@ export async function calculerMicroBnc(dossierFiscalId: string, annee: number): 
 
   let anneeMoins1: DonneesAnneeMicroBnc | undefined;
   if (profil.dateDebutActivite <= `${annee - 1}-12-31`) {
-    anneeMoins1 = await resoudreDonneesAnnee(dossierFiscalId, annee - 1);
+    anneeMoins1 = await resoudreDonneesAnnee(dossierFiscalId, annee - 1, identiteSub);
     raisons.push(...raisonsDeAnnee(annee - 1, anneeMoins1));
   }
   let anneeMoins2: DonneesAnneeMicroBnc | undefined;
   if (profil.dateDebutActivite <= `${annee - 2}-12-31`) {
-    anneeMoins2 = await resoudreDonneesAnnee(dossierFiscalId, annee - 2);
+    anneeMoins2 = await resoudreDonneesAnnee(dossierFiscalId, annee - 2, identiteSub);
     raisons.push(...raisonsDeAnnee(annee - 2, anneeMoins2));
   }
 

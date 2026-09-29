@@ -105,7 +105,7 @@ export default async function AujourdHui() {
     listerAcquereursActifsDuWorkspace(workspaceId),
     listerTachesDuWorkspace(workspaceId),
     listerProspectsVendeursDuWorkspace(workspaceId, "archives"),
-    chargerContexteAlertes(workspaceId),
+    chargerContexteAlertes(workspaceId, session.sub),
   ]);
   const alertes = produireAlertes(contexteAlertes);
   const alertesPrioritaires = alertes.slice(0, NB_ALERTES_PRIORITAIRES);

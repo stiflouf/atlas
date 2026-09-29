@@ -1422,10 +1422,31 @@ export const transmissionsDossierNotaire = pgTable(
 // Un doute ne doit pas être transformé en modèle permanent, et celui-ci a une conséquence de
 // confidentialité réelle. À trancher explicitement (workspace ou identité) avant tout deuxième
 // membre — l'ajout de la colonne restera additif dans les deux cas.
-export const dossierFiscal = pgTable("dossier_fiscal", {
-  id: text("id").primaryKey().default("default"),
-  creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
-});
+export const dossierFiscal = pgTable(
+  "dossier_fiscal",
+  {
+    // `id` reste la PK et garde son type : les trois tables filles la référencent déjà par FK.
+    // Le DEFAULT `'default'` a été RETIRÉ (migration 0057) — il rendait toute deuxième identité
+    // impossible, puisque la seconde insertion serait entrée en collision de clé primaire.
+    // L'identifiant est désormais généré par le repository, jamais par la base.
+    id: text("id").primaryKey(),
+    // FISCAL_IDENTITY_OWNERSHIP_V1 (ADR-054 §6 bis, tranché le 2026-09-08) — appartenance par
+    // IDENTITÉ. Ce n'est PAS la clé primaire, contrairement à `connexions_google` : celle-là
+    // n'avait aucune table fille, celle-ci en a trois. ADR-023 §1 avait prévu exactement cette
+    // forme — « le jour où un rattachement conseiller → dossier fiscal devient nécessaire, il
+    // s'ajoute comme une colonne sur `dossier_fiscal` SEULE ».
+    //
+    // Aucune FK vers `workspace_membres` : `identite_sub` n'y est pas unique (PK composite avec le
+    // workspace), et surtout une FK y rattacherait un fait PERSONNEL à une APPARTENANCE — ce que
+    // le §6 bis refuse précisément.
+    identiteSub: text("identite_sub").notNull(),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Une personne, un dossier. C'est cette contrainte qui remplace l'ancien singleton d'instance.
+    unique("dossier_fiscal_identite_sub_unique").on(table.identiteSub),
+  ]
+);
 
 // Profil fiscal du conseiller (ADR-023) : instantané complet historisé, jamais un historique
 // champ par champ. Les paramètres sont interdépendants (l'option débits n'a de sens qu'avec un
@@ -1801,6 +1822,18 @@ export const remuneration = pgTable(
       .notNull()
       .references(() => compromis.id, { onDelete: "cascade" })
       .unique(),
+    // FISCAL_IDENTITY_OWNERSHIP_V1 — QUI perçoit ces honoraires. Jusqu'ici `remuneration` portait
+    // un montant « du conseiller » sans jamais dire LEQUEL : aucune colonne du schéma ne reliait un
+    // encaissement à une personne, et l'assiette fiscale agrégeait donc l'argent de tout le monde.
+    //
+    // C'est un FAIT MÉTIER (le bénéficiaire des honoraires), pas une trace d'audit : à ne pas
+    // confondre avec la colonne d'auteur qu'ADR-054 laisse en question ouverte n°3. Le workspace ne
+    // pouvait pas tenir ce rôle — un workspace peut légitimement compter plusieurs membres (PK
+    // composite de `workspace_membres`), et « les honoraires du périmètre » ne sont pas « les
+    // honoraires de Steven ».
+    //
+    // Aucune FK, même raison que `dossier_fiscal.identite_sub` ci-dessus.
+    beneficiaireIdentiteSub: text("beneficiaire_identite_sub").notNull(),
     montantHonorairesTotalCentimes: integer("montant_honoraires_total_centimes"),
     montantRemunerationConseillerCentimes: integer("montant_remuneration_conseiller_centimes").notNull(),
     dateEncaissementPrevue: date("date_encaissement_prevue"),

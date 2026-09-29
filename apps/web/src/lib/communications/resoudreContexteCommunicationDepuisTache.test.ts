@@ -4,6 +4,9 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — bénéficiaire des honoraires dans ces fixtures.
+const BENEFICIAIRE_TEST = "sub-beneficiaire-test";
+
 const { getDb } = await import("@/db/client");
 const {
   biens: biensTable,
@@ -507,7 +510,7 @@ describe("resoudreContexteCommunicationDepuisTache", () => {
     const acquereur = await creerAcquereurTest("resol5@test.local");
     const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: "2026-03-01" });
     idsCompromis.push(compromis.id);
-    const remuneration = await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: 500000 });
+    const remuneration = await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: BENEFICIAIRE_TEST, montantRemunerationConseillerCentimes: 500000 });
     idsRemunerations.push(remuneration.id);
 
     const tache = await creerTache({

@@ -5,6 +5,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // Référentiel réel seedé : plafond_micro_bnc = 83 600,00 € du 2026-01-01 au 2029-01-01 (exclu).
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -73,13 +75,13 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: dossierFiscalId, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, date);
 }
 
 describe("calculerMicroBnc", () => {
   it("compare les recettes connues au plafond plein quand la couverture est complète", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_PLEIN_ANNEE }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_PLEIN_ANNEE, identiteSub: DOSSIER_PLEIN_ANNEE }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_PLEIN_ANNEE,
       dateDebutValidite: "2020-01-01",
@@ -113,7 +115,7 @@ describe("calculerMicroBnc", () => {
     await enregistrerHistoriqueAmorcage(DOSSIER_PLEIN_ANNEE, 2024, 0, "2024-12-31");
     await creerEncaissement(DOSSIER_PLEIN_ANNEE, "001", 900000000, "2026-03-01"); // 9 000 000 € > plafond
 
-    const resultat = await calculerMicroBnc(DOSSIER_PLEIN_ANNEE, 2026);
+    const resultat = await calculerMicroBnc(DOSSIER_PLEIN_ANNEE, 2026, DOSSIER_PLEIN_ANNEE);
     expect(resultat.statut).toBe("calcule");
     if (resultat.statut === "calcule") {
       expect(resultat.valeur.plafondPleinCentimes).toBe(8360000);
@@ -124,7 +126,7 @@ describe("calculerMicroBnc", () => {
   });
 
   it("année de création : le prorata est une valeur de référence, jamais comparée pour 'depasse'", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_CREATION }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_CREATION, identiteSub: DOSSIER_CREATION }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_CREATION,
       dateDebutValidite: "2026-07-01",
@@ -138,7 +140,7 @@ describe("calculerMicroBnc", () => {
     await enregistrerHistoriqueAmorcage(DOSSIER_CREATION, 2026, 0, "2026-07-01");
     await creerEncaissement(DOSSIER_CREATION, "002", 1000000, "2026-08-01"); // 10 000 €, sous le plafond plein ET le prorata
 
-    const resultat = await calculerMicroBnc(DOSSIER_CREATION, 2026);
+    const resultat = await calculerMicroBnc(DOSSIER_CREATION, 2026, DOSSIER_CREATION);
     expect(resultat.statut).toBe("calcule");
     if (resultat.statut === "calcule") {
       expect(resultat.valeur.anneeCreation).toBe(true);
@@ -153,7 +155,7 @@ describe("calculerMicroBnc", () => {
   });
 
   it("couverture partielle : statut global partiel, jamais un dépassement affirmé", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_PARTIEL }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_PARTIEL, identiteSub: DOSSIER_PARTIEL }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_PARTIEL,
       dateDebutValidite: "2020-01-01",
@@ -170,7 +172,7 @@ describe("calculerMicroBnc", () => {
     // les assertions ci-dessous ne dépendent d'aucun montant exact pour rester robustes à cela.
     await creerEncaissement(DOSSIER_PARTIEL, "003", 1000000, "2026-03-01");
 
-    const resultat = await calculerMicroBnc(DOSSIER_PARTIEL, 2026);
+    const resultat = await calculerMicroBnc(DOSSIER_PARTIEL, 2026, DOSSIER_PARTIEL);
     expect(resultat.statut).toBe("partiel");
     if (resultat.statut === "partiel") {
       expect(resultat.valeurConnue.anneeCourante.statut).toBe("indeterminee");
@@ -180,7 +182,7 @@ describe("calculerMicroBnc", () => {
 
   it("un profil en déclaration contrôlée est indisponible pour le micro-BNC", async () => {
     const dossierId = "test-dossier-microbnc-declaration";
-    await getDb().insert(dossierFiscalTable).values({ id: dossierId }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: dossierId, identiteSub: dossierId }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: dossierId,
       dateDebutValidite: "2026-01-01",
@@ -192,7 +194,7 @@ describe("calculerMicroBnc", () => {
       affiliationRetraite: "ssi_regime_general",
     });
 
-    const resultat = await calculerMicroBnc(dossierId, 2026);
+    const resultat = await calculerMicroBnc(dossierId, 2026, dossierId);
     expect(resultat.statut).toBe("indisponible");
 
     await getDb().delete(dossierFiscalTable).where(eq(dossierFiscalTable.id, dossierId));

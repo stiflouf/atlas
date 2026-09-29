@@ -22,7 +22,7 @@ afterAll(async () => {
 
 describe("calculerConsequencesFiscalesProjetees — réutilise les gardes de régime ADR-024", () => {
   it("un profil en déclaration contrôlée est indisponible pour les cotisations/CFP/VFL, et micro-BNC est indéterminé", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_DECLARATION }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_DECLARATION, identiteSub: DOSSIER_DECLARATION }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_DECLARATION,
       dateDebutValidite: "2020-01-01",
@@ -45,7 +45,7 @@ describe("calculerConsequencesFiscalesProjetees — réutilise les gardes de ré
 
 describe("calculerConsequencesFiscalesHypothese — correction obligatoire n° 4/5 (jamais de ventilation devinée)", () => {
   it("un profil et des règles stables toute l'année : la même hypothèse annuelle est taxée directement", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_STABLE }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_STABLE, identiteSub: DOSSIER_STABLE }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_STABLE,
       dateDebutValidite: "2020-01-01",
@@ -63,7 +63,7 @@ describe("calculerConsequencesFiscalesHypothese — correction obligatoire n° 4
   });
 
   it("un changement de régime en cours d'année : ventilation_requise partout, jamais une répartition devinée", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_INSTABLE }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_INSTABLE, identiteSub: DOSSIER_INSTABLE }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_INSTABLE,
       dateDebutValidite: "2020-01-01",

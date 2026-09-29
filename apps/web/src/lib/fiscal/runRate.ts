@@ -16,8 +16,10 @@ export type FiabiliteRunRate =
 // seuil minimal est atteint — plus l'historique s'accumule, plus la moyenne se stabilise. Division
 // entière exclusivement (arithmetiqueFiscale.diviserEntier), même garantie que le reste du moteur
 // fiscal : aucune donnée monétaire en flottant.
-export async function evaluerRunRate(dossierFiscalId: string): Promise<FiabiliteRunRate> {
-  const serie = await chargerHistoriqueMensuel(dossierFiscalId);
+// FISCAL_IDENTITY_OWNERSHIP_V1 — `identiteSub` transporte l'assiette PERSONNELLE ; la règle
+// fiscale appliquée, elle, ne change pas (barèmes légaux, globaux par nature).
+export async function evaluerRunRate(dossierFiscalId: string, identiteSub: string): Promise<FiabiliteRunRate> {
+  const serie = await chargerHistoriqueMensuel(dossierFiscalId, identiteSub);
   if (serie.length < SEUIL_MOIS_MINIMUM_RUN_RATE) {
     return { fiable: false, moisHistoriqueUtilises: serie.length };
   }

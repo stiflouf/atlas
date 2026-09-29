@@ -6,6 +6,8 @@ import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 // 2026-01-01.
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
+// FISCAL_IDENTITY_OWNERSHIP_V1 — dans ces fixtures, un dossier = une identité : le bénéficiaire
+// des honoraires est donc l'identifiant du dossier lui-même, ce qui rend la correspondance lisible.
 const { getDb } = await import("@/db/client");
 const {
   dossierFiscal: dossierFiscalTable,
@@ -70,13 +72,13 @@ async function creerEncaissement(dossierFiscalId: string, suffixe: string, monta
   const compromis = await enregistrerCompromis({ bienId: bien.id, acquereurId: acquereur.id, prixConvenu: 300000, dateSignature: date });
   idsCompromisCrees.push(compromis.id);
   await getDb().update(compromisTable).set({ statut: "realise" }).where(eq(compromisTable.id, compromis.id));
-  await enregistrerRemuneration({ compromisId: compromis.id, montantRemunerationConseillerCentimes: montantCentimes });
+  await enregistrerRemuneration({ compromisId: compromis.id, beneficiaireIdentiteSub: dossierFiscalId, montantRemunerationConseillerCentimes: montantCentimes });
   await marquerRemunerationEncaissee(compromis.id, date);
 }
 
 describe("calculerFranchiseTva — correction obligatoire n° 3 (franchise uniquement)", () => {
   it("calcule les marges avant seuils pour un profil en franchise, couverture complète", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_FRANCHISE }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_FRANCHISE, identiteSub: DOSSIER_FRANCHISE }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_FRANCHISE,
       dateDebutValidite: "2026-01-01",
@@ -93,10 +95,10 @@ describe("calculerFranchiseTva — correction obligatoire n° 3 (franchise uniqu
     // resoudreAssietteAnnuelle() somme TOUS les encaissements réels de l'année, y compris ceux
     // d'autres dossiers/fixtures. seuilBase/seuilMajore, eux, viennent uniquement du référentiel
     // seedé (regle_fiscale) — jamais affectés par l'assiette — restent en égalité absolue.
-    const avant = await calculerFranchiseTva(DOSSIER_FRANCHISE, 2026);
+    const avant = await calculerFranchiseTva(DOSSIER_FRANCHISE, 2026, DOSSIER_FRANCHISE);
     await creerEncaissement(DOSSIER_FRANCHISE, "001", 1000000, "2026-03-01"); // 10 000 €
 
-    const resultat = await calculerFranchiseTva(DOSSIER_FRANCHISE, 2026);
+    const resultat = await calculerFranchiseTva(DOSSIER_FRANCHISE, 2026, DOSSIER_FRANCHISE);
     expect(avant.statut).toBe("calcule");
     expect(resultat.statut).toBe("calcule");
     if (resultat.statut === "calcule" && avant.statut === "calcule") {
@@ -109,7 +111,7 @@ describe("calculerFranchiseTva — correction obligatoire n° 3 (franchise uniqu
   });
 
   it("un profil redevable retourne indisponible — Atlas ne stocke pas le montant HT nécessaire", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_REDEVABLE }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_REDEVABLE, identiteSub: DOSSIER_REDEVABLE }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_REDEVABLE,
       dateDebutValidite: "2026-01-01",
@@ -121,7 +123,7 @@ describe("calculerFranchiseTva — correction obligatoire n° 3 (franchise uniqu
       affiliationRetraite: "ssi_regime_general",
     });
 
-    const resultat = await calculerFranchiseTva(DOSSIER_REDEVABLE, 2026);
+    const resultat = await calculerFranchiseTva(DOSSIER_REDEVABLE, 2026, DOSSIER_REDEVABLE);
     expect(resultat).toEqual({
       statut: "indisponible",
       raisons: [{ type: "regime_tva_non_supporte", regimeTva: "redevable_reel_simplifie" }],
@@ -129,7 +131,7 @@ describe("calculerFranchiseTva — correction obligatoire n° 3 (franchise uniqu
   });
 
   it("couverture partielle : statut partiel, jamais 'calcule' sur un CA incertain", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_PARTIEL }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_PARTIEL, identiteSub: DOSSIER_PARTIEL }).onConflictDoNothing();
     await enregistrerProfilFiscal({
       dossierFiscalId: DOSSIER_PARTIEL,
       dateDebutValidite: "2026-01-01",
@@ -147,7 +149,7 @@ describe("calculerFranchiseTva — correction obligatoire n° 3 (franchise uniqu
     // égalité exacte, pour rester robuste à cela.
     await creerEncaissement(DOSSIER_PARTIEL, "003", 1000000, "2026-03-01");
 
-    const resultat = await calculerFranchiseTva(DOSSIER_PARTIEL, 2026);
+    const resultat = await calculerFranchiseTva(DOSSIER_PARTIEL, 2026, DOSSIER_PARTIEL);
     expect(resultat.statut).toBe("partiel");
     if (resultat.statut === "partiel") {
       expect(resultat.valeurConnue.caReferenceConnuCentimes).toBeGreaterThanOrEqual(1000000);

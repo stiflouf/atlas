@@ -5,6 +5,9 @@ import type { StatutCompromis } from "@/types/compromis";
 export type Remuneration = {
   id: string;
   compromisId: string;
+  // FISCAL_IDENTITY_OWNERSHIP_V1 — le BÉNÉFICIAIRE des honoraires (`sub` de la session Atlas).
+  // Fait métier, pas trace d'audit : c'est lui qui rend une assiette fiscale personnelle possible.
+  beneficiaireIdentiteSub: string;
   montantHonorairesTotalCentimes?: number;
   montantRemunerationConseillerCentimes: number;
   dateEncaissementPrevue?: string;

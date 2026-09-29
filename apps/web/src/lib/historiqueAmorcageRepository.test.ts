@@ -15,7 +15,7 @@ afterAll(async () => {
 
 describe("historiqueAmorcageRepository — contrat de couverture (point 3)", () => {
   it("prépare un dossier fiscal de test", async () => {
-    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID }).onConflictDoNothing();
+    await getDb().insert(dossierFiscalTable).values({ id: DOSSIER_TEST_ID, identiteSub: DOSSIER_TEST_ID }).onConflictDoNothing();
   });
 
   it("absence de ligne pour une année = couverture inconnue, jamais assimilée à 0", async () => {

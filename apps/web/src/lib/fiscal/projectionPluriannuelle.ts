@@ -13,17 +13,19 @@ export const HORIZON_PROJECTION_ANNEES = 5;
 //
 // hypotheses : montants annuels temporaires saisis par l'utilisateur pour CETTE requête uniquement
 // (correction n° 5) — jamais persistés, jamais une migration associée dans cette passe.
+// FISCAL_IDENTITY_OWNERSHIP_V1 — même correction d'asymétrie que `calculerProjectionFinAnnee` :
+// pipeline et run-rate portent désormais tous deux sur la personne.
 export async function calculerProjectionPluriannuelle(
   dossierFiscalId: string,
   anneeDebut: number,
-  workspaceId: string,
+  identiteSub: string,
   nombreAnnees: number = HORIZON_PROJECTION_ANNEES,
   hypotheses?: Record<number, number>
 ): Promise<ProjectionAnneeFiscale[]> {
   const anneeFin = anneeDebut + nombreAnnees - 1;
   const [{ finaliseNonEncaisse, compromisEnCours }, fiabiliteRunRate] = await Promise.all([
-    listerPipelineDate(workspaceId, anneeDebut, anneeFin),
-    evaluerRunRate(dossierFiscalId),
+    listerPipelineDate({ type: "identite", identiteSub }, anneeDebut, anneeFin),
+    evaluerRunRate(dossierFiscalId, identiteSub),
   ]);
 
   const itemsPipeline: TrancheProjetee[] = [...finaliseNonEncaisse, ...compromisEnCours].map((item) => ({
