@@ -28,9 +28,11 @@ export async function enregistrerValidationBien(
   decision: DecisionValidation,
   bienId: string | null
 ): Promise<void> {
-  await exigerSessionAtlas();
+  // WORKSPACE_SCOPING_V2D2 — l'identité sert au compte Google (relecture de l'événement), le
+  // workspace aux données DOMIORA. Jamais l'un pour l'autre.
+  const session = await exigerSessionAtlas();
   const workspaceId = await exigerWorkspaceCourant();
-  const resultat = await getRendezVousAvecContexte(rendezVousId, workspaceId);
+  const resultat = await getRendezVousAvecContexte(rendezVousId, workspaceId, session.sub);
   if (!resultat) return; // rendez-vous introuvable (supprimé côté Google entre-temps, etc.)
 
   if (bienId && decision !== "ignore" && !(await getBienDuWorkspace(bienId, workspaceId))) return;

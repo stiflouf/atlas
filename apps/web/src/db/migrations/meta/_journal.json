@@ -393,6 +393,13 @@
       "when": 1790586049064,
       "tag": "0055_contextual_memory_per_workspace",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1790672449064,
+      "tag": "0056_google_connection_per_identity",
+      "breakpoints": true
     }
   ]
 }

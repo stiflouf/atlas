@@ -410,6 +410,13 @@ déploiement `domiora-demo` ne suit pas cette séquence — il découle automati
    - [ ] Un document existant se télécharge toujours (stockage intact).
    - [ ] Les 3 jobs répondent 200 au prochain déclenchement.
    - [ ] Google Calendar/Gmail toujours connectés (ou reconnexion possible si révoqués).
+     **Exception, une seule fois, au déploiement de la migration 0056** (`connexions_google`
+     rattachée à l'identité, WORKSPACE_SCOPING_V2D2) : la ligne historique n'appartenait à personne
+     — aucune donnée en base ne reliait ce refresh token à un conseiller — elle est donc SUPPRIMÉE
+     par la migration, jamais attribuée à une identité supposée. La reconnexion est alors
+     OBLIGATOIRE, pas conditionnelle. Geste propre : cliquer « Déconnecter » sur `/` AVANT la
+     migration (elle n'appelle jamais le réseau, elle ne peut donc pas révoquer le token abandonné),
+     puis se reconnecter après le déploiement via `/api/auth/google/login`.
 
 ## 8. Rollback
 

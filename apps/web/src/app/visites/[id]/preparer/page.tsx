@@ -37,6 +37,7 @@ import { rechercherTransactionsComparables } from "@/lib/marche/dvfClient";
 import { produirePointsAttention } from "@/lib/pointsAttention/moteur";
 import { chargerPresentationMandatBien, statutMandatEffectif } from "@/lib/presentationMandatBien";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { produirePointsForts } from "@/lib/pointsForts/moteur";
 import type { PreparationVisite } from "@/types/preparation";
 import type { Bien } from "@/types/bien";
@@ -126,13 +127,17 @@ function EnTeteRetour() {
 export default async function PreparerVisite({ params }: PageProps) {
   const { id } = await params;
   // ADR-054 — AVANT toute lecture Calendar, tout rapprochement, tout rendu.
+  // WORKSPACE_SCOPING_V2D2 — l'identité est résolue au même endroit, et pour une raison DIFFÉRENTE :
+  // le workspace décide quelles données DOMIORA peuvent entrer, l'identité décide de quel compte
+  // Google l'événement est lu. Les deux sont nécessaires avant le premier appel Google.
+  const session = await exigerSessionAtlas();
   const workspaceId = await exigerWorkspaceCourant();
 
   // Chemin 1 — preuve par la Visite canonique. Scopé (jointure sur `biens.workspace_id`) : une
   // Visite d'un autre workspace est introuvable ici, exactement comme un événement inconnu.
   const visiteProuvee = await getVisiteParRendezVousCalendarId(id, workspaceId);
 
-  const resultat = await getRendezVousAvecContexte(id, workspaceId);
+  const resultat = await getRendezVousAvecContexte(id, workspaceId, session.sub);
   if (!resultat) notFound();
 
   const { rdv, contexte } = resultat;

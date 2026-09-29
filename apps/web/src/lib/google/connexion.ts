@@ -4,9 +4,6 @@ import { getDb } from "@/db/client";
 import { connexionsGoogle } from "@/db/schema";
 
 const ALGORITHME = "aes-256-gcm";
-// Produit mono-conseiller : une seule connexion Google possible, toujours cette ligne (voir
-// ADR-006). Pas de notion d'utilisateur/session tant que ce besoin n'existe pas réellement.
-const ID_CONNEXION = "default";
 
 function cle(): Buffer {
   const b64 = process.env.GOOGLE_TOKEN_ENCRYPTION_KEY;
@@ -40,13 +37,22 @@ function dechiffrer(valeur: string): string {
 // uniquement de ce champ (voir capacites.ts), jamais d'une supposition sur la route appelée.
 export type ConnexionGoogle = { refreshToken: string; scope: string };
 
+// WORKSPACE_SCOPING_V2D2 (ADR-054 §6) — `identiteSub` est OBLIGATOIRE sur les trois fonctions de ce
+// module, et c'est tout le lot : jusqu'ici elles ne prenaient AUCUN paramètre et visaient toujours
+// la même ligne (`id = 'default'`). Un token OAuth appartient à la personne qui l'a accordé, jamais
+// à l'instance ni au workspace — deux conseillers ont deux comptes Google, deux agendas, deux
+// boîtes mail.
+//
+// `identiteSub` vient de `DonneesSessionAtlas.sub` (ADR-047), jamais d'un champ de formulaire ni
+// d'un paramètre d'URL : c'est une identité prouvée par cookie scellé, pas une valeur soumise.
+//
 // Le refresh_token n'est jamais transmis au navigateur : il est chiffré (AES-256-GCM) et vit
 // uniquement en base. L'access_token n'est jamais persisté, régénéré à la demande.
-export async function lireConnexionGoogle(): Promise<ConnexionGoogle | undefined> {
+export async function lireConnexionGoogle(identiteSub: string): Promise<ConnexionGoogle | undefined> {
   const [ligne] = await getDb()
     .select()
     .from(connexionsGoogle)
-    .where(eq(connexionsGoogle.id, ID_CONNEXION))
+    .where(eq(connexionsGoogle.identiteSub, identiteSub))
     .limit(1);
 
   if (!ligne) return undefined;
@@ -66,17 +72,24 @@ export async function lireConnexionGoogle(): Promise<ConnexionGoogle | undefined
   }
 }
 
-export async function ecrireConnexionGoogle(refreshToken: string, scope: string): Promise<void> {
+// La cible de l'`ON CONFLICT` est l'IDENTITÉ : une reconnexion remplace le token de CETTE personne
+// et d'aucune autre. Avant ce lot la cible était `id`, constante — chaque connexion écrasait donc
+// celle du membre précédent, en silence.
+export async function ecrireConnexionGoogle(
+  identiteSub: string,
+  refreshToken: string,
+  scope: string
+): Promise<void> {
   const db = getDb();
   await db
     .insert(connexionsGoogle)
     .values({
-      id: ID_CONNEXION,
+      identiteSub,
       refreshTokenChiffre: chiffrer(refreshToken),
       scope,
     })
     .onConflictDoUpdate({
-      target: connexionsGoogle.id,
+      target: connexionsGoogle.identiteSub,
       set: {
         refreshTokenChiffre: chiffrer(refreshToken),
         scope,
@@ -85,6 +98,8 @@ export async function ecrireConnexionGoogle(refreshToken: string, scope: string)
     });
 }
 
-export async function supprimerConnexionGoogle(): Promise<void> {
-  await getDb().delete(connexionsGoogle).where(eq(connexionsGoogle.id, ID_CONNEXION));
+// Supprime la connexion d'UNE personne. Un `DELETE` sans `WHERE` d'identité déconnecterait tout le
+// monde — c'est exactement ce que faisait le logout avant ce lot.
+export async function supprimerConnexionGoogle(identiteSub: string): Promise<void> {
+  await getDb().delete(connexionsGoogle).where(eq(connexionsGoogle.identiteSub, identiteSub));
 }

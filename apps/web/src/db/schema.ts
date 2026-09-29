@@ -71,17 +71,28 @@ export const workspaceMembres = pgTable(
   ]
 );
 
-// Produit mono-conseiller pour l'instant (voir ADR-006) : une seule ligne possible,
-// toujours identifiée par id = 'default'. Pas de notion d'utilisateur/session en base.
-//
 // ADR-054 §6 — SECRET PERSONNEL, jamais un actif du workspace : cette table porte un refresh token
 // OAuth accordé par UNE identité humaine. Elle ne reçoit donc AUCUN `workspace_id`, et n'en recevra
-// jamais : le jour du multi-utilisateur elle gagnera une référence vers l'identité/l'appartenance.
-// Aucun partage implicite d'un token entre membres — une boîte mail ou un agenda d'organisation
-// serait une connexion distincte, accordée explicitement à ce titre, jamais l'élargissement
-// silencieux du token personnel d'un conseiller.
+// jamais. Aucun partage implicite d'un token entre membres — une boîte mail ou un agenda
+// d'organisation serait une connexion distincte, accordée explicitement à ce titre, jamais
+// l'élargissement silencieux du token personnel d'un conseiller.
+//
+// WORKSPACE_SCOPING_V2D2 — la promesse d'ADR-054 §6 (« le jour du multi-utilisateur elle gagnera
+// une référence vers l'identité ») est tenue ici : la PK devient `identite_sub`, une ligne PAR
+// personne. Jusqu'à ce lot, l'identité de la ligne était le littéral `'default'` : le second membre
+// qui connectait Google ÉCRASAIT le token du premier (upsert sur cet id), et tout appel
+// Calendar/Gmail de n'importe quelle session tapait sur le compte du dernier connecté.
+//
+// `identite_sub` est le `sub` OIDC de la session Atlas (`DonneesSessionAtlas`, ADR-047) — stable,
+// non modifiable, déjà la clé d'appartenance (`workspace_membres.identite_sub`). JAMAIS l'email
+// (mutable côté fournisseur), jamais le workspace (§6 ci-dessus).
+//
+// AUCUNE FK : il n'existe pas de table d'utilisateurs, et `workspace_membres.identite_sub` n'est
+// pas unique (PK composite avec le workspace). Inventer une FK vers elle rattacherait un secret
+// personnel à une APPARTENANCE — exactement ce que §6 refuse. Le périmètre est donc porté par la
+// colonne seule, comme pour toute racine de ce schéma.
 export const connexionsGoogle = pgTable("connexions_google", {
-  id: text("id").primaryKey().default("default"),
+  identiteSub: text("identite_sub").primaryKey(),
   refreshTokenChiffre: text("refresh_token_chiffre").notNull(),
   scope: text("scope").notNull(),
   creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),

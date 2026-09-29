@@ -33,14 +33,19 @@ vi.mock("@/lib/google/connexion", () => ({
 const ORIGINE_PUBLIQUE = "https://domiora-production.up.railway.app";
 const URL_INTERNE = "http://localhost:8080/api/auth/google/callback";
 
+const SUB_SESSION_TEST = "sub-1";
+
 async function seedSessionAtlas() {
   const { creerSessionAtlas } = await import("@/lib/auth/sessionAtlas");
-  await creerSessionAtlas({ sub: "sub-1", email: "conseiller@example.com" });
+  await creerSessionAtlas({ sub: SUB_SESSION_TEST, email: "conseiller@example.com" });
 }
 
-async function seedStateGoogle(state: string) {
+// WORKSPACE_SCOPING_V2D2 — le state porte désormais le `sub` initiateur. Par défaut on scelle celui
+// de la session semée ci-dessus : ces cas-ci testent l'origine de redirection, pas la frontière
+// d'identité (couverte par frontiereIdentite.test.ts).
+async function seedStateGoogle(state: string, identiteSub = SUB_SESSION_TEST) {
   const { ecrireStateTemporaire } = await import("@/lib/google/state");
-  await ecrireStateTemporaire(state);
+  await ecrireStateTemporaire(state, identiteSub);
 }
 
 describe("GET /api/auth/google/callback — origine de redirection (bugfix déploiement)", () => {
@@ -77,7 +82,7 @@ describe("GET /api/auth/google/callback — origine de redirection (bugfix dépl
 
     expect(reponse.status).toBe(307);
     expect(reponse.headers.get("location")).toBe(`${ORIGINE_PUBLIQUE}/`);
-    expect(ecrireConnexionGoogleMock).toHaveBeenCalledWith("rt-1", "s");
+    expect(ecrireConnexionGoogleMock).toHaveBeenCalledWith(SUB_SESSION_TEST, "rt-1", "s");
   });
 
   it("développement local : GOOGLE_REDIRECT_URI localhost ⇒ redirection localhost (flux dev non cassé)", async () => {

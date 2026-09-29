@@ -111,7 +111,11 @@ export async function envoyerEmailGmailAction(
   _etatPrecedent: ResultatActionEnvoiEmail | null,
   formData: FormData
 ): Promise<ResultatActionEnvoiEmail> {
-  await exigerSessionAtlas();
+  // WORKSPACE_SCOPING_V2D2 — la session n'est plus seulement exigée, elle est RETENUE : son `sub`
+  // désigne le compte Gmail qui enverra. L'API Gmail expédie via `users/me`, c'est-à-dire « le
+  // compte du refresh token » : lire le mauvais token, c'est envoyer depuis la boîte de quelqu'un
+  // d'autre, sous son nom.
+  const session = await exigerSessionAtlas();
   const idempotencyKey = texteOptionnel(formData.get("idempotencyKey"));
   const destinataireEmail = texteOptionnel(formData.get("destinataireEmail"));
   const objet = String(formData.get("objet") ?? "");
@@ -126,7 +130,7 @@ export async function envoyerEmailGmailAction(
     return { statut: "echec", message: "Requête invalide — destinataire ou clé d'envoi manquante." };
   }
 
-  const capacites = await chargerCapacitesGoogle();
+  const capacites = await chargerCapacitesGoogle(session.sub);
   if (!capacites.gmailAutorise) {
     return { statut: "echec", message: "Gmail n'est pas autorisé — autorisez Gmail avant d'envoyer." };
   }
@@ -160,7 +164,7 @@ export async function envoyerEmailGmailAction(
     return { statut: "incertain" };
   }
 
-  const connexion = await lireConnexionGoogle();
+  const connexion = await lireConnexionGoogle(session.sub);
   if (!connexion) {
     // Bugfix pilote : auparavant silencieux — soit aucune connexion en base, soit déchiffrement
     // impossible (déjà journalisé séparément par lireConnexionGoogle() dans ce second cas).

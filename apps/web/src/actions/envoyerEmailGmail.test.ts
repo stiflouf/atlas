@@ -47,6 +47,11 @@ const { listerInteractionsDuContact } = await import("@/lib/interactionRepositor
 const { listerNotesProspectVendeur } = await import("@/lib/noteProspectVendeurRepository");
 const { getEnvoiEmailById } = await import("@/lib/envoiEmailRepository");
 const { deriverEtatEnvoiEmail } = await import("@/types/envoiEmail");
+// WORKSPACE_SCOPING_V2D2 — la connexion Google appartient désormais à une IDENTITÉ : les fixtures
+// doivent écrire sous le `sub` de la session mockée ci-dessus, sinon l'action ne retrouve aucun
+// token (et c'est le comportement correct).
+const SUB_SESSION_TEST = "test-sub";
+
 const { envoyerEmailGmailAction } = await import("./envoyerEmailGmail");
 
 const idsEnvois: string[] = [];
@@ -54,7 +59,7 @@ const idsProspects: string[] = [];
 const idsContacts: string[] = [];
 
 beforeAll(async () => {
-  await ecrireConnexionGoogle("refresh-token-test", `https://www.googleapis.com/auth/calendar.events.readonly ${SCOPE_GMAIL_SEND}`);
+  await ecrireConnexionGoogle(SUB_SESSION_TEST, "refresh-token-test", `https://www.googleapis.com/auth/calendar.events.readonly ${SCOPE_GMAIL_SEND}`);
 });
 
 afterAll(async () => {
@@ -73,7 +78,7 @@ afterAll(async () => {
     await getDb().delete(interactionsTable).where(eq(interactionsTable.contactId, id));
     await getDb().delete(contactsTable).where(eq(contactsTable.id, id));
   }
-  await supprimerConnexionGoogle();
+  await supprimerConnexionGoogle(SUB_SESSION_TEST);
 });
 
 afterEach(() => {
@@ -134,8 +139,8 @@ describe("envoyerEmailGmailAction", () => {
   });
 
   it("scope Gmail absent -> échec explicite, aucune tentative démarrée", async () => {
-    await supprimerConnexionGoogle();
-    await ecrireConnexionGoogle("refresh-token-test", "https://www.googleapis.com/auth/calendar.events.readonly");
+    await supprimerConnexionGoogle(SUB_SESSION_TEST);
+    await ecrireConnexionGoogle(SUB_SESSION_TEST, "refresh-token-test", "https://www.googleapis.com/auth/calendar.events.readonly");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -152,7 +157,7 @@ describe("envoyerEmailGmailAction", () => {
     await expect(getEnvoiEmailById(id)).resolves.toBeUndefined();
 
     // Restaure le scope Gmail pour les tests suivants.
-    await ecrireConnexionGoogle("refresh-token-test", `https://www.googleapis.com/auth/calendar.events.readonly ${SCOPE_GMAIL_SEND}`);
+    await ecrireConnexionGoogle(SUB_SESSION_TEST, "refresh-token-test", `https://www.googleapis.com/auth/calendar.events.readonly ${SCOPE_GMAIL_SEND}`);
   });
 
   it("échec Gmail (réponse HTTP reçue non-2xx) -> statut echec, aucune interaction ajoutée", async () => {

@@ -657,6 +657,110 @@ describe("Frontière workspace — mémoire contextuelle par workspace", () => {
   });
 });
 
+// ───────────────── 4ter. FRONTIÈRE DE COMPTE GOOGLE (IDENTITÉ) ─────────────────
+
+// WORKSPACE_SCOPING_V2D2 (ADR-054 §6) — toutes les gardes ci-dessus raisonnent sur le WORKSPACE.
+// Celle-ci raisonne sur l'IDENTITÉ, et c'est une frontière différente : un refresh token Google
+// appartient à la personne qui l'a accordé, jamais au workspace ni à l'instance. Confondre les deux
+// ferait d'un secret personnel un actif partagé.
+//
+// Jusqu'à ce lot, `connexions_google` était un SINGLETON (`id = 'default'`) : le second membre qui
+// connectait Google écrasait le token du premier, le premier logout révoquait pour tout le monde,
+// et chaque lecture Calendar/Gmail tapait sur le compte du dernier connecté. Ces gardes empêchent
+// le retour de l'une ou l'autre forme de ce défaut.
+const CONNEXION_GOOGLE_REPOSITORY = "lib/google/connexion.ts";
+
+// Le dossier Google entier, plus les surfaces machine qui ne doivent jamais y toucher.
+const SURFACES_MACHINE = [
+  "app/api/automatisations/scan/route.ts",
+  "app/api/automatisations/reprise/route.ts",
+  "app/api/compatibilite/scan/route.ts",
+  "app/api/compatibilite/baseline/route.ts",
+  ...listerFichiers(join(SRC, "lib", "automatisations"), (c) => /\.ts$/.test(c) && !/\.test\.ts$/.test(c)).map((chemin) =>
+    relative(SRC, chemin).split(sep).join("/")
+  ),
+];
+
+describe("Frontière d'identité — connexion Google personnelle", () => {
+  const sourceConnexion = () => codeSeul(join(SRC, ...CONNEXION_GOOGLE_REPOSITORY.split("/")));
+
+  it("toute fonction exportée du repository de connexion exige un identiteSub", () => {
+    const sansIdentite: string[] = [];
+    for (const bloc of sourceConnexion().split(/(?=export async function )/)) {
+      const nom = /^export async function (\w+)/.exec(bloc)?.[1];
+      if (!nom) continue;
+      const signature = bloc.slice(0, bloc.indexOf("): "));
+      if (!/identiteSub: string/.test(signature)) sansIdentite.push(`${CONNEXION_GOOGLE_REPOSITORY} → ${nom}`);
+      expect(signature, `${nom} : identiteSub ne doit jamais être optionnel`).not.toContain("identiteSub?");
+    }
+    expect(sansIdentite).toEqual([]);
+  });
+
+  // Le singleton ne revient pas par une constante rebaptisée : ce qui est interdit, c'est qu'une
+  // requête sur cette table vise une valeur littérale plutôt que l'identité reçue en paramètre.
+  it("aucun identifiant de connexion en dur : le singleton ne peut pas revenir", () => {
+    const source = sourceConnexion();
+    expect(source, "ID_CONNEXION était la clé du singleton — ne jamais la réintroduire").not.toContain("ID_CONNEXION");
+    expect(source, "aucune connexion ne s'identifie par le littéral 'default'").not.toMatch(/["'`]default["'`]/);
+  });
+
+  it("toute lecture ou suppression de connexions_google porte l'identité", () => {
+    const fautifs: string[] = [];
+    for (const instruction of sourceConnexion().split(";")) {
+      const touche = /\.from\(connexionsGoogle\)/.test(instruction) || /\.delete\(connexionsGoogle\)/.test(instruction);
+      if (!touche) continue;
+      if (!/connexionsGoogle\.identiteSub/.test(instruction)) {
+        fautifs.push(
+          `${CONNEXION_GOOGLE_REPOSITORY} : accès à connexions_google sans eq(connexionsGoogle.identiteSub, ...) — ` +
+            `un SELECT ou un DELETE global rendrait (ou supprimerait) le token de quelqu'un d'autre.`
+        );
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  it("tout ON CONFLICT sur la connexion cible l'identité, jamais une clé d'instance", () => {
+    const cibles = [...sourceConnexion().matchAll(/onConflictDoUpdate\(\{\s*target:\s*([^\n,]*)/g)].map((m) => m[1]);
+    expect(cibles.length, "l'upsert de connexion doit exister").toBeGreaterThan(0);
+    for (const cible of cibles) {
+      expect(
+        cible,
+        `ON CONFLICT ciblant ${cible.trim()} — la clé d'une connexion est l'identité ; toute autre cible ` +
+          `fait écraser le token d'une autre personne (c'était le défaut du singleton).`
+      ).toContain("connexionsGoogle.identiteSub");
+    }
+  });
+
+  // Un chemin machine n'a aucune identité à présenter : s'il acquérait un token Google, il devrait
+  // en choisir un — c'est-à-dire emprunter le compte de quelqu'un. L'audit V2D2 a établi qu'aucun
+  // n'y touche aujourd'hui ; cette garde empêche que cela change sans décision explicite.
+  it("aucune surface machine n'importe le domaine Google", () => {
+    const fautifs: string[] = [];
+    for (const relatif of SURFACES_MACHINE) {
+      const source = codeSeul(join(SRC, ...relatif.split("/")));
+      if (/from "@\/lib\/google\//.test(source) || /from "\.\.?\/google\//.test(source)) {
+        fautifs.push(
+          `${relatif} importe lib/google/** — un chemin machine n'a pas d'identité, il ne peut donc pas ` +
+            `choisir un compte Google sans emprunter celui de quelqu'un.`
+        );
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  // Capacité de détection, sur des sources fabriquées : une garde qui ne ferait que constater
+  // l'état du dépôt passerait encore si elle était vide.
+  it("détecte un upsert revenu à une clé d'instance et une lecture sans identité", () => {
+    const fauxUpsert = `.onConflictDoUpdate({ target: connexionsGoogle.id, set: v });`;
+    expect([...fauxUpsert.matchAll(/onConflictDoUpdate\(\{\s*target:\s*([^\n,]*)/g)][0][1]).not.toContain(
+      "connexionsGoogle.identiteSub"
+    );
+    const fausseLecture = `const [l] = await getDb().select().from(connexionsGoogle).limit(1);`;
+    expect(/\.from\(connexionsGoogle\)/.test(fausseLecture)).toBe(true);
+    expect(/connexionsGoogle\.identiteSub/.test(fausseLecture)).toBe(false);
+  });
+});
+
 // ───────────────── 5. MOTEUR D'AUTOMATISATION MULTI-WORKSPACE ─────────────────
 
 // WORKSPACE_SCOPING_V2B5 — les quatre gardes précédentes raisonnent sur des lectures et des

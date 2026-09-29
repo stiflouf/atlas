@@ -11,6 +11,14 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
   exigerWorkspaceCourant: async () => "default",
 }));
 
+// WORKSPACE_SCOPING_V2D2 — le cockpit résout aussi l'IDENTITÉ, pour un usage distinct du workspace :
+// elle désigne le compte Google dont l'agenda et les capacités sont lus. Aucune connexion Google
+// n'existe pour ce `sub` en base de test, donc l'agenda retombe sur son repli habituel — exactement
+// le comportement déjà exercé par ces cas, qui ne portent pas sur Google.
+vi.mock("@/lib/auth/sessionAtlas", () => ({
+  exigerSessionAtlas: async () => ({ sub: "sub-cockpit-test", email: "conseiller@example.com" }),
+}));
+
 // Test d'intégration réel (ADR-039) : vraie base Postgres, comme le reste du projet — la page
 // d'accueil orchestre plusieurs repositories réels, un mock partiel romprait la couverture de
 // cette orchestration. Base partagée avec le reste de la suite : chaque assertion sur un contenu

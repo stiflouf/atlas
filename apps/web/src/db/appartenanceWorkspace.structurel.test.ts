@@ -283,6 +283,23 @@ describe("ADR-054 — appartenance des tables (garantie structurelle)", () => {
     }
   });
 
+  // WORKSPACE_SCOPING_V2D2 — le pendant POSITIF de la garde ci-dessus. « Pas de workspace_id » ne
+  // suffisait pas : la table n'avait AUCUNE appartenance, son identité était le littéral 'default'.
+  // Un secret personnel doit être rattaché à quelqu'un, et à une PERSONNE — ce test échoue donc
+  // aussi bien si `identite_sub` disparaît que si elle cesse d'être la clé.
+  it("un secret personnel est rattaché à une identité, et cette identité est sa clé", () => {
+    for (const nom of TABLES_PRIVEES_IDENTITE) {
+      const colonnes = config(nom).columns;
+      const identite = colonnes.find((c) => c.name === "identite_sub");
+      expect(identite, `${nom} doit porter identite_sub : un secret sans propriétaire est un secret partagé`).toBeDefined();
+      expect(identite!.notNull, `${nom}.identite_sub ne peut pas être nullable`).toBe(true);
+      expect(identite!.primary, `${nom}.identite_sub doit être la clé primaire : une ligne PAR personne`).toBe(true);
+      // Aucune FK : il n'existe pas de table d'utilisateurs, et workspace_membres.identite_sub n'est
+      // pas unique. Une FK vers elle rattacherait le secret à une APPARTENANCE, pas à une personne.
+      expect(config(nom).foreignKeys, `${nom} ne doit avoir aucune FK`).toHaveLength(0);
+    }
+  });
+
   it("une appartenance non tranchée ou globale ne reçoit pas workspace_id en silence", () => {
     for (const nom of [...TABLES_APPARTENANCE_NON_TRANCHEE, ...TABLES_TECHNIQUES_GLOBALES]) {
       expect(colonneWorkspace(nom), `${nom} ne doit pas porter ${NOM_COLONNE} sans décision explicite`).toBeUndefined();

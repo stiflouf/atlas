@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { SCOPE_GMAIL_SEND, construireUrlAutorisation } from "@/lib/google/oauth";
 import { ecrireStateTemporaire } from "@/lib/google/state";
-import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute";
+import { exigerSessionAtlasRoute } from "@/lib/auth/exigerSessionAtlasRoute";
 
 // ADR-047 : un visiteur anonyme ne peut jamais initier une autorisation Gmail pour l'instance Atlas
 // — même rationale que /api/auth/google/login.
@@ -16,9 +16,11 @@ import { refuserSiSessionAtlasAbsente } from "@/lib/auth/exigerSessionAtlasRoute
 // refresh_token est requis à coup sûr pour cette nouvelle capacité, et Google ne le réémet de
 // façon garantie qu'avec un consentement explicite.
 export async function GET() {
-  const refus = await refuserSiSessionAtlasAbsente();
+  // WORKSPACE_SCOPING_V2D2 — le scope demandé diffère, l'appartenance non : un consentement Gmail
+  // est accordé par la MÊME identité Atlas et alimente la MÊME ligne `connexions_google`.
+  const { refus, session } = await exigerSessionAtlasRoute();
   if (refus) return refus;
   const state = randomBytes(16).toString("hex");
-  await ecrireStateTemporaire(state);
+  await ecrireStateTemporaire(state, session.sub);
   return NextResponse.redirect(construireUrlAutorisation(state, true, [SCOPE_GMAIL_SEND]));
 }

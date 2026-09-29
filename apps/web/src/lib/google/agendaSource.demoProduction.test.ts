@@ -26,12 +26,16 @@ afterEach(() => {
   vi.mocked(rafraichirAccessToken).mockReset();
 });
 
+// WORKSPACE_SCOPING_V2D2 — l'agenda est celui d'une identité ; `lireConnexionGoogle` est mocké ici,
+// la valeur du sub n'influe donc sur rien d'autre que la signature.
+const SUB_TEST = "sub-agenda-test";
+
 describe("getAgendaSemaine — isolation démo/production", () => {
   it("production + aucune connexion Google : agenda vide, jamais les rendez-vous mockés", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.mocked(lireConnexionGoogle).mockResolvedValue(undefined);
 
-    const { rendezVous, source } = await getAgendaSemaine();
+    const { rendezVous, source } = await getAgendaSemaine(SUB_TEST);
 
     expect(rendezVous).toEqual([]);
     // La source reste "demo" : c'est elle qui porte le badge expliquant pourquoi l'agenda n'est pas
@@ -43,7 +47,7 @@ describe("getAgendaSemaine — isolation démo/production", () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.mocked(lireConnexionGoogle).mockResolvedValue(undefined);
 
-    const { rendezVous, source } = await getAgendaSemaine();
+    const { rendezVous, source } = await getAgendaSemaine(SUB_TEST);
 
     expect(rendezVous.length).toBeGreaterThan(0);
     expect(source).toBe("demo");
@@ -54,7 +58,7 @@ describe("getAgendaSemaine — isolation démo/production", () => {
     vi.mocked(lireConnexionGoogle).mockResolvedValue({ refreshToken: "factice", scope: "" });
     vi.mocked(rafraichirAccessToken).mockRejectedValue(new Error("token révoqué (simulé)"));
 
-    const { rendezVous, source } = await getAgendaSemaine();
+    const { rendezVous, source } = await getAgendaSemaine(SUB_TEST);
 
     expect(rendezVous).toEqual([]);
     expect(source).toBe("demo_erreur");
@@ -64,7 +68,7 @@ describe("getAgendaSemaine — isolation démo/production", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.mocked(lireConnexionGoogle).mockRejectedValue(new Error("connexion refusée (simulé)"));
 
-    const { rendezVous, source } = await getAgendaSemaine();
+    const { rendezVous, source } = await getAgendaSemaine(SUB_TEST);
 
     expect(rendezVous).toEqual([]);
     expect(source).toBe("demo");
@@ -75,7 +79,7 @@ describe("getAgendaSemaine — isolation démo/production", () => {
     vi.mocked(lireConnexionGoogle).mockResolvedValue({ refreshToken: "factice", scope: "" });
     vi.mocked(rafraichirAccessToken).mockRejectedValue(new Error("token révoqué (simulé)"));
 
-    const { rendezVous, source } = await getAgendaSemaine();
+    const { rendezVous, source } = await getAgendaSemaine(SUB_TEST);
 
     expect(rendezVous.length).toBeGreaterThan(0);
     expect(source).toBe("demo_erreur");

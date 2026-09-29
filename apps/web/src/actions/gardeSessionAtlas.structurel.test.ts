@@ -33,19 +33,37 @@ function estDirectiveUseServer(sourceFile: ts.SourceFile): boolean {
 // function sans accolades, ex. `export const foo = async () => bar()`) est structurellement
 // incapable de contenir `exigerSessionAtlas()` comme première INSTRUCTION d'une suite — traité
 // comme non protégé s'il apparaît, quel que soit son contenu.
+function estAppelExigerSessionAtlas(expression: ts.Expression): boolean {
+  // `await exigerSessionAtlas()` — l'expression est un AwaitExpression enveloppant l'appel.
+  const appel = ts.isAwaitExpression(expression) ? expression.expression : expression;
+  return (
+    ts.isCallExpression(appel) && ts.isIdentifier(appel.expression) && appel.expression.text === "exigerSessionAtlas"
+  );
+}
+
 function corpsAppelleExigerSessionAtlasEnPremier(corps: ts.Block | undefined): boolean {
   const premiereInstruction = corps?.statements[0];
-  if (!premiereInstruction || !ts.isExpressionStatement(premiereInstruction)) return false;
+  if (!premiereInstruction) return false;
 
-  let expression = premiereInstruction.expression;
-  // `await exigerSessionAtlas();` — l'expression de tête est un AwaitExpression enveloppant l'appel.
-  if (ts.isAwaitExpression(expression)) expression = expression.expression;
+  // Forme historique : `await exigerSessionAtlas();` — l'appel est jeté, seule sa levée compte.
+  if (ts.isExpressionStatement(premiereInstruction)) {
+    return estAppelExigerSessionAtlas(premiereInstruction.expression);
+  }
 
-  return (
-    ts.isCallExpression(expression) &&
-    ts.isIdentifier(expression.expression) &&
-    expression.expression.text === "exigerSessionAtlas"
-  );
+  // WORKSPACE_SCOPING_V2D2 — forme équivalente : `const session = await exigerSessionAtlas();`.
+  // Ce que cette garde protège est l'ORDRE (la garde s'exécute avant tout effet), pas la mise au
+  // rebut du résultat. Depuis que la connexion Google est rattachée à une identité, plusieurs
+  // actions ont besoin du `sub` qu'elles obtenaient déjà : les forcer à jeter la valeur puis à
+  // relire le cookie ne renforcerait rien et ajouterait un déchiffrement. Une seule déclaration,
+  // un seul initialiseur, en PREMIÈRE instruction — les conditions restent strictes.
+  if (ts.isVariableStatement(premiereInstruction)) {
+    const declarations = premiereInstruction.declarationList.declarations;
+    if (declarations.length !== 1) return false;
+    const initialiseur = declarations[0].initializer;
+    return initialiseur !== undefined && estAppelExigerSessionAtlas(initialiseur);
+  }
+
+  return false;
 }
 
 type FonctionNonProtegee = { fichier: string; fonction: string };

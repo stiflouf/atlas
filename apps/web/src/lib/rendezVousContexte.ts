@@ -40,12 +40,21 @@ async function chargerReferentiel(workspaceId: string): Promise<Referentiel> {
 // workspace de session. C'est correct, et c'est pourquoi la mémoire est désormais clée sur le
 // triplet (workspace, source, identifiant externe) — migration 0055.
 //
-// Ce que cette fonction ne borne PAS : l'événement lui-même. Il vient du compte Google connecté,
-// qui reste un singleton d'instance (`connexions_google`, id 'default'). La frontière Google est
-// une dette ouverte, explicitement laissée à V2D2 — voir ADR-054 §6.
+// WORKSPACE_SCOPING_V2D2 — DEUX périmètres, jamais confondus, et c'est pourquoi ce sont deux
+// paramètres distincts plutôt qu'un seul « contexte » :
+//
+//   `workspaceId` borne les données DOMIORA — quels biens et quels acquéreurs peuvent être
+//   rapprochés de cet événement (V2D1) ;
+//   `identiteSub` borne le COMPTE GOOGLE — de quel agenda l'événement est lu.
+//
+// Les deux ne coïncident pas conceptuellement : un agenda appartient à une personne, un dossier à
+// un workspace. Les fusionner reviendrait à faire d'un secret personnel un actif partagé, ce que
+// l'ADR-054 §6 refuse explicitement. Avant ce lot, l'événement venait du singleton d'instance :
+// c'était la dernière frontière ouverte du chantier.
 export async function getRendezVousAvecContexte(
   rdvId: string,
-  workspaceId: string
+  workspaceId: string,
+  identiteSub: string
 ): Promise<RendezVousAvecContexte | undefined> {
   const rdvMock = rendezVousMock.find((r) => r.id === rdvId);
   if (rdvMock) {
@@ -55,7 +64,7 @@ export async function getRendezVousAvecContexte(
 
   if (!rdvId.startsWith(PREFIXE_GOOGLE)) return undefined;
 
-  const connexion = await lireConnexionGoogle();
+  const connexion = await lireConnexionGoogle(identiteSub);
   if (!connexion) return undefined;
 
   try {

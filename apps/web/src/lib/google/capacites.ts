@@ -12,8 +12,13 @@ export type CapacitesGoogle = { calendarAutorise: boolean; gmailAutorise: boolea
 // consentement, pas un appel de contrôle à Google. Si l'accès a été révoqué directement depuis le
 // compte Google du conseiller entre-temps, ce statut reste "autorisé" jusqu'au prochain échec réel
 // (voir gmailClient.ts) — ne jamais le présenter comme une garantie de fonctionnement immédiat.
-export async function chargerCapacitesGoogle(): Promise<CapacitesGoogle> {
-  const connexion = await lireConnexionGoogle();
+//
+// WORKSPACE_SCOPING_V2D2 — les capacités sont PERSONNELLES : elles décrivent ce que CETTE personne
+// a autorisé, jamais ce que l'instance a autorisé. Sans ce paramètre, l'écran d'un conseiller
+// affichait « Gmail autorisé » parce qu'un collègue l'avait accordé, et lui proposait un envoi qui
+// aurait utilisé le compte du collègue.
+export async function chargerCapacitesGoogle(identiteSub: string): Promise<CapacitesGoogle> {
+  const connexion = await lireConnexionGoogle(identiteSub);
   if (!connexion) return { calendarAutorise: false, gmailAutorise: false };
 
   const scopes = new Set(connexion.scope.split(" ").filter(Boolean));

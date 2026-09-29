@@ -21,7 +21,9 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // `acquereurId` client fourni sans revalidation. Idempotente au niveau DB (UNIQUE sur
 // `rendez_vous_calendar_id`, `materialiserVisite`) : un double submit ne crée jamais deux visites.
 export async function materialiserVisiteAction(formData: FormData): Promise<void> {
-  await exigerSessionAtlas();
+  // WORKSPACE_SCOPING_V2D2 — deux périmètres distincts : le workspace borne les données DOMIORA,
+  // l'identité borne le compte Google dont l'événement est relu.
+  const session = await exigerSessionAtlas();
   const workspaceId = await exigerWorkspaceCourant();
   const rendezVousCalendarId = String(formData.get("rendezVousCalendarId") ?? "");
 
@@ -31,7 +33,7 @@ export async function materialiserVisiteAction(formData: FormData): Promise<void
     // le matching voyait le catalogue entier : c'est `creerVisiteEnBase` qui refusait l'écriture,
     // en dernier recours, sur un bien hors périmètre. La défense en profondeur reste, mais elle
     // n'est plus la seule.
-    const resultat = await getRendezVousAvecContexte(rendezVousCalendarId, workspaceId);
+    const resultat = await getRendezVousAvecContexte(rendezVousCalendarId, workspaceId, session.sub);
     if (resultat?.contexte.bien && resultat.contexte.client) {
       const [bien, acquereur] = await Promise.all([
         getBienDuWorkspace(resultat.contexte.bien.bienId, workspaceId),

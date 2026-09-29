@@ -17,6 +17,7 @@ import { redactionAssisteeDisponible } from "@/lib/redaction/redacteur";
 import { selectionnerReperesPourCommunication } from "@/lib/relations/politiqueReperesCommunication";
 import { listerReperesRelationnelsAcquereur } from "@/lib/repereRelationnelRepository";
 import { chargerCapacitesGoogle } from "@/lib/google/capacites";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 type PageProps = { searchParams: Promise<ParametresEcranCommunication> };
 
@@ -26,7 +27,7 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
   const resultat = await resoudreContexteEcranCommunication(params, await exigerWorkspaceCourant());
   if (!resultat) notFound();
   const { titre, determinerIntention, candidats, faits, retourHref, bienId, tacheId } = resultat;
-  const { gmailAutorise } = await chargerCapacitesGoogle();
+  const { gmailAutorise } = await chargerCapacitesGoogle((await exigerSessionAtlas()).sub);
   // VALUE-05 — n'expose qu'un booléen : jamais l'URL du fournisseur, jamais le modèle, jamais la clé.
   const redactionDisponible = redactionAssisteeDisponible();
 

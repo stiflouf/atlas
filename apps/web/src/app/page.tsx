@@ -33,6 +33,7 @@ import { produireAlertes } from "@/lib/alertes/moteur";
 import { visitesDuJour } from "@/lib/visiteRepository";
 import { fusionnerAgendaDuJour } from "@/lib/visites/agendaDuJour";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
+import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 // Alertes affichées directement — au-delà, "Afficher les autres" les développe localement (ADR-026,
 // pas de nouvelle route /alertes). Le plan vise "3 à 5" : 5 est le plafond, moins s'il y en a moins.
@@ -66,13 +67,20 @@ export default async function AujourdHui() {
   const maintenantEnMinutes = minutesDepuisMinuit(maintenant);
   const aujourdHuiISO = formatDateISO(maintenant);
 
-  const { rendezVous, source } = await getAgendaSemaine();
-  const { gmailAutorise } = await chargerCapacitesGoogle();
+  // WORKSPACE_SCOPING_V2D2 — ORDRE CORRIGÉ : les deux lectures Google se faisaient AVANT que la
+  // moindre identité soit en main. La session existait (le proxy filtre « / »), mais rien au point
+  // d'appel ne disait DE QUI il s'agissait — et le token lu était celui du dernier compte connecté
+  // à l'instance, quel qu'en soit le propriétaire. Même défaut d'ordonnancement que celui corrigé
+  // sur /preparer en V2D1 : le périmètre se résout d'abord, les lectures suivent.
+  const session = await exigerSessionAtlas();
+  const workspaceId = await exigerWorkspaceCourant();
+
+  const { rendezVous, source } = await getAgendaSemaine(session.sub);
+  const { gmailAutorise } = await chargerCapacitesGoogle(session.sub);
   // VISIT_NATIVE_ENTRY_V1 — les Visites DOMIORA du jour (workspace de session, une seule requête
   // set-based), fusionnées avec l'agenda Calendar : une Visite matérialisée remplace son événement
   // Calendar (jamais deux fois le même rendez-vous), une Visite native apparaît même sans Google
   // Calendar connecté, une Visite annulée/réalisée n'est plus un rendez-vous actif.
-  const workspaceId = await exigerWorkspaceCourant();
   const visitesDomioraDuJour = await visitesDuJour(workspaceId, aujourdHuiISO);
   // La fenêtre de lecture couvre 7 jours (utile aux prochains sprints) ; cet écran ne montre
   // que le jour courant. Les rendez-vous mockés n'ont pas de `date` : ils sont toujours
