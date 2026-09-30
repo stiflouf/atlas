@@ -57,8 +57,11 @@ export default function CibleTacheSelecteur({
       </p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label className={labelCls}>Bien</label>
+          <label htmlFor="tache-bienId" className={labelCls}>
+            Bien
+          </label>
           <select
+            id="tache-bienId"
             name="bienId"
             value={cibles.bienId}
             onChange={(e) => setCibles((c) => appliquerExclusiviteCible(c, "bienId", e.target.value))}
@@ -73,8 +76,11 @@ export default function CibleTacheSelecteur({
           </select>
         </div>
         <div>
-          <label className={labelCls}>Acquéreur</label>
+          <label htmlFor="tache-acquereurId" className={labelCls}>
+            Acquéreur
+          </label>
           <select
+            id="tache-acquereurId"
             name="acquereurId"
             value={cibles.acquereurId}
             onChange={(e) => setCibles((c) => appliquerExclusiviteCible(c, "acquereurId", e.target.value))}
@@ -89,8 +95,11 @@ export default function CibleTacheSelecteur({
           </select>
         </div>
         <div>
-          <label className={labelCls}>Prospect vendeur</label>
+          <label htmlFor="tache-prospectVendeurId" className={labelCls}>
+            Prospect vendeur
+          </label>
           <select
+            id="tache-prospectVendeurId"
             name="prospectVendeurId"
             value={cibles.prospectVendeurId}
             onChange={(e) => setCibles((c) => appliquerExclusiviteCible(c, "prospectVendeurId", e.target.value))}

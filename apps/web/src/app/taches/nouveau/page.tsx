@@ -78,8 +78,11 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
 
       <FormulaireAvecEtat action={creerTacheAction} className="flex flex-col gap-4" positionErreur="haut">
         <div>
-          <label className={labelCls}>Titre *</label>
+          <label htmlFor="tache-titre" className={labelCls}>
+            Titre *
+          </label>
           <input
+            id="tache-titre"
             name="titre"
             required
             className={inputCls}
@@ -88,14 +91,18 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
         </div>
 
         <div>
-          <label className={labelCls}>Contexte</label>
-          <textarea name="contexte" rows={3} className={inputCls} placeholder="Appeler avant vendredi" />
+          <label htmlFor="tache-contexte" className={labelCls}>
+            Contexte
+          </label>
+          <textarea id="tache-contexte" name="contexte" rows={3} className={inputCls} placeholder="Appeler avant vendredi" />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={labelCls}>Type</label>
-            <select name="type" defaultValue="autre" className={inputCls}>
+            <label htmlFor="tache-type" className={labelCls}>
+              Type
+            </label>
+            <select id="tache-type" name="type" defaultValue="autre" className={inputCls}>
               <option value="appel">Appel</option>
               <option value="email">Email</option>
               <option value="message">Message</option>
@@ -105,8 +112,10 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
             </select>
           </div>
           <div>
-            <label className={labelCls}>Priorité</label>
-            <select name="priorite" defaultValue="normale" className={inputCls}>
+            <label htmlFor="tache-priorite" className={labelCls}>
+              Priorité
+            </label>
+            <select id="tache-priorite" name="priorite" defaultValue="normale" className={inputCls}>
               <option value="haute">Haute</option>
               <option value="normale">Normale</option>
               <option value="basse">Basse</option>
@@ -115,8 +124,10 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
         </div>
 
         <div>
-          <label className={labelCls}>Échéance</label>
-          <input name="echeance" type="date" className={inputCls} placeholder="Sans échéance" />
+          <label htmlFor="tache-echeance" className={labelCls}>
+            Échéance
+          </label>
+          <input id="tache-echeance" name="echeance" type="date" className={inputCls} placeholder="Sans échéance" />
         </div>
 
         <input type="hidden" name="redirectTo" value={redirectTo} />

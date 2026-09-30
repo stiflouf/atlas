@@ -134,3 +134,68 @@ describe("/taches/nouveau — retour contextuel après création (correctif UX)"
     expect(html).toContain('name="redirectTo" value="/"');
   });
 });
+
+// TASK_CREATE_FORM_ACCESSIBILITY — chaque label VISIBLE du formulaire doit réellement cibler son
+// contrôle. Aucun `htmlFor` n'existait : les labels n'étaient que du texte posé au-dessus du champ,
+// donc sans nom accessible pour un lecteur d'écran, sans activation au clic sur le libellé, et
+// introuvables par `getByLabel` (constaté au lot précédent lors du contrôle Playwright).
+// Assertions portées sur le HTML RENDU, jamais sur le source : c'est le contrat livré au navigateur
+// qui compte.
+describe("/taches/nouveau — association label ↔ contrôle (accessibilité)", () => {
+  // Les huit champs visibles, avec le libellé affiché et le `name` métier qui ne doit pas bouger.
+  const CHAMPS = [
+    { id: "tache-titre", label: "Titre *", name: "titre", balise: "input" },
+    { id: "tache-contexte", label: "Contexte", name: "contexte", balise: "textarea" },
+    { id: "tache-type", label: "Type", name: "type", balise: "select" },
+    { id: "tache-priorite", label: "Priorité", name: "priorite", balise: "select" },
+    { id: "tache-echeance", label: "Échéance", name: "echeance", balise: "input" },
+    { id: "tache-bienId", label: "Bien", name: "bienId", balise: "select" },
+    { id: "tache-acquereurId", label: "Acquéreur", name: "acquereurId", balise: "select" },
+    { id: "tache-prospectVendeurId", label: "Prospect vendeur", name: "prospectVendeurId", balise: "select" },
+  ] as const;
+
+  async function rendre(): Promise<string> {
+    return renderToStaticMarkup(await NouvelleTachePage({ searchParams: Promise.resolve({}) }));
+  }
+
+  it("chaque champ visible porte un label associé, sur le bon contrôle, sans changer son name métier", async () => {
+    const html = await rendre();
+    for (const champ of CHAMPS) {
+      // Le label existe, cible ce champ, et affiche toujours le même texte.
+      expect(html).toMatch(
+        new RegExp(`<label[^>]*for="${champ.id}"[^>]*>\\s*${champ.label.replace("*", "\\*")}\\s*</label>`)
+      );
+      // La cible du htmlFor est bien le contrôle attendu, et son name métier est inchangé.
+      expect(html).toMatch(new RegExp(`<${champ.balise}[^>]*id="${champ.id}"[^>]*name="${champ.name}"`));
+    }
+  });
+
+  it("chaque htmlFor pointe vers un id réellement présent dans le document", async () => {
+    const html = await rendre();
+    const cibles = [...html.matchAll(/<label[^>]*\sfor="([^"]+)"/g)].map((m) => m[1]);
+    const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+    expect(cibles.length).toBeGreaterThanOrEqual(CHAMPS.length);
+    expect(cibles.filter((cible) => !ids.has(cible))).toEqual([]);
+  });
+
+  it("aucun id dupliqué dans le document rendu", async () => {
+    const html = await rendre();
+    const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+    const doublons = ids.filter((id, i) => ids.indexOf(id) !== i);
+    expect(doublons).toEqual([]);
+  });
+
+  it("aucun label visible orphelin : plus aucun <label> sans for dans ce formulaire", async () => {
+    const html = await rendre();
+    const labelsSansFor = [...html.matchAll(/<label(?![^>]*\sfor=)[^>]*>([\s\S]*?)<\/label>/g)].map((m) =>
+      m[1].trim()
+    );
+    expect(labelsSansFor).toEqual([]);
+  });
+
+  it("le champ caché redirectTo reste sans label et sans id (non-régression)", async () => {
+    const html = await rendre();
+    expect(html).toContain('<input type="hidden" name="redirectTo"');
+    expect(html).not.toMatch(/for="tache-redirectTo"/);
+  });
+});
