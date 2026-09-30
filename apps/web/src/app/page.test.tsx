@@ -135,8 +135,8 @@ function rendreVersHtml(element: ReactElement): Promise<string> {
   });
 }
 
-async function rendreCockpit(): Promise<string> {
-  return rendreVersHtml(await AujourdHui());
+async function rendreCockpit(searchParams: { tacheTerminee?: string } = {}): Promise<string> {
+  return rendreVersHtml(await AujourdHui({ searchParams: Promise.resolve(searchParams) }));
 }
 
 describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)", () => {
@@ -173,7 +173,11 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
     expect(html).toContain(`href="/clients/${acquereur.id}"`);
   });
 
-  it("tâche terminée absente du cockpit", async () => {
+  // TASK_COMPLETION_VISIBILITY — contrat précisé : une tâche terminée quitte les tâches ACTIVES
+  // (plus aucun bouton de complétion pour elle) mais reste visible dans les terminées du jour.
+  // Avant ce correctif elle disparaissait entièrement de l'écran, ce qui se lisait comme une
+  // suppression alors que la ligne existe toujours en base (terminee_le posé).
+  it("tâche terminée : retirée des tâches actives, mais toujours visible dans les terminées du jour", async () => {
     const tache = await creerTache({
       titre: `[test réel] Tâche terminée cockpit ${Date.now()}`,
       type: "autre",
@@ -184,7 +188,45 @@ describe("page d'accueil « Aujourd'hui » — orchestration réelle (ADR-039)",
     await terminerTache(tache.id, WORKSPACE_TEST);
 
     const html = await rendreCockpit();
-    expect(html).not.toContain(tache.titre);
+    // Plus aucune action de complétion : elle n'est plus dans les tâches actives.
+    expect(html).not.toContain(`Marquer « ${tache.titre} » comme terminée`);
+    // Mais elle n'a pas disparu, et son marqueur est non interactif.
+    expect(html).toContain(tache.titre);
+    expect(html).toContain('aria-label="Tâche terminée"');
+  });
+
+  it("tâche active : la case de complétion revient sur le cockpit avec le feedback (redirectTo)", async () => {
+    const tache = await creerTache({
+      titre: `[test réel] Tâche redirect cockpit ${Date.now()}`,
+      type: "autre",
+      priorite: "normale",
+      origine: "manuelle",
+    }, WORKSPACE_TEST);
+    idsTachesCreees.push(tache.id);
+
+    const html = await rendreCockpit();
+    expect(html).toContain(`Marquer « ${tache.titre} » comme terminée`);
+    expect(html).toContain(`value="/?tacheTerminee=${tache.id}"`);
+  });
+
+  it("feedback de complétion affiché quand le query param désigne une tâche réellement terminée ce jour", async () => {
+    const tache = await creerTache({
+      titre: `[test réel] Tâche feedback cockpit ${Date.now()}`,
+      type: "autre",
+      priorite: "normale",
+      origine: "manuelle",
+    }, WORKSPACE_TEST);
+    idsTachesCreees.push(tache.id);
+    await terminerTache(tache.id, WORKSPACE_TEST);
+
+    const html = await rendreCockpit({ tacheTerminee: tache.id });
+    expect(html).toContain("Tâche terminée :");
+    expect(html).toContain(tache.titre);
+  });
+
+  it("query param arbitraire : aucun faux feedback de complétion", async () => {
+    const html = await rendreCockpit({ tacheTerminee: "3f1c9a52-0000-4000-8000-000000000000" });
+    expect(html).not.toContain("Tâche terminée :");
   });
 
   it("tâche liée à un bien : apparaît dans « Dossiers nécessitant une action », jamais dupliquée", async () => {

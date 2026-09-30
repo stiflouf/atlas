@@ -149,3 +149,32 @@ describe("TacheItem — provenance (non-régression)", () => {
     expect(html).not.toContain("Créée automatiquement");
   });
 });
+
+// TASK_COMPLETION_VISIBILITY — la case n'est pas un sélecteur : elle soumet terminerTacheAction.
+// Ces cas verrouillent son identification explicite (le défaut d'affordance à l'origine du
+// correctif) et le retour au bon écran avec le feedback de complétion.
+describe("TacheItem — action de complétion explicite", () => {
+  it("le contrôle est identifiable comme action de complétion, et nomme la tâche concernée", () => {
+    const html = render(tacheTest({ titre: "Envoyer un mail au vendeur" }));
+    expect(html).toContain('aria-label="Marquer « Envoyer un mail au vendeur » comme terminée"');
+    expect(html).toContain('title="Marquer comme terminée"');
+  });
+
+  it("le contrôle est un bouton de soumission, jamais une case à cocher", () => {
+    const html = render(tacheTest());
+    expect(html).toContain('type="submit"');
+    expect(html).not.toContain('type="checkbox"');
+  });
+
+  it("redirectTo par défaut : retour à l'accueil (comportement historique inchangé)", () => {
+    const html = render(tacheTest());
+    expect(html).toContain('name="redirectTo" value="/"');
+  });
+
+  it("redirectTo fourni : transmis tel quel, pour que l'écran appelant confirme la complétion", () => {
+    const html = renderToStaticMarkup(
+      TacheItem({ tache: tacheTest({ id: "tache-x" }), redirectTo: "/?tacheTerminee=tache-x" })
+    );
+    expect(html).toContain('name="redirectTo" value="/?tacheTerminee=tache-x"');
+  });
+});

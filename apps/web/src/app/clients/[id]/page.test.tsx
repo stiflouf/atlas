@@ -244,7 +244,10 @@ describe("/clients/[id] — feedback de complétion d'une tâche (correctif UX)"
     expect(html).not.toMatch(/tâche terminée/i);
     expect(html).not.toMatch(/tâches? terminées? — afficher/i);
     // Contrôle interactif de complétion réellement présent (TacheItem), jamais un marqueur inerte.
-    expect(html).toContain('aria-label="Marquer comme terminée"');
+    // TASK_COMPLETION_VISIBILITY — l'étiquette nomme désormais la tâche concernée (dans une liste,
+    // « Marquer comme terminée » seul ne disait pas laquelle) ; l'infobulle souris porte l'action.
+    expect(html).toContain(`aria-label="Marquer « ${tache.titre} » comme terminée"`);
+    expect(html).toContain('title="Marquer comme terminée"');
   });
 
   it("?tacheTerminee=<id> après complétion réelle : encart de confirmation, section terminées ouverte automatiquement, tâche réellement conservée (jamais supprimée)", async () => {

@@ -36,9 +36,15 @@ export default function TacheItem({
       <form action={terminerTacheAction} className="mt-0.5 shrink-0">
         <input type="hidden" name="id" value={tache.id} />
         <input type="hidden" name="redirectTo" value={redirectTo} />
+        {/* TASK_COMPLETION_VISIBILITY — ce carré n'est pas une case à cocher : c'est le bouton qui
+            TERMINE la tâche (terminerTacheAction). `title` en plus de `aria-label` : sans lui, un
+            utilisateur à la souris n'avait aucune façon de découvrir ce que fait le contrôle avant
+            de cliquer. `aria-label` reprend le titre de la tâche, comme ProspectVendeurTaches —
+            dans une liste, « Marquer comme terminée » seul ne dit pas laquelle. */}
         <button
           type="submit"
-          aria-label="Marquer comme terminée"
+          aria-label={`Marquer « ${tache.titre} » comme terminée`}
+          title="Marquer comme terminée"
           className="w-4 h-4 rounded border border-border-default hover:border-action-primary hover:bg-surface-subtle transition-colors"
         />
       </form>

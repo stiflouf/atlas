@@ -1,4 +1,4 @@
-import { CalendarCheck, Building2, ListChecks, AlertCircle } from "lucide-react";
+import { CalendarCheck, Building2, ListChecks, AlertCircle, Check } from "lucide-react";
 import AgendaCard from "@/components/aujourd-hui/AgendaCard";
 import VisiteJourCard from "@/components/aujourd-hui/VisiteJourCard";
 import TacheItem from "@/components/aujourd-hui/TacheItem";
@@ -60,7 +60,15 @@ function getGreeting(hour: number): string {
   return "Bonsoir";
 }
 
-export default async function AujourdHui() {
+// `searchParams` optionnel (page.js, Next 16 — prop de page, promise) : `tacheTerminee` porte le
+// feedback de complétion, exactement comme sur /clients/[id] et la fiche prospect vendeur. Optionnel
+// et non requis pour que la page reste appelable sans prop dans les tests d'orchestration réelle.
+export default async function AujourdHui({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tacheTerminee?: string }>;
+} = {}) {
+  const { tacheTerminee } = (await searchParams) ?? {};
   const dateStr = formatDate();
   const maintenant = new Date();
   const greeting = getGreeting(heureDuJour(maintenant));
@@ -146,6 +154,23 @@ export default async function AujourdHui() {
   const acquereursParId = new Map(clients.map((client) => [client.id, client]));
   const prospectsVendeursArchivesIds = new Set(prospectsVendeursArchives.map((p) => p.id));
   const tachesActives = taches.filter((t) => deriverStatutTache(t) === "a_faire");
+
+  // TASK_COMPLETION_VISIBILITY — la case de TacheItem TERMINE la tâche (terminerTacheAction) ; le
+  // redirect serveur qui suit la faisait alors disparaître de cet écran sans aucune trace, donnant
+  // l'impression d'une suppression. Les fiches acquéreur et prospect vendeur avaient déjà reçu ce
+  // correctif ; ce cockpit était le dernier endroit où la case existe sans contrepartie visible.
+  //
+  // Borné au JOUR COURANT, pas à tout l'historique : c'est l'écran « Aujourd'hui », et le même
+  // idiome que « N déjà terminé(s) aujourd'hui » pour les rendez-vous ci-dessous. Aucune vue
+  // d'historique complet des tâches n'existe dans le produit, et ce n'est pas le rôle de cet écran
+  // d'en devenir une.
+  const tachesTermineesAujourdHui = taches.filter(
+    (t) => deriverStatutTache(t) === "terminee" && t.termineeLe && formatDateISO(new Date(t.termineeLe)) === aujourdHuiISO
+  );
+  // Jamais l'id de requête pris tel quel : ne confirme que s'il désigne réellement une tâche
+  // désormais terminée dans CE workspace, sinon ignoré silencieusement (lien obsolète, copié-collé)
+  // — même garde que /clients/[id].
+  const tacheTermineeConfirmee = tachesTermineesAujourdHui.find((t) => t.id === tacheTerminee);
 
   const tachesParBien = new Map<string, Tache[]>();
   for (const tache of tachesActives) {
@@ -360,17 +385,68 @@ export default async function AujourdHui() {
           )}
 
           {/* Autres tâches (sans bien rattaché) */}
-          {autresTaches.length > 0 && (
+          {(autresTaches.length > 0 || tachesTermineesAujourdHui.length > 0) && (
             <section>
               <SectionTitle>
-                {autresTaches.length} autre{autresTaches.length > 1 ? "s" : ""} tâche
-                {autresTaches.length > 1 ? "s" : ""}
+                {autresTaches.length === 0
+                  ? "Tâches"
+                  : `${autresTaches.length} autre${autresTaches.length > 1 ? "s" : ""} tâche${autresTaches.length > 1 ? "s" : ""}`}
               </SectionTitle>
-              <Card className="px-4 divide-y divide-border-subtle">
-                {autresTaches.map((tache) => (
-                  <TacheItem key={tache.id} tache={tache} lienCibleOverride={lienCibleParTache.get(tache.id)} />
-                ))}
-              </Card>
+              {/* Feedback de complétion — aucun toast/flash message n'existe dans le design system
+                  DOMIORA : cet encart inline reprend à l'identique le patron déjà en place sur
+                  /clients/[id], plutôt que d'introduire un nouveau mécanisme. */}
+              {tacheTermineeConfirmee && (
+                <p className="text-[13px] text-success bg-success-light rounded-lg px-3 py-2 mb-2">
+                  Tâche terminée : « {tacheTermineeConfirmee.titre} » — déplacée dans les tâches
+                  terminées ci-dessous.
+                </p>
+              )}
+              {autresTaches.length > 0 && (
+                <Card className="px-4 divide-y divide-border-subtle">
+                  {autresTaches.map((tache) => (
+                    <TacheItem
+                      key={tache.id}
+                      tache={tache}
+                      redirectTo={`/?tacheTerminee=${tache.id}`}
+                      lienCibleOverride={lienCibleParTache.get(tache.id)}
+                    />
+                  ))}
+                </Card>
+              )}
+              {tachesTermineesAujourdHui.length > 0 && (
+                <details className="mt-2" open={Boolean(tacheTermineeConfirmee)}>
+                  <summary className="text-[12px] text-text-muted hover:text-text-secondary cursor-pointer select-none">
+                    {tachesTermineesAujourdHui.length} tâche
+                    {tachesTermineesAujourdHui.length > 1 ? "s" : ""} terminée
+                    {tachesTermineesAujourdHui.length > 1 ? "s" : ""} aujourd&apos;hui — afficher
+                  </summary>
+                  <Card className="flex flex-col divide-y divide-border-subtle px-4 mt-2">
+                    {tachesTermineesAujourdHui.map((tache) => (
+                      <div key={tache.id} className="flex items-start gap-3 py-3">
+                        {/* Marqueur NON interactif, repris tel quel de /clients/[id] : aucune
+                            transition terminée → active n'existe dans le domaine (tacheRepository :
+                            terminerTache/annulerTache sont gelées, aucune primitive de réouverture).
+                            Ni <button> ni <form>, rien à décocher — une case cochable ici laisserait
+                            croire à une réouverture impossible. */}
+                        <span
+                          role="img"
+                          aria-label="Tâche terminée"
+                          title="Tâche terminée"
+                          className="w-4 h-4 mt-0.5 rounded-full shrink-0 bg-success text-surface flex items-center justify-center"
+                        >
+                          <Check size={12} strokeWidth={3.5} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[14px] text-text-primary">{tache.titre}</p>
+                          {tache.contexte && (
+                            <p className="text-[13px] text-text-muted mt-0.5">{tache.contexte}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </Card>
+                </details>
+              )}
             </section>
           )}
         </div>
