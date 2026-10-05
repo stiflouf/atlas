@@ -37,6 +37,7 @@ erDiagram
     offres |o--o{ taches : "offre_id (FK, nullable)"
     compromis |o--o{ taches : "compromis_id (FK, nullable)"
     remuneration |o--o{ taches : "remuneration_id (FK, nullable)"
+    contacts |o--o{ taches : "contact_id (FK, nullable, ADR-064)"
     acquereurs ||--o{ secteurs_recherche_acquereur : "acquereur_id (FK)"
     biens ||..o{ memoire_contextuelle : "bien_id (text, sans FK)"
     acquereurs ||..o{ memoire_contextuelle : "client_id (text, sans FK)"
@@ -124,6 +125,8 @@ erDiagram
         uuid offre_id FK "nullable"
         uuid compromis_id FK "nullable"
         uuid remuneration_id FK "nullable"
+        uuid visite_canonique_id FK "nullable"
+        uuid contact_id FK "nullable, ADR-064"
         timestamptz cree_le
         timestamptz terminee_le "nullable"
         timestamptz annulee_le "nullable"
@@ -1690,7 +1693,7 @@ ce moteur (voir `docs/BUSINESS_RULES.md`). Aucune nouvelle colonne introduite pa
 ## `taches`
 
 **Rôle** : moteur de tâches générique (ADR-028) — remplace l'ancienne table `actions`. Contrairement
-à `actions`, l'intégrité référentielle est réelle : huit colonnes FK nullables dédiées (une par
+à `actions`, l'intégrité référentielle est réelle : neuf colonnes FK nullables dédiées (une par
 cible réellement supportée), jamais un couple `objetType`/`objetId` polymorphe (voir ADR-010, qui ne
 couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (tâche générale).
 
@@ -1712,6 +1715,7 @@ couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (t
 | `compromis_id` | uuid (FK → `compromis.id`, `ON DELETE CASCADE`) | oui | |
 | `remuneration_id` | uuid (FK → `remuneration.id`, `ON DELETE CASCADE`) | oui | |
 | `visite_canonique_id` | uuid (FK → `visites.id`, `ON DELETE CASCADE`) | oui | `VISIT_AUTOMATION_V1` (ADR-063, migration 0052) — cible la Visite CANONIQUE, distincte de `visite_id` ci-dessus (nom trompeur hérité, jamais renommé). `deriverRouteFicheCible()` en dérive un lien navigable réel (`/visites/{id}`), contrairement à `visite_id` |
+| `contact_id` | uuid (FK → `contacts.id`, **sans cascade**) | oui | `TASK_CONTACT_TARGET_V1` (ADR-064, migration 0058) — cible l'identité CANONIQUE elle-même (ADR-055 §A), pas un dossier : une tâche « envoyer un mail à Jean Dupont » n'exige ni acquéreur, ni prospect vendeur, ni bien. Pas de `ON DELETE CASCADE` contrairement aux huit autres cibles : `contacts` ne connaît pas la suppression (ADR-059 — une fusion est un marqueur). Validée à l'écriture par `verrouillerContactActif` (un contact absorbé est refusé) ; résolue à la lecture par `resoudreContactActif` (le destinataire est le survivant, la colonne n'est jamais réécrite). `deriverRouteFicheCible()` en dérive `/contacts/{id}` |
 | `cree_le` | timestamptz | non | |
 | `terminee_le` | timestamptz | oui | posée atomiquement (gel concurrent) par `terminerTache()` |
 | `annulee_le` | timestamptz | oui | posée atomiquement (gel concurrent) par `annulerTache()`, mutuellement exclusive avec `terminee_le` |
@@ -1720,7 +1724,7 @@ couvre plus ce cas depuis ADR-028). Une tâche sans aucune cible reste valide (t
 - `type IN ('appel','email','message','document','relance','autre')`
 - `priorite IN ('haute','normale','basse')`
 - `origine IN ('manuelle','automatique')`
-- `taches_une_seule_cible_check` — somme des huit indicatrices de présence (`bien_id` non NULL, etc.)
+- `taches_une_seule_cible_check` — somme des neuf indicatrices de présence (`bien_id` non NULL, etc.)
   `<= 1` : au plus une cible à la fois, jamais "exactement une" (une tâche générale reste valide),
   jamais "au moins une".
 

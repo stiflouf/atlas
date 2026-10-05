@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import {
   LABEL_TON_MESSAGE,
+  type DestinataireCandidat,
   type FaitsCommunication,
   type IntentionCommunication,
   type TonMessage,
@@ -43,7 +44,10 @@ type ProprietesEcranConfirmation = {
   objet: string;
   corps: string;
   idempotencyKey: string;
-  destinataireCandidatType?: "prospectVendeur" | "acquereur";
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — dérivé de `DestinataireCandidat` plutôt que réénuméré :
+  // un quatrième type de destinataire ne doit pas pouvoir être accepté en amont et silencieusement
+  // perdu ici, où il devient le champ caché `destinataireType` de l'envoi.
+  destinataireCandidatType?: DestinataireCandidat["type"];
   destinataireCandidatId?: string;
   tacheId?: string;
   bienId?: string;
@@ -187,7 +191,7 @@ export default function BrouillonEmailFormulaire({
   faits: FaitsCommunication;
   destinataireEmail?: string;
   gmailAutorise?: boolean;
-  destinataireCandidatType?: "prospectVendeur" | "acquereur";
+  destinataireCandidatType?: DestinataireCandidat["type"];
   destinataireCandidatId?: string;
   tacheId?: string;
   bienId?: string;

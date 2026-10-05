@@ -1,6 +1,10 @@
 # ADR-028 — Moteur de tâches générique
 
-**Statut :** Accepté
+**Statut :** Accepté — **ÉTENDU** par **ADR-063** (`visite_canonique_id`, migration 0052) et par
+**ADR-064** (`contact_id`, migration 0058 : une tâche peut cibler l'identité CANONIQUE elle-même, et
+plus seulement un dossier). Le modèle décidé ici — FK nullables dédiées + `CHECK` « au plus une
+cible » — est inchangé dans les deux cas : ces lots en ajoutent une colonne, jamais une abstraction
+polymorphe.
 **Date :** 2026-08-13
 **Décideurs :** Steven Gausset (CEO), CTO
 

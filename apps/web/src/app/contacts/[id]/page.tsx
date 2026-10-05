@@ -148,6 +148,12 @@ export default async function FicheContact({ params, searchParams }: PageProps) 
             <ButtonLink href="#noter-echange" variant="primary" size="sm">
               + Noter un échange
             </ButtonLink>
+            {/* TASK_CONTACT_TARGET_V1 (ADR-064) — le point d'entrée naturel : la tâche naît depuis
+                la personne, avec elle comme cible STRUCTURÉE, sans qu'aucun nom n'ait à être
+                retrouvé dans un titre. */}
+            <ButtonLink href={`/taches/nouveau?contactId=${contact.id}`} variant="secondary" size="sm">
+              + Nouvelle tâche
+            </ButtonLink>
             <ButtonLink href={`/contacts/${contact.id}/modifier`} variant="secondary" size="sm">
               Modifier
             </ButtonLink>

@@ -15,7 +15,14 @@ export type IntentionCommunication =
   | "relance_piece_a_verifier"
   | "message_compromis"
   | "message_notaire"
-  | "retour_vendeur_apres_visite";
+  | "retour_vendeur_apres_visite"
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — la SEULE intention sans dossier. Une tâche qui ne cible
+  // qu'un contact ne dit rien d'un projet de vente, d'une acquisition, d'une visite ou d'un
+  // compromis : retomber sur "relance_prospect_vendeur" (le repli historique de
+  // `determinerIntentionParDefaut`) ferait partir « Suivi de votre projet de vente » à une personne
+  // dont DOMIORA ne sait pas qu'elle vend. Cette intention n'affirme donc rien du tout — elle
+  // prépare l'enveloppe (le bon destinataire, la bonne salutation) et laisse le conseiller écrire.
+  | "message_contact";
 
 export const LABEL_INTENTION_COMMUNICATION: Record<IntentionCommunication, string> = {
   relance_prospect_vendeur: "Relance prospect vendeur",
@@ -27,6 +34,7 @@ export const LABEL_INTENTION_COMMUNICATION: Record<IntentionCommunication, strin
   message_compromis: "Message lié au compromis",
   message_notaire: "Message destiné au notaire",
   retour_vendeur_apres_visite: "Retour vendeur après visite",
+  message_contact: "Message à un contact",
 };
 
 // Quatre tons explicites (ADR-031) : varient la formulation du MÊME contenu factuel, jamais les
@@ -41,10 +49,14 @@ export const LABEL_TON_MESSAGE: Record<TonMessage, string> = {
 };
 
 // Un destinataire structurellement résolu — jamais deviné depuis un texte libre. `email` absent
-// signifie que l'entité existe mais n'a pas d'adresse renseignée (cas prospectVendeur uniquement,
+// signifie que l'entité existe mais n'a pas d'adresse renseignée (prospectVendeur et contact ;
 // acquereurs.email est NOT NULL en base).
+//
+// TASK_CONTACT_TARGET_V1 (ADR-064) — "contact" est l'identité CANONIQUE elle-même (ADR-055 §A), et
+// non un dossier qui la porterait. `id` est alors l'id du contact ACTIF : la résolution de la
+// chaîne de fusion (ADR-059) a déjà eu lieu en amont, à la lecture.
 export type DestinataireCandidat = {
-  type: "prospectVendeur" | "acquereur";
+  type: "prospectVendeur" | "acquereur" | "contact";
   id: string;
   nom: string;
   prenom?: string;

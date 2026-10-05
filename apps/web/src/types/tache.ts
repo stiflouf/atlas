@@ -36,7 +36,7 @@ export const LABEL_PRIORITE_TACHE: Record<PrioriteTache, string> = {
   basse: "Basse",
 };
 
-// Cibles réellement supportées par les sept FK dédiées de `taches` (jamais un couple
+// Cibles réellement supportées par les neuf FK dédiées de `taches` (jamais un couple
 // objetType/objetId polymorphe sans FK — correction ADR-028, intégrité référentielle prioritaire
 // sur la généricité). CibleTache n'est qu'une vue TypeScript/UI dérivée de ces colonnes, jamais une
 // donnée stockée séparément.
@@ -50,11 +50,15 @@ export type TypeCible =
   | "remuneration"
   // VISIT_AUTOMATION_V1 (ADR-063) — Visite CANONIQUE (`visites.id`), distincte de "visite" ci-dessus
   // qui cible en réalité un compte rendu (`comptes_rendus_visite.id`, nom trompeur hérité ADR-040).
-  | "visiteCanonique";
+  | "visiteCanonique"
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — l'identité CANONIQUE elle-même (`contacts.id`, ADR-055 §A),
+  // et non un dossier qui la porterait. C'est la cible d'une tâche qui ne concerne qu'une personne
+  // (« envoyer un mail à Jean Dupont ») : elle n'exige ni acquéreur, ni prospect vendeur, ni bien.
+  | "contact";
 
 export type CibleTache = { type: TypeCible; id: string };
 
-// Source unique pour toute tâche métier. Les sept champs *Id sont indépendants et tous optionnels,
+// Source unique pour toute tâche métier. Les neuf champs *Id sont indépendants et tous optionnels,
 // mais mutuellement exclusifs en base (CHECK taches_une_seule_cible_check, schema.ts) : au plus un
 // est renseigné à la fois. Une tâche sans aucun n'est pas une anomalie (tâche générale).
 export type Tache = {
@@ -77,6 +81,7 @@ export type Tache = {
   compromisId?: string;
   remunerationId?: string;
   visiteCanoniqueId?: string;
+  contactId?: string;
   creeLe: string;
   termineeLe?: string;
   annuleeLe?: string;
@@ -101,9 +106,10 @@ const CHAMPS_CIBLE: { type: TypeCible; champ: keyof Tache }[] = [
   { type: "compromis", champ: "compromisId" },
   { type: "remuneration", champ: "remunerationId" },
   { type: "visiteCanonique", champ: "visiteCanoniqueId" },
+  { type: "contact", champ: "contactId" },
 ];
 
-// Vue générique {type,id} dérivée des sept colonnes dédiées — jamais plus d'une ne devrait être
+// Vue générique {type,id} dérivée des neuf colonnes dédiées — jamais plus d'une ne devrait être
 // renseignée (garanti par le CHECK en base) ; si plusieurs l'étaient malgré tout (données
 // corrompues hors du chemin applicatif normal), la première trouvée dans cet ordre fait foi,
 // silencieusement, plutôt que de lever une erreur d'affichage.
@@ -125,6 +131,10 @@ const ROUTE_FICHE_PAR_TYPE_CIBLE: Partial<Record<TypeCible, string>> = {
   acquereur: "/clients",
   prospectVendeur: "/prospects-vendeurs",
   visiteCanonique: "/visites",
+  // TASK_CONTACT_TARGET_V1 — `/contacts/{id}` existe réellement (ADR-058). Pour un contact ABSORBÉ
+  // (ADR-059), cette fiche explique la fusion et renvoie vers le survivant : le lien reste donc
+  // juste, et c'est à la fiche de dire la vérité sur l'état, jamais à cette table de routes.
+  contact: "/contacts",
 };
 
 // `undefined` = aucune fiche navigable pour ce type de cible (ou aucune cible du tout) — jamais un

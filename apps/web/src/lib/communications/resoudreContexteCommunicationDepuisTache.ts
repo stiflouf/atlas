@@ -13,7 +13,13 @@ import {
   type FaitsCommunication,
   type IntentionCommunication,
 } from "./contexteCommunication";
-import { resoudreDestinatairesDepuisBien, versCandidatAcquereur, versCandidatProspectVendeur } from "./destinataireCommunication";
+import { resoudreContactActif } from "@/lib/contactRepository";
+import {
+  resoudreDestinatairesDepuisBien,
+  versCandidatAcquereur,
+  versCandidatContact,
+  versCandidatProspectVendeur,
+} from "./destinataireCommunication";
 
 export type ContexteCommunicationTache = {
   cibleType?: TypeCible;
@@ -146,6 +152,27 @@ export async function resoudreContexteCommunicationDepuisTache(tache: Tache, wor
       return { cibleType: cible.type, candidats, faits: { ...base, bienAdresse: bien?.adresse } };
     }
 
+    // TASK_CONTACT_TARGET_V1 (ADR-064) — une tâche rattachée au SEUL contact se suffit : aucun
+    // acquéreur, aucun prospect vendeur, aucun bien n'est exigé pour obtenir un destinataire.
+    //
+    // `resoudreContactActif` est la primitive EXISTANTE de résolution de l'identité effective
+    // (ADR-059) : elle suit la chaîne de fusion jusqu'au survivant, dans le périmètre, et la logique
+    // de fusion n'est donc pas réécrite ici. Une tâche posée sur A avant que A ne soit absorbé par B
+    // propose B — jamais une identité dont l'historique continue ailleurs.
+    //
+    // Les deux issues non résolues (`introuvable` hors périmètre ou id inconnu, `chaine_invalide`
+    // cycle ou maillon manquant) rendent ZÉRO candidat : aucun destinataire inventé, aucune adresse
+    // reprise d'un dossier (ADR-057). `faits` reste vide — un contact ne porte, par construction,
+    // aucune donnée de projet (ADR-055 §A) : il n'y a rien de factuel à joindre au message.
+    case "contact": {
+      const resolution = await resoudreContactActif(cible.id, workspaceId);
+      return {
+        cibleType: cible.type,
+        candidats: resolution.statut === "actif" ? [versCandidatContact(resolution.contact)] : [],
+        faits: base,
+      };
+    }
+
     case "remuneration":
       // Aucune relation structurée directe vers une personne n'est câblée depuis une rémunération
       // (remunerationRepository n'expose aucun lookup par id de rémunération) — non ajouté ici,
@@ -172,6 +199,10 @@ export function determinerIntentionParDefaut(
   origineCode?: string
 ): IntentionCommunication {
   if (origineCode === "retour_vendeur_apres_visite") return "retour_vendeur_apres_visite";
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — AVANT le repli final, et sur le TYPE DE CIBLE : le repli
+  // historique (`relance_prospect_vendeur`) parle d'un projet de vente, ce qu'une tâche ciblant une
+  // personne n'affirme nulle part. La seule intention honnête ici n'affirme rien.
+  if (cibleType === "contact") return "message_contact";
   if (cibleType === "visite") return "suivi_visite";
   if (cibleType === "offre") return "suivi_acquereur";
   if (cibleType === "compromis") return "message_compromis";

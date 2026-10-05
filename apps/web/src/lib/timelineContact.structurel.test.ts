@@ -12,17 +12,17 @@ const codeSeul = (chemin: string) => lire(chemin).replace(/\/\*[\s\S]*?\*\//g, "
 
 describe("CRM_TIMELINE_V1 — read model, jamais une table", () => {
   // Le compteur est une TRIPWIRE volontaire : il oblige quiconque ajoute une migration à venir dire
-  // ici qu'elle n'est pas celle de ce lot. Dernier passage : FISCAL_IDENTITY_OWNERSHIP_V1 (0057,
-  // `identite_sub` sur `dossier_fiscal` et bénéficiaire sur `remuneration`) — le rattachement du dossier
-  // fiscal personnel à une personne, sans
-  // aucun rapport avec l'historique de contact, qui reste un read model sans table ni migration.
-  it("aucune table timeline dans le schéma, aucune migration ajoutée (58 fichiers SQL, dernière = 0057)", () => {
+  // ici qu'elle n'est pas celle de ce lot. Dernier passage : TASK_CONTACT_TARGET_V1 (0058,
+  // `taches.contact_id`) — une tâche peut désormais cibler une identité canonique. Une tâche est une
+  // INTENTION, jamais un échange survenu : elle n'entre donc pas dans l'historique de contact, qui
+  // reste un read model des interactions et des notes, sans table ni migration.
+  it("aucune table timeline dans le schéma, aucune migration ajoutée (59 fichiers SQL, dernière = 0058)", () => {
     const schema = lire("db/schema.ts");
     expect(schema).not.toMatch(/pgTable\(\s*"(timeline|historique_contact|historique_echange)/i);
     expect(schema).not.toMatch(/timeline_contact|historique_contact|timelineContact/);
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrations).toHaveLength(58);
-    expect(migrations[migrations.length - 1]).toBe("0057_fiscal_identity_ownership.sql");
+    expect(migrations).toHaveLength(59);
+    expect(migrations[migrations.length - 1]).toBe("0058_task_contact_target_v1.sql");
   });
 
   it("le read model lit les deux sources bornées, trie en mémoire, et n'écrit jamais", () => {

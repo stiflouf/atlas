@@ -407,6 +407,13 @@
       "when": 1790758849064,
       "tag": "0057_fiscal_identity_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1791203343908,
+      "tag": "0058_task_contact_target_v1",
+      "breakpoints": true
     }
   ]
 }

@@ -115,14 +115,14 @@ describe("VISIT_NATIVE_ENTRY_V1 — gardes structurelles", () => {
 
   // Même tripwire volontaire que timelineContact.structurel.test.ts : le compteur force tout lot
   // qui ajoute une migration à confirmer ici qu'elle ne vient pas de celui-ci. Dernier passage :
-  // FISCAL_IDENTITY_OWNERSHIP_V1 (0057, dossier fiscal par identité). Ce lot ne touche ni les
-  // Visites ni un quelconque BuyerProject : sa migration ne porte que sur `dossier_fiscal` et
-  // `remuneration`.
+  // TASK_CONTACT_TARGET_V1 (0058, `taches.contact_id`). Ce lot ne touche ni les Visites ni un
+  // quelconque BuyerProject : sa migration n'ajoute qu'une neuvième cible de tâche vers
+  // `contacts.id`.
   it("aucun BuyerProject, aucune migration ajoutée par ce lot", () => {
     const fichiers = readdirSync(join(SRC, "lib")).concat(readdirSync(join(SRC, "actions")), readdirSync(join(SRC, "types")));
     expect(fichiers.filter((f) => /buyerProject/i.test(f))).toEqual([]);
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql"));
-    expect(migrations.length).toBe(58);
-    expect(migrations.at(-1)).toBe("0057_fiscal_identity_ownership.sql");
+    expect(migrations.length).toBe(59);
+    expect(migrations.at(-1)).toBe("0058_task_contact_target_v1.sql");
   });
 });

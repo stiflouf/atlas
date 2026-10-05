@@ -38,6 +38,13 @@ describe("TacheItem — Voir la fiche (ADR-039)", () => {
     expect(html).toContain('href="/prospects-vendeurs/prospect-1"');
   });
 
+  // TASK_CONTACT_TARGET_V1 (ADR-064)
+  it("cible contact : lien vers la fiche contact", () => {
+    const html = render(tacheTest({ contactId: "contact-1" }));
+    expect(html).toContain("Voir la fiche");
+    expect(html).toContain('href="/contacts/contact-1"');
+  });
+
   it("tâche sans cible : aucun lien « Voir la fiche »", () => {
     const html = render(tacheTest());
     expect(html).not.toContain("Voir la fiche");
@@ -100,6 +107,13 @@ describe("TacheItem — nouveau match ADR-037 : non-régression", () => {
 describe("TacheItem — Préparer un email (non-régression)", () => {
   it("disponible dès qu'une cible existe, quel que soit son type, pour une tâche réelle (id UUID)", () => {
     const html = render(tacheTest({ id: "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e", bienId: "bien-1" }));
+    expect(html).toContain("Préparer un email");
+  });
+
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — une tâche rattachée au SEUL contact suffit : elle n'exige ni
+  // acquéreur, ni prospect vendeur, ni bien pour que l'action soit proposée.
+  it("disponible pour une tâche ciblant uniquement un contact canonique", () => {
+    const html = render(tacheTest({ id: "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e", contactId: "c1a2b3c4-d5e6-4f7a-8b9c-0d1e2f3a4b5c" }));
     expect(html).toContain("Préparer un email");
   });
 

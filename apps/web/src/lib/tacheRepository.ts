@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { taches as tachesTable } from "@/db/schema";
+import { verrouillerContactActif } from "@/lib/contactActif";
 import { tachesMetier as tachesDemo } from "@/data/taches";
 import type { CodeRegleAutomatisation } from "@/types/automatisation";
 import type { CibleTache, OrigineTache, PrioriteTache, Tache, TypeTache } from "@/types/tache";
@@ -35,6 +36,7 @@ function ligneVersTache(ligne: LigneTache): Tache {
     compromisId: ligne.compromisId ?? undefined,
     remunerationId: ligne.remunerationId ?? undefined,
     visiteCanoniqueId: ligne.visiteCanoniqueId ?? undefined,
+    contactId: ligne.contactId ?? undefined,
     creeLe: ligne.creeLe.toISOString(),
     termineeLe: ligne.termineeLe?.toISOString(),
     annuleeLe: ligne.annuleeLe?.toISOString(),
@@ -217,6 +219,7 @@ export type NouvelleTache = Omit<
   | "compromisId"
   | "remunerationId"
   | "visiteCanoniqueId"
+  | "contactId"
 > & { cible?: CibleTache };
 
 // Insertion pure : la validation métier (titre non vide, au plus une cible, archivage, etc.) est
@@ -252,9 +255,47 @@ export async function creerTache(
       compromisId: input.cible?.type === "compromis" ? input.cible.id : null,
       remunerationId: input.cible?.type === "remuneration" ? input.cible.id : null,
       visiteCanoniqueId: input.cible?.type === "visiteCanonique" ? input.cible.id : null,
+      contactId: input.cible?.type === "contact" ? input.cible.id : null,
     })
     .returning();
   return ligneVersTache(ligne);
+}
+
+// TASK_CONTACT_TARGET_V1 (ADR-064) — créer une tâche CIBLANT UN CONTACT, avec sa garde, dans UNE
+// transaction.
+//
+// `creerTache` ci-dessus reste une insertion pure et le restera : ce qui est différent ici, c'est
+// qu'un contact possède un état — ACTIF ou ABSORBÉ (ADR-059) — et qu'une tâche est une donnée
+// vivante. Rattacher une intention future à une personne dont l'historique continue ailleurs
+// (ADR-059 §10) produirait une tâche qui prépare un email vers une identité périmée.
+//
+// La garde est `verrouillerContactActif`, la primitive partagée par tous les writers qui reçoivent
+// un `contact_id` — jamais une relecture maison : elle lit la ligne SOUS VERROU dans NOTRE
+// transaction, ce qui sérialise cette création avec le moteur de fusion. Une lecture nue suivie d'un
+// INSERT laisserait la course ouverte (la fusion pourrait se commettre entre les deux).
+//
+// Elle ne suit JAMAIS la chaîne de fusion : un conseiller qui choisit B et découvre B absorbé est
+// refusé, pas silencieusement redirigé vers A. C'est la résolution à la LECTURE
+// (`resoudreContactActif`, employée par le contexte de communication) qui mène au survivant.
+//
+// Hors périmètre, le contact est INTROUVABLE — indistinguable d'un id inexistant : aucune fuite.
+export type ResultatCreationTacheContact =
+  | { statut: "creee"; tache: Tache }
+  | { statut: "contact_introuvable" }
+  | { statut: "contact_fusionne" };
+
+export async function creerTacheCiblantContact(
+  input: Omit<NouvelleTache, "cible">,
+  contactId: string,
+  workspaceId: string
+): Promise<ResultatCreationTacheContact> {
+  return getDb().transaction(async (tx) => {
+    const etat = await verrouillerContactActif(contactId, tx, workspaceId);
+    if (etat.statut === "introuvable") return { statut: "contact_introuvable" } as const;
+    if (etat.statut === "fusionne") return { statut: "contact_fusionne" } as const;
+    const tache = await creerTache({ ...input, cible: { type: "contact", id: contactId } }, workspaceId, tx);
+    return { statut: "creee", tache } as const;
+  });
 }
 
 // Écritures atomiques dédiées, gel concurrent (même patron que marquerCompromisRealise/

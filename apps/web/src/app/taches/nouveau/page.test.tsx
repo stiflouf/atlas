@@ -16,12 +16,16 @@ vi.mock("@/lib/auth/workspaceCourant", () => ({
 process.env.DATABASE_URL ??= "postgresql://atlas:atlas@localhost:5432/atlas";
 
 const { getDb } = await import("@/db/client");
-const { biens: biensTable, acquereurs: acquereursTable, prospectsVendeurs: prospectsVendeursTable } = await import(
-  "@/db/schema"
-);
+const {
+  biens: biensTable,
+  acquereurs: acquereursTable,
+  prospectsVendeurs: prospectsVendeursTable,
+  contacts: contactsTable,
+} = await import("@/db/schema");
 const { creerBien } = await import("@/lib/bienRepository");
 const { creerAcquereur } = await import("@/lib/clientRepository");
 const { creerProspectVendeur } = await import("@/lib/prospectVendeurRepository");
+const { creerContact, marquerContactFusionne } = await import("@/lib/contactRepository");
 const NouvelleTachePage = (await import("./page")).default;
 
 // React (SSR) sérialise un <select> contrôlé en marquant l'<option> correspondante
@@ -36,12 +40,30 @@ function valeurSelectionnee(html: string, nomChamp: string): string | undefined 
 const idsBiensCrees: string[] = [];
 const idsAcquereursCrees: string[] = [];
 const idsProspectsCrees: string[] = [];
+const idsContactsCrees: string[] = [];
 
 afterAll(async () => {
   for (const id of idsBiensCrees) await getDb().delete(biensTable).where(eq(biensTable.id, id));
   for (const id of idsAcquereursCrees) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, id));
   for (const id of idsProspectsCrees) await getDb().delete(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id));
+  for (const id of idsContactsCrees) {
+    await getDb()
+      .update(contactsTable)
+      .set({ fusionneDansContactId: null, fusionneLe: null })
+      .where(eq(contactsTable.id, id));
+  }
+  for (const id of idsContactsCrees) await getDb().delete(contactsTable).where(eq(contactsTable.id, id));
 });
+
+// TASK_CONTACT_TARGET_V1 (ADR-064)
+async function contactDeTest(suffixe: string, email?: string) {
+  const contact = await creerContact(
+    { nom: `[test réel] Tâche Contact ${suffixe}`, prenom: "Jean", email, telephone: undefined },
+    WORKSPACE_TEST
+  );
+  idsContactsCrees.push(contact.id);
+  return contact;
+}
 
 async function bienDeTest(suffixe: string) {
   const bien = await creerBien({
@@ -126,6 +148,35 @@ describe("/taches/nouveau — retour contextuel après création (correctif UX)"
     expect(valeurSelectionnee(html, "prospectVendeurId")).toBe("");
   });
 
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — quatrième point d'entrée : la fiche contact.
+  it("?contactId=C : contact retenu affiché, les trois select vides, retour vers /contacts/C", async () => {
+    const contact = await contactDeTest("PRESELECTION", "test-reel-tache-contact@example.test");
+    const html = renderToStaticMarkup(
+      await NouvelleTachePage({ searchParams: Promise.resolve({ contactId: contact.id }) })
+    );
+    expect(html).toContain(`<input type="hidden" name="contactId" value="${contact.id}"`);
+    expect(html).toContain("Jean [test réel] Tâche Contact PRESELECTION");
+    expect(valeurSelectionnee(html, "bienId")).toBe("");
+    expect(valeurSelectionnee(html, "acquereurId")).toBe("");
+    expect(valeurSelectionnee(html, "prospectVendeurId")).toBe("");
+    expect(html).toContain(`name="redirectTo" value="/contacts/${contact.id}"`);
+  });
+
+  it("?contactId= d'un contact ABSORBÉ : aucune présélection, retour générique (ADR-059 §10)", async () => {
+    const absorbe = await contactDeTest("ABSORBE");
+    const survivant = await contactDeTest("SURVIVANT");
+    await getDb().transaction(async (tx) => {
+      await marquerContactFusionne(absorbe.id, survivant.id, WORKSPACE_TEST, tx);
+    });
+
+    const html = renderToStaticMarkup(
+      await NouvelleTachePage({ searchParams: Promise.resolve({ contactId: absorbe.id }) })
+    );
+    expect(html).toContain('<input type="hidden" name="contactId" value=""');
+    expect(html).not.toContain("Tâche Contact ABSORBE");
+    expect(html).toContain('name="redirectTo" value="/"');
+  });
+
   it("id inconnu/obsolète dans l'URL : aucune présélection, retour générique — jamais une erreur", async () => {
     const html = renderToStaticMarkup(
       await NouvelleTachePage({ searchParams: Promise.resolve({ acquereurId: "id-obsolete-inexistant" }) })
@@ -142,7 +193,10 @@ describe("/taches/nouveau — retour contextuel après création (correctif UX)"
 // Assertions portées sur le HTML RENDU, jamais sur le source : c'est le contrat livré au navigateur
 // qui compte.
 describe("/taches/nouveau — association label ↔ contrôle (accessibilité)", () => {
-  // Les huit champs visibles, avec le libellé affiché et le `name` métier qui ne doit pas bouger.
+  // Les neuf champs visibles, avec le libellé affiché et le `name` métier qui ne doit pas bouger.
+  // TASK_CONTACT_TARGET_V1 — le champ Contact est le seul SANS `name` : c'est un champ de recherche
+  // (son contenu ne part jamais au serveur), la cible soumise est l'`<input type="hidden">`
+  // `contactId`. Il doit malgré tout porter un label associé comme les huit autres.
   const CHAMPS = [
     { id: "tache-titre", label: "Titre *", name: "titre", balise: "input" },
     { id: "tache-contexte", label: "Contexte", name: "contexte", balise: "textarea" },
@@ -152,6 +206,7 @@ describe("/taches/nouveau — association label ↔ contrôle (accessibilité)",
     { id: "tache-bienId", label: "Bien", name: "bienId", balise: "select" },
     { id: "tache-acquereurId", label: "Acquéreur", name: "acquereurId", balise: "select" },
     { id: "tache-prospectVendeurId", label: "Prospect vendeur", name: "prospectVendeurId", balise: "select" },
+    { id: "tache-contact-recherche", label: "Contact", name: undefined, balise: "input" },
   ] as const;
 
   async function rendre(): Promise<string> {
@@ -166,7 +221,11 @@ describe("/taches/nouveau — association label ↔ contrôle (accessibilité)",
         new RegExp(`<label[^>]*for="${champ.id}"[^>]*>\\s*${champ.label.replace("*", "\\*")}\\s*</label>`)
       );
       // La cible du htmlFor est bien le contrôle attendu, et son name métier est inchangé.
-      expect(html).toMatch(new RegExp(`<${champ.balise}[^>]*id="${champ.id}"[^>]*name="${champ.name}"`));
+      expect(html).toMatch(
+        champ.name === undefined
+          ? new RegExp(`<${champ.balise}[^>]*id="${champ.id}"`)
+          : new RegExp(`<${champ.balise}[^>]*id="${champ.id}"[^>]*name="${champ.name}"`)
+      );
     }
   });
 

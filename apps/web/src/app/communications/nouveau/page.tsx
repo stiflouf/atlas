@@ -7,6 +7,7 @@ import ReperesPourEchange from "@/components/communications/ReperesPourEchange";
 import {
   assemblerFaits,
   LABEL_INTENTION_COMMUNICATION,
+  type DestinataireCandidat,
 } from "@/lib/communications/contexteCommunication";
 import {
   resoudreContexteEcranCommunication,
@@ -20,6 +21,13 @@ import { chargerCapacitesGoogle } from "@/lib/google/capacites";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 
 type PageProps = { searchParams: Promise<ParametresEcranCommunication> };
+
+// Le mot employé à l'écran pour chaque type de destinataire que le flux sait produire.
+const LABEL_TYPE_DESTINATAIRE: Record<DestinataireCandidat["type"], string> = {
+  prospectVendeur: "vendeur",
+  acquereur: "acquéreur",
+  contact: "contact",
+};
 
 export default async function PageNouvelleCommunication({ searchParams }: PageProps) {
   const params = await searchParams;
@@ -78,9 +86,10 @@ export default async function PageNouvelleCommunication({ searchParams }: PagePr
               <label key={`${c.type}:${c.id}`} className="inline-flex items-center gap-2 text-[14px] text-text-1">
                 <input type="radio" name="candidat" value={`${c.type}:${c.id}`} required />
                 {c.prenom ? `${c.prenom} ${c.nom}` : c.nom}
-                <span className="text-[11px] text-text-3">
-                  ({c.type === "prospectVendeur" ? "vendeur" : "acquéreur"})
-                </span>
+                {/* TASK_CONTACT_TARGET_V1 (ADR-064) — trois types possibles : le libellé est lu
+                    dans une table, jamais déduit d'un ternaire qui range tout le reste dans
+                    « acquéreur ». */}
+                <span className="text-[11px] text-text-3">({LABEL_TYPE_DESTINATAIRE[c.type]})</span>
               </label>
             ))}
             <button

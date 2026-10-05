@@ -33,6 +33,11 @@ const OBJET_PAR_INTENTION: Record<IntentionCommunication, (faits: FaitsCommunica
   message_compromis: (f) => `Votre compromis de vente${f.bienAdresse ? ` — ${f.bienAdresse}` : ""}`,
   message_notaire: (f) => `Dossier de vente${f.bienAdresse ? ` — ${f.bienAdresse}` : ""}`,
   retour_vendeur_apres_visite: (f) => `Retour de visite${f.bienAdresse ? ` — ${f.bienAdresse}` : ""}`,
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — OBJET VIDE, volontairement. Une tâche ciblant un contact ne
+  // porte aucun fait : un objet comme « Votre dossier » ou « Prise de contact » affirmerait qu'un
+  // dossier existe, ou que c'est un premier échange. DOMIORA ne sait ni l'un ni l'autre. Le champ
+  // est éditable à l'écran — un objet que le conseiller écrit lui-même est la seule version vraie.
+  message_contact: () => "",
 };
 
 type ConstructeurParagraphes = (faits: FaitsCommunication, ton: TonMessage) => (string | undefined)[];
@@ -188,6 +193,16 @@ const PARAGRAPHES_PAR_INTENTION: Record<IntentionCommunication, ConstructeurPara
             ];
     }
   },
+
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — AUCUN paragraphe, et c'est le contenu correct. Un contact est
+  // une identité, pas un dossier (ADR-055 §A) : il n'existe ici ni bien, ni date, ni montant, ni
+  // jalon. Le titre et le contexte de la tâche ne sont pas davantage utilisables — ce sont des
+  // textes libres internes (EMAIL-DEMO-02, `tacheContexte` n'est lu par aucun constructeur).
+  //
+  // Ce que DOMIORA apporte malgré tout est réel et suffit : le bon destinataire, structurellement
+  // résolu, et la salutation à son nom. La phrase qui dit pourquoi on écrit appartient au
+  // conseiller, pas au produit.
+  message_contact: () => [],
 };
 
 // Génère un brouillon complet — destinataireEmail est transmis séparément par l'appelant (jamais

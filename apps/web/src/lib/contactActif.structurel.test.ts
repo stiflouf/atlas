@@ -46,6 +46,10 @@ describe("ADR-059 §10 — gardes d'écriture sur contact_id", () => {
         "lib/provenance/champVerrouilleRepository.ts",
         "lib/provenance/referenceExterneRepository.ts",
         "lib/rattachementContact.ts",
+        // TASK_CONTACT_TARGET_V1 (ADR-064) — `taches.contact_id` est un contact_id comme un autre :
+        // son writer (`creerTacheCiblantContact`) entre dans le MÊME inventaire et passe par la même
+        // garde sous verrou, dans la transaction de l'INSERT.
+        "lib/tacheRepository.ts",
       ].sort()
     );
     for (const chemin of writers) {

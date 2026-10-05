@@ -39,6 +39,10 @@ const INTENTIONS_VALIDES: IntentionCommunication[] = [
   "message_compromis",
   "message_notaire",
   "retour_vendeur_apres_visite",
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — sans cette entrée, un envoi depuis une tâche ciblant un
+  // contact journaliserait `origine_intention` à NULL : l'audit perdrait d'où venait le message,
+  // alors que la cause est parfaitement connue.
+  "message_contact",
 ];
 
 function texteOptionnel(valeur: FormDataEntryValue | null): string | undefined {
@@ -51,12 +55,14 @@ function parseIntentionOptionnelle(valeur: FormDataEntryValue | null): Intention
 }
 
 // Le couple (type, id) vient de champs cachés du formulaire : il est donc VÉRIFIÉ ici contre les
-// deux seuls types que le flux sait produire, jamais transmis tel quel. Une valeur inconnue ne
+// trois seuls types que le flux sait produire, jamais transmis tel quel. Une valeur inconnue ne
 // produit pas d'erreur — simplement aucun destinataire canonique, donc aucune interaction.
 function parseDestinataire(type: string | undefined, id: string | undefined): DestinataireEnvoi | undefined {
   if (!id) return undefined;
   if (type === "acquereur") return { type: "acquereur", id };
   if (type === "prospectVendeur") return { type: "prospectVendeur", id };
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — un destinataire déjà canonique (tâche ciblant un contact).
+  if (type === "contact") return { type: "contact", id };
   return undefined;
 }
 

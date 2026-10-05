@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { creerTache } from "@/lib/tacheRepository";
+import { creerTache, creerTacheCiblantContact } from "@/lib/tacheRepository";
 import { getBienDuWorkspace } from "@/lib/bienRepository";
 import { getAcquereurDuWorkspace } from "@/lib/clientRepository";
 import { getProspectVendeurDuWorkspace } from "@/lib/prospectVendeurRepository";
@@ -37,10 +37,14 @@ export async function creerTacheAction(_etatPrecedent: EtatFormulaire, formData:
     const bienId = parseTexteOptionnel(formData.get("bienId"));
     const acquereurId = parseTexteOptionnel(formData.get("acquereurId"));
     const prospectVendeurId = parseTexteOptionnel(formData.get("prospectVendeurId"));
+    // TASK_CONTACT_TARGET_V1 (ADR-064) — quatrième cible offerte par ce formulaire : l'identité
+    // CANONIQUE. Elle n'est jamais déduite du titre ni du contexte (texte libre) ; elle est choisie
+    // explicitement par le conseiller, et revérifiée ici.
+    const contactId = parseTexteOptionnel(formData.get("contactId"));
 
     // Au plus une cible (miroir du CHECK taches_une_seule_cible_check, schema.ts) — refus explicite
     // plutôt que de choisir silencieusement laquelle garder.
-    const nombreCibles = [bienId, acquereurId, prospectVendeurId].filter((v) => v !== undefined).length;
+    const nombreCibles = [bienId, acquereurId, prospectVendeurId, contactId].filter((v) => v !== undefined).length;
     if (nombreCibles > 1) {
       throw new ErreurSaisie("Une tâche ne peut être rattachée qu'à une seule cible à la fois.");
     }
@@ -66,19 +70,37 @@ export async function creerTacheAction(_etatPrecedent: EtatFormulaire, formData:
       cible = { type: "prospectVendeur", id: prospectVendeurId };
     }
 
-    await creerTache(
-      {
-        titre,
-        contexte: parseTexteOptionnel(formData.get("contexte")),
-        type: String(formData.get("type")) as TypeTache,
-        priorite: String(formData.get("priorite")) as PrioriteTache,
-        echeance: parseTexteOptionnel(formData.get("echeance")),
-        origine: "manuelle",
-        cible,
-      },
-      // ADR-054 — appartenance explicite de la tâche (table racine).
-      workspaceId
-    );
+    const champsCommuns = {
+      titre,
+      contexte: parseTexteOptionnel(formData.get("contexte")),
+      type: String(formData.get("type")) as TypeTache,
+      priorite: String(formData.get("priorite")) as PrioriteTache,
+      echeance: parseTexteOptionnel(formData.get("echeance")),
+      origine: "manuelle" as const,
+    };
+
+    if (contactId) {
+      // Chemin dédié : la garde de fusion (ADR-059 §10) doit tenir le contact SOUS VERROU dans la
+      // même transaction que l'INSERT — une vérification faite ici, hors transaction, laisserait une
+      // fusion concurrente se glisser entre le contrôle et l'écriture. Le périmètre est passé à la
+      // garde : un contact d'un autre workspace est « introuvable », exactement comme un id
+      // inexistant, et le message ne distingue pas les deux cas.
+      const resultat = await creerTacheCiblantContact(champsCommuns, contactId, workspaceId);
+      if (resultat.statut === "contact_introuvable") {
+        throw new ErreurSaisie("Ce contact est introuvable.");
+      }
+      if (resultat.statut === "contact_fusionne") {
+        throw new ErreurSaisie(
+          "Ce contact a été fusionné avec un autre : rattachez la tâche au contact qui a repris son historique."
+        );
+      }
+    } else {
+      await creerTache(
+        { ...champsCommuns, cible },
+        // ADR-054 — appartenance explicite de la tâche (table racine).
+        workspaceId
+      );
+    }
 
     const redirectTo = String(formData.get("redirectTo") ?? "/");
     redirect(redirectTo.startsWith("/") ? redirectTo : "/");

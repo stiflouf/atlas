@@ -1,6 +1,9 @@
 # ADR-031 — Emails et relances assistées
 
-**Statut :** Accepté
+**Statut :** Accepté — **ÉTENDU** par **ADR-064** : un troisième type de destinataire (`"contact"`,
+l'identité canonique elle-même) et une dixième intention, `message_contact`, sans aucun fait. La
+règle fondatrice de cette ADR est **confirmée, pas levée** : aucun destinataire n'est jamais déduit
+d'un titre, d'un contexte ou d'une note en texte libre.
 **Date :** 2026-08-14
 **Décideurs :** Steven Gausset (CEO), CTO
 

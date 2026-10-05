@@ -2,6 +2,7 @@ import { getDb } from "@/db/client";
 import { getContactCanoniqueDeLAcquereur } from "@/lib/clientRepository";
 import { getContactCanoniqueDuProspectVendeur } from "@/lib/prospectVendeurRepository";
 import { ErreurContactFusionne } from "@/lib/contactActif";
+import { getContactDuWorkspace } from "@/lib/contactRepository";
 import { creerInteraction } from "@/lib/interactionRepository";
 import {
   enregistrerReferenceExterne,
@@ -26,13 +27,17 @@ import {
 // L'audit reste la source de vérité de « l'email est-il parti ? » ; l'interaction ne répond qu'à
 // « que s'est-il passé dans cette relation ? ».
 
-// Les deux seuls destinataires que le flux de communication sait produire aujourd'hui
-// (`DestinataireCandidat`), et les deux seuls dont le pont vers un contact canonique existe en
-// colonne. Un troisième type (syndic, notaire) ne produira une interaction que le jour où sa
-// relation à un contact sera écrite quelque part — jamais devinée.
+// Les trois destinataires que le flux de communication sait produire (`DestinataireCandidat`), et
+// les trois seuls dont le pont vers un contact canonique existe en colonne — ou EST le contact.
+// Un quatrième type (syndic, notaire) ne produira une interaction que le jour où sa relation à un
+// contact sera écrite quelque part — jamais devinée.
 export type DestinataireEnvoi =
   | { type: "acquereur"; id: string }
-  | { type: "prospectVendeur"; id: string };
+  | { type: "prospectVendeur"; id: string }
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — l'identité canonique elle-même : il n'y a PAS de pont à
+  // franchir, `id` EST le `contact_id`. C'est le chemin le plus court vers une interaction, et le
+  // seul qui ne peut pas être rompu par un dossier non rattaché.
+  | { type: "contact"; id: string };
 
 export type ResultatFinalisationCanonique =
   | { statut: "interaction_creee"; interactionId: string }
@@ -52,8 +57,23 @@ export type ResultatFinalisationCanonique =
 // main, et une fusion à tort ne se défait pas (ADR-055 §H).
 async function contactCanoniqueDuDestinataire(
   destinataire: DestinataireEnvoi,
+  workspaceId: string,
   executeur: Parameters<typeof creerInteraction>[1]
 ): Promise<string | undefined> {
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — un destinataire DÉJÀ canonique n'a aucun pont à traverser :
+  // son id EST l'identité. Mais ce couple (type, id) arrive d'un champ caché du formulaire, donc du
+  // navigateur : il est relu DANS LE PÉRIMÈTRE de l'envoi avant d'écrire quoi que ce soit.
+  //
+  // `creerInteraction` ne peut pas tenir cette garde à notre place : il compare le workspace du
+  // contact à celui de son CONTEXTE métier, et ce chemin n'en a aucun (une interaction sans
+  // contexte est un fait complet). Sans la relecture ci-dessous, un id forgé écrirait une
+  // interaction sur le contact d'un autre workspace. Hors périmètre : `undefined`, donc
+  // « aucun contact canonique » — le même état que toute ligne non rattachée, aucune information
+  // sur l'existence du contact visé.
+  if (destinataire.type === "contact") {
+    const contact = await getContactDuWorkspace(destinataire.id, workspaceId, executeur);
+    return contact?.id;
+  }
   return destinataire.type === "acquereur"
     ? getContactCanoniqueDeLAcquereur(destinataire.id, executeur)
     : getContactCanoniqueDuProspectVendeur(destinataire.id, executeur);
@@ -100,7 +120,7 @@ export async function finaliserEnvoiGmailReussi(input: {
     const deja = await resoudreEntiteCanonique(identite, input.workspaceId, tx);
     if (deja?.type === "interaction") return { statut: "deja_ingere", interactionId: deja.id } as const;
 
-    const contactId = await contactCanoniqueDuDestinataire(destinataire, tx);
+    const contactId = await contactCanoniqueDuDestinataire(destinataire, input.workspaceId, tx);
     if (!contactId) return { statut: "aucun_contact_canonique" } as const;
 
     // AUCUN contexte métier. Le flux d'envoi connaît un `bienId` (ce dont le message parle) et le

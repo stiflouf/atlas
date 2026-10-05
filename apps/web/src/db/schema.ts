@@ -2168,6 +2168,16 @@ export const taches = pgTable(
     // sont JAMAIS renseignées ensemble par construction (CHECK « une seule cible » ci-dessous) —
     // aucune tâche ne cible les deux notions à la fois.
     visiteCanoniqueId: uuid("visite_canonique_id").references(() => visites.id, { onDelete: "cascade" }),
+    // TASK_CONTACT_TARGET_V1 (ADR-064) — cible dédiée vers l'identité CANONIQUE (ADR-055 §A),
+    // neuvième colonne du même patron, jamais un couple polymorphe. Une tâche « envoyer un mail à
+    // Jean Dupont » devient ainsi structurée sans qu'aucune personne ne soit devinée depuis le
+    // titre ou le contexte libre (ADR-031, correction n°1).
+    //
+    // SANS `onDelete: "cascade"`, contrairement aux huit cibles au-dessus : `contacts` ne connaît
+    // pas la suppression (ADR-059 — une fusion est un MARQUEUR, jamais un DELETE), et les dix
+    // autres FK vers `contacts.id` du schéma sont toutes en `no action`. Un `cascade` ici
+    // promettrait un effacement en masse pour un geste qui n'existe pas.
+    contactId: uuid("contact_id").references(() => contacts.id),
     creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
     termineeLe: timestamp("terminee_le", { withTimezone: true }),
     annuleeLe: timestamp("annulee_le", { withTimezone: true }),
@@ -2176,7 +2186,7 @@ export const taches = pgTable(
     check("taches_type_check", sql`${table.type} IN ('appel','email','message','document','relance','autre')`),
     check("taches_priorite_check", sql`${table.priorite} IN ('haute','normale','basse')`),
     check("taches_origine_check", sql`${table.origine} IN ('manuelle','automatique')`),
-    // Au plus une cible : somme des huit indicatrices de présence <= 1 — jamais "exactement 1"
+    // Au plus une cible : somme des neuf indicatrices de présence <= 1 — jamais "exactement 1"
     // (une tâche générale sans rattachement reste valide), jamais "au moins 1".
     check(
       "taches_une_seule_cible_check",
@@ -2188,7 +2198,8 @@ export const taches = pgTable(
         (case when ${table.offreId} is not null then 1 else 0 end) +
         (case when ${table.compromisId} is not null then 1 else 0 end) +
         (case when ${table.remunerationId} is not null then 1 else 0 end) +
-        (case when ${table.visiteCanoniqueId} is not null then 1 else 0 end)
+        (case when ${table.visiteCanoniqueId} is not null then 1 else 0 end) +
+        (case when ${table.contactId} is not null then 1 else 0 end)
       ) <= 1`
     ),
   ]
@@ -2242,7 +2253,8 @@ export const envoisEmail = pgTable(
       sql`${table.origineIntention} IS NULL OR ${table.origineIntention} IN (
         'relance_prospect_vendeur','suivi_rdv_estimation','suivi_acquereur','suivi_visite',
         'demande_document_manquant','relance_piece_a_verifier','message_compromis','message_notaire',
-        'retour_vendeur_apres_visite'
+        'retour_vendeur_apres_visite',
+        'message_contact'
       )`
     ),
   ]

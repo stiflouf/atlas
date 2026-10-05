@@ -3,6 +3,7 @@ import { listerCompromisPourBien } from "@/lib/compromisRepository";
 import { getProspectVendeurDuWorkspace, getProspectVendeurParBien } from "@/lib/prospectVendeurRepository";
 import type { ProfilAcquereur } from "@/types/client";
 import type { DocumentBien } from "@/types/documentBien";
+import type { Contact } from "@/types/contact";
 import type { ProspectVendeur } from "@/types/prospectVendeur";
 import type { DestinataireCandidat } from "./contexteCommunication";
 
@@ -12,6 +13,17 @@ export function versCandidatProspectVendeur(p: ProspectVendeur): DestinataireCan
 
 export function versCandidatAcquereur(a: ProfilAcquereur): DestinataireCandidat {
   return { type: "acquereur", id: a.id, nom: a.nom, prenom: a.prenom, email: a.email };
+}
+
+// TASK_CONTACT_TARGET_V1 (ADR-064) — l'identité CANONIQUE devient un destinataire. Projection pure
+// des quatre champs qu'elle porte déjà : aucun repli sur un dossier historique (ADR-057 — le repli
+// est au niveau de l'agrégat d'identité, et un contact sans email n'a PAS d'email, il n'en a pas un
+// qui serait celui de son ancien dossier).
+//
+// L'appelant doit avoir résolu l'identité ACTIVE avant d'appeler (ADR-059) : cette fonction ne lit
+// rien et ne vérifie rien — elle traduit le contact qu'on lui donne.
+export function versCandidatContact(contact: Contact): DestinataireCandidat {
+  return { type: "contact", id: contact.id, nom: contact.nom, prenom: contact.prenom, email: contact.email };
 }
 
 // Destinataires structurellement atteignables depuis un bien (ADR-031) : le contact vendeur

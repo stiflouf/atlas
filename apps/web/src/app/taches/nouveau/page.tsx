@@ -5,6 +5,8 @@ import CibleTacheSelecteur from "@/components/tache/CibleTacheSelecteur";
 import { listerBiensActifsDuWorkspace } from "@/lib/bienRepository";
 import { listerAcquereursActifsDuWorkspace } from "@/lib/clientRepository";
 import { listerProspectsVendeursDuWorkspace } from "@/lib/prospectVendeurRepository";
+import { getContactDuWorkspace } from "@/lib/contactRepository";
+import { estContactFusionne } from "@/lib/contactFusion";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import { nomComplet } from "@/lib/identite/nomPersonne";
 import FormulaireAvecEtat from "@/components/formulaires/FormulaireAvecEtat";
@@ -18,7 +20,9 @@ const labelCls = "text-[12px] font-medium text-text-2 mb-1 block";
 // flag, les select bien/acquéreur/prospect vendeur figeraient la liste au moment du build.
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams: Promise<{ bienId?: string; acquereurId?: string; prospectVendeurId?: string }> };
+type PageProps = {
+  searchParams: Promise<{ bienId?: string; acquereurId?: string; prospectVendeurId?: string; contactId?: string }>;
+};
 
 export default async function NouvelleTachePage({ searchParams }: PageProps) {
   const params = await searchParams;
@@ -46,10 +50,24 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
     ? params.prospectVendeurId
     : undefined;
 
+  // TASK_CONTACT_TARGET_V1 (ADR-064) — `?contactId=` est le point d'entrée depuis la fiche contact.
+  // Résolu ici par le reader SCOPÉ (`getContactDuWorkspace`, jamais `getContactById`) : un contact
+  // d'un autre workspace est introuvable, et l'écran ne révèle donc jamais son nom. Un contact
+  // ABSORBÉ est refusé comme préremplissage (ADR-059 §10 — on ne rattache pas une donnée vivante à
+  // une identité figée) : le champ reste vide, exactement comme pour un id inconnu, et la garde de
+  // création le refuserait de toute façon.
+  const contactParametre = params.contactId ? await getContactDuWorkspace(params.contactId, workspaceId) : undefined;
+  const contactValide =
+    contactParametre && !estContactFusionne(contactParametre) ? contactParametre : undefined;
+
   const bienIdPreselectionne = bienIdValide ?? "";
   const acquereurIdPreselectionne = !bienIdValide && acquereurIdValide ? acquereurIdValide : "";
   const prospectVendeurIdPreselectionne =
     !bienIdValide && !acquereurIdValide && prospectVendeurIdValide ? prospectVendeurIdValide : "";
+  // Même priorité défensive que les trois autres : le contact ne préremplit que si aucune cible
+  // dossier ne l'a déjà fait. Aucun point d'entrée actuel ne produit deux paramètres à la fois.
+  const contactPreselectionne =
+    !bienIdValide && !acquereurIdValide && !prospectVendeurIdValide ? contactValide : undefined;
 
   // Retour dérivé de la cible réellement préremplie (correctif UX) — jamais un returnUrl
   // arbitraire pris depuis l'URL : uniquement l'un des trois ids déjà validés ci-dessus contre les
@@ -60,7 +78,9 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
       ? `/clients/${acquereurIdPreselectionne}`
       : prospectVendeurIdPreselectionne
         ? `/prospects-vendeurs/${prospectVendeurIdPreselectionne}`
-        : "/";
+        : contactPreselectionne
+          ? `/contacts/${contactPreselectionne.id}`
+          : "/";
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-2xl">
@@ -142,6 +162,16 @@ export default async function NouvelleTachePage({ searchParams }: PageProps) {
           bienIdInitial={bienIdPreselectionne}
           acquereurIdInitial={acquereurIdPreselectionne}
           prospectVendeurIdInitial={prospectVendeurIdPreselectionne}
+          contactInitial={
+            contactPreselectionne
+              ? {
+                  id: contactPreselectionne.id,
+                  nom: contactPreselectionne.nom,
+                  prenom: contactPreselectionne.prenom,
+                  email: contactPreselectionne.email,
+                }
+              : undefined
+          }
         />
 
         <BoutonSoumettre classeBrute="self-start mt-2 text-[13px] font-medium text-white bg-accent hover:bg-accent-hover transition-colors px-4 py-2.5 rounded-lg" libelleAttente="Création…">
