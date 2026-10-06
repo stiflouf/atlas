@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { BookUser } from "lucide-react";
+import { BookUser, Plus } from "lucide-react";
+import ButtonLink from "@/components/ui/ButtonLink";
 import ChampRecherche from "@/components/ui/ChampRecherche";
 import EmptyState from "@/components/ui/EmptyState";
 import PaginationSuite from "@/components/ui/PaginationSuite";
@@ -58,9 +59,25 @@ export default async function ContactsPage({ searchParams }: PageProps) {
 
   return (
     <div className="px-4 py-6 md:px-8 md:py-8 max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">Contacts</h1>
-        <p className="text-[14px] text-text-3 mt-1">Retrouvez une personne et l’ensemble de ses projets.</p>
+      {/* CONTACT_STANDALONE_CREATION_V1 — l'action principale du carnet. Elle manquait : la page
+          savait chercher une personne mais pas en enregistrer une, et la seule façon d'entrer dans
+          `contacts` passait par un dossier acquéreur ou vendeur. */}
+      <div className="mb-8 flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[22px] md:text-[28px] font-semibold text-text-1 leading-tight">Contacts</h1>
+          <p className="text-[14px] text-text-3 mt-1">
+            Retrouvez une personne, qu’elle porte un projet immobilier ou non.
+          </p>
+        </div>
+        <ButtonLink
+          href="/contacts/nouveau"
+          variant="primary"
+          size="md"
+          className="shrink-0 inline-flex items-center gap-1.5"
+        >
+          <Plus size={14} />
+          Nouveau contact
+        </ButtonLink>
       </div>
 
       <ChampRecherche
@@ -79,10 +96,15 @@ export default async function ContactsPage({ searchParams }: PageProps) {
               <p className="mt-1">Essayez avec un nom, un email ou un téléphone.</p>
             </div>
           ) : (
+            // CONTACT_STANDALONE_CREATION_V1 — le message précédent était devenu faux : il
+            // annonçait que seules les personnes enregistrées comme acquéreur ou prospect vendeur
+            // apparaîtraient ici, alors qu'un Contact peut désormais naître pour lui-même. Le CTA
+            // d'`EmptyState` existait déjà et n'était pas utilisé : une impasse sans geste suivant.
             <EmptyState
               icon={BookUser}
               titre="Aucun contact pour le moment."
-              message="Les personnes que vous enregistrez comme acquéreur ou prospect vendeur apparaîtront ici."
+              message="Enregistrez une personne directement, ou créez un acquéreur ou un prospect vendeur : tous apparaissent ici."
+              cta={{ href: "/contacts/nouveau", libelle: "Nouveau contact" }}
             />
           )
         ) : (

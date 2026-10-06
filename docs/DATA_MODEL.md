@@ -330,10 +330,19 @@ Le classement complet des tables est exécutable et verrouillé par
 **Rôle** : **identité canonique d'une personne**, indépendante de tout dossier — la première brique
 du modèle canonique décidé par ADR-055.
 
-**État : fondation, pas encore la source de vérité.** `prospects_vendeurs` et `acquereurs` restent
-intacts et pilotent tous les workflows existants (matching, visites, offres, compromis, tâches,
-automatisations). `contacts` est une identité **parallèle**, alimentée depuis les créations réelles,
-que rien ne lit encore. Ne pas présenter cette table comme utilisée : elle est prête, pas branchée.
+**État : identité parallèle, lue mais pas encore source de vérité des workflows.**
+`prospects_vendeurs` et `acquereurs` restent intacts et pilotent tous les workflows existants
+(matching, visites, offres, compromis, automatisations). `contacts`, en revanche, n'est plus une
+table que rien ne lit : elle est l'unité de recherche du carnet (ADR-058), la cible possible d'une
+tâche (ADR-064) et le destinataire structuré d'une communication.
+
+**Trois chemins l'alimentent**, tous via le même writer `creerContact` : une création acquéreur et
+une création prospect vendeur (dans la transaction de leur dossier, ADR-055 §B), le rattrapage
+`creerContactEtRattacher*` pour un dossier historique, et — depuis
+`CONTACT_STANDALONE_CREATION_V1` — `/contacts/nouveau`, qui enregistre une personne **sans aucun
+rôle ni projet**. Ce troisième chemin ne déroge à rien : ADR-055 §A pose déjà le Contact comme
+« l'identité d'un interlocuteur, indépendante de tout dossier », sans colonne de rôle. Aucun chemin
+ne rapproche ni ne fusionne automatiquement deux identités (ADR-055 §H).
 
 | Colonne | Type | Nullable | Notes |
 |---|---|---|---|
