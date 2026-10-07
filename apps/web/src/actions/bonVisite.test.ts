@@ -77,7 +77,9 @@ async function pngTransparentFactice(): Promise<Buffer> {
     .toBuffer();
 }
 
-async function visiteDeTest(suffixe: string) {
+// `planifiee` par défaut : le bon se signe à la fin de la visite, avant tout compte rendu
+// (BON_VISITE_V2_VISIT_LIFECYCLE_CORRECTION).
+async function visiteDeTest(suffixe: string, { realisee = false }: { realisee?: boolean } = {}) {
   const bien = await creerBien(
     {
       reference: `[test réel] ACTION-BON-${suffixe}`,
@@ -116,6 +118,12 @@ async function visiteDeTest(suffixe: string) {
   const resultat = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-06-01" }, WORKSPACE_TEST);
   if (resultat.statut !== "creee") throw new Error("création de visite attendue");
   idsVisites.push(resultat.visite.id);
+  if (realisee) {
+    await getDb()
+      .update(visitesTable)
+      .set({ statut: "realisee", realiseeLe: new Date("2026-06-04T08:15:00Z") })
+      .where(eq(visitesTable.id, resultat.visite.id));
+  }
   return resultat.visite;
 }
 
@@ -220,5 +228,60 @@ describe("signerBonVisiteAction — §29/§30/§44 revalidation serveur", () => 
     ).catch(() => {});
 
     expect((await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST))?.statut).toBe("brouillon");
+  });
+});
+
+describe("signerBonVisiteAction — lifecycle de la Visite", () => {
+  // T1/T6 côté Server Action : une visite seulement planifiée se signe, sans compte rendu, et la
+  // Visite n'est jamais basculée en `realisee` par ce chemin.
+  it("signe une visite planifiée et ne touche pas au lifecycle", async () => {
+    const visite = await visiteDeTest("SIGNPLANIFIEE");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    const dataUrl = "data:image/png;base64," + (await pngSignatureFactice()).toString("base64");
+
+    await signerBonVisiteAction(
+      formData({
+        bonVisiteId: r.bonVisite.id,
+        visiteId: visite.id,
+        nomSignataire: "Dupont",
+        roleSignataire: "principal",
+        consentement: "on",
+        signatureImage: dataUrl,
+      })
+    ).catch(() => {});
+
+    expect((await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST))?.statut).toBe("signe");
+    const [ligneVisite] = await getDb().select().from(visitesTable).where(eq(visitesTable.id, visite.id));
+    expect(ligneVisite.statut).toBe("planifiee");
+    expect(ligneVisite.realiseeLe).toBeNull();
+  });
+
+  // Aucune date du client n'entre dans le document : la Server Action ne lit aucun champ de date.
+  it("ignore toute date fournie par le client", async () => {
+    const visite = await visiteDeTest("SIGNDATECLIENT");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    const textePrepare = r.bonVisite.contenuSnapshot.template.texte;
+    const dataUrl = "data:image/png;base64," + (await pngSignatureFactice()).toString("base64");
+
+    await signerBonVisiteAction(
+      formData({
+        bonVisiteId: r.bonVisite.id,
+        visiteId: visite.id,
+        nomSignataire: "Dupont",
+        roleSignataire: "principal",
+        consentement: "on",
+        signatureImage: dataUrl,
+        dateRealisation: "2026-06-04",
+        realiseeLe: "2026-06-04T08:15:00Z",
+        datePrevue: "2026-06-01",
+      })
+    ).catch(() => {});
+
+    const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
+    expect(relu?.statut).toBe("signe");
+    expect(relu?.contenuSnapshot.template.texte).toBe(textePrepare);
+    expect(relu?.contenuSnapshot.template.texte).not.toContain("4 juin 2026");
   });
 });

@@ -22,6 +22,14 @@ export type SnapshotBonVisite = {
   // Texte RÉELLEMENT présenté (placeholders déjà substitués), pas seulement la version du template
   // — voir templateBonVisite.ts. `version` permet de savoir quel gabarit a produit ce texte.
   template: { version: string; texte: string };
+  // BON_VISITE_LEGAL_HARDENING_V2 — formule de consentement RÉELLEMENT présentée au signataire,
+  // figée au même titre que le texte du bon : jusqu'ici seule la DATE du consentement était
+  // persistée (signatures_bon_visite.consentement_confirme_le), jamais ce qui avait été accepté.
+  // OPTIONNEL par rétrocompatibilité : les snapshots domiora-v1 déjà en base ne portent pas ce
+  // champ et ne doivent JAMAIS être réécrits pour l'acquérir (aucun backfill ne serait honnête —
+  // personne ne peut certifier après coup quelle phrase un signataire a lue). `version` est la
+  // version de TEMPLATE à laquelle cette formule est rattachée.
+  consentement?: { texte: string; version: string };
 };
 
 export type BonVisite = {
@@ -39,6 +47,14 @@ export type BonVisite = {
 };
 
 export type RoleSignataire = "principal" | "secondaire";
+
+// Libellés humains du rôle — SOURCE UNIQUE partagée par le `<select>` de signature et le PDF final
+// (BON_VISITE_LEGAL_HARDENING_V2) : le PDF imprimait jusqu'ici la valeur brute du vocabulaire
+// ("principal"), lisible pour une base de données, pas pour la personne qui signe.
+export const LABEL_ROLE_SIGNATAIRE: Record<RoleSignataire, string> = {
+  principal: "Signataire principal",
+  secondaire: "Second signataire",
+};
 
 // V1 : une seule valeur possible ("domiora", signature tactile native) — le champ existe pour
 // accueillir un futur fournisseur externe sans redesign (§9 du brief).

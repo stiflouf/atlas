@@ -14,7 +14,11 @@ import { enregistrerDocumentBien } from "@/lib/documentBienRepository";
 import { ecrireDocument, genererCleStockage } from "@/lib/stockageDocuments";
 import { emettreEvenementEtPreparerExecutions } from "@/lib/automatisations/evenementMetierRepository";
 import { obtenirNomConseiller } from "@/lib/conseiller";
-import { construireTexteBonVisite, VERSION_TEMPLATE_BON_VISITE_V1 } from "@/lib/bonVisite/templateBonVisite";
+import {
+  construireTexteBonVisiteV2,
+  TEXTE_CONSENTEMENT_BON_VISITE_V2,
+  VERSION_TEMPLATE_BON_VISITE_V2,
+} from "@/lib/bonVisite/templateBonVisite";
 import { genererPdfBonVisite } from "@/lib/bonVisite/pdfBonVisite";
 import { bufferSignatureEstVide } from "@/lib/bonVisite/validationSignatureImage";
 import { verrouillerContactActif } from "@/lib/contactActif";
@@ -148,19 +152,27 @@ export async function getDocumentBonVisitePourTelechargement(
 
 // ───────────────────────────── VERROU ─────────────────────────────
 
-type BonVisiteVerrouille = { statut: "verrouille"; ligne: LigneBonVisite } | { statut: "introuvable" };
+// `visiteStatut` est lu par la MÊME jointure qui porte déjà la garde workspace — jamais une seconde
+// requête. Le verrou reste posé sur `bons_visite` SEUL (`of`), comme avant : verrouiller aussi la
+// Visite élargirait la zone de sérialisation sans besoin. Les deux transitions de la Visite sont
+// terminales et non réouvrables (ADR-040), donc une lecture non verrouillée ne peut produire qu'un
+// faux NÉGATIF transitoire (refus d'une signature pendant qu'une annulation commite juste à côté),
+// jamais un faux positif — un bon ne peut pas être signé sur une visite annulée par une course.
+type BonVisiteVerrouille =
+  | { statut: "verrouille"; ligne: LigneBonVisite; visiteStatut: string }
+  | { statut: "introuvable" };
 
 async function verrouillerBonVisite(id: string, workspaceId: string, tx: Executeur): Promise<BonVisiteVerrouille> {
   if (!UUID_REGEX.test(id)) return { statut: "introuvable" };
   const [trouve] = await tx
-    .select({ bon: bonsVisiteTable })
+    .select({ bon: bonsVisiteTable, visiteStatut: visitesTable.statut })
     .from(bonsVisiteTable)
     .innerJoin(visitesTable, eq(bonsVisiteTable.visiteId, visitesTable.id))
     .innerJoin(biensTable, eq(visitesTable.bienId, biensTable.id))
     .where(and(eq(bonsVisiteTable.id, id), eq(biensTable.workspaceId, workspaceId)))
     .for("update", { of: bonsVisiteTable });
   if (!trouve) return { statut: "introuvable" };
-  return { statut: "verrouille", ligne: trouve.bon };
+  return { statut: "verrouille", ligne: trouve.bon, visiteStatut: trouve.visiteStatut };
 }
 
 // ───────────────────────────── CRÉATION ─────────────────────────────
@@ -225,17 +237,31 @@ export async function creerBonVisite(
       },
       conseiller: { nom: conseillerNom },
       template: {
-        version: VERSION_TEMPLATE_BON_VISITE_V1,
-        texte: construireTexteBonVisite({
+        version: VERSION_TEMPLATE_BON_VISITE_V2,
+        // Texte substitué ICI, UNE SEULE FOIS, et jamais reconstruit ensuite — ni à l'affichage, ni
+        // à la signature (`signerBonVisite` n'écrit jamais `contenuSnapshot`). C'est ce qui rend
+        // vraie par construction l'égalité « texte lu par la personne qui signe = texte du snapshot
+        // signé = texte du PDF ».
+        //
+        // La date de visite n'est affirmée que si `realisee_le` est DÉJÀ renseignée à cet instant
+        // (bon établi après un compte rendu) ; sinon aucune date de visite n'est affirmée et le
+        // constat est daté par l'horodatage serveur de la signature. `datePrevue` n'est jamais un
+        // substitut — ce n'est même pas un paramètre du gabarit V2 (templateBonVisite.ts).
+        //
+        // La signature ne requiert aucun compte rendu préalable et ne touche pas à la Visite :
+        // `planifiee → realisee` reste la conséquence exclusive de la création d'un compte rendu
+        // (ADR-040 §7, ADR-063 §43).
+        texte: construireTexteBonVisiteV2({
           bienReference: bien.reference,
           bienTitre: bien.titre,
           bienAdresse: bien.adresse,
           bienVille: bien.ville,
           bienCodePostal: bien.codePostal,
-          datePrevue: verrouVisite.ligne.datePrevue,
+          dateRealisationISO: verrouVisite.ligne.realiseeLe ? verrouVisite.ligne.realiseeLe.toISOString() : null,
           conseillerNom,
         }),
       },
+      consentement: { texte: TEXTE_CONSENTEMENT_BON_VISITE_V2, version: VERSION_TEMPLATE_BON_VISITE_V2 },
     };
 
     const [ligne] = await tx
@@ -244,7 +270,7 @@ export async function creerBonVisite(
         visiteId,
         version,
         statut: "brouillon",
-        templateVersion: VERSION_TEMPLATE_BON_VISITE_V1,
+        templateVersion: VERSION_TEMPLATE_BON_VISITE_V2,
         contenuSnapshot: snapshot,
       })
       .returning();
@@ -303,7 +329,12 @@ export type ResultatSignatureBonVisite =
   | { statut: "signature_vide" }
   | { statut: "signature_trop_grande" }
   | { statut: "contact_introuvable" }
-  | { statut: "contact_fusionne" };
+  | { statut: "contact_fusionne" }
+  // §35 — une visite annulée n'a pas eu lieu : son bon ne peut pas en attester la réalisation. La
+  // création était déjà refusée (`visite_annulee`, creerBonVisite) ; ce refus-ci couvre le cas où la
+  // Visite est annulée APRÈS la préparation du brouillon. Un cas normal du parcours, pas une
+  // exception technique.
+  | { statut: "visite_annulee" };
 
 function nomFichierBonVisite(snapshot: SnapshotBonVisite, date: Date): string {
   const referenceSure = snapshot.bien.reference.replace(/[^a-zA-Z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
@@ -338,11 +369,23 @@ export async function signerBonVisite(
   if (bonActuel.statut === "signe") return { statut: "deja_signe" };
   if (bonActuel.statut === "annule") return { statut: "deja_annule" };
 
+  // BON_VISITE_V2_VISIT_LIFECYCLE_CORRECTION — la signature n'exige PAS que la Visite soit déjà
+  // `realisee`, et ne la fait jamais transiter : le bon se signe à la fin de la visite, le compte
+  // rendu vient après (workflow cible ADR-063), et `planifiee → realisee` reste la conséquence
+  // exclusive de la création d'un compte rendu (ADR-040 §7, ADR-063 §43 — « jamais un bouton
+  // indépendant »). Ce qui garantit l'honnêteté du document n'est donc pas une garde de lifecycle
+  // mais le TEXTE lui-même : domiora-v2 n'affirme une date de visite que si `realisee_le` existait
+  // à la préparation du bon, sinon il n'en affirme aucune et se fait dater par l'horodatage serveur
+  // de la signature (templateBonVisite.ts).
+  //
+  // Le snapshot n'est JAMAIS reconstruit ici : le texte figé à la préparation est exactement celui
+  // que la personne a lu à l'écran (invariant TEXT_SHOWN = TEXT_SIGNED, vrai par construction).
   const signeLe = new Date();
   const nomComplet = [input.prenomSignataire, input.nomSignataire].filter(Boolean).join(" ") || input.nomSignataire;
 
   const pdfBytes = await genererPdfBonVisite({
     contenuSnapshot: bonActuel.contenuSnapshot,
+    bon: { id: bonActuel.id, version: bonActuel.version },
     signataire: { nomComplet, roleSignataire: input.roleSignataire },
     signatureImagePng: input.signatureImagePng,
     signeLe,
@@ -359,6 +402,10 @@ export async function signerBonVisite(
     if (verrou.statut !== "verrouille") return { statut: "introuvable" };
     if (verrou.ligne.statut === "signe") return { statut: "deja_signe" };
     if (verrou.ligne.statut === "annule") return { statut: "deja_annule" };
+    // §35 — une visite annulée entre la préparation du brouillon et ce clic : le document
+    // attesterait une visite qui n'a pas eu lieu. Vérifié ICI, sous verrou, dans la transaction qui
+    // écrit — jamais seulement sur une lecture préalable hors transaction.
+    if (verrou.visiteStatut === "annulee") return { statut: "visite_annulee" };
 
     // ADR-059 §10 — un contact absorbé est figé : aucune donnée vivante ne s'y rattache plus. Lu
     // SOUS VERROU (verrouillerContactActif), dans CETTE transaction, avant toute écriture — jamais
@@ -404,6 +451,8 @@ export async function signerBonVisite(
 
     const [ligne] = await tx
       .update(bonsVisiteTable)
+      // `contenuSnapshot` n'est JAMAIS réécrit par la signature (§5) — le texte figé à la
+      // préparation est celui qui a été lu, imprimé et signé.
       .set({ statut: "signe", documentId: document.id, hashDocument, signeLe })
       .where(and(eq(bonsVisiteTable.id, input.bonVisiteId), eq(bonsVisiteTable.statut, "brouillon")))
       .returning();

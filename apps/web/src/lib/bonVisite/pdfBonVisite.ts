@@ -1,14 +1,23 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
-import type { SnapshotBonVisite } from "@/types/bonVisite";
+import { LABEL_ROLE_SIGNATAIRE, type RoleSignataire, type SnapshotBonVisite } from "@/types/bonVisite";
+import { titreDocumentBonVisite } from "@/lib/bonVisite/templateBonVisite";
 
 // Document final immuable (§14/§15 du brief VISIT_SIGNED_FORM_V1) — un PDF sobre, généré une seule
 // fois à la signature, jamais régénéré après coup (le hash SHA-256 posé sur bonsVisite.hashDocument
 // lie la preuve à cet exact fichier). Pas de design premium : une page A4, texte simple, aucune
 // dépendance disproportionnée (pdf-lib est pur JS, sans binaire natif, cf. package.json).
+//
+// BON_VISITE_LEGAL_HARDENING_V2 — le SHA-256 n'est VOLONTAIREMENT jamais imprimé dans le PDF : il
+// est calculé sur les octets finaux de ce fichier, donc l'y insérer modifierait précisément ce
+// qu'il mesure. Il reste une métadonnée externe (bons_visite.hash_document). Référence du bon et
+// version du modèle, elles, sont des données stables en amont du fichier : les imprimer est sûr.
 
 export type DonneesPdfBonVisite = {
   contenuSnapshot: SnapshotBonVisite;
-  signataire: { nomComplet: string; roleSignataire: string };
+  // Référence stable du document signé (§7 du lot V2) — l'identifiant du bon et sa version pour la
+  // Visite, les deux seules clés qui désignent ce document sans ambiguïté et ne changent jamais.
+  bon: { id: string; version: number };
+  signataire: { nomComplet: string; roleSignataire: RoleSignataire };
   signatureImagePng: Buffer;
   signeLe: Date;
 };
@@ -69,7 +78,8 @@ export async function genererPdfBonVisite(donnees: DonneesPdfBonVisite): Promise
     y -= taille * 1.4 + (opts.espaceApres ?? 0);
   };
 
-  ecrireLigne("BON DE VISITE", { taille: 18, police: fontBold, espaceApres: 10 });
+  const versionTemplate = donnees.contenuSnapshot.template.version;
+  ecrireLigne(titreDocumentBonVisite(versionTemplate), { taille: 18, police: fontBold, espaceApres: 10 });
 
   for (const ligne of decouperEnLignes(donnees.contenuSnapshot.template.texte, font, 11, LARGEUR_UTILE)) {
     ecrireLigne(ligne || " ");
@@ -77,7 +87,20 @@ export async function genererPdfBonVisite(donnees: DonneesPdfBonVisite): Promise
 
   y -= 16;
   ecrireLigne("Signataire", { taille: 12, police: fontBold, espaceApres: 2 });
-  ecrireLigne(`${donnees.signataire.nomComplet} (${donnees.signataire.roleSignataire})`);
+  ecrireLigne(`${donnees.signataire.nomComplet} (${LABEL_ROLE_SIGNATAIRE[donnees.signataire.roleSignataire]})`);
+
+  // Reproduit la formule EXACTE acceptée, telle que figée dans le snapshot — jamais une formule
+  // reconstruite ici depuis la version du template : le PDF doit imprimer ce que le signataire a lu,
+  // pas ce que le code considère aujourd'hui comme la bonne formule. Absente des snapshots
+  // domiora-v1 (jamais capturée à l'époque) : rien n'est alors imprimé plutôt qu'une phrase
+  // reconstituée après coup.
+  if (donnees.contenuSnapshot.consentement) {
+    y -= 16;
+    ecrireLigne("Consentement", { taille: 12, police: fontBold, espaceApres: 2 });
+    for (const ligne of decouperEnLignes(donnees.contenuSnapshot.consentement.texte, font, 10, LARGEUR_UTILE)) {
+      ecrireLigne(ligne || " ", { taille: 10 });
+    }
+  }
 
   y -= 24;
   const signatureBytes = new Uint8Array(donnees.signatureImagePng);
@@ -95,6 +118,10 @@ export async function genererPdfBonVisite(donnees: DonneesPdfBonVisite): Promise
   });
   y -= 14;
   ecrireLigne(`Signé le ${formatHorodatage(donnees.signeLe)}`, { taille: 9, couleur: gris });
+  ecrireLigne(`Bon de visite ${donnees.bon.id} — version ${donnees.bon.version} — modèle ${versionTemplate}`, {
+    taille: 8,
+    couleur: gris,
+  });
 
   const bytes = await pdf.save();
   return Buffer.from(bytes);

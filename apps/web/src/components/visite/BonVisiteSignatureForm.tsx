@@ -4,7 +4,7 @@ import { useState } from "react";
 import Button from "@/components/ui/Button";
 import SignatureCanvas from "@/components/visite/SignatureCanvas";
 import { signerBonVisiteAction } from "@/actions/bonVisite";
-import type { RoleSignataire } from "@/types/bonVisite";
+import { LABEL_ROLE_SIGNATAIRE, type RoleSignataire } from "@/types/bonVisite";
 
 type Props = {
   bonVisiteId: string;
@@ -12,14 +12,23 @@ type Props = {
   prenomInitial?: string;
   nomInitial: string;
   emailInitial?: string;
+  // Formule EXACTE figée dans le snapshot du bon (BON_VISITE_LEGAL_HARDENING_V2) — jamais un
+  // littéral local : c'est la même chaîne qui est affichée ici, conservée en base et imprimée dans
+  // le PDF, et c'est cette égalité qui rend démontrable ce que le signataire a accepté.
+  texteConsentement: string;
 };
-
-const LABEL_ROLE: Record<RoleSignataire, string> = { principal: "Signataire principal", secondaire: "Second signataire" };
 
 // §28/§29/§30 : le bouton "Signer" reste désactivé côté client tant que la signature est vide ou
 // le consentement non coché — un confort d'usage, jamais la seule garantie (signerBonVisiteAction
 // revalide indépendamment les deux, §44).
-export default function BonVisiteSignatureForm({ bonVisiteId, visiteId, prenomInitial, nomInitial, emailInitial }: Props) {
+export default function BonVisiteSignatureForm({
+  bonVisiteId,
+  visiteId,
+  prenomInitial,
+  nomInitial,
+  emailInitial,
+  texteConsentement,
+}: Props) {
   const [signatureVide, setSignatureVide] = useState(true);
   const [consentement, setConsentement] = useState(false);
 
@@ -67,9 +76,9 @@ export default function BonVisiteSignatureForm({ bonVisiteId, visiteId, prenomIn
           defaultValue="principal"
           className="w-full border border-border-md rounded-lg px-3 py-2 text-[14px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
         >
-          {(Object.keys(LABEL_ROLE) as RoleSignataire[]).map((role) => (
+          {(Object.keys(LABEL_ROLE_SIGNATAIRE) as RoleSignataire[]).map((role) => (
             <option key={role} value={role}>
-              {LABEL_ROLE[role]}
+              {LABEL_ROLE_SIGNATAIRE[role]}
             </option>
           ))}
         </select>
@@ -88,7 +97,7 @@ export default function BonVisiteSignatureForm({ bonVisiteId, visiteId, prenomIn
           onChange={(e) => setConsentement(e.target.checked)}
           className="mt-0.5"
         />
-        Je reconnais avoir pris connaissance du texte ci-dessus et je le signe volontairement.
+        {texteConsentement}
       </label>
 
       <Button type="submit" variant="primary" size="md" disabled={signatureVide || !consentement} className="self-start">

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { eq, inArray, or } from "drizzle-orm";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,6 +24,7 @@ const {
   contacts: contactsTable,
   champsVerrouilles: champsVerrouillesTable,
   visites: visitesTable,
+  comptesRendusVisite: comptesRendusVisiteTable,
   bonsVisite: bonsVisiteTable,
   signaturesBonVisite: signaturesBonVisiteTable,
   documentsBien: documentsBienTable,
@@ -33,6 +35,7 @@ const { creerBien, modifierBien, archiverBien } = await import("@/lib/bienReposi
 const { creerAcquereur } = await import("@/lib/clientRepository");
 const { creerContact, modifierIdentiteContact } = await import("@/lib/contactRepository");
 const { creerVisite, annulerVisite } = await import("@/lib/visiteRepository");
+const { creerCompteRenduEtRealiserVisite } = await import("@/lib/compteRenduVisiteRepository");
 const {
   creerBonVisite,
   annulerBrouillonBonVisite,
@@ -43,6 +46,13 @@ const {
   getDocumentBonVisitePourTelechargement,
 } = await import("@/lib/bonVisiteRepository");
 const { lireDocument } = await import("@/lib/stockageDocuments");
+const {
+  TEXTE_CONSENTEMENT_BON_VISITE_V2,
+  VERSION_TEMPLATE_BON_VISITE_V1,
+  VERSION_TEMPLATE_BON_VISITE_V2,
+  construireTexteBonVisite,
+} = await import("@/lib/bonVisite/templateBonVisite");
+const { texteVisiblePdfDeTest } = await import("@/lib/bonVisite/texteVisiblePdfDeTest");
 
 const idsBiens: string[] = [];
 const idsAcquereurs: string[] = [];
@@ -69,10 +79,23 @@ afterAll(async () => {
     ? await getDb().select({ id: bonsVisiteTable.id }).from(bonsVisiteTable).where(inArray(bonsVisiteTable.visiteId, idsVisites))
     : [];
   const idsBons = bonsCrees.map((b) => b.id);
-  if (idsVisites.length || idsBons.length) {
+  // `visite_realisee` cible `compteRenduVisiteId` (ADR-041 §5), jamais la Visite : un test qui crée
+  // un compte rendu (T7 — le CR reste possible après la signature) laisse donc un événement que ni
+  // `visiteId` ni `bonVisiteId` ne retrouvent, et qui bloque la suppression en cascade du Bien.
+  // Retrouvés par `bienId` et non par `visiteId` : `comptes_rendus_visite.visite_id` est ON DELETE
+  // SET NULL, donc une purge partielle antérieure peut l'avoir déjà vidé.
+  const comptesRendusCrees = idsBiens.length
+    ? await getDb()
+        .select({ id: comptesRendusVisiteTable.id })
+        .from(comptesRendusVisiteTable)
+        .where(inArray(comptesRendusVisiteTable.bienId, idsBiens))
+    : [];
+  const idsComptesRendus = comptesRendusCrees.map((c) => c.id);
+  if (idsVisites.length || idsBons.length || idsComptesRendus.length) {
     const filtre = or(
       idsVisites.length ? inArray(evenementsMetier.visiteId, idsVisites) : undefined,
-      idsBons.length ? inArray(evenementsMetier.bonVisiteId, idsBons) : undefined
+      idsBons.length ? inArray(evenementsMetier.bonVisiteId, idsBons) : undefined,
+      idsComptesRendus.length ? inArray(evenementsMetier.compteRenduVisiteId, idsComptesRendus) : undefined
     );
     const evenements = await getDb().select({ id: evenementsMetier.id }).from(evenementsMetier).where(filtre);
     const idsEvenements = evenements.map((e) => e.id);
@@ -92,6 +115,9 @@ afterAll(async () => {
       .update(contactsTable)
       .set({ fusionneDansContactId: null, fusionneLe: null })
       .where(inArray(contactsTable.id, idsContacts));
+  }
+  if (idsComptesRendus.length) {
+    await getDb().delete(comptesRendusVisiteTable).where(inArray(comptesRendusVisiteTable.id, idsComptesRendus));
   }
   // visites CASCADE vers bons_visite CASCADE vers signatures_bon_visite — dont
   // signatures_bon_visite.contact_id référence contacts en NO ACTION : les visites doivent donc
@@ -152,12 +178,27 @@ async function acquereurDeTest(nom: string) {
   return acquereur;
 }
 
-async function visiteDeTest(nom: string) {
+// Instant de réalisation volontairement DIFFÉRENT de `datePrevue` (2026-06-01) : tout test qui
+// confondrait les deux dates dans le texte du bon échoue au lieu de passer par coïncidence.
+const REALISEE_LE_TEST = new Date("2026-06-04T08:15:00Z");
+
+// `planifiee` par défaut — l'état nominal du terrain : le bon se signe à la fin de la visite, avant
+// tout compte rendu (BON_VISITE_V2_VISIT_LIFECYCLE_CORRECTION). Les tests du cas inverse (bon
+// établi APRÈS un compte rendu) passent `{ realisee: true }`. L'UPDATE direct installe alors l'ÉTAT
+// attendu sans dépendre du domaine Compte rendu (seul writer réel de cette transition en
+// production, ADR-040) : la fixture ne teste pas cette transition, elle en suppose le résultat.
+async function visiteDeTest(nom: string, { realisee = false }: { realisee?: boolean } = {}) {
   const bien = await bienDeTest(`[test réel] BON-VISITE-${nom}`);
   const acquereur = await acquereurDeTest(`BONVISITE${nom}`);
   const resultat = await creerVisite({ bienId: bien.id, acquereurId: acquereur.id, datePrevue: "2026-06-01" }, WORKSPACE_TEST);
   if (resultat.statut !== "creee") throw new Error("création de visite attendue");
   idsVisites.push(resultat.visite.id);
+  if (realisee) {
+    await getDb()
+      .update(visitesTable)
+      .set({ statut: "realisee", realiseeLe: REALISEE_LE_TEST })
+      .where(eq(visitesTable.id, resultat.visite.id));
+  }
   return { bien, acquereur, visite: resultat.visite };
 }
 
@@ -715,5 +756,287 @@ describe("bonVisiteRepository — contraintes DB (§46, migration)", () => {
         contenuSnapshot: { visite: { id: visite.id, datePrevue: "2026-01-01" }, bien: { id: "x", reference: "x", titre: "x", adresse: "x", ville: "x", codePostal: "x" }, conseiller: { nom: "x" }, template: { version: "x", texte: "x" } },
       })
     ).rejects.toThrow();
+  });
+});
+
+// ───────────────── BON_VISITE_V2_VISIT_LIFECYCLE_CORRECTION ─────────────────
+
+describe("bonVisiteRepository — domiora-v2 : création et snapshot", () => {
+  // I2
+  it("un nouveau bon est créé en domiora-v2, colonne et snapshot cohérents", async () => {
+    const { visite } = await visiteDeTest("V2CREATION1");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    expect(r.bonVisite.templateVersion).toBe(VERSION_TEMPLATE_BON_VISITE_V2);
+    expect(r.bonVisite.contenuSnapshot.template.version).toBe(VERSION_TEMPLATE_BON_VISITE_V2);
+  });
+
+  // T6 — le consentement est figé dès la préparation du bon, pas reconstruit à la lecture.
+  it("le snapshot porte la formule de consentement V2, mot pour mot", async () => {
+    const { visite } = await visiteDeTest("V2CONSENT1");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    expect(r.bonVisite.contenuSnapshot.consentement?.texte).toBe(TEXTE_CONSENTEMENT_BON_VISITE_V2);
+    expect(r.bonVisite.contenuSnapshot.consentement?.version).toBe(VERSION_TEMPLATE_BON_VISITE_V2);
+
+    const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
+    expect(relu?.contenuSnapshot.consentement?.texte).toBe(TEXTE_CONSENTEMENT_BON_VISITE_V2);
+  });
+
+  // T1/T2 — visite encore planifiée : aucune date de visite n'est affirmée, et surtout pas la date
+  // prévue (2026-06-01).
+  it("visite planifiée : le texte n'affirme aucune date de visite, jamais la date prévue", async () => {
+    const { visite } = await visiteDeTest("V2PLANIFIEE1");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    const texte = r.bonVisite.contenuSnapshot.template.texte;
+    expect(texte).toContain("a été visité avec le concours de");
+    expect(texte).not.toContain("1 juin 2026");
+    expect(texte).not.toMatch(/a été visité le/);
+    expect(r.bonVisite.contenuSnapshot.visite.realiseeLe).toBeUndefined();
+  });
+
+  // T8 — bon établi APRÈS un compte rendu : la date enregistrée est citée, jamais la date prévue.
+  it("visite déjà réalisée : le texte cite la date de réalisation enregistrée", async () => {
+    const { visite } = await visiteDeTest("V2REALISEE1", { realisee: true });
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    expect(r.bonVisite.contenuSnapshot.template.texte).toContain("a été visité le 4 juin 2026");
+    expect(r.bonVisite.contenuSnapshot.template.texte).not.toContain("1 juin 2026");
+    expect(r.bonVisite.contenuSnapshot.visite.realiseeLe).toBe(REALISEE_LE_TEST.toISOString());
+  });
+});
+
+describe("bonVisiteRepository — la signature n'exige ni ne provoque la réalisation", () => {
+  // T1/T6 — le cœur de la correction : signer un bon sur une visite PLANIFIÉE, sans aucun compte
+  // rendu préalable, et sans qu'aucun compte rendu ne soit créé au passage.
+  it("signe une visite planifiée sans compte rendu, et n'en crée aucun", async () => {
+    const { visite, bien, acquereur } = await visiteDeTest("V2SIGNPLANIFIEE1");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+
+    const resultat = await signerBonVisite(
+      {
+        bonVisiteId: r.bonVisite.id,
+        nomSignataire: "Dupont",
+        prenomSignataire: "Marie",
+        roleSignataire: "principal",
+        signatureImagePng: await pngSignatureFactice(),
+        consentementConfirme: true,
+      },
+      WORKSPACE_TEST
+    );
+    expect(resultat.statut).toBe("signe");
+
+    // T6 — aucun compte rendu créé, et la Visite reste PLANIFIÉE : la signature ne touche pas au
+    // lifecycle (ADR-040 §7 / ADR-063 §43 — `realisee` vient du seul compte rendu).
+    const [ligneVisite] = await getDb().select().from(visitesTable).where(eq(visitesTable.id, visite.id));
+    expect(ligneVisite.statut).toBe("planifiee");
+    expect(ligneVisite.realiseeLe).toBeNull();
+    const comptesRendus = await getDb()
+      .select()
+      .from(comptesRendusVisiteTable)
+      .where(eq(comptesRendusVisiteTable.visiteId, visite.id));
+    expect(comptesRendus).toHaveLength(0);
+
+    // I5 — l'horodatage de signature reste posé par le serveur, et c'est lui qui date le constat.
+    const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
+    expect(relu?.signeLe).toBeDefined();
+    expect(relu?.hashDocument).toMatch(/^[0-9a-f]{64}$/);
+
+    // T7 — le compte rendu reste possible APRÈS la signature, et c'est lui qui réalise la visite.
+    const cr = await creerCompteRenduEtRealiserVisite(
+      {
+        bienId: bien.id,
+        acquereurId: acquereur.id,
+        visiteId: visite.id,
+        dateVisite: "2026-06-01",
+        retour: "Visite effectuée, retour à chaud positif.",
+        interet: "a_reflechir",
+      },
+      WORKSPACE_TEST
+    );
+    expect(cr.statut).toBe("cree");
+    const [apresCr] = await getDb().select().from(visitesTable).where(eq(visitesTable.id, visite.id));
+    expect(apresCr.statut).toBe("realisee");
+    expect(apresCr.realiseeLe).not.toBeNull();
+
+    // T4 — le snapshot signé n'a PAS été réécrit par la réalisation postérieure : le document
+    // atteste ce qui a été lu et signé, pas ce que la base a appris ensuite.
+    const relapres = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
+    expect(relapres?.contenuSnapshot.template.texte).toBe(relu?.contenuSnapshot.template.texte);
+  });
+
+  // T4/T5 — TEXT_SHOWN = TEXT_SIGNED : le texte figé à la préparation est, caractère pour
+  // caractère, celui du snapshot signé et celui imprimé dans le PDF.
+  it("le texte préparé est exactement le texte signé et le texte du PDF", async () => {
+    const { visite } = await visiteDeTest("V2TEXTEIDENT1");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    const textePrepare = r.bonVisite.contenuSnapshot.template.texte;
+
+    const resultat = await signerBonVisite(
+      {
+        bonVisiteId: r.bonVisite.id,
+        nomSignataire: "Dupont",
+        roleSignataire: "principal",
+        signatureImagePng: await pngSignatureFactice(),
+        consentementConfirme: true,
+      },
+      WORKSPACE_TEST
+    );
+    expect(resultat.statut).toBe("signe");
+
+    const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
+    expect(relu?.contenuSnapshot.template.texte).toBe(textePrepare);
+
+    const document = await getDocumentBonVisitePourTelechargement(r.bonVisite.id, WORKSPACE_TEST);
+    const fichier = await lireDocument(document!.cleStockage);
+    const texteVisible = texteVisiblePdfDeTest(fichier!);
+    // Comparaison ligne par ligne : le PDF coupe les lignes pour la mise en page.
+    for (const ligne of textePrepare.split("\n").filter(Boolean)) {
+      for (const mot of ligne.split(" ")) expect(texteVisible).toContain(mot);
+    }
+    expect(texteVisible).toContain(VERSION_TEMPLATE_BON_VISITE_V2);
+    expect(texteVisible).toContain(r.bonVisite.id);
+
+    // Assertions NÉGATIVES portées sur le texte réellement extrait du PDF, pas sur le snapshot :
+    // avec `realiseeLe` NULL, le document ne doit affirmer aucune date de visite. La date prévue de
+    // la fixture (2026-06-01 → « 1 juin 2026 ») ne doit apparaître nulle part, et la formulation
+    // qui introduirait une date de visite ne doit pas être présente.
+    expect(texteVisible).not.toContain("1 juin 2026");
+    expect(texteVisible).not.toContain("2026-06-01");
+    expect(texteVisible).not.toMatch(/a été visité le/);
+    // Seule date du document : l'horodatage serveur de la signature, explicitement libellé.
+    expect(texteVisible).toMatch(/Signé le \d{1,2} \S+ \d{4} à \d{2}:\d{2}/);
+
+    // T13 — le hash reste celui du fichier réellement écrit.
+    expect(createHash("sha256").update(fichier!).digest("hex")).toBe(relu?.hashDocument);
+  });
+
+  // T8 — `realiseeLe` n'est JAMAIS écrasé : la signature ne l'écrit pas, même quand il existe.
+  it("visite déjà réalisée : realiseeLe est conservé tel quel par la signature", async () => {
+    const { visite } = await visiteDeTest("V2NOOVERWRITE1", { realisee: true });
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    const resultat = await signerBonVisite(
+      {
+        bonVisiteId: r.bonVisite.id,
+        nomSignataire: "Dupont",
+        roleSignataire: "principal",
+        signatureImagePng: await pngSignatureFactice(),
+        consentementConfirme: true,
+      },
+      WORKSPACE_TEST
+    );
+    expect(resultat.statut).toBe("signe");
+    const [ligneVisite] = await getDb().select().from(visitesTable).where(eq(visitesTable.id, visite.id));
+    expect(ligneVisite.realiseeLe?.toISOString()).toBe(REALISEE_LE_TEST.toISOString());
+    expect(ligneVisite.statut).toBe("realisee");
+  });
+
+  // T9/§35 — visite annulée APRÈS la préparation du brouillon : signature refusée, et T10 : aucun
+  // état métier incohérent laissé derrière.
+  it("visite annulée après préparation : signature refusée, aucune écriture", async () => {
+    const { visite } = await visiteDeTest("V2ANNULEEAPRES1");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+    await annulerVisite(visite.id, WORKSPACE_TEST);
+
+    const resultat = await signerBonVisite(
+      {
+        bonVisiteId: r.bonVisite.id,
+        nomSignataire: "Dupont",
+        roleSignataire: "principal",
+        signatureImagePng: await pngSignatureFactice(),
+        consentementConfirme: true,
+      },
+      WORKSPACE_TEST
+    );
+    expect(resultat.statut).toBe("visite_annulee");
+
+    const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
+    expect(relu?.statut).toBe("brouillon");
+    expect(relu?.documentId).toBeUndefined();
+    expect(relu?.hashDocument).toBeUndefined();
+    expect(await listerSignaturesPourBonVisite(r.bonVisite.id, WORKSPACE_TEST)).toHaveLength(0);
+    // La Visite n'est jamais "dé-annulée" pour débloquer la signature.
+    const [ligneVisite] = await getDb().select().from(visitesTable).where(eq(visitesTable.id, visite.id));
+    expect(ligneVisite.statut).toBe("annulee");
+  });
+
+  // I1/T11 — un brouillon domiora-v1 historique reste signable et inaltéré.
+  it("un brouillon domiora-v1 historique reste signable et inaltéré", async () => {
+    const { visite, bien } = await visiteDeTest("V1LEGACY1");
+    const r = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (r.statut !== "cree") throw new Error("brouillon attendu");
+
+    const texteV1 = construireTexteBonVisite({
+      bienReference: bien.reference,
+      bienTitre: bien.titre,
+      bienAdresse: bien.adresse,
+      bienVille: bien.ville,
+      bienCodePostal: bien.codePostal,
+      datePrevue: "2026-06-01",
+      conseillerNom: r.bonVisite.contenuSnapshot.conseiller.nom,
+    });
+    await getDb()
+      .update(bonsVisiteTable)
+      .set({
+        templateVersion: VERSION_TEMPLATE_BON_VISITE_V1,
+        contenuSnapshot: {
+          visite: { id: visite.id, datePrevue: "2026-06-01" },
+          bien: r.bonVisite.contenuSnapshot.bien,
+          conseiller: r.bonVisite.contenuSnapshot.conseiller,
+          template: { version: VERSION_TEMPLATE_BON_VISITE_V1, texte: texteV1 },
+        },
+      })
+      .where(eq(bonsVisiteTable.id, r.bonVisite.id));
+
+    const resultat = await signerBonVisite(
+      {
+        bonVisiteId: r.bonVisite.id,
+        nomSignataire: "Dupont",
+        roleSignataire: "principal",
+        signatureImagePng: await pngSignatureFactice(),
+        consentementConfirme: true,
+      },
+      WORKSPACE_TEST
+    );
+    expect(resultat.statut).toBe("signe");
+
+    const relu = await getBonVisiteById(r.bonVisite.id, WORKSPACE_TEST);
+    expect(relu?.contenuSnapshot.template.version).toBe(VERSION_TEMPLATE_BON_VISITE_V1);
+    expect(relu?.contenuSnapshot.template.texte).toBe(texteV1);
+    expect(relu?.contenuSnapshot.consentement).toBeUndefined();
+
+    const document = await getDocumentBonVisitePourTelechargement(r.bonVisite.id, WORKSPACE_TEST);
+    const texte = texteVisiblePdfDeTest((await lireDocument(document!.cleStockage))!);
+    expect(texte).not.toContain("ATTESTATION DE VISITE");
+    expect(texte).not.toContain("Consentement");
+  });
+
+  // Les deux versions coexistent sur une même Visite, sans migration ni réécriture.
+  it("deux versions de bon, v1 historique et v2 courant, coexistent sur la même Visite", async () => {
+    const { visite } = await visiteDeTest("V1V2COEXIST1");
+    const premier = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (premier.statut !== "cree") throw new Error("v1 attendu");
+    await getDb()
+      .update(bonsVisiteTable)
+      .set({ templateVersion: VERSION_TEMPLATE_BON_VISITE_V1 })
+      .where(eq(bonsVisiteTable.id, premier.bonVisite.id));
+    await annulerBrouillonBonVisite(premier.bonVisite.id, WORKSPACE_TEST);
+
+    // I11/T16 — le versionnement par Visite reste intact.
+    const second = await creerBonVisite(visite.id, WORKSPACE_TEST);
+    if (second.statut !== "cree") throw new Error("v2 attendu");
+    expect(second.bonVisite.version).toBe(2);
+    expect(second.bonVisite.templateVersion).toBe(VERSION_TEMPLATE_BON_VISITE_V2);
+
+    const bons = await listerBonsVisitePourVisite(visite.id, WORKSPACE_TEST);
+    expect(bons.map((b) => b.templateVersion).sort()).toEqual([
+      VERSION_TEMPLATE_BON_VISITE_V1,
+      VERSION_TEMPLATE_BON_VISITE_V2,
+    ]);
   });
 });

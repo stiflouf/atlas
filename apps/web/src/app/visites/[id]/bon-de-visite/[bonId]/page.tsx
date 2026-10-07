@@ -10,6 +10,7 @@ import { getBonVisiteById, listerSignaturesPourBonVisite } from "@/lib/bonVisite
 import { annulerBrouillonBonVisiteAction } from "@/actions/bonVisite";
 import BonVisiteSignatureForm from "@/components/visite/BonVisiteSignatureForm";
 import { LABEL_STATUT_BON_VISITE } from "@/types/bonVisite";
+import { texteConsentementPourVersion } from "@/lib/bonVisite/templateBonVisite";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 type PageProps = { params: Promise<{ id: string; bonId: string }> };
@@ -30,6 +31,7 @@ const LIBELLE_ERREUR: Record<string, string> = {
   deja_annule: "Ce bon de visite a été annulé.",
   contact_introuvable: "Le contact sélectionné est introuvable.",
   contact_fusionne: "Le contact sélectionné a été fusionné avec un autre — veuillez le resélectionner.",
+  visite_annulee: "Cette visite a été annulée — son bon de visite ne peut plus être signé.",
 };
 
 export default async function BonVisiteSignaturePage({ params, searchParams }: PageProps & { searchParams: Promise<{ erreur?: string }> }) {
@@ -43,6 +45,12 @@ export default async function BonVisiteSignaturePage({ params, searchParams }: P
   if (!bon || bon.visiteId !== visite.id) notFound();
 
   const acquereur = await getClientById(visite.acquereurId);
+  // BON_VISITE_V2_VISIT_LIFECYCLE_CORRECTION — miroir d'affichage de la seule garde serveur qui
+  // reste (signerBonVisite, §35), jamais la garde elle-même. Une visite annulée après la
+  // préparation du brouillon ne peut plus produire d'attestation.
+  const signatureBloqueeVisiteAnnulee = visite.statut === "annulee";
+  // Le snapshot est affiché TEL QUEL, jamais reprojeté : le texte figé à la préparation est celui
+  // qui sera imprimé et signé (invariant TEXT_SHOWN = TEXT_SIGNED, vrai par construction).
   const signatures = bon.statut === "signe" ? await listerSignaturesPourBonVisite(bon.id, workspaceId) : [];
 
   return (
@@ -76,13 +84,24 @@ export default async function BonVisiteSignaturePage({ params, searchParams }: P
 
       {bon.statut === "brouillon" && (
         <>
-          <BonVisiteSignatureForm
-            bonVisiteId={bon.id}
-            visiteId={visite.id}
-            prenomInitial={acquereur?.prenom}
-            nomInitial={acquereur?.nom ?? ""}
-            emailInitial={acquereur?.email}
-          />
+          {signatureBloqueeVisiteAnnulee ? (
+            <div className="border border-border rounded-lg bg-surface px-3.5 py-3 text-[13px] text-text-2 leading-relaxed">
+              <span className="font-medium text-text-1">Signature indisponible : visite annulée.</span> Ce bon atteste
+              une visite réalisée ; il ne peut plus être signé. Vous pouvez annuler ce brouillon.
+            </div>
+          ) : (
+            <BonVisiteSignatureForm
+              bonVisiteId={bon.id}
+              visiteId={visite.id}
+              prenomInitial={acquereur?.prenom}
+              nomInitial={acquereur?.nom ?? ""}
+              emailInitial={acquereur?.email}
+              texteConsentement={
+                bon.contenuSnapshot.consentement?.texte ??
+                texteConsentementPourVersion(bon.contenuSnapshot.template.version)
+              }
+            />
+          )}
           <form action={annulerBrouillonBonVisiteAction} className="mt-4">
             <input type="hidden" name="id" value={bon.id} />
             <input type="hidden" name="visiteId" value={visite.id} />
