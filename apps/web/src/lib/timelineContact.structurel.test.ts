@@ -16,13 +16,15 @@ describe("CRM_TIMELINE_V1 — read model, jamais une table", () => {
   // `taches.contact_id`) — une tâche peut désormais cibler une identité canonique. Une tâche est une
   // INTENTION, jamais un échange survenu : elle n'entre donc pas dans l'historique de contact, qui
   // reste un read model des interactions et des notes, sans table ni migration.
-  it("aucune table timeline dans le schéma, aucune migration ajoutée (59 fichiers SQL, dernière = 0058)", () => {
+  it("aucune table timeline dans le schéma, aucune migration de ce domaine", () => {
     const schema = lire("db/schema.ts");
     expect(schema).not.toMatch(/pgTable\(\s*"(timeline|historique_contact|historique_echange)/i);
     expect(schema).not.toMatch(/timeline_contact|historique_contact|timelineContact/);
+    // Ce que ce lot garantit : la timeline reste un READ MODEL, donc aucune migration ne la
+    // matérialise. Un compte absolu de fichiers SQL exprimait autre chose — « le dépôt n'a pas
+    // bougé » — et cassait à la première migration ultérieure sans rapport (0059, ADR-065).
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql")).sort();
-    expect(migrations).toHaveLength(59);
-    expect(migrations[migrations.length - 1]).toBe("0058_task_contact_target_v1.sql");
+    expect(migrations.filter((f) => /timeline|historique_contact|historique_echange/i.test(f))).toEqual([]);
   });
 
   it("le read model lit les deux sources bornées, trie en mémoire, et n'écrit jamais", () => {

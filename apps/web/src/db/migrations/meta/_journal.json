@@ -414,6 +414,13 @@
       "when": 1791203343908,
       "tag": "0058_task_contact_target_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1791500000000,
+      "tag": "0059_workspace_privacy_identity",
+      "breakpoints": true
     }
   ]
 }

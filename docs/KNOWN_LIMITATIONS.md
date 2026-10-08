@@ -1198,7 +1198,37 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
 - **Aucune UI de gestion de session** (liste des connexions actives, révocation à distance) — la
   seule action possible est se connecter/se déconnecter soi-même.
 - **Aucun mécanisme RGPD outillé** (export/suppression/anonymisation automatisés) — seule une
-  procédure manuelle documentée existe à ce stade (voir l'audit ADR-047).
+  procédure manuelle documentée existe à ce stade (voir l'audit ADR-047). ADR-065 a posé la
+  gouvernance (responsable du traitement, bases juridiques, politiques de conservation) mais
+  **aucun outillage des droits** : `DATA_SUBJECT_RIGHTS_V1` reste ouvert.
+- **Aucune notice de confidentialité publiée**, et c'est une décision et non un retard (ADR-065
+  §7) : une notice énonce des durées de conservation, et le produit n'en applique aucune. Publier
+  « 3 ans » ou « 5 ans » serait un engagement non exécuté — un défaut plus grave que l'absence de
+  notice, parce qu'il est affirmatif. `PUBLIC_PRIVACY_PAGE` et `SHORT_NOTICE_AT_BON_VISITE` restent
+  désactivés jusqu'à `RETENTION_ENFORCEMENT_V1`.
+- **Les politiques de conservation sont décidées mais pas appliquées** (ADR-065 §3) : aucun cron,
+  aucune purge, aucun TTL de donnée métier. La doctrine en vigueur reste la conservation indéfinie
+  (ADR-012, ADR-013). Trois catégories restent explicitement `UNDECIDED` — documents de
+  transaction (`BY_DOCUMENT_PURPOSE`), textes libres, et données de projet après clôture.
+- **Aucun consentement marketing, donc aucune prospection électronique B2C possible** (ADR-065
+  §2) : ni `marketing_consent`, ni `opt_in`, ni `consent_at`, ni provenance de consentement
+  n'existent dans le schéma. Aucune notice ne doit laisser entendre le contraire.
+  `MARKETING_CONSENT_V1` reste ouvert.
+- **`FISCAL_PERSONAL_DATA_MULTI_MEMBER = BLOCKED_BEFORE_SECOND_WORKSPACE_MEMBER`** (ADR-065 §9) —
+  `dossier_fiscal` et ses trois filles portent la situation fiscale **personnelle** du conseiller
+  (régime, TVA, revenu fiscal de référence du **foyer**, nombre de parts), et leur appartenance est
+  explicitement non tranchée entre workspace et identité. Or ADR-054 §5 pose que l'accès est
+  binaire : être membre d'un workspace donne accès à tout le workspace. Rattacher ce dossier au
+  workspace exposerait donc intégralement le revenu fiscal du foyer du conseiller au premier
+  assistant ajouté. **À trancher explicitement avant tout deuxième membre** ; l'ajout de la colonne
+  restera additif dans les deux cas.
+- **Fournisseurs non activés en production, et à ne pas activer sans qualification** (ADR-065
+  §8) : `PRIM_API_KEY` et `DOMIORA_REDACTION_*` sont absentes de l'environnement de production. Le
+  service de reformulation recevrait le brouillon de message complet, le prénom du destinataire,
+  l'adresse du bien, la date de visite et les critères du projet, chez un fournisseur
+  indéterminable depuis le dépôt. Préalables : qualification du fournisseur, localisation des
+  traitements, conditions contractuelles, évaluation des données transmises, mise à jour de la
+  notice.
 
 ## Dette technique identifiée dans le code
 

@@ -329,11 +329,46 @@ describe("ADR-054 — appartenance des tables (garantie structurelle)", () => {
 
   it("workspaces et workspace_membres restent le modèle minimal décidé par ADR-054", () => {
     const workspaces = config("workspaces");
-    expect(workspaces.columns.map((colonne) => colonne.name).sort()).toEqual(["cree_le", "id", "nom"]);
-    // Aucune colonne « au cas où » : pas de slug, pas de statut, pas d'organisation, pas de plan.
+    // Deux socles distincts, et la distinction est le fond de cette garde.
+    //
+    // ADR-054 — APPARTENANCE : trois colonnes, et toujours trois. Aucune colonne « au cas où » :
+    // pas de slug, pas de statut, pas d'organisation, pas de plan.
+    //
+    // ADR-065 — IDENTITÉ JURIDIQUE du responsable du traitement. Ces colonnes ne sont pas des
+    // colonnes spéculatives : chacune correspond à une information qu'une notice de confidentialité
+    // doit porter, décidée et justifiée par son ADR. La garde reste donc une LISTE FERMÉE —
+    // ajouter une quatorzième colonne continue de faire échouer ce test, et c'est le seul moment où
+    // quelqu'un est forcé de se demander si elle sert vraiment à identifier un responsable.
+    const COLONNES_APPARTENANCE = ["cree_le", "id", "nom"];
+    const COLONNES_IDENTITE_PRIVACY = [
+      "controller_address_line1",
+      "controller_address_line2",
+      "controller_city",
+      "controller_country_code",
+      "controller_legal_form",
+      "controller_legal_name",
+      "controller_postal_code",
+      "controller_siren",
+      "controller_trade_name",
+      "dpo_email",
+      "dpo_name",
+      "privacy_identity_modifie_le",
+      "privacy_rights_email",
+    ];
+    expect(workspaces.columns.map((colonne) => colonne.name).sort()).toEqual(
+      [...COLONNES_APPARTENANCE, ...COLONNES_IDENTITE_PRIVACY].sort()
+    );
     expect(workspaces.columns.find((colonne) => colonne.name === "id")!.default).toBe(VALEUR_WORKSPACE_HISTORIQUE);
     // `nom` nullable : le workspace historique n'a jamais reçu de libellé, aucun n'est inventé.
     expect(workspaces.columns.find((colonne) => colonne.name === "nom")!.notNull).toBe(false);
+    // ADR-065 — les treize colonnes d'identité sont TOUTES nullables et sans défaut. C'est ce qui
+    // rend la migration 0059 applicable sans backfill : aucune identité juridique n'existe nulle
+    // part dans le produit, et un NOT NULL aurait exigé d'en inventer une.
+    for (const nom of COLONNES_IDENTITE_PRIVACY) {
+      const colonne = workspaces.columns.find((candidate) => candidate.name === nom)!;
+      expect(colonne.notNull, nom).toBe(false);
+      expect(colonne.default, nom).toBeUndefined();
+    }
 
     const membres = config("workspace_membres");
     expect(membres.columns.map((colonne) => colonne.name).sort()).toEqual([

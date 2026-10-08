@@ -269,9 +269,40 @@ propriété permanente.
 | `id` | text (PK) | non | `DEFAULT 'default'` — clé logique, jamais un uuid de substitution |
 | `nom` | text | **oui** | `NULL` = aucun libellé saisi ; la migration n'en invente aucun (ADR-009). Distinct d'`ATLAS_ADVISOR_DISPLAY_NAME`, propriété d'instance |
 | `cree_le` | timestamptz | non | `defaultNow()` |
+| `controller_legal_name` | text | **oui** | ADR-065 — nom légal du responsable du traitement. « Prénom Nom » pour une personne physique en EI, raison sociale pour une personne morale. Jamais déduit de `nom` |
+| `controller_legal_form` | text | **oui** | ADR-065 — EI, SAS, SARL… Texte libre, **pas** un enum : le catalogue réel est long et évolutif |
+| `controller_trade_name` | text | **oui** | ADR-065 — nom commercial |
+| `controller_address_line1` | text | **oui** | ADR-065 |
+| `controller_address_line2` | text | **oui** | ADR-065 — complément, bâtiment |
+| `controller_postal_code` | text | **oui** | ADR-065 |
+| `controller_city` | text | **oui** | ADR-065 |
+| `controller_country_code` | text | **oui** | ADR-065 — ISO 3166-1 alpha-2 |
+| `controller_siren` | text | **oui** | ADR-065 — facultatif, y compris pour une notice complète |
+| `privacy_rights_email` | text | **oui** | ADR-065 — adresse d'exercice des droits |
+| `dpo_name` | text | **oui** | ADR-065 — facultatif : un DPO n'est pas toujours requis |
+| `dpo_email` | text | **oui** | ADR-065 — facultatif |
+| `privacy_identity_modifie_le` | timestamptz | **oui** | ADR-065 — patron `modifie_le`, mais nullable sans défaut : « jamais renseigné » reste distinct de « renseigné à la création » |
 
-Aucune contrainte `CHECK`. Référencée par la colonne `workspace_id` des tables racines (voir
-ci-dessous) et par `workspace_membres`.
+Deux contraintes `CHECK`, toutes deux de la forme `IS NULL OR …` — elles portent sur la FORME et
+laissent passer l'absence, ce qui les rend applicables aux lignes existantes :
+`workspaces_controller_siren_check` (exactement 9 chiffres) et
+`workspaces_controller_country_code_check` (exactement 2 lettres majuscules). **Aucun `CHECK`
+d'email** : le dépôt n'a aucun pattern SQL d'email sur ses quatre colonnes d'email existantes, et la
+validation reste applicative.
+
+Les treize colonnes ADR-065 sont **toutes nullables, sans défaut, et sans backfill** (migration
+`0059`). Aucune identité juridique n'existe nulle part dans le produit : ni `nom` (libellé
+d'affichage), ni `ATLAS_ADVISOR_DISPLAY_NAME` (nom d'affichage d'instance), ni le nom du produit
+n'en sont une. Les recopier aurait fabriqué un responsable du traitement inexistant. Le workspace
+historique sort de la migration avec ces treize colonnes à `NULL`, et c'est l'état correct :
+l'identité est saisie par le propriétaire depuis `/parametres/confidentialite`, jamais déduite.
+
+Lecture et écriture : `lib/workspacePrivacyRepository.ts` (seul writer). Complétude :
+`lib/privacy/identiteResponsable.ts` — l'identité « prête pour la notice » exige nom légal, adresse
+postale exploitable et email d'exercice des droits ; aucun repli n'est jamais affiché.
+
+Référencée par la colonne `workspace_id` des tables racines (voir ci-dessous) et par
+`workspace_membres`.
 
 ## `workspace_membres` (ADR-054)
 

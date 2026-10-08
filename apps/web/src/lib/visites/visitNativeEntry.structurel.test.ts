@@ -121,8 +121,14 @@ describe("VISIT_NATIVE_ENTRY_V1 — gardes structurelles", () => {
   it("aucun BuyerProject, aucune migration ajoutée par ce lot", () => {
     const fichiers = readdirSync(join(SRC, "lib")).concat(readdirSync(join(SRC, "actions")), readdirSync(join(SRC, "types")));
     expect(fichiers.filter((f) => /buyerProject/i.test(f))).toEqual([]);
+    // L'invariant de CE lot est qu'il n'a ajouté AUCUNE migration — pas que le dépôt soit figé.
+    // Un compte absolu exprimait le second, et faisait donc échouer ce test à chaque migration
+    // ultérieure sans rapport (0059, ADR-065) : il mesurait l'activité du dépôt, pas la frontière
+    // de ce chantier. La garde porte désormais sur le DOMAINE : aucune migration ne touche à
+    // l'entrée native de visite ni à un BuyerProject.
     const migrations = readdirSync(join(SRC, "db", "migrations")).filter((f) => f.endsWith(".sql"));
-    expect(migrations.length).toBe(59);
-    expect(migrations.at(-1)).toBe("0058_task_contact_target_v1.sql");
+    // Nommée d'après CE lot, et pas d'après son domaine : `0050_visit_native_lifecycle_v1.sql`
+    // appartient à un chantier antérieur du même domaine et doit rester.
+    expect(migrations.filter((f) => /buyer|visit_native_entry/i.test(f))).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getDb, type Executeur } from "@/db/client";
 import { workspaces, workspaceMembres } from "@/db/schema";
 
@@ -48,6 +48,27 @@ export async function resoudreWorkspaceExecutionMachine(executeur: Executeur = g
 export async function listerTousLesWorkspaceIds(executeur: Executeur = getDb()): Promise<string[]> {
   const lignes = await executeur.select({ id: workspaces.id }).from(workspaces).orderBy(asc(workspaces.id));
   return lignes.map((ligne) => ligne.id);
+}
+
+// PRIVACY_GOVERNANCE_FOUNDATION_V1 (ADR-065) — le RÔLE d'une identité dans un workspace donné.
+//
+// Rend `null` quand l'appartenance n'existe pas, et ne lève pas : « cette personne n'est pas membre »
+// est une réponse, pas une anomalie. C'est l'appelant (`exigerOwnerWorkspaceCourant`) qui décide
+// quoi en faire — ce module ne décide jamais d'un droit d'accès, conformément à son en-tête.
+//
+// Lit le couple COMPLET (workspace, identité), qui est la PK de la table : interroger la seule
+// identité rendrait le rôle qu'elle détient ailleurs, ce qui serait faux dès le second workspace.
+export async function roleDansWorkspace(
+  workspaceId: string,
+  identiteSub: string,
+  executeur: Executeur = getDb()
+): Promise<string | null> {
+  const lignes = await executeur
+    .select({ role: workspaceMembres.role })
+    .from(workspaceMembres)
+    .where(and(eq(workspaceMembres.workspaceId, workspaceId), eq(workspaceMembres.identiteSub, identiteSub)))
+    .limit(1);
+  return lignes[0]?.role ?? null;
 }
 
 export async function listerWorkspaceIdsPourIdentite(

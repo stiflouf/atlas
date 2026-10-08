@@ -21,11 +21,78 @@ import type { SnapshotBonVisite } from "../types/bonVisite";
 // ADR-054 écarte explicitement `organization`/`account` comme unité racine, et une future
 // `organisations` qui contiendrait des workspaces serait une FK ajoutée ICI — jamais une reprise
 // des tables métier.
-export const workspaces = pgTable("workspaces", {
-  id: text("id").primaryKey().default("default"),
-  nom: text("nom"),
-  creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
-});
+// PRIVACY_GOVERNANCE_FOUNDATION_V1 (ADR-065) — identité JURIDIQUE du responsable du traitement
+// métier, portée par le workspace.
+//
+// POURQUOI ICI, et pas ailleurs : ADR-054 a tranché que `workspace_id` est l'axe d'appartenance de
+// toutes les données métier. Le responsable du traitement de ces données est donc celui qui tient
+// le workspace — un conseiller en EI, une agence, une autre structure. Ces colonnes ne créent aucun
+// concept nouveau : elles nomment enfin une entité dont le périmètre existait déjà.
+//
+// `nom` ci-dessus reste un LIBELLÉ D'AFFICHAGE libre, et ne devient jamais une raison sociale :
+// confondre les deux ferait d'un intitulé de confort une affirmation juridique.
+//
+// TOUTES NULLABLES, sans exception et sans défaut. Un workspace existant n'a aucune de ces
+// informations, et aucune ne peut être devinée : ni depuis `nom`, ni depuis
+// `ATLAS_ADVISOR_DISPLAY_NAME` (propriété d'instance, nom d'affichage), ni depuis le nom du produit
+// — `branding.ts` dit lui-même qu'il est « encore en cours de sécurisation juridique ». Un NOT NULL
+// exigerait un backfill, donc une identité inventée. Aucun backfill n'est fait (migration 0059).
+//
+// PERSONNE PHYSIQUE OU MORALE, indifféremment : `controller_legal_name` reçoit « Prénom Nom » pour
+// une entreprise individuelle comme une raison sociale pour une société. `controller_legal_form`
+// reste du TEXTE LIBRE et non un enum : le catalogue réel des formes juridiques est long, évolutif,
+// et un vocabulaire fermé prématuré refuserait des cas légitimes.
+//
+// CE QUI N'Y FIGURE PAS, volontairement (ADR-065 §non-objectifs) : carte professionnelle et son
+// autorité de délivrance, réseau ou enseigne de rattachement, garantie financière, RCP. Ces
+// informations ne servent pas à identifier un responsable de traitement ; elles relèvent d'une
+// future identité d'agence / mentions légales, et les ajouter ici gonflerait ce modèle d'éléments
+// qu'aucune notice de confidentialité n'exige.
+export const workspaces = pgTable(
+  "workspaces",
+  {
+    id: text("id").primaryKey().default("default"),
+    nom: text("nom"),
+    creeLe: timestamp("cree_le", { withTimezone: true }).notNull().defaultNow(),
+    controllerLegalName: text("controller_legal_name"),
+    controllerLegalForm: text("controller_legal_form"),
+    controllerTradeName: text("controller_trade_name"),
+    controllerAddressLine1: text("controller_address_line1"),
+    controllerAddressLine2: text("controller_address_line2"),
+    controllerPostalCode: text("controller_postal_code"),
+    controllerCity: text("controller_city"),
+    controllerCountryCode: text("controller_country_code"),
+    controllerSiren: text("controller_siren"),
+    privacyRightsEmail: text("privacy_rights_email"),
+    dpoName: text("dpo_name"),
+    dpoEmail: text("dpo_email"),
+    privacyIdentityModifieLe: timestamp("privacy_identity_modifie_le", { withTimezone: true }),
+  },
+  (table) => [
+    // FORME, jamais EXISTENCE : ces CHECK refusent une valeur malformée, et laissent passer
+    // l'absence. C'est la seule garde que la base peut honnêtement porter — « cette identité est-elle
+    // suffisante pour publier une notice ? » est une question de domaine, pas de colonne, et elle
+    // vit dans `identiteResponsable.ts`.
+    //
+    // Les deux CHECK existants du dépôt portant sur une forme (`workspace_membres_role_check`,
+    // `rfr_foyer_montant_positif_check`) suivent le même principe.
+    check(
+      "workspaces_controller_siren_check",
+      sql`${table.controllerSiren} IS NULL OR ${table.controllerSiren} ~ '^[0-9]{9}$'`
+    ),
+    // ISO 3166-1 alpha-2 : exactement deux lettres majuscules. Aucun catalogue de pays n'est
+    // embarqué — le vérifier en base exigerait de le maintenir en base.
+    check(
+      "workspaces_controller_country_code_check",
+      sql`${table.controllerCountryCode} IS NULL OR ${table.controllerCountryCode} ~ '^[A-Z]{2}$'`
+    ),
+    // Les emails ne reçoivent AUCUN CHECK : le dépôt n'a aujourd'hui aucun pattern SQL d'email
+    // (`contacts.email`, `workspace_membres.email`, `envois_email.destinataire_email` et
+    // `transmissions_dossier_notaire.destinataire_email` en sont tous dépourvus), et en introduire un
+    // ici créerait une seconde règle de forme pour la même donnée — exactement ce que
+    // `contactFormulaire.ts` refuse pour la normalisation. La validation reste applicative.
+  ]
+);
 
 // ADR-054 — ACCESS, jamais OWNERSHIP et jamais IDENTITY. Cette table dit "cette identité humaine a
 // accès à ce workspace" ; elle ne dit ni qui possède une ligne métier (c'est `workspace_id`), ni qui
