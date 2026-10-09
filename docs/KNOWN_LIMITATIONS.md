@@ -1210,6 +1210,14 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   aucune purge, aucun TTL de donnée métier. La doctrine en vigueur reste la conservation indéfinie
   (ADR-012, ADR-013). Trois catégories restent explicitement `UNDECIDED` — documents de
   transaction (`BY_DOCUMENT_PURPOSE`), textes libres, et données de projet après clôture.
+  ADR-066 a ajouté un **dry-run** qui sait dire ce qui serait éligible (`POST
+  /api/retention/dry-run`, déclenchement manuel, secret dédié) sans rien supprimer :
+  `RETENTION_ENFORCEMENT_V1_LIVRE` reste `FALSE` et `APPLY_SUPPORTED = NO`. Une seule politique y
+  est calculable (bon de visite signé, `signe_le + 5 ans`), et elle reste non supprimable faute de
+  primitive de suppression de fichier, de modèle de suspension pour contentieux et de chemin de
+  suppression complet. `PROSPECT_MARKETING` et `CUSTOMER_MARKETING` restent bloquées faute de
+  déclencheur fiable — `dernier_contact_le` est explicitement interdit comme dernier contact
+  entrant, un test le verrouille.
 - **Aucun consentement marketing, donc aucune prospection électronique B2C possible** (ADR-065
   §2) : ni `marketing_consent`, ni `opt_in`, ni `consent_at`, ni provenance de consentement
   n'existent dans le schéma. Aucune notice ne doit laisser entendre le contraire.

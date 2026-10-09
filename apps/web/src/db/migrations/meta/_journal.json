@@ -421,6 +421,13 @@
       "when": 1791500000000,
       "tag": "0059_workspace_privacy_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1791550480868,
+      "tag": "0060_retention_engine_foundation_v1",
+      "breakpoints": true
     }
   ]
 }
