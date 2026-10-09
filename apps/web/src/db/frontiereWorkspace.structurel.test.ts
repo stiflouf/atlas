@@ -48,6 +48,10 @@ const ROUTES_MACHINE = [
   "api/automatisations/reprise/route.ts",
   "api/compatibilite/scan/route.ts",
   "api/compatibilite/baseline/route.ts",
+  // RETENTION_ENGINE_FOUNDATION_DRY_RUN_V1 (ADR-066) — balayage de rétention : trans-workspace par
+  // conception (une passe et un run PAR workspace), garde = Bearer dédié, aucun cron. Sa réponse est
+  // agrégée et ne porte aucune donnée personnelle, donc aucun lecteur scopé à déclarer ci-dessous.
+  "api/retention/dry-run/route.ts",
 ];
 
 // Identité : elles créent ou détruisent la session, elles ne peuvent pas dépendre d'un périmètre

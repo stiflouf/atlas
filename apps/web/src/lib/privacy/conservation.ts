@@ -49,6 +49,28 @@ export const DECLENCHEURS_CONSERVATION = [
 
 export type DeclencheurConservation = (typeof DECLENCHEURS_CONSERVATION)[number];
 
+// Vocabulaire FERMÉ des politiques, exposé pour que RETENTION_ENGINE_FOUNDATION_DRY_RUN_V1
+// (ADR-066) réutilise CES codes au lieu d'en déclarer une seconde liste de son côté. Le moteur de
+// rétention vit dans `lib/retention/` — jamais ici, où un test structurel interdit les primitives
+// destructives — mais il ne doit pas pour autant posséder son propre vocabulaire de politiques :
+// deux listes de codes dériveraient, et la plus fausse des deux serait celle qui pilote la purge.
+//
+// `cle` est typée avec cette union ci-dessous : l'array POLITIQUES_CONSERVATION_V1 ne peut donc pas
+// porter un code absent d'ici, et un test vérifie la couverture dans l'autre sens.
+export const CLES_POLITIQUES_CONSERVATION = [
+  "PROSPECT_MARKETING",
+  "CUSTOMER_MARKETING",
+  "SIGNED_VISIT_FORM",
+  "SESSION",
+  "OIDC_STATE",
+  "GOOGLE_CONNECTION",
+  "TRANSACTION_DOCUMENTS",
+  "FREE_TEXT_NOTES",
+  "ACTIVE_CLIENT_OR_PROJECT_DATA",
+] as const;
+
+export type ClePolitiqueConservation = (typeof CLES_POLITIQUES_CONSERVATION)[number];
+
 // ACTIVE vs ARCHIVE : la distinction qui empêche la dérive la plus coûteuse de ce domaine.
 //
 // Une relation close ne justifie pas de conserver l'intégralité du CRM « au cas où ». Les données
@@ -65,7 +87,7 @@ export interface RegleConservation {
 }
 
 interface PolitiqueConservationDecidee {
-  readonly cle: string;
+  readonly cle: ClePolitiqueConservation;
   readonly statut: "DECIDEE";
   readonly libelle: string;
   readonly personnes: readonly TypePersonneConcernee[];
@@ -80,7 +102,7 @@ interface PolitiqueConservationDecidee {
 // tranchée, et personne n'a le droit d'en inventer une ». Tant qu'une catégorie indispensable est
 // ici, la notice publique reste désactivée.
 interface PolitiqueConservationIndecise {
-  readonly cle: string;
+  readonly cle: ClePolitiqueConservation;
   readonly statut: "UNDECIDED";
   readonly libelle: string;
   readonly personnes: readonly TypePersonneConcernee[];

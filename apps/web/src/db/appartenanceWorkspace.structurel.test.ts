@@ -45,6 +45,10 @@ const TABLES_RACINES = [
   "evenements_metier",
   "configurations_automatisation",
   "runs_scan_automatisation",
+  // ADR-066 — journal des balayages de rétention : RACINE, comme `runs_scan_automatisation`. Une
+  // politique peut être calculable dans un workspace et bloquée dans un autre, et le balayage
+  // machine est global mais jamais trans-workspace dans ses résultats.
+  "runs_retention",
   "compatibilites_a_resynchroniser",
   // ADR-056 — la couche provenance naît racine : deux workspaces peuvent légitimement recevoir le
   // MÊME identifiant du MÊME fournisseur sans que ce soit une collision.
@@ -97,6 +101,10 @@ const TABLES_FEUILLES = [
   "notes_prospect_vendeur",
   "remuneration",
   "executions_automatisation",
+  // ADR-066 — journal des actions de rétention : FEUILLE de `runs_retention` par sa FK NOT NULL.
+  // Elle ne duplique pas `workspace_id` : le périmètre d'une action est celui du balayage qui l'a
+  // produite. Table créée VIDE par la migration 0060 et écrite par aucun chemin de ce lot.
+  "actions_retention",
   "compatibilites_bien_acquereur_etat",
   "profil_fiscal",
   "historique_amorcage",

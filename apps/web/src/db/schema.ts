@@ -2774,3 +2774,106 @@ export const compatibilitesARessynchroniser = pgTable(
       .where(sql`${table.acquereurId} IS NOT NULL AND ${table.traiteeLe} IS NULL`),
   ]
 );
+
+// RETENTION_ENGINE_FOUNDATION_DRY_RUN_V1 (ADR-066) — journal technique du moteur de rétention.
+//
+// CES DEUX TABLES NE SUPPRIMENT RIEN, et la seconde reste VIDE à la sortie de ce lot. Elles sont la
+// fondation d'un journal, pas un moteur de purge : la doctrine en vigueur reste la conservation
+// indéfinie (ADR-012, ADR-013) et `RETENTION_ENFORCEMENT_V1_LIVRE` reste à `false`.
+//
+// Deux niveaux, exactement comme le couple déjà éprouvé `runs_scan_automatisation` /
+// `executions_automatisation` : un RUN dit qu'un balayage a eu lieu et ce qu'il a compté ; une
+// ACTION dira qu'une donnée précise a été traitée. Les confondre produirait soit un journal qui ne
+// prouve rien (un compteur sans entité), soit un journal qui en dit trop (une ligne par candidat
+// détecté, c'est-à-dire un index permanent des personnes bientôt effaçables).
+export const runsRetention = pgTable(
+  "runs_retention",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // ADR-054 — appartenance (OWNERSHIP). Rationale complet : voir `biens.workspaceId`. Un run
+    // porte SON workspace : une politique peut être calculable dans A et bloquée dans B, et le
+    // balayage machine est global mais jamais trans-workspace dans ses résultats.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    // `'apply'` figure dans le vocabulaire et AUCUN chemin de ce lot ne peut l'écrire : le refus est
+    // applicatif (`executerDryRunRetention`) et routier, pas seulement conventionnel. La valeur
+    // existe pour que le jour où une purge sera livrée, son journal ne soit pas distinguable d'un
+    // dry-run par une colonne ajoutée après coup — ce qui rendrait l'historique antérieur muet sur
+    // ce qu'il était.
+    mode: text("mode").notNull(),
+    demarreLe: timestamp("demarre_le", { withTimezone: true }).notNull().defaultNow(),
+    // ORDRE TOTAL du journal, et rien d'autre — même rationale que
+    // `runs_scan_automatisation.ordre` : `demarre_le` vaut `now()` et ne départage pas deux runs
+    // démarrés dans la même microseconde, `id` est un uuid aléatoire sans chronologie.
+    ordre: bigint("ordre", { mode: "number" }).generatedAlwaysAsIdentity(),
+    termineLe: timestamp("termine_le", { withTimezone: true }),
+    nombrePolitiques: integer("nombre_politiques"),
+    nombreEligibles: integer("nombre_eligibles"),
+    nombreBloquees: integer("nombre_bloquees"),
+    erreurTechnique: text("erreur_technique"),
+  },
+  (table) => [
+    check("runs_retention_mode_check", sql`${table.mode} IN ('dry-run','apply')`),
+    index("runs_retention_workspace_demarre_idx").on(table.workspaceId, table.demarreLe),
+  ]
+);
+
+// Journal des ACTIONS de rétention — créé vide, écrit par AUCUN chemin de ce lot.
+//
+// CE QU'IL NE DOIT JAMAIS CONTENIR : nom, prénom, email, téléphone, adresse, texte libre, snapshot,
+// contenu de document, image de signature. Un journal de purge qui recopierait la donnée purgée
+// n'aurait pas appliqué la politique de conservation, il l'aurait déplacée. `entity_type` +
+// `entity_id` suffisent à prouver qu'une ligne précise a été traitée ; ils ne permettent pas de
+// reconstituer qui elle désignait une fois la donnée partie, et c'est exactement la propriété
+// recherchée.
+//
+// `action` n'admet aujourd'hui qu'une seule valeur, et c'est délibérément fail-closed : aucune
+// capacité de suppression n'existe, donc aucun verbe de suppression n'est accepté par la base. Le
+// lot qui livrera réellement une suppression élargira ce CHECK par migration — un INSERT prématuré
+// de `'DELETE_DB'` est refusé par PostgreSQL d'ici là, pas seulement par une revue de code.
+export const actionsRetention = pgTable(
+  "actions_retention",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    // Pas de CASCADE : un journal ne perd pas ses lignes parce que son run a disparu, et aucun run
+    // n'est jamais supprimé (même doctrine que `evenements_metier`, schema ci-dessus).
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => runsRetention.id),
+    // ADR-054 §7 — FEUILLE de `runs_retention`, et donc AUCUN `workspace_id` ici. Le dupliquer
+    // créerait une seconde vérité d'appartenance, qui peut diverger de celle du run : même
+    // précédent qu'`executions_automatisation`, feuille de son événement. Le périmètre d'une action
+    // est celui du balayage qui l'a produite, et il se lit par jointure sur `run_id`.
+    //
+    // (Le brief du chantier listait `workspace_id` parmi les colonnes minimales ; la garde
+    // structurelle d'ADR-054 l'interdit pour une feuille, et elle n'a pas été affaiblie.)
+    // Vocabulaire des politiques : celui de `lib/privacy/conservation.ts`, jamais un second.
+    policyCode: text("policy_code").notNull(),
+    entityType: text("entity_type").notNull(),
+    // `text` et non `uuid` : toutes les racines du schéma n'ont pas un uuid pour identité
+    // (`workspaces.id`, `connexions_google.identite_sub` sont des `text`). Jamais une FK vers
+    // l'entité : la ligne du journal doit survivre à la disparition de ce qu'elle décrit, sans quoi
+    // elle ne prouverait précisément pas la suppression.
+    entityId: text("entity_id").notNull(),
+    eligibleAt: timestamp("eligible_at", { withTimezone: true }),
+    detectedAt: timestamp("detected_at", { withTimezone: true }).notNull().defaultNow(),
+    action: text("action").notNull(),
+    executedAt: timestamp("executed_at", { withTimezone: true }),
+    result: text("result"),
+    erreurTechnique: text("erreur_technique"),
+  },
+  (table) => [
+    check("actions_retention_action_check", sql`${table.action} IN ('DRY_RUN_DETECTED')`),
+    check("actions_retention_result_check", sql`${table.result} IS NULL OR ${table.result} IN ('SUCCES','ECHEC')`),
+    check(
+      "actions_retention_policy_code_check",
+      sql`${table.policyCode} IN (
+        'PROSPECT_MARKETING','CUSTOMER_MARKETING','SIGNED_VISIT_FORM',
+        'SESSION','OIDC_STATE','GOOGLE_CONNECTION',
+        'TRANSACTION_DOCUMENTS','FREE_TEXT_NOTES','ACTIVE_CLIENT_OR_PROJECT_DATA'
+      )`
+    ),
+    index("actions_retention_run_idx").on(table.runId),
+  ]
+);
