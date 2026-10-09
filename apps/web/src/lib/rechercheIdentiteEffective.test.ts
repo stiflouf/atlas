@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { WORKSPACE_TEST } from "@/db/workspaceDeTest";
 import type { Contact } from "@/types/contact";
 
@@ -87,7 +87,28 @@ async function unProspect(snapshot: { nom: string; prenom?: string; email?: stri
     WORKSPACE_TEST
   );
   idsProspects.push(prospect.id);
+  // DÉTERMINISME DE L'ORDRE (TEST_SUITE_STABILITY_V1) — `rechercherProspectsVendeurs` trie par
+  // `cree_le DESC, id DESC`. `cree_le` vaut `now()`, soit l'horodatage de la transaction de chaque
+  // INSERT : deux créations successives peuvent partager la même microseconde, et le départage
+  // réel devient alors `id DESC`, un uuid aléatoire. L'ordre attendu « le plus récent d'abord »
+  // dépendait donc d'un tirage au sort.
+  //
+  // La fixture pose elle-même un `cree_le` STRICTEMENT CROISSANT : l'ordre de création devient une
+  // donnée du test, le tri reste celui du repository et l'assertion n'est pas affaiblie.
+  rangCreationProspect += 1;
+  const creeLe = new Date(INSTANT_BASE_FIXTURE.getTime() + rangCreationProspect * 1000);
+  await getDb().update(prospectsVendeursTable).set({ creeLe }).where(eq(prospectsVendeursTable.id, prospect.id));
   return prospect;
+}
+
+const INSTANT_BASE_FIXTURE = new Date("2026-01-01T08:00:00.000Z");
+let rangCreationProspect = 0;
+
+// Lit le `cree_le` réellement en base, pour que le test d'ordre énonce son hypothèse au lieu de la
+// supposer.
+async function creeLeProspect(id: string): Promise<Date> {
+  const [ligne] = await getDb().select({ creeLe: prospectsVendeursTable.creeLe }).from(prospectsVendeursTable).where(eq(prospectsVendeursTable.id, id));
+  return ligne.creeLe;
 }
 
 const idsBuyer = async (q: string) =>
@@ -236,7 +257,12 @@ describe("recherche sur l'identité effective — /prospects-vendeurs (recherche
     const alice = await unContact({ nom: `${M}MartinSV`, prenom: "Alice" });
     const premier = await unProspect({ nom: `${M}DurandSV1` }, alice.id);
     const second = await unProspect({ nom: `${M}DurandSV2` }, alice.id);
+    // Hypothèse du tri rendue EXPLICITE : `second` est postérieur à `premier`, donc il passe
+    // devant par `cree_le DESC` — pas par un hasard d'uuid.
+    expect((await creeLeProspect(second.id)).getTime()).toBeGreaterThan((await creeLeProspect(premier.id)).getTime());
     const enCours = await idsSeller(`${M}MartinSV`);
+    expect(enCours).toContain(premier.id);
+    expect(enCours).toContain(second.id);
     expect(enCours.indexOf(second.id)).toBeLessThan(enCours.indexOf(premier.id));
     expect((await rechercherProspectsVendeurs({ workspaceId: WORKSPACE_TEST, q: `${M}MartinSV`, vue: "perdus" })).map((p) => p.id)).not.toContain(premier.id);
   });

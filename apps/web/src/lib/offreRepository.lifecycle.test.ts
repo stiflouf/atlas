@@ -107,11 +107,37 @@ async function unAutreWorkspace(suffixe: string) {
   return id;
 }
 
+// DÉTERMINISME DE L'ORDRE (TEST_SUITE_STABILITY_V1) — `listerOffresPourBien` trie par
+// `date_offre DESC, cree_le DESC, id DESC`. Les offres de fixture partagent la même `date_offre`,
+// et `cree_le` vaut `now()`, c'est-à-dire l'horodatage de la transaction de chaque INSERT : deux
+// créations successives peuvent tomber dans la même microseconde. Le départage réel devient alors
+// `id DESC`, un uuid aléatoire — et l'ordre attendu « la plus récente d'abord » devient un tirage
+// au sort, qui échoue environ une fois sur deux quand la collision se produit.
+//
+// La fixture pose donc elle-même un `cree_le` STRICTEMENT CROISSANT. L'ordre de création devient
+// une donnée du test plutôt qu'une course entre deux appels, sans rien changer au produit ni
+// affaiblir l'assertion : le tri reste celui du repository, et il est toujours comparé dans son
+// ordre réel.
+const INSTANT_BASE_FIXTURE = new Date("2026-08-01T08:00:00.000Z");
+let rangCreationOffre = 0;
+
 async function offreEnCours(bienId: string, acquereurId: string, montant = 300000, workspaceId = WORKSPACE_TEST) {
   const r = await creerOffre({ bienId, acquereurId, montant, dateOffre: "2026-08-01" }, [], workspaceId);
   if (r.statut !== "creee") throw new Error(`création attendue, reçu ${r.statut}`);
   idsOffres.push(r.offre.id);
+  // Une seconde pleine d'écart par offre : largement au-delà de toute imprécision d'horloge, et
+  // lisible dans un dump de table en cas d'enquête.
+  rangCreationOffre += 1;
+  const creeLe = new Date(INSTANT_BASE_FIXTURE.getTime() + rangCreationOffre * 1000);
+  await getDb().update(offresTable).set({ creeLe }).where(eq(offresTable.id, r.offre.id));
   return r.offre;
+}
+
+// Lit le `cree_le` réellement en base, pour que les tests d'ordre puissent énoncer leur hypothèse
+// au lieu de la supposer.
+async function creeLeDe(offreId: string): Promise<Date> {
+  const [ligne] = await getDb().select({ creeLe: offresTable.creeLe }).from(offresTable).where(eq(offresTable.id, offreId));
+  return ligne.creeLe;
 }
 
 async function evenements(offreId: string, type?: string) {
@@ -262,6 +288,9 @@ describe("transitions (ADR-061 §2-§6)", () => {
 
     const acceptationB = await accepterOffre(oB.id, "2026-08-15", WORKSPACE_TEST);
     expect(acceptationB.statut).toBe("decidee");
+    // Hypothèse du tri rendue EXPLICITE : oB est postérieure à oA, donc elle passe devant par
+    // `cree_le DESC` — pas par un hasard d'uuid.
+    expect((await creeLeDe(oB.id)).getTime()).toBeGreaterThan((await creeLeDe(oA.id)).getTime());
     expect((await listerOffresPourBien(bien.id, WORKSPACE_TEST)).map((o) => [o.id, o.statut])).toEqual([[oB.id, "acceptee"], [oA.id, "caduque"]]);
   });
 
