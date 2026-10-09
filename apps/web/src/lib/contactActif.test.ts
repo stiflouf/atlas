@@ -280,11 +280,27 @@ async function course(
   {
     const s = await unContact();
     const a = await unContact();
+    // BARRIÈRE SUR UN ÉTAT, PAS SUR UN DÉLAI (TEST_SUITE_STABILITY_V1) — ce bloc teste l'ordre
+    // « writer PUIS fusion ». Il attendait auparavant 100 ms en supposant que le writer avait eu le
+    // temps d'écrire ; sous charge, le writer pouvait encore ne pas avoir écrit, la fusion
+    // commitait d'abord, et l'écriture se retrouvait horodatée APRÈS l'absorption — l'invariant
+    // vérifié était alors faux pour une raison d'ordonnancement, pas de produit.
+    //
+    // Le writer signale désormais lui-même qu'il a atteint l'état requis, et la fusion ne démarre
+    // qu'après ce signal. L'ordre testé est donc garanti au lieu d'être espéré.
+    let signalerEcritureFaite!: () => void;
+    const ecritureFaite = new Promise<void>((resoudre) => {
+      signalerEcritureFaite = resoudre;
+    });
     const t1 = getDb().transaction(async (tx) => {
       await writer(a.id, tx);
+      signalerEcritureFaite();
+      // La transaction reste ouverte après le signal : c'est ce qui force la fusion à patienter sur
+      // le verrou et préserve le chevauchement réel. Ce délai ne conditionne plus la correction de
+      // l'ordre — seulement la vigueur du scénario de concurrence — et n'a donc pas été allongé.
       await attendre(400);
     });
-    await attendre(100);
+    await ecritureFaite;
     const t2 = absorber(a, s);
     await Promise.all([t1, t2]);
     expect(await compterSur(a.id), "ordre writer→fusion : rien ne reste sur l'absorbé").toBe(0);
@@ -293,6 +309,13 @@ async function course(
     }
   }
   // Ordre 2 : la fusion tient le verrou, le writer attend, puis voit B absorbé et refuse.
+  //
+  // Aucune barrière équivalente n'est posée ici, et c'est délibéré : savoir que la fusion « tient
+  // son verrou » demanderait d'observer l'intérieur de sa transaction, donc un point
+  // d'instrumentation dans le code produit — hors du périmètre test-only de ce lot. L'assertion de
+  // ce bloc accepte d'ailleurs les deux issues (`ecrit` ou `refuse`), elle ne départage pas la
+  // course ; seul l'invariant « rien ne reste sur l'absorbé » est exigé. Ce bloc n'a produit aucun
+  // échec observé, contrairement à l'Ordre 1.
   {
     const s = await unContact();
     const a = await unContact();
