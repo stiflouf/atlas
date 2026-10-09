@@ -39,6 +39,27 @@ const MAINTENANT = new Date("2026-10-09T12:00:00.000Z");
 
 const idsCrees = { bien: "", acquereur: "", visite: "", document: "", bonAncien: "", bonRecent: "" };
 
+// ISOLATION — chaque dry-run est GLOBAL : il crée une ligne de journal PAR workspace, donc aussi
+// pour le workspace historique, partagé avec toute la suite. Ce fichier mémorise donc l'identifiant
+// de CHAQUE run qu'il déclenche, et son nettoyage ne supprime que ceux-là.
+//
+// La dépendance inverse — purger par workspace, ou purger la table entière — reviendrait à effacer
+// des lignes qu'un autre fichier aurait pu écrire, et rendrait la propreté de la base dépendante de
+// l'ordre d'exécution des fichiers de test. Un fichier de test doit nettoyer ce qu'il a créé, ni
+// plus, ni moins.
+const runsDuFichier = new Set<string>();
+
+async function dryRun(options?: { mode?: string; maintenant?: Date }) {
+  const resultats = await executerDryRunRetention(options);
+  for (const resultat of resultats) runsDuFichier.add(resultat.runId);
+  return resultats;
+}
+
+// Total global d'actions, relevé AVANT tout dry-run : les assertions comparent à ce relevé plutôt
+// qu'à zéro. L'invariant vérifié reste le bon (ce fichier n'écrit aucune action) et il tient même si
+// la base en contenait déjà.
+let actionsAuDepart = 0;
+
 async function creerBonSigne(visiteId: string, documentId: string, version: number, signeLe: Date): Promise<string> {
   const [ligne] = await getDb()
     .insert(bonsVisiteTable)
@@ -73,6 +94,7 @@ async function creerBonSigne(visiteId: string, documentId: string, version: numb
 }
 
 beforeAll(async () => {
+  actionsAuDepart = await compterActionsTotal();
   await getDb().insert(workspacesTable).values({ id: WORKSPACE_ETRANGER, nom: "Rétention — workspace étranger" });
 
   const [bien] = await getDb()
@@ -142,15 +164,24 @@ afterAll(async () => {
   if (idsCrees.document) await getDb().delete(documentsBienTable).where(eq(documentsBienTable.id, idsCrees.document));
   if (idsCrees.bien) await getDb().delete(biensTable).where(eq(biensTable.id, idsCrees.bien));
   if (idsCrees.acquereur) await getDb().delete(acquereursTable).where(eq(acquereursTable.id, idsCrees.acquereur));
-  // Les runs de ce fichier sont purgés : la base de développement ne doit pas conserver un journal
-  // de rétention issu d'une fixture. Les lignes du workspace historique le sont aussi, puisque le
-  // balayage est global et en crée une à chaque appel.
-  await getDb().delete(actionsRetentionTable);
-  await getDb().delete(runsRetentionTable).where(eq(runsRetentionTable.workspaceId, WORKSPACE_ETRANGER));
+  // Journal de rétention : SEULS les runs déclenchés par ce fichier, identifiés un par un — y
+  // compris ceux du workspace historique. Les actions d'abord (FK vers le run), puis les runs, puis
+  // le workspace (dont les runs sont en NO ACTION : l'inverse échouerait).
+  //
+  // La purge s'appuie sur `runsDuFichier`, alimenté à chaque dry-run : elle est donc complète même
+  // si un test a échoué après avoir déclenché un balayage, et elle ne touche jamais une ligne
+  // écrite par un autre fichier.
+  const runs = [...runsDuFichier];
+  if (runs.length) {
+    await getDb().delete(actionsRetentionTable).where(inArray(actionsRetentionTable.runId, runs));
+    await getDb().delete(runsRetentionTable).where(inArray(runsRetentionTable.id, runs));
+  }
   await getDb().delete(workspacesTable).where(eq(workspacesTable.id, WORKSPACE_ETRANGER));
 });
 
-async function compterActions(): Promise<number> {
+// Lectures, jamais des suppressions : mesurer globalement est légitime, effacer globalement ne
+// l'est pas. Le total sert à prouver qu'aucune action n'apparaît, d'où qu'elle vienne.
+async function compterActionsTotal(): Promise<number> {
   const [ligne] = await getDb().select({ n: sql<number>`count(*)::int` }).from(actionsRetentionTable);
   return ligne.n;
 }
@@ -197,7 +228,7 @@ function politique(resultats: Awaited<ReturnType<typeof executerDryRunRetention>
 describe("T16 / T17 — le dry-run écrit un run par workspace et aucune action", () => {
   it("T16 — un run par workspace balayé, démarré ET terminé, avec ses compteurs", async () => {
     const avant = (await runsDuWorkspace(WORKSPACE_ETRANGER)).length;
-    const resultats = await executerDryRunRetention({ maintenant: MAINTENANT });
+    const resultats = await dryRun({ maintenant: MAINTENANT });
 
     const runs = await runsDuWorkspace(WORKSPACE_ETRANGER);
     expect(runs.length).toBe(avant + 1);
@@ -219,8 +250,8 @@ describe("T16 / T17 — le dry-run écrit un run par workspace et aucune action"
   });
 
   it("T17 — actions_retention reste VIDE : le dry-run ne construit aucun index des personnes bientôt effaçables", async () => {
-    await executerDryRunRetention({ maintenant: MAINTENANT });
-    expect(await compterActions()).toBe(0);
+    await dryRun({ maintenant: MAINTENANT });
+    expect(await compterActionsTotal()).toBe(actionsAuDepart);
   });
 });
 
@@ -231,8 +262,8 @@ function politiquesAttendues(resultats: Awaited<ReturnType<typeof executerDryRun
 describe("T18 — aucune donnée métier n'est modifiée", () => {
   it("compteurs et lignes du fixture strictement identiques avant et après deux balayages", async () => {
     const avant = await empreinteMetier();
-    await executerDryRunRetention({ maintenant: MAINTENANT });
-    await executerDryRunRetention({ maintenant: MAINTENANT });
+    await dryRun({ maintenant: MAINTENANT });
+    await dryRun({ maintenant: MAINTENANT });
     const apres = await empreinteMetier();
     expect(apres).toEqual(avant);
   });
@@ -240,7 +271,7 @@ describe("T18 — aucune donnée métier n'est modifiée", () => {
 
 describe("T19 — scoping par workspace", () => {
   it("le bon signé du workspace étranger n'est compté que dans SON workspace", async () => {
-    const resultats = await executerDryRunRetention({ maintenant: MAINTENANT });
+    const resultats = await dryRun({ maintenant: MAINTENANT });
 
     const etranger = politique(resultats, WORKSPACE_ETRANGER, "SIGNED_VISIT_FORM");
     expect(etranger.status).toBe("COMPUTABLE_DRY_RUN_ONLY");
@@ -283,7 +314,7 @@ describe("T20 — lecture minimale", () => {
 
 describe("T22 — rien de personnel n'est persisté ni retourné", () => {
   it("le run persisté ne contient que des compteurs et des horodatages", async () => {
-    await executerDryRunRetention({ maintenant: MAINTENANT });
+    await dryRun({ maintenant: MAINTENANT });
     const [run] = await runsDuWorkspace(WORKSPACE_ETRANGER);
     const serialise = JSON.stringify(run);
     for (const interdit of ["Fixture", "Retention", "fixture-retention@example.invalid", "0000000000", "rue de la Fixture", idsCrees.bonAncien]) {
@@ -309,7 +340,7 @@ describe("T22 — rien de personnel n'est persisté ni retourné", () => {
   });
 
   it("la réponse du service ne porte aucun identifiant d'entité ni donnée personnelle", async () => {
-    const resultats = await executerDryRunRetention({ maintenant: MAINTENANT });
+    const resultats = await dryRun({ maintenant: MAINTENANT });
     const serialise = JSON.stringify(resultats);
     for (const interdit of [idsCrees.bonAncien, idsCrees.bonRecent, idsCrees.bien, idsCrees.acquereur, "Fixture", "@example.invalid"]) {
       expect(serialise).not.toContain(interdit);
@@ -325,15 +356,15 @@ describe("T22 — rien de personnel n'est persisté ni retourné", () => {
 
 describe("T23 — idempotence", () => {
   it("deux balayages à instant et données constants donnent exactement les mêmes compteurs", async () => {
-    const premier = await executerDryRunRetention({ maintenant: MAINTENANT });
-    const second = await executerDryRunRetention({ maintenant: MAINTENANT });
+    const premier = await dryRun({ maintenant: MAINTENANT });
+    const second = await dryRun({ maintenant: MAINTENANT });
 
     // Comparaison des POLITIQUES seules : `runId` diffère par construction (chaque balayage est
     // journalisé), et c'est précisément ce qui doit différer — rien d'autre.
     const sansRun = (r: typeof premier) =>
       r.map(({ workspaceId, mode, politiques }) => ({ workspaceId, mode, politiques }));
     expect(sansRun(second)).toEqual(sansRun(premier));
-    expect(await compterActions()).toBe(0);
+    expect(await compterActionsTotal()).toBe(actionsAuDepart);
   });
 });
 
@@ -346,7 +377,7 @@ describe("mode apply — refusé par le service, avant toute lecture", () => {
     // Pas même un run : le refus précède l'ouverture du journal, donc « apply » ne laisse aucune
     // trace d'un balayage qui n'a pas eu lieu.
     expect((await runsDuWorkspace(WORKSPACE_ETRANGER)).length).toBe(avant);
-    expect(await compterActions()).toBe(0);
+    expect(await compterActionsTotal()).toBe(actionsAuDepart);
   });
 
   it("aucun mode fantaisiste ne passe (fail-closed, pas une liste noire)", async () => {
@@ -371,7 +402,7 @@ describe("la base refuse elle-même ce que le code ne sait pas faire", () => {
           action: "DELETE_DB",
         })
     ).rejects.toThrow();
-    expect(await compterActions()).toBe(0);
+    expect(await compterActionsTotal()).toBe(actionsAuDepart);
   });
 
   it("un code de politique hors vocabulaire est rejeté par PostgreSQL", async () => {
@@ -387,7 +418,7 @@ describe("la base refuse elle-même ce que le code ne sait pas faire", () => {
           action: "DRY_RUN_DETECTED",
         })
     ).rejects.toThrow();
-    expect(await compterActions()).toBe(0);
+    expect(await compterActionsTotal()).toBe(actionsAuDepart);
   });
 
   it("un mode hors vocabulaire est rejeté par PostgreSQL", async () => {
@@ -399,7 +430,7 @@ describe("la base refuse elle-même ce que le code ne sait pas faire", () => {
 
 describe("statuts rendus pour un workspace réel", () => {
   it("les neuf politiques sont rendues, avec les statuts d'ADR-066 §5", async () => {
-    const resultats = await executerDryRunRetention({ maintenant: MAINTENANT });
+    const resultats = await dryRun({ maintenant: MAINTENANT });
     const attendu: Record<string, string> = {
       PROSPECT_MARKETING: "BLOCKED_MISSING_TRIGGER",
       CUSTOMER_MARKETING: "BLOCKED_MISSING_TRIGGER",
@@ -425,7 +456,7 @@ describe("statuts rendus pour un workspace réel", () => {
   });
 
   it("aucune politique bloquée ne compte d'éligible, et aucune ne lit la base pour le dire", async () => {
-    const resultats = await executerDryRunRetention({ maintenant: MAINTENANT });
+    const resultats = await dryRun({ maintenant: MAINTENANT });
     for (const workspace of resultats) {
       for (const p of workspace.politiques) {
         if (p.status === "COMPUTABLE_DRY_RUN_ONLY") continue;
