@@ -1214,8 +1214,11 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   /api/retention/dry-run`, déclenchement manuel, secret dédié) sans rien supprimer :
   `RETENTION_ENFORCEMENT_V1_LIVRE` reste `FALSE` et `APPLY_SUPPORTED = NO`. Une seule politique y
   est calculable (bon de visite signé, `signe_le + 5 ans`), et elle reste non supprimable faute de
-  primitive de suppression de fichier, de modèle de suspension pour contentieux et de chemin de
-  suppression complet. `PROSPECT_MARKETING` et `CUSTOMER_MARKETING` restent bloquées faute de
+  modèle de suspension pour contentieux et de chemin de suppression complet. ADR-067 a livré la
+  troisième brique qui manquait — une primitive de suppression de fichier (`supprimerFichierStocke`)
+  et un inventaire des orphelins en lecture seule — **branchée sur aucun chemin métier** : la
+  capacité technique existe, la règle de cycle de vie reste inchangée et `documents_bien` reste
+  append-only. `PROSPECT_MARKETING` et `CUSTOMER_MARKETING` restent bloquées faute de
   déclencheur fiable — `dernier_contact_le` est explicitement interdit comme dernier contact
   entrant, un test le verrouille.
 - **Aucun consentement marketing, donc aucune prospection électronique B2C possible** (ADR-065
