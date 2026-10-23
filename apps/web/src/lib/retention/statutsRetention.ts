@@ -59,6 +59,15 @@ export const VERDICTS_ENTITE_RETENTION = [
   // Fail-closed. Toute incohérence, toute valeur hors vocabulaire, toute absence de donnée
   // nécessaire au calcul arrive ici — jamais dans ELIGIBLE, et jamais convertie en date ancienne.
   "BLOCKED",
+  // LEGAL_HOLD_FOUNDATION_V1 (ADR-068) — l'échéance EST atteinte, et la ligne est pourtant protégée
+  // par un legal hold actif.
+  //
+  // Verdict DISTINCT de `BLOCKED`, et ce n'est pas une nuance de vocabulaire : `BLOCKED` veut dire
+  // « on ne sait pas », celui-ci veut dire « on sait, et c'est interdit ». Les confondre ferait
+  // disparaître une protection délibérée dans le même compteur que les incohérences de données, donc
+  // dans le bruit — et rendrait impossible de répondre à la seule question qui compte le jour d'un
+  // contentieux : cette pièce est-elle protégée, et par quel acte ?
+  "BLOCKED_BY_LEGAL_HOLD",
 ] as const;
 
 export type VerdictEntiteRetention = (typeof VERDICTS_ENTITE_RETENTION)[number];
@@ -77,7 +86,16 @@ export const CODES_BLOCAGE_RETENTION = [
   // l'acquéreur n'a même aucun horodatage de sortie de parcours.
   "RELATIONSHIP_END_AT_MISSING",
   "POLICY_UNDECIDED",
+  // LEGAL_HOLD_FOUNDATION_V1 (ADR-068) — cause NOMMÉE du verdict `BLOCKED_BY_LEGAL_HOLD` : un hold
+  // actif existe sur cette ligne précise. Niveau ENTITÉ, pas politique : la politique reste
+  // parfaitement calculable, c'est cette ligne-là qui est protégée.
+  "ACTIVE_LEGAL_HOLD",
   // Blocages de SUPPRESSION, pas de calcul. Ils n'empêchent pas de compter ; ils interdisent d'agir.
+  //
+  // `LEGAL_HOLD_MODEL_MISSING` n'est plus porté par SIGNED_VISIT_FORM depuis ADR-068 : le modèle
+  // existe et le moteur le consulte. Le code RESTE dans le vocabulaire — il redeviendra exact le jour
+  // où une politique visera un type de cible que `TYPES_CIBLE_LEGAL_HOLD` ne couvre pas encore, et le
+  // retirer aujourd'hui rendrait ce blocage-là inexprimable.
   "LEGAL_HOLD_MODEL_MISSING",
   "FILE_DELETE_PRIMITIVE_MISSING",
   "DELETE_PATH_MISSING",

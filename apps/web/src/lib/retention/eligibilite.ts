@@ -32,6 +32,22 @@ export interface CandidatBonVisiteRetention {
   readonly workspaceId: string;
   readonly statut: string;
   readonly signeLe?: Date;
+  // LEGAL_HOLD_FOUNDATION_V1 (ADR-068) — champ OBLIGATOIRE, et c'est la première des deux gardes
+  // fail-closed de l'intégration : il n'est pas optionnel, donc un objet littéral qui l'omettrait ne
+  // compile pas. Un `boolean | undefined` aurait fait d'un oubli de câblage une ligne ÉLIGIBLE,
+  // c'est-à-dire exactement la panne qu'un legal hold doit rendre impossible.
+  //
+  // Le type ne suffit pourtant pas à lui seul, et il faut le dire : un appelant qui construit le
+  // candidat en étalant un `Partial<CandidatBonVisiteRetention>` échappe à la vérification (c'est
+  // l'idiome des fixtures de test, qui posent donc le champ explicitement). La garde qui tient
+  // vraiment est la seconde : le seul producteur de production est
+  // `listerCandidatsBonVisitePourRetention`, qui le renseigne depuis la base, et dont l'échec de
+  // lecture remonte au lieu de produire « non protégé ».
+  //
+  // Le moteur reçoit un booléen, jamais le hold lui-même : il n'a aucun usage du motif, de l'auteur
+  // ni des dates de l'acte, et une donnée qu'une fonction ne possède pas est une donnée qu'elle ne
+  // peut pas divulguer.
+  readonly sousLegalHoldActif: boolean;
 }
 
 export interface EvaluationEntiteRetention {
@@ -69,7 +85,14 @@ export function ajouterAnnees(instant: Date, annees: number): Date {
 //   statut connu mais ≠ signe -> OUT_OF_SCOPE (on sait, et elle n'est pas concernée)
 //   signe_le absent           -> BLOCKED (incohérence avec l'invariant SQL : jamais une date 0)
 //   échéance non atteinte     -> NOT_YET_ELIGIBLE
-//   échéance atteinte         -> ELIGIBLE
+//   échéance atteinte         -> ELIGIBLE, SAUF legal hold actif -> BLOCKED_BY_LEGAL_HOLD (ADR-068)
+//
+// ORDRE du legal hold, explicite parce qu'il est le seul point discutable : le hold est appliqué EN
+// DERNIER, sur le seul verdict qui autoriserait un jour une suppression. Les trois autres sont déjà
+// non supprimables et le dire deux fois les rendrait moins lisibles : `OUT_OF_SCOPE` signifie que la
+// ligne ne relève pas de la politique (un hold n'y change rien), `NOT_YET_ELIGIBLE` que l'échéance
+// n'est pas atteinte, et `BLOCKED` que l'état de la ligne est incompréhensible — un cas où « on ne
+// sait pas » doit rester le verdict le plus fort, jamais être adouci en « simplement protégé ».
 export function evaluerBonVisiteSigne(
   candidat: CandidatBonVisiteRetention,
   instantReference: Date,
@@ -96,7 +119,14 @@ export function evaluerBonVisiteSigne(
   // qui n'échoit qu'à la première milliseconde de la sixième année serait une politique de cinq ans
   // plus un epsilon non écrit.
   const echue = instantReference.getTime() >= eligibleAt.getTime();
-  return { ...base, statut: echue ? "ELIGIBLE" : "NOT_YET_ELIGIBLE", eligibleAt };
+  if (!echue) return { ...base, statut: "NOT_YET_ELIGIBLE", eligibleAt };
+  if (candidat.sousLegalHoldActif) {
+    // `eligibleAt` est CONSERVÉ : l'échéance est un fait, et le hold ne l'annule pas — il interdit
+    // d'agir dessus. L'effacer rendrait impossible de savoir, à la levée, depuis quand la pièce
+    // était échue.
+    return { ...base, statut: "BLOCKED_BY_LEGAL_HOLD", eligibleAt, blockerCode: "ACTIVE_LEGAL_HOLD" };
+  }
+  return { ...base, statut: "ELIGIBLE", eligibleAt };
 }
 
 // Durée déclarée par la politique, lue dans `conservation.ts` plutôt que recopiée : « 5 ans » est
@@ -137,21 +167,25 @@ export function statutPolitique(politique: PolitiqueConservation): StatutPolitiq
 
   switch (policyCode) {
     case "SIGNED_VISIT_FORM":
-      // CALCULABLE, et strictement rien de plus. Les trois blocages ci-dessous sont l'audit
-      // RETENTION_ENFORCEMENT_V1_READINESS : pas de modèle de suspension pour contentieux, pas de
-      // primitive de suppression de fichier (ni le PDF, ni le PNG de signature), et un chemin de
-      // suppression incomplet — `bons_visite.document_id` est en SET NULL, donc supprimer le bon
+      // CALCULABLE, et strictement rien de plus. Les blocages ci-dessous sont l'audit
+      // RETENTION_ENFORCEMENT_V1_READINESS : la primitive de suppression de fichier n'est branchée
+      // sur aucun chemin métier (ni le PDF, ni le PNG de signature), et le chemin de
+      // suppression reste incomplet — `bons_visite.document_id` est en SET NULL, donc supprimer le bon
       // laisserait derrière lui la ligne `documents_bien` du PDF et son fichier, et
       // `evenements_metier.bon_visite_id` en NO ACTION bloque de toute façon la suppression dès
       // qu'un événement référence le bon.
       return {
         policyCode,
         status: "COMPUTABLE_DRY_RUN_ONLY",
-        blocagesAvantSuppression: [
-          "LEGAL_HOLD_MODEL_MISSING",
-          "FILE_DELETE_PRIMITIVE_MISSING",
-          "DELETE_PATH_MISSING",
-        ],
+        // ADR-068 a retiré `LEGAL_HOLD_MODEL_MISSING` de cette liste, et UNIQUEMENT celui-là : le
+        // modèle de suspension existe désormais et le moteur le consulte réellement, donc l'y laisser
+        // serait faux. Les deux autres restent vrais et aucun n'est touché par ce lot —
+        // `FILE_DELETE_PRIMITIVE_MISSING` relève du câblage de la primitive d'ADR-067, qui n'est
+        // branchée sur aucun chemin métier.
+        //
+        // Retirer un blocage n'autorise RIEN : chacun suffit seul à interdire d'agir, et
+        // `APPLY_SUPPORTED` reste false.
+        blocagesAvantSuppression: ["FILE_DELETE_PRIMITIVE_MISSING", "DELETE_PATH_MISSING"],
       };
 
     case "PROSPECT_MARKETING":
@@ -201,6 +235,10 @@ export interface AgregatPolitiqueRetention {
   readonly blockedCount: number;
   readonly outOfScopeCount: number;
   readonly notYetEligibleCount: number;
+  // ADR-068 — compteur PROPRE, jamais fondu dans `blockedCount`. Une protection délibérée et une
+  // incohérence de données ne se lisent pas de la même façon : la première se lève par une décision
+  // documentée, la seconde se corrige. Les additionner rendrait le journal muet sur les deux.
+  readonly legalHoldCount: number;
   readonly oldestEligibleAt?: Date;
   readonly newestEligibleAt?: Date;
 }
@@ -214,6 +252,7 @@ export function agregerEvaluations(evaluations: readonly EvaluationEntiteRetenti
   let blockedCount = 0;
   let outOfScopeCount = 0;
   let notYetEligibleCount = 0;
+  let legalHoldCount = 0;
   let oldestEligibleAt: Date | undefined;
   let newestEligibleAt: Date | undefined;
 
@@ -236,8 +275,22 @@ export function agregerEvaluations(evaluations: readonly EvaluationEntiteRetenti
       case "NOT_YET_ELIGIBLE":
         notYetEligibleCount += 1;
         break;
+      case "BLOCKED_BY_LEGAL_HOLD":
+        // Compté à part, et SANS alimenter les bornes de dates : `oldestEligibleAt` /
+        // `newestEligibleAt` décrivent l'étendue de ce qui serait actionnable, et une ligne protégée
+        // ne l'est pas. L'y inclure ferait croire à une fenêtre de purge plus large qu'elle n'est.
+        legalHoldCount += 1;
+        break;
     }
   }
 
-  return { eligibleCount, blockedCount, outOfScopeCount, notYetEligibleCount, oldestEligibleAt, newestEligibleAt };
+  return {
+    eligibleCount,
+    blockedCount,
+    outOfScopeCount,
+    notYetEligibleCount,
+    legalHoldCount,
+    oldestEligibleAt,
+    newestEligibleAt,
+  };
 }

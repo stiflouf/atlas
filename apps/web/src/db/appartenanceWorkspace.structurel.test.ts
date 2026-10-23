@@ -49,6 +49,14 @@ const TABLES_RACINES = [
   // politique peut être calculable dans un workspace et bloquée dans un autre, et le balayage
   // machine est global mais jamais trans-workspace dans ses résultats.
   "runs_retention",
+  // ADR-068 — registre des suspensions de suppression : RACINE, et non feuille de `bons_visite`.
+  // Deux raisons distinctes, aucune n'étant un contournement de §7 : `bons_visite` ne porte lui-même
+  // aucune appartenance (feuille de `visites -> biens`), donc rien ne pourrait être dérivé d'une FK
+  // vers lui ; et la cible d'un hold est générique (`entity_type` + `entity_id` en texte, sans FK —
+  // voir l'en-tête de la migration 0061), exactement le cas de `memoire_contextuelle` ci-dessous.
+  // Un hold est d'ailleurs un ACTE d'administration du workspace, comme `runs_retention`, pas une
+  // donnée métier rattachée à une ligne.
+  "legal_holds",
   "compatibilites_a_resynchroniser",
   // ADR-056 — la couche provenance naît racine : deux workspaces peuvent légitimement recevoir le
   // MÊME identifiant du MÊME fournisseur sans que ce soit une collision.

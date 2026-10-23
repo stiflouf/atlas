@@ -2877,3 +2877,104 @@ export const actionsRetention = pgTable(
     index("actions_retention_run_idx").on(table.runId),
   ]
 );
+
+// LEGAL_HOLD_FOUNDATION_V1 (ADR-068) — suspension explicite de toute FUTURE suppression d'une
+// ressource, quand une conservation est requise (contentieux, obligation, contrôle, demande
+// juridique).
+//
+// CETTE TABLE NE SUPPRIME RIEN et n'en autorise rien : elle INTERDIT. C'est la troisième des trois
+// briques qu'ADR-066 avait nommées manquantes pour SIGNED_VISIT_FORM, et `conservation.ts` déclarait
+// déjà `legalHoldApplicable: true` sur cette seule politique (ADR-065) — ce lot branche enfin un
+// modèle derrière cette déclaration, sans livrer la moindre purge.
+//
+// RACINE au sens d'ADR-054 : un hold porte SON `workspace_id`. Ce n'est pas une feuille de
+// `bons_visite` — d'abord parce que `bons_visite` ne porte lui-même aucune appartenance (feuille de
+// `visites -> biens`), ensuite parce qu'un hold n'est pas une donnée métier mais un ACTE
+// d'administration du workspace, au même titre que `runs_retention`.
+//
+// AUCUNE FK vers la ressource protégée, et c'est une décision, pas un oubli :
+//   - une FK `ON DELETE cascade` ferait disparaître l'historique du hold avec la ressource —
+//     exactement ce qu'un registre de conservation ne doit jamais faire ;
+//   - une FK `ON DELETE no action` protégerait la ressource au niveau SQL, mais protégerait AUSSI
+//     pour l'éternité une ressource dont le hold a été LEVÉ (la ligne reste, par immutabilité), ce
+//     qui rendrait la levée sans effet et donc le registre faux ;
+//   - `entity_type` + `entity_id` suivent donc le précédent d'`actions_retention` : le registre
+//     survit à ce qu'il décrit, et l'existence de la cible est prouvée à la POSE par une lecture
+//     scopée au workspace, jamais par une contrainte qui aurait l'un des deux défauts ci-dessus.
+//
+// `entity_type` n'admet QUE les types réellement supportés par le produit. Un vocabulaire ouvert
+// aurait permis de poser un hold sur un type que rien ne consulte — un hold qui ne protège rien est
+// pire qu'un hold absent, parce qu'il se lit comme une protection.
+export const legalHolds = pgTable(
+  "legal_holds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    entityType: text("entity_type").notNull(),
+    // `text` et non `uuid` : même raison qu'`actions_retention.entity_id` — toutes les racines du
+    // schéma n'ont pas un uuid pour identité.
+    entityId: text("entity_id").notNull(),
+    // AUCUN `policy_code` : un hold protège la RESSOURCE, pas une politique. Le rattacher à une
+    // politique aurait créé un trou fail-open — un hold posé pour SIGNED_VISIT_FORM ne protégerait
+    // pas la même ligne d'une purge décidée au titre d'une autre catégorie.
+    motifCode: text("motif_code").notNull(),
+    // Justification OBLIGATOIRE et non vide. Un hold sans motif documenté ne peut être ni audité ni
+    // levé en connaissance de cause ; la longueur minimale est en base pour qu'une chaîne d'un
+    // caractère ne puisse pas tenir lieu de motivation.
+    motif: text("motif").notNull(),
+    poseLe: timestamp("pose_le", { withTimezone: true }).notNull().defaultNow(),
+    // IDENTITÉ réelle du poseur : le `sub` OIDC de la session Atlas (ADR-047), déjà la clé
+    // d'appartenance de `workspace_membres` et de `connexions_google`. Jamais l'email — un registre
+    // de conservation n'a pas besoin d'une coordonnée pour désigner un auteur de façon stable.
+    //
+    // Aucune FK vers `workspace_membres` : la retirer d'un membre ne doit ni effacer ni bloquer
+    // l'historique de ses actes, et une FK `no action` ferait précisément du registre un obstacle à
+    // la gestion des membres. Même précédent que `connexions_google.identite_sub`.
+    poseParIdentiteSub: text("pose_par_identite_sub").notNull(),
+    // ÉTAT DÉRIVÉ, jamais stocké : actif <=> `leve_le IS NULL`. Une colonne `statut` en plus de ces
+    // dates serait une seconde vérité, et le jour où les deux divergeraient c'est la plus
+    // permissive qui piloterait la purge.
+    leveLe: timestamp("leve_le", { withTimezone: true }),
+    leveParIdentiteSub: text("leve_par_identite_sub"),
+    motifLevee: text("motif_levee"),
+    // ORDRE TOTAL du registre — même rationale que `runs_retention.ordre` : `pose_le` vaut `now()`
+    // et ne départage pas deux poses dans la même microseconde, `id` est un uuid sans chronologie.
+    ordre: bigint("ordre", { mode: "number" }).generatedAlwaysAsIdentity(),
+  },
+  (table) => [
+    check("legal_holds_entity_type_check", sql`${table.entityType} IN ('bons_visite')`),
+    check(
+      "legal_holds_motif_code_check",
+      sql`${table.motifCode} IN (
+        'CONTENTIEUX','PRE_CONTENTIEUX','OBLIGATION_CONSERVATION',
+        'CONTROLE_OU_AUDIT','DEMANDE_JURIDIQUE','AUTRE_MOTIF_DOCUMENTE'
+      )`
+    ),
+    check("legal_holds_motif_non_vide_check", sql`length(btrim(${table.motif})) >= 10`),
+    // COHÉRENCE DE LA LEVÉE, en tout ou rien : une levée est datée, attribuée ET motivée, ou elle
+    // n'a pas eu lieu. Sans ce CHECK, un `UPDATE` partiel produirait un hold « levé » sans auteur ni
+    // raison, c'est-à-dire la disparition silencieuse d'une protection que l'étape 4 interdit.
+    check(
+      "legal_holds_coherence_levee_check",
+      sql`(${table.leveLe} IS NULL AND ${table.leveParIdentiteSub} IS NULL AND ${table.motifLevee} IS NULL)
+        OR (${table.leveLe} IS NOT NULL AND ${table.leveParIdentiteSub} IS NOT NULL
+            AND ${table.motifLevee} IS NOT NULL AND length(btrim(${table.motifLevee})) >= 10)`
+    ),
+    check("legal_holds_levee_apres_pose_check", sql`${table.leveLe} IS NULL OR ${table.leveLe} >= ${table.poseLe}`),
+    // UNICITÉ LOGIQUE portée par la BASE, pas par une lecture-puis-écriture applicative : deux poses
+    // simultanées du même hold ne peuvent pas passer toutes les deux, quel que soit l'entrelacement.
+    //
+    // La clé inclut `motif_code` À DESSEIN : plusieurs motifs distincts peuvent protéger la même
+    // ressource en même temps (un contentieux ET un contrôle), et lever l'un ne doit pas lever
+    // l'autre. Collapser à un seul hold par cible aurait été fail-open. Limite connue et assumée :
+    // deux affaires distinctes de même motif se partagent un hold, dont le `motif` doit alors les
+    // mentionner toutes deux (ADR-068, limites).
+    uniqueIndex("legal_holds_cible_actif_unique")
+      .on(table.workspaceId, table.entityType, table.entityId, table.motifCode)
+      .where(sql`${table.leveLe} IS NULL`),
+    // Lecture de l'interrogation chaude du moteur de rétention : « cette cible est-elle protégée ? ».
+    index("legal_holds_cible_idx").on(table.workspaceId, table.entityType, table.entityId),
+  ]
+);

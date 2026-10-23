@@ -1,6 +1,7 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { biens, bonsVisite, runsRetention, visites } from "@/db/schema";
+import { listerCiblesSousLegalHoldActif } from "@/lib/legalHold/legalHoldRepository";
 import type { CandidatBonVisiteRetention } from "./eligibilite";
 import type { ModeRetention } from "./statutsRetention";
 
@@ -13,6 +14,10 @@ import type { ModeRetention } from "./statutsRetention";
 // Aucune écriture sur une table métier, aucun DELETE, aucune écriture dans `actions_retention`
 // (créée vide par ce lot, voir ADR-066). Un test structurel le vérifie plutôt que de s'en remettre
 // à la relecture.
+//
+// LEGAL_HOLD_FOUNDATION_V1 (ADR-068) — ce module LIT désormais `legal_holds`, et c'est tout ce qu'il
+// en fait : aucune pose, aucune levée, aucune écriture. Le registre des suspensions est la propriété
+// du domaine `lib/legalHold`, et le moteur de rétention n'en est qu'un lecteur.
 
 // MINIMISATION, et c'est le point central de cette fonction plutôt qu'un détail de performance :
 // le calcul a besoin de l'identifiant, du périmètre, du statut et de la date de signature. Il n'a
@@ -26,9 +31,22 @@ import type { ModeRetention } from "./statutsRetention";
 // dérive par `visites -> biens`. La jointure n'est donc pas un raccourci de requête, c'est la seule
 // preuve d'appartenance disponible, et elle doit rester dans le `WHERE` — un filtrage en mémoire
 // après lecture aurait chargé les bons des autres workspaces avant de les écarter.
+// LEGAL_HOLD (ADR-068) — les cibles protégées sont lues en UNE requête, puis croisées en mémoire.
+//
+// Pas de `leftJoin` sur `legal_holds` : la jointure dupliquerait chaque bon autant de fois qu'il
+// porte de holds (plusieurs motifs peuvent protéger la même pièce), et un comptage d'éligibilité qui
+// dépend du nombre de holds posés serait faux de la plus mauvaise manière possible — surévaluant les
+// lignes exactement là où une protection existe.
+//
+// FAIL-CLOSED : si cette lecture échoue, l'exception REMONTE. Elle n'est pas rattrapée ici, pas
+// convertie en ensemble vide, pas remplacée par un `catch` silencieux. `evaluerPolitiquePourWorkspace`
+// la transforme en politique BLOQUÉE avec `REPOSITORY_ERROR` — jamais en « aucun hold », qui aurait
+// rendu ÉLIGIBLES des pièces protégées.
 export async function listerCandidatsBonVisitePourRetention(
   workspaceId: string
 ): Promise<CandidatBonVisiteRetention[]> {
+  const ciblesProtegees = await listerCiblesSousLegalHoldActif("bons_visite", workspaceId);
+
   const lignes = await getDb()
     .select({
       id: bonsVisite.id,
@@ -50,6 +68,7 @@ export async function listerCandidatsBonVisitePourRetention(
     workspaceId: ligne.workspaceId,
     statut: ligne.statut,
     signeLe: ligne.signeLe ?? undefined,
+    sousLegalHoldActif: ciblesProtegees.has(ligne.id),
   }));
 }
 

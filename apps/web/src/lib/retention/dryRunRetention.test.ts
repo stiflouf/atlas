@@ -295,13 +295,22 @@ describe("T19 — scoping par workspace", () => {
 });
 
 describe("T20 — lecture minimale", () => {
-  it("le repository ne ramène que id, workspaceId, statut et signeLe", async () => {
+  it("le repository ne ramène que id, workspaceId, statut, signeLe et le drapeau de legal hold", async () => {
     const candidats = await listerCandidatsBonVisitePourRetention(WORKSPACE_ETRANGER);
     expect(candidats).toHaveLength(2);
     for (const candidat of candidats) {
       // Aucune autre clé : ni contenu_snapshot, ni identité du signataire, ni hash, ni clé de
       // stockage. Une donnée absente de l'objet est une donnée que le moteur ne peut pas divulguer.
-      expect(Object.keys(candidat).sort()).toEqual(["id", "signeLe", "statut", "workspaceId"]);
+      // Aucune autre clé. ADR-068 ajoute `sousLegalHoldActif` — un BOOLÉEN, et rien du hold
+      // lui-même : ni motif, ni auteur, ni date. Un moteur qui compte des échéances n'a aucun usage
+      // du texte d'une affaire.
+      expect(Object.keys(candidat).sort()).toEqual([
+        "id",
+        "signeLe",
+        "sousLegalHoldActif",
+        "statut",
+        "workspaceId",
+      ]);
       expect(candidat.workspaceId).toBe(WORKSPACE_ETRANGER);
     }
   });
@@ -448,8 +457,9 @@ describe("statuts rendus pour un workspace réel", () => {
     expect(politique(resultats, WORKSPACE_ETRANGER, "PROSPECT_MARKETING").blockerCode).toBe(
       "LAST_INBOUND_CONTACT_AT_MISSING"
     );
+    // ADR-068 a retiré `LEGAL_HOLD_MODEL_MISSING` — le modèle existe et le moteur le consulte. Les
+    // deux autres restent, et chacun suffit seul à interdire d'agir.
     expect(politique(resultats, WORKSPACE_ETRANGER, "SIGNED_VISIT_FORM").blocagesAvantSuppression).toEqual([
-      "LEGAL_HOLD_MODEL_MISSING",
       "FILE_DELETE_PRIMITIVE_MISSING",
       "DELETE_PATH_MISSING",
     ]);

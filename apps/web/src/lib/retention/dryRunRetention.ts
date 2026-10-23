@@ -48,6 +48,11 @@ export interface ResultatPolitiqueDryRun {
   readonly blockedCount: number;
   readonly notYetEligibleCount: number;
   readonly outOfScopeCount: number;
+  // ADR-068 — lignes échues mais PROTÉGÉES par un legal hold actif. Jamais fondu dans
+  // `blockedCount` : une protection documentée et une incohérence de données n'appellent pas la même
+  // suite, et un compteur qui les additionne ne répond plus à « combien de pièces sont sous
+  // suspension ? ».
+  readonly legalHoldCount: number;
   readonly oldestEligibleAt?: string;
   readonly newestEligibleAt?: string;
   readonly blockerCode?: CodeBlocageRetention;
@@ -80,6 +85,7 @@ const AUCUN_COMPTEUR = {
   blockedCount: 0,
   notYetEligibleCount: 0,
   outOfScopeCount: 0,
+  legalHoldCount: 0,
 } as const;
 
 // Évaluation d'UNE politique pour UN workspace. Les politiques bloquées ou déjà appliquées ne
@@ -132,6 +138,7 @@ async function evaluerPolitiquePourWorkspace(
     blockedCount: agregat.blockedCount,
     notYetEligibleCount: agregat.notYetEligibleCount,
     outOfScopeCount: agregat.outOfScopeCount,
+    legalHoldCount: agregat.legalHoldCount,
     oldestEligibleAt: agregat.oldestEligibleAt?.toISOString(),
     newestEligibleAt: agregat.newestEligibleAt?.toISOString(),
   };
@@ -144,6 +151,10 @@ async function evaluerPolitiquePourWorkspace(
 //
 // `maintenant` est injecté et par défaut `new Date()` ici, au point d'entrée IO — jamais dans le
 // moteur pur, dont aucune fonction ne lit l'horloge.
+//
+// LEGAL_HOLD (ADR-068) : ce service ne pose ni ne lève aucun hold, et n'importe pas le domaine
+// `lib/legalHold`. Il en reçoit l'effet par les candidats, déjà marqués par le repository — un
+// moteur qui compte des échéances n'a pas à pouvoir modifier les protections qu'il consulte.
 export async function executerDryRunRetention(options?: {
   mode?: string;
   maintenant?: Date;

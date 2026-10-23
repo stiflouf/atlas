@@ -35,6 +35,10 @@ function bon(partiel: Partial<CandidatBonVisiteRetention> = {}): CandidatBonVisi
     workspaceId: "default",
     statut: "signe",
     signeLe: new Date("2020-01-15T10:00:00.000Z"),
+    // ADR-068 — champ OBLIGATOIRE du candidat : la fixture doit le poser explicitement, exactement
+    // comme un appelant de production. C'est ce qui rend impossible qu'un oubli de câblage passe
+    // pour « non protégé ».
+    sousLegalHoldActif: false,
     ...partiel,
   };
 }
@@ -229,19 +233,91 @@ describe("T13/T14/T15 — politiques déjà appliquées ou partiellement appliqu
 });
 
 describe("SIGNED_VISIT_FORM — calculable, et strictement rien de plus", () => {
-  it("COMPUTABLE_DRY_RUN_ONLY, avec les trois blocages de suppression énoncés", () => {
+  it("COMPUTABLE_DRY_RUN_ONLY, avec les blocages de suppression restants énoncés", () => {
     const evalue = statutPolitique(politique("SIGNED_VISIT_FORM"));
     expect(evalue.status).toBe("COMPUTABLE_DRY_RUN_ONLY");
-    expect(evalue.blocagesAvantSuppression).toEqual([
-      "LEGAL_HOLD_MODEL_MISSING",
-      "FILE_DELETE_PRIMITIVE_MISSING",
-      "DELETE_PATH_MISSING",
-    ]);
+    // ADR-068 a retiré `LEGAL_HOLD_MODEL_MISSING` : le modèle de suspension existe désormais et le
+    // moteur le consulte, donc l'y laisser serait faux. Les deux autres restent vrais, et chacun
+    // suffit SEUL à interdire d'agir — retirer un blocage n'autorise rien.
+    expect(evalue.blocagesAvantSuppression).toEqual(["FILE_DELETE_PRIMITIVE_MISSING", "DELETE_PATH_MISSING"]);
+    expect(evalue.blocagesAvantSuppression).not.toContain("LEGAL_HOLD_MODEL_MISSING");
   });
 
   it("aucun statut du vocabulaire ne signifie « actionnable » : la liste est fermée et vérifiée", () => {
     const evalue = statutPolitique(politique("SIGNED_VISIT_FORM"));
     expect(JSON.stringify(evalue)).not.toMatch(/ACTIONABLE|READY_FOR_DELETE|DELETABLE/i);
+  });
+});
+
+// LEGAL_HOLD_FOUNDATION_V1 (ADR-068) — la branche legal hold du moteur PUR, sans aucun Postgres.
+// Le scénario bout en bout sur vraie base vit dans lib/legalHold/legalHoldRetention.test.ts.
+describe("ADR-068 — un legal hold actif interdit l'éligibilité, et seulement elle", () => {
+  const MAINTENANT = new Date("2026-01-01T00:00:00.000Z");
+
+  it("une ligne échue ET protégée devient BLOCKED_BY_LEGAL_HOLD, jamais ELIGIBLE", () => {
+    const evaluation = evaluerBonVisiteSigne(
+      bon({ signeLe: new Date("2015-01-01T00:00:00.000Z"), sousLegalHoldActif: true }),
+      MAINTENANT,
+      DUREE_BON
+    );
+    expect(evaluation.statut).toBe("BLOCKED_BY_LEGAL_HOLD");
+    expect(evaluation.blockerCode).toBe("ACTIVE_LEGAL_HOLD");
+  });
+
+  it("l'échéance est CONSERVÉE malgré le hold", () => {
+    // Le hold interdit d'agir ; il n'annule pas le fait que la pièce est échue. Effacer l'échéance
+    // rendrait impossible de savoir, à la levée, depuis quand elle l'était.
+    const evaluation = evaluerBonVisiteSigne(
+      bon({ signeLe: new Date("2015-01-01T00:00:00.000Z"), sousLegalHoldActif: true }),
+      MAINTENANT,
+      DUREE_BON
+    );
+    expect(evaluation.eligibleAt?.toISOString()).toBe("2020-01-01T00:00:00.000Z");
+  });
+
+  it("sans hold, la même ligne est ELIGIBLE : le hold est bien la seule différence", () => {
+    const evaluation = evaluerBonVisiteSigne(
+      bon({ signeLe: new Date("2015-01-01T00:00:00.000Z"), sousLegalHoldActif: false }),
+      MAINTENANT,
+      DUREE_BON
+    );
+    expect(evaluation.statut).toBe("ELIGIBLE");
+    expect(evaluation.blockerCode).toBeUndefined();
+  });
+
+  it("un hold ne change RIEN aux trois verdicts déjà non supprimables", () => {
+    // NOT_YET_ELIGIBLE reste tel quel : l'échéance n'est pas atteinte, le hold n'ajoute rien.
+    expect(
+      evaluerBonVisiteSigne(bon({ signeLe: new Date("2025-01-01T00:00:00.000Z"), sousLegalHoldActif: true }), MAINTENANT, DUREE_BON)
+        .statut
+    ).toBe("NOT_YET_ELIGIBLE");
+    // OUT_OF_SCOPE reste tel quel : la ligne ne relève pas de la politique.
+    expect(
+      evaluerBonVisiteSigne(bon({ statut: "brouillon", sousLegalHoldActif: true }), MAINTENANT, DUREE_BON).statut
+    ).toBe("OUT_OF_SCOPE");
+    // BLOCKED reste BLOCKED : « on ne sait pas » est le verdict le plus fort et ne doit jamais être
+    // adouci en « simplement protégé ».
+    const incoherent = evaluerBonVisiteSigne(bon({ signeLe: undefined, sousLegalHoldActif: true }), MAINTENANT, DUREE_BON);
+    expect(incoherent.statut).toBe("BLOCKED");
+    expect(incoherent.blockerCode).toBe("SIGNED_AT_MISSING");
+  });
+
+  it("l'agrégation compte les holds à part, et sans élargir les bornes de dates", () => {
+    const agregat = agregerEvaluations([
+      evaluerBonVisiteSigne(bon({ id: "a", signeLe: new Date("2015-01-01T00:00:00.000Z") }), MAINTENANT, DUREE_BON),
+      evaluerBonVisiteSigne(
+        bon({ id: "b", signeLe: new Date("2010-01-01T00:00:00.000Z"), sousLegalHoldActif: true }),
+        MAINTENANT,
+        DUREE_BON
+      ),
+    ]);
+    expect(agregat.eligibleCount).toBe(1);
+    expect(agregat.legalHoldCount).toBe(1);
+    // Pas dans `blockedCount` : une protection documentée ne se confond pas avec une incohérence.
+    expect(agregat.blockedCount).toBe(0);
+    // Et la borne la plus ancienne reste celle de la ligne RÉELLEMENT actionnable (2020), pas celle
+    // de la ligne protégée (2015) : l'inclure ferait croire à une fenêtre de purge plus large.
+    expect(agregat.oldestEligibleAt?.toISOString()).toBe("2020-01-01T00:00:00.000Z");
   });
 });
 
@@ -281,6 +357,8 @@ describe("agrégation — les identifiants tombent ici, par construction", () =>
       blockedCount: 0,
       outOfScopeCount: 0,
       notYetEligibleCount: 0,
+      // ADR-068 — compteur propre des lignes protégées par un legal hold actif.
+      legalHoldCount: 0,
       oldestEligibleAt: undefined,
       newestEligibleAt: undefined,
     });

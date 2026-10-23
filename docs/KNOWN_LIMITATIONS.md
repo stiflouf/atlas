@@ -1214,11 +1214,19 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   /api/retention/dry-run`, déclenchement manuel, secret dédié) sans rien supprimer :
   `RETENTION_ENFORCEMENT_V1_LIVRE` reste `FALSE` et `APPLY_SUPPORTED = NO`. Une seule politique y
   est calculable (bon de visite signé, `signe_le + 5 ans`), et elle reste non supprimable faute de
-  modèle de suspension pour contentieux et de chemin de suppression complet. ADR-067 a livré la
-  troisième brique qui manquait — une primitive de suppression de fichier (`supprimerFichierStocke`)
-  et un inventaire des orphelins en lecture seule — **branchée sur aucun chemin métier** : la
-  capacité technique existe, la règle de cycle de vie reste inchangée et `documents_bien` reste
-  append-only. `PROSPECT_MARKETING` et `CUSTOMER_MARKETING` restent bloquées faute de
+  chemin de suppression complet. ADR-067 a livré une primitive de suppression de fichier
+  (`supprimerFichierStocke`) et un inventaire des orphelins en lecture seule — **branchée sur aucun
+  chemin métier** : la capacité technique existe, la règle de cycle de vie reste inchangée et
+  `documents_bien` reste append-only. ADR-068 a livré le **modèle de suspension pour contentieux**
+  (`legal_holds`, migration 0061) : poser un hold, le lever, détecter qu'une ressource est protégée,
+  et un verdict `BLOCKED_BY_LEGAL_HOLD` dans le dry-run. Lui aussi **sans aucune surface** — ni
+  route, ni action serveur, ni écran, ni cron — donc aucun geste du produit ne peut encore poser de
+  hold, et un contentieux survenant aujourd'hui se gérerait hors produit. Il ne reste qu'un blocage
+  avant qu'une suppression soit techniquement possible, et il suffit :
+  `DELETE_PATH_MISSING` — `bons_visite.document_id` est en SET NULL (supprimer le bon laisserait la
+  ligne `documents_bien` du PDF et son fichier) et `evenements_metier.bon_visite_id` en NO ACTION
+  bloque la suppression dès qu'un événement référence le bon.
+  `PROSPECT_MARKETING` et `CUSTOMER_MARKETING` restent bloquées faute de
   déclencheur fiable — `dernier_contact_le` est explicitement interdit comme dernier contact
   entrant, un test le verrouille.
 - **Aucun consentement marketing, donc aucune prospection électronique B2C possible** (ADR-065

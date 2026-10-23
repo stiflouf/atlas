@@ -97,16 +97,45 @@ describe("aucune suppression métier n'existe dans le moteur de rétention", () 
     }
   });
 
-  it("aucun legal hold n'est posé, levé ni modélisé", () => {
+  // ADR-068 a REMPLACÉ la garde « aucun legal hold n'est posé, levé ni modélisé » : le modèle existe
+  // désormais, et le moteur de rétention le CONSULTE. L'invariant à garder n'est donc plus son
+  // absence — ce serait garder l'immobilité du dépôt, pas une propriété de sûreté — mais le fait que
+  // le moteur n'en soit qu'un LECTEUR. Un moteur de purge capable de lever les protections qu'il
+  // consulte serait la pire défaillance possible de ce domaine.
+  it("le moteur de rétention LIT les legal holds et n'en pose, lève ni modifie aucun", () => {
     for (const chemin of SOURCES_PRODUCTION) {
       const code = codeSeul(chemin);
-      // Les CODES du vocabulaire le NOMMENT (`LEGAL_HOLD_MODEL_MISSING`,
-      // `BLOCKED_MISSING_LEGAL_HOLD`) — nommer ce qui manque est précisément l'inverse d'en poser
-      // un. Toute autre forme (colonne, champ, fonction) est interdite.
-      const sansCodeDeBlocage = code.replace(/[A-Z_]*LEGAL_HOLD[A-Z_]*/g, " ");
-      expect(sansCodeDeBlocage, chemin).not.toMatch(/legal_?hold/i);
-      expect(sansCodeDeBlocage, chemin).not.toMatch(/suspensionContentieux|sousScelle/i);
+      // Aucune écriture, sous aucune forme : ni pose, ni levée, ni insertion, ni mise à jour.
+      expect(code, chemin).not.toMatch(/creerLegalHold|leverLegalHold/);
+      expect(code, chemin).not.toMatch(/\.(insert|update|delete)\(\s*legalHolds/);
+      expect(code, chemin).not.toMatch(/leveLe\s*:|leve_le\s*=/);
+      // La seule porte d'entrée autorisée est la lecture d'ensemble des cibles protégées.
+      const importsLegalHold = [...code.matchAll(/from\s+"@\/lib\/legalHold\/[A-Za-z]+"/g)];
+      if (importsLegalHold.length > 0) {
+        expect(code, chemin).toMatch(/listerCiblesSousLegalHoldActif/);
+      }
     }
+  });
+
+  it("seul le repository de rétention connaît le registre des holds", () => {
+    // Le moteur PUR (`eligibilite.ts`) et le service (`dryRunRetention.ts`) ne doivent pas même
+    // importer le domaine legal hold : ils reçoivent un booléen déjà calculé. Un service qui peut
+    // lire les holds pourrait demain décider de les contourner.
+    for (const chemin of SOURCES_PRODUCTION) {
+      if (chemin.endsWith("retentionRepository.ts")) continue;
+      expect(codeSeul(chemin), chemin).not.toMatch(/@\/lib\/legalHold/);
+    }
+    expect(codeSeul(join(RETENTION, "retentionRepository.ts"))).toMatch(
+      /listerCiblesSousLegalHoldActif/
+    );
+  });
+
+  it("une lecture de holds en échec ne peut pas être avalée en « aucun hold »", () => {
+    const repository = codeSeul(join(RETENTION, "retentionRepository.ts"));
+    // Ni try/catch, ni `?? new Set`, ni `.catch(` autour de la lecture : l'erreur doit remonter
+    // jusqu'au try/catch par politique de `dryRunRetention`, qui la rend comme BLOCKED.
+    expect(repository).not.toMatch(/catch/);
+    expect(repository).not.toMatch(/listerCiblesSousLegalHoldActif[\s\S]{0,120}(\?\?|\|\|)/);
   });
 });
 

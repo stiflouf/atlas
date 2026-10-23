@@ -428,6 +428,13 @@
       "when": 1791550480868,
       "tag": "0060_retention_engine_foundation_v1",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1792740226234,
+      "tag": "0061_legal_hold_foundation_v1",
+      "breakpoints": true
     }
   ]
 }
