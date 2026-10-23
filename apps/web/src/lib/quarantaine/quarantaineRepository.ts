@@ -175,8 +175,20 @@ function politiqueToujoursApplicable(
       // Durée introuvable : fail-closed. Une politique dont on ne sait plus lire la durée n'est pas
       // « toujours applicable », elle est inévaluable.
       if (dureeAnnees === undefined) return false;
+      // `enQuarantaineActive: false` est passé à dessein, même raison que `sousLegalHoldActif` : le
+      // champ est purement informatif côté éligibilité et ne change aucun verdict, et seul
+      // `evaluation.statut` est lu ici. Le renseigner depuis la quarantaine en cours ferait croire
+      // que l'état de la quarantaine pèse sur l'applicabilité de la politique, alors que revalider
+      // consiste justement à reposer la question sans rien reprendre de l'entrée.
       const evaluation = evaluerBonVisiteSigne(
-        { id: entityId, workspaceId: "", statut: cible.statut, signeLe: cible.signeLe, sousLegalHoldActif: false },
+        {
+          id: entityId,
+          workspaceId: "",
+          statut: cible.statut,
+          signeLe: cible.signeLe,
+          sousLegalHoldActif: false,
+          enQuarantaineActive: false,
+        },
         instantReference,
         dureeAnnees
       );
