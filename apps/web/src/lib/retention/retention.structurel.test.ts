@@ -117,6 +117,31 @@ describe("aucune suppression métier n'existe dans le moteur de rétention", () 
     }
   });
 
+  // ADR-069 — la quarantaine est soumise à la MÊME frontière que les legal holds : le moteur de
+  // rétention la LIT et ne l'écrit jamais. Un dry-run qui ouvrirait des états de longue durée ne
+  // serait plus un dry-run, et un balayage automatisé aurait alors engagé des ressources vers une
+  // purge sans décision humaine.
+  it("le moteur de rétention LIT les quarantaines et n'en crée, lève ni modifie aucune", () => {
+    for (const chemin of SOURCES_PRODUCTION) {
+      const code = codeSeul(chemin);
+      expect(code, chemin).not.toMatch(/creerQuarantaine|leverQuarantaine/);
+      expect(code, chemin).not.toMatch(/\.(insert|update|delete)\(\s*retentionQuarantines/);
+      expect(code, chemin).not.toMatch(/leveeLe\s*:|levee_le\s*=/);
+      const importsQuarantaine = [...code.matchAll(/from\s+"@\/lib\/quarantaine\/[A-Za-z]+"/g)];
+      if (importsQuarantaine.length > 0) {
+        expect(code, chemin).toMatch(/listerCiblesEnQuarantaineActive/);
+      }
+    }
+  });
+
+  it("seul le repository de rétention connaît la quarantaine", () => {
+    for (const chemin of SOURCES_PRODUCTION) {
+      if (chemin.endsWith("retentionRepository.ts")) continue;
+      expect(codeSeul(chemin), chemin).not.toMatch(/@\/lib\/quarantaine/);
+    }
+    expect(codeSeul(join(RETENTION, "retentionRepository.ts"))).toMatch(/listerCiblesEnQuarantaineActive/);
+  });
+
   it("seul le repository de rétention connaît le registre des holds", () => {
     // Le moteur PUR (`eligibilite.ts`) et le service (`dryRunRetention.ts`) ne doivent pas même
     // importer le domaine legal hold : ils reçoivent un booléen déjà calculé. Un service qui peut

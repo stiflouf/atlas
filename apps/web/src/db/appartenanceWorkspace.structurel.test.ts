@@ -57,6 +57,12 @@ const TABLES_RACINES = [
   // Un hold est d'ailleurs un ACTE d'administration du workspace, comme `runs_retention`, pas une
   // donnée métier rattachée à une ligne.
   "legal_holds",
+  // ADR-069 — état de quarantaine de rétention : RACINE, pour les mêmes deux raisons que
+  // `legal_holds`. Sa cible est générique (`entity_type` + `entity_id` en texte, sans FK) et
+  // `bons_visite` ne porte lui-même aucune appartenance (feuille de `visites -> biens`) : aucune
+  // dérivation n'est possible. Elle ne porte pas non plus de FK vers `runs_retention`, qui aurait
+  // fait dériver un état de longue durée d'une ligne de journal.
+  "retention_quarantines",
   "compatibilites_a_resynchroniser",
   // ADR-056 — la couche provenance naît racine : deux workspaces peuvent légitimement recevoir le
   // MÊME identifiant du MÊME fournisseur sans que ce soit une collision.

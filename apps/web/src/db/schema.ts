@@ -2978,3 +2978,106 @@ export const legalHolds = pgTable(
     index("legal_holds_cible_idx").on(table.workspaceId, table.entityType, table.entityId),
   ]
 );
+
+// RETENTION_QUARANTINE_FOUNDATION_V1 (ADR-069) — phase intermédiaire PERSISTANTE entre « cette ligne
+// est éligible selon une politique de conservation » et une future purge qui n'existe pas.
+//
+// CE QUE LA QUARANTAINE N'EST PAS, et la liste compte autant que la table : elle ne déplace aucun
+// fichier, ne cache rien à l'utilisateur, n'archive pas la ressource métier, ne modifie pas son
+// contenu, ne supprime ni ligne ni fichier, n'anonymise rien et ne démarre AUCUN compte à rebours
+// destructif. Elle est un ÉTAT DE RÉTENTION, auditable, et rien d'autre.
+//
+// L'ÉCHÉANCE NE SIGNIFIE JAMAIS « SUPPRIMABLE ». `revalidation_due_le` dit à partir de quand une
+// REVALIDATION est exigée — politique toujours applicable, cible toujours présente, aucun legal hold
+// actif. C'est le point de conception central : un modèle où une date atteinte rendrait une donnée
+// supprimable transformerait un oubli de relecture en suppression automatique.
+//
+// RACINE (ADR-054 §7), même raisonnement que `legal_holds` (ADR-068) : la cible est générique
+// (`entity_type` + `entity_id` en texte, sans FK) et `bons_visite` ne porte lui-même aucune
+// appartenance. Le périmètre est donc porté par la table.
+//
+// AUCUNE FK vers la ressource mise en quarantaine, pour les deux mêmes raisons qu'ADR-068 : une
+// `cascade` effacerait l'historique avec la ressource, une `no action` retiendrait pour toujours une
+// ressource dont la quarantaine a été LEVÉE (la ligne reste, par immutabilité du registre).
+//
+// AUCUNE FK vers `runs_retention` non plus, et c'est une décision : rattacher une quarantaine au
+// balayage qui a détecté l'éligibilité ferait dépendre un état de longue durée d'une ligne de
+// journal, et ferait dériver son appartenance d'un scan ancien. Le brief l'évoquait comme
+// « référence éventuelle » ; aucun consommateur ne la demande, et une colonne sans usage démontré
+// n'est pas ajoutée (ADR-069, alternatives rejetées).
+export const retentionQuarantines = pgTable(
+  "retention_quarantines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    // POLICY_CODE, contrairement à `legal_holds` qui n'en porte pas : un hold protège la RESSOURCE
+    // contre toute suppression, alors qu'une quarantine est ouverte AU TITRE d'une politique
+    // précise. Deux politiques pourraient un jour mettre la même ligne en quarantaine pour des
+    // échéances différentes, et les confondre rendrait la revalidation impossible à mener.
+    //
+    // Restreint à la seule politique dont l'échéance est calculable aujourd'hui
+    // (`COMPUTABLE_DRY_RUN_ONLY`, ADR-066). Une politique bloquée ne peut produire aucun candidat :
+    // l'accepter ici permettrait d'ouvrir une quarantaine que rien ne justifie.
+    policyCode: text("policy_code").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id").notNull(),
+    // Pourquoi CETTE ligne est entrée en quarantaine, en clair. `policy_code` dit au titre de quelle
+    // règle ; ce texte dit sur quelle base la décision a été prise. L'entrée est un geste délibéré,
+    // pas un effet de bord d'un scan : elle se motive.
+    motif: text("motif").notNull(),
+    entreLe: timestamp("entre_le", { withTimezone: true }).notNull().defaultNow(),
+    entreParIdentiteSub: text("entre_par_identite_sub").notNull(),
+    // NOT NULL et SANS DEFAUT : aucune durée de quarantaine n'est décidée dans le produit
+    // (ADR-069 §durée). L'échéance est donc toujours fournie explicitement par l'appelant, jamais
+    // calculée depuis la durée de CONSERVATION — confondre les deux ferait d'une règle de
+    // conservation une autorisation de purge.
+    revalidationDueLe: timestamp("revalidation_due_le", { withTimezone: true }).notNull(),
+    // SORTIE NON DESTRUCTIVE. État dérivé, jamais stocké (ADR-012, même patron que `legal_holds`) :
+    //   levee_le IS NOT NULL                      -> LEVEE
+    //   revalidation_due_le <= maintenant         -> REVALIDATION_REQUISE
+    //   sinon                                     -> EN_QUARANTAINE
+    // Aucun de ces trois états ne signifie « supprimable », et aucune valeur du vocabulaire ne le
+    // signifie : c'est ce qui rend l'absence d'auto-purge structurelle plutôt que déclarative.
+    leveeLe: timestamp("levee_le", { withTimezone: true }),
+    leveeParIdentiteSub: text("levee_par_identite_sub"),
+    causeLevee: text("cause_levee"),
+    motifLevee: text("motif_levee"),
+    // ORDRE TOTAL du registre — même rationale que `runs_retention.ordre` et `legal_holds.ordre`.
+    ordre: bigint("ordre", { mode: "number" }).generatedAlwaysAsIdentity(),
+  },
+  (table) => [
+    check("retention_quarantines_policy_code_check", sql`${table.policyCode} IN ('SIGNED_VISIT_FORM')`),
+    check("retention_quarantines_entity_type_check", sql`${table.entityType} IN ('bons_visite')`),
+    check("retention_quarantines_motif_non_vide_check", sql`length(btrim(${table.motif})) >= 10`),
+    check(
+      "retention_quarantines_cause_levee_check",
+      sql`${table.causeLevee} IS NULL OR ${table.causeLevee} IN (
+        'DECISION_MANUELLE','POLITIQUE_NON_APPLICABLE','CIBLE_DISPARUE','LEGAL_HOLD_POSE'
+      )`
+    ),
+    // COHÉRENCE DE LA LEVÉE, en tout ou rien : datée, attribuée, causée ET motivée, ou rien. Sans ce
+    // CHECK, un UPDATE partiel produirait une quarantaine « levée » sans auteur ni raison — la
+    // disparition silencieuse d'un état que ce lot doit rendre auditable.
+    check(
+      "retention_quarantines_coherence_levee_check",
+      sql`(${table.leveeLe} IS NULL AND ${table.leveeParIdentiteSub} IS NULL
+           AND ${table.causeLevee} IS NULL AND ${table.motifLevee} IS NULL)
+        OR (${table.leveeLe} IS NOT NULL AND ${table.leveeParIdentiteSub} IS NOT NULL
+            AND ${table.causeLevee} IS NOT NULL
+            AND ${table.motifLevee} IS NOT NULL AND length(btrim(${table.motifLevee})) >= 10)`
+    ),
+    check("retention_quarantines_levee_apres_entree_check", sql`${table.leveeLe} IS NULL OR ${table.leveeLe} >= ${table.entreLe}`),
+    // Une échéance antérieure à l'entrée produirait une quarantaine née « expirée », donc exigeant
+    // une revalidation qu'aucun délai n'a permis de préparer.
+    check("retention_quarantines_echeance_apres_entree_check", sql`${table.revalidationDueLe} >= ${table.entreLe}`),
+    // UNICITÉ LOGIQUE portée par la BASE : une seule quarantaine ACTIVE par cible et par politique.
+    // Partielle, donc une cible dont la quarantaine a été levée peut en recevoir une nouvelle — ce
+    // qu'un index total aurait interdit pour toujours.
+    uniqueIndex("retention_quarantines_cible_active_unique")
+      .on(table.workspaceId, table.entityType, table.entityId, table.policyCode)
+      .where(sql`${table.leveeLe} IS NULL`),
+    index("retention_quarantines_cible_idx").on(table.workspaceId, table.entityType, table.entityId),
+  ]
+);

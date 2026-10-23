@@ -2,6 +2,7 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { biens, bonsVisite, runsRetention, visites } from "@/db/schema";
 import { listerCiblesSousLegalHoldActif } from "@/lib/legalHold/legalHoldRepository";
+import { listerCiblesEnQuarantaineActive } from "@/lib/quarantaine/quarantaineRepository";
 import type { CandidatBonVisiteRetention } from "./eligibilite";
 import type { ModeRetention } from "./statutsRetention";
 
@@ -18,6 +19,13 @@ import type { ModeRetention } from "./statutsRetention";
 // LEGAL_HOLD_FOUNDATION_V1 (ADR-068) — ce module LIT désormais `legal_holds`, et c'est tout ce qu'il
 // en fait : aucune pose, aucune levée, aucune écriture. Le registre des suspensions est la propriété
 // du domaine `lib/legalHold`, et le moteur de rétention n'en est qu'un lecteur.
+//
+// RETENTION_QUARANTINE_FOUNDATION_V1 (ADR-069) — même règle, même frontière, pour
+// `retention_quarantines` : LECTURE SEULE. Le dry-run n'OUVRE aucune quarantaine et n'en lève
+// aucune. Faire d'un balayage le créateur d'un état de longue durée aurait transformé un comptage en
+// décision, et un balayage qui tournerait un jour tout seul aurait alors engagé des ressources vers
+// une purge sans qu'aucun humain ne l'ait voulu. L'entrée en quarantaine reste un geste distinct,
+// réservé au futur lot d'enforcement.
 
 // MINIMISATION, et c'est le point central de cette fonction plutôt qu'un détail de performance :
 // le calcul a besoin de l'identifiant, du périmètre, du statut et de la date de signature. Il n'a
@@ -46,6 +54,9 @@ export async function listerCandidatsBonVisitePourRetention(
   workspaceId: string
 ): Promise<CandidatBonVisiteRetention[]> {
   const ciblesProtegees = await listerCiblesSousLegalHoldActif("bons_visite", workspaceId);
+  // Même contrat fail-closed que les holds : une erreur de lecture REMONTE et bloque la politique,
+  // elle ne devient jamais un ensemble vide qu'on lirait comme « aucune quarantaine ».
+  const ciblesEnQuarantaine = await listerCiblesEnQuarantaineActive("bons_visite", workspaceId);
 
   const lignes = await getDb()
     .select({
@@ -69,6 +80,7 @@ export async function listerCandidatsBonVisitePourRetention(
     statut: ligne.statut,
     signeLe: ligne.signeLe ?? undefined,
     sousLegalHoldActif: ciblesProtegees.has(ligne.id),
+    enQuarantaineActive: ciblesEnQuarantaine.has(ligne.id),
   }));
 }
 

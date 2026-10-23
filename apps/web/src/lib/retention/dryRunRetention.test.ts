@@ -295,7 +295,7 @@ describe("T19 — scoping par workspace", () => {
 });
 
 describe("T20 — lecture minimale", () => {
-  it("le repository ne ramène que id, workspaceId, statut, signeLe et le drapeau de legal hold", async () => {
+  it("le repository ne ramène que id, workspaceId, statut, signeLe et les deux drapeaux de rétention", async () => {
     const candidats = await listerCandidatsBonVisitePourRetention(WORKSPACE_ETRANGER);
     expect(candidats).toHaveLength(2);
     for (const candidat of candidats) {
@@ -305,6 +305,7 @@ describe("T20 — lecture minimale", () => {
       // lui-même : ni motif, ni auteur, ni date. Un moteur qui compte des échéances n'a aucun usage
       // du texte d'une affaire.
       expect(Object.keys(candidat).sort()).toEqual([
+        "enQuarantaineActive",
         "id",
         "signeLe",
         "sousLegalHoldActif",
@@ -462,6 +463,8 @@ describe("statuts rendus pour un workspace réel", () => {
     expect(politique(resultats, WORKSPACE_ETRANGER, "SIGNED_VISIT_FORM").blocagesAvantSuppression).toEqual([
       "FILE_DELETE_PRIMITIVE_MISSING",
       "DELETE_PATH_MISSING",
+      // ADR-069 — le modèle d'état de quarantaine existe, sa DURÉE n'est pas décidée.
+      "QUARANTINE_POLICY_MISSING",
     ]);
   });
 

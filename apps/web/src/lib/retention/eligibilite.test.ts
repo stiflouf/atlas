@@ -39,6 +39,9 @@ function bon(partiel: Partial<CandidatBonVisiteRetention> = {}): CandidatBonVisi
     // comme un appelant de production. C'est ce qui rend impossible qu'un oubli de câblage passe
     // pour « non protégé ».
     sousLegalHoldActif: false,
+    // ADR-069 — champ OBLIGATOIRE lui aussi : la fixture le pose explicitement, comme tout appelant
+    // de production. Informatif, il ne change aucun verdict.
+    enQuarantaineActive: false,
     ...partiel,
   };
 }
@@ -239,7 +242,13 @@ describe("SIGNED_VISIT_FORM — calculable, et strictement rien de plus", () => 
     // ADR-068 a retiré `LEGAL_HOLD_MODEL_MISSING` : le modèle de suspension existe désormais et le
     // moteur le consulte, donc l'y laisser serait faux. Les deux autres restent vrais, et chacun
     // suffit SEUL à interdire d'agir — retirer un blocage n'autorise rien.
-    expect(evalue.blocagesAvantSuppression).toEqual(["FILE_DELETE_PRIMITIVE_MISSING", "DELETE_PATH_MISSING"]);
+    // ADR-069 a AJOUTÉ `QUARANTINE_POLICY_MISSING` : le modèle d'état de quarantaine existe, sa
+    // DURÉE n'est pas décidée. Un blocage de plus, jamais un de moins.
+    expect(evalue.blocagesAvantSuppression).toEqual([
+      "FILE_DELETE_PRIMITIVE_MISSING",
+      "DELETE_PATH_MISSING",
+      "QUARANTINE_POLICY_MISSING",
+    ]);
     expect(evalue.blocagesAvantSuppression).not.toContain("LEGAL_HOLD_MODEL_MISSING");
   });
 
@@ -321,6 +330,52 @@ describe("ADR-068 — un legal hold actif interdit l'éligibilité, et seulement
   });
 });
 
+// RETENTION_QUARANTINE_FOUNDATION_V1 (ADR-069) — la quarantaine est INFORMATIVE dans le moteur pur :
+// elle ne change aucun verdict, et c'est délibéré. Une ligne en quarantaine reste `ELIGIBLE` au sens
+// de la politique ; la quarantaine est l'étape SUIVANTE, pas un blocage.
+describe("ADR-069 — la quarantaine ne change aucun verdict et se compte à part", () => {
+  const MAINTENANT_Q = new Date("2026-01-01T00:00:00.000Z");
+
+  it("une ligne échue en quarantaine reste ELIGIBLE", () => {
+    const evaluation = evaluerBonVisiteSigne(
+      bon({ signeLe: new Date("2015-01-01T00:00:00.000Z"), enQuarantaineActive: true }),
+      MAINTENANT_Q,
+      DUREE_BON
+    );
+    expect(evaluation.statut).toBe("ELIGIBLE");
+    expect(evaluation.enQuarantaineActive).toBe(true);
+  });
+
+  it("un legal hold garde la priorité sur une ligne en quarantaine", () => {
+    // Un hold posé APRÈS l'entrée en quarantaine : le verdict reste BLOCKED_BY_LEGAL_HOLD, et la
+    // ligne est tout de même comptée comme prise en charge.
+    const evaluation = evaluerBonVisiteSigne(
+      bon({ signeLe: new Date("2015-01-01T00:00:00.000Z"), enQuarantaineActive: true, sousLegalHoldActif: true }),
+      MAINTENANT_Q,
+      DUREE_BON
+    );
+    expect(evaluation.statut).toBe("BLOCKED_BY_LEGAL_HOLD");
+    expect(evaluation.enQuarantaineActive).toBe(true);
+  });
+
+  it("le compteur voit les lignes en quarantaine quel que soit leur verdict", () => {
+    const agregat = agregerEvaluations([
+      evaluerBonVisiteSigne(bon({ id: "a", signeLe: new Date("2015-01-01T00:00:00.000Z"), enQuarantaineActive: true }), MAINTENANT_Q, DUREE_BON),
+      evaluerBonVisiteSigne(
+        bon({ id: "b", signeLe: new Date("2015-01-01T00:00:00.000Z"), enQuarantaineActive: true, sousLegalHoldActif: true }),
+        MAINTENANT_Q,
+        DUREE_BON
+      ),
+      evaluerBonVisiteSigne(bon({ id: "c", signeLe: new Date("2015-01-01T00:00:00.000Z") }), MAINTENANT_Q, DUREE_BON),
+    ]);
+    // Comptées HORS du switch de verdict : l'imbriquer ferait disparaître du décompte précisément
+    // les lignes dont la situation est la plus délicate (échues, prises en charge, et protégées).
+    expect(agregat.quarantineCount).toBe(2);
+    expect(agregat.eligibleCount).toBe(2);
+    expect(agregat.legalHoldCount).toBe(1);
+  });
+});
+
 describe("toutes les politiques de conservation.ts sont couvertes, aucune ne reçoit de statut par défaut", () => {
   it("chaque politique déclarée obtient un statut du vocabulaire fermé, et aucune n'est UNKNOWN_POLICY", () => {
     expect(POLITIQUES_CONSERVATION_V1.map((p) => p.cle).sort()).toEqual([...CLES_POLITIQUES_CONSERVATION].sort());
@@ -359,6 +414,8 @@ describe("agrégation — les identifiants tombent ici, par construction", () =>
       notYetEligibleCount: 0,
       // ADR-068 — compteur propre des lignes protégées par un legal hold actif.
       legalHoldCount: 0,
+      // ADR-069 — lignes déjà prises en charge par une quarantaine active.
+      quarantineCount: 0,
       oldestEligibleAt: undefined,
       newestEligibleAt: undefined,
     });

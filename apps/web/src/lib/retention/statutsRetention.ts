@@ -99,6 +99,13 @@ export const CODES_BLOCAGE_RETENTION = [
   "LEGAL_HOLD_MODEL_MISSING",
   "FILE_DELETE_PRIMITIVE_MISSING",
   "DELETE_PATH_MISSING",
+  // RETENTION_QUARANTINE_FOUNDATION_V1 (ADR-069) — aucune DURÉE de quarantaine n'est décidée dans le
+  // produit. Le modèle d'état existe et le moteur le lit, mais rien ne permet de calculer à partir
+  // de quand une revalidation serait exigée : la durée de CONSERVATION (cinq ans après signature)
+  // est une règle de conservation, jamais une autorisation de purge, et la dériver en durée de
+  // quarantaine serait l'erreur la plus coûteuse de ce domaine. Blocage NOMMÉ plutôt qu'une valeur
+  // plausible inventée.
+  "QUARANTINE_POLICY_MISSING",
   // Niveau entité.
   "SIGNED_AT_MISSING",
   "UNKNOWN_ENTITY_STATE",

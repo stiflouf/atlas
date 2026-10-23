@@ -53,6 +53,10 @@ export interface ResultatPolitiqueDryRun {
   // suite, et un compteur qui les additionne ne répond plus à « combien de pièces sont sous
   // suspension ? ».
   readonly legalHoldCount: number;
+  // ADR-069 — lignes déjà prises en charge par une quarantaine active. INFORMATIF : ces lignes sont
+  // aussi comptées dans `eligibleCount` ou `legalHoldCount`, la quarantaine n'étant pas un verdict
+  // d'éligibilité mais l'étape suivante. Le dry-run la LIT et n'en crée aucune.
+  readonly quarantineCount: number;
   readonly oldestEligibleAt?: string;
   readonly newestEligibleAt?: string;
   readonly blockerCode?: CodeBlocageRetention;
@@ -86,6 +90,7 @@ const AUCUN_COMPTEUR = {
   notYetEligibleCount: 0,
   outOfScopeCount: 0,
   legalHoldCount: 0,
+  quarantineCount: 0,
 } as const;
 
 // Évaluation d'UNE politique pour UN workspace. Les politiques bloquées ou déjà appliquées ne
@@ -139,6 +144,7 @@ async function evaluerPolitiquePourWorkspace(
     notYetEligibleCount: agregat.notYetEligibleCount,
     outOfScopeCount: agregat.outOfScopeCount,
     legalHoldCount: agregat.legalHoldCount,
+    quarantineCount: agregat.quarantineCount,
     oldestEligibleAt: agregat.oldestEligibleAt?.toISOString(),
     newestEligibleAt: agregat.newestEligibleAt?.toISOString(),
   };
@@ -155,6 +161,10 @@ async function evaluerPolitiquePourWorkspace(
 // LEGAL_HOLD (ADR-068) : ce service ne pose ni ne lève aucun hold, et n'importe pas le domaine
 // `lib/legalHold`. Il en reçoit l'effet par les candidats, déjà marqués par le repository — un
 // moteur qui compte des échéances n'a pas à pouvoir modifier les protections qu'il consulte.
+//
+// QUARANTAINE (ADR-069) : identique, et pour une raison de plus. Ce service n'ouvre aucune
+// quarantaine et n'importe pas `lib/quarantaine`. Un dry-run qui créerait des états de longue durée
+// ne serait plus un dry-run.
 export async function executerDryRunRetention(options?: {
   mode?: string;
   maintenant?: Date;

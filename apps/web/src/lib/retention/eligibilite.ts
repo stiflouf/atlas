@@ -48,6 +48,14 @@ export interface CandidatBonVisiteRetention {
   // ni des dates de l'acte, et une donnée qu'une fonction ne possède pas est une donnée qu'elle ne
   // peut pas divulguer.
   readonly sousLegalHoldActif: boolean;
+  // RETENTION_QUARANTINE_FOUNDATION_V1 (ADR-069) — champ OBLIGATOIRE, même raison que ci-dessus : un
+  // objet littéral qui l'omettrait ne compile pas.
+  //
+  // Il est purement INFORMATIF : être en quarantaine ne change AUCUN verdict. Une ligne en
+  // quarantaine reste `ELIGIBLE` au sens de la politique — la quarantaine est l'étape SUIVANTE, pas
+  // un blocage. Le confondre avec un blocage masquerait les lignes déjà prises en charge dans le
+  // même compteur que celles qui ne le sont pas.
+  readonly enQuarantaineActive: boolean;
 }
 
 export interface EvaluationEntiteRetention {
@@ -57,6 +65,9 @@ export interface EvaluationEntiteRetention {
   readonly statut: VerdictEntiteRetention;
   readonly eligibleAt?: Date;
   readonly blockerCode?: CodeBlocageRetention;
+  // ADR-069 — repris du candidat et transporté tel quel jusqu'à l'agrégation, qui en fait un
+  // compteur. Aucune branche de décision ne le lit : la quarantaine n'influence aucun verdict.
+  readonly enQuarantaineActive: boolean;
 }
 
 // « + 5 ans » en ARITHMÉTIQUE DE CALENDRIER, jamais en millisecondes : cinq ans ne sont pas
@@ -102,6 +113,7 @@ export function evaluerBonVisiteSigne(
     policyCode: "SIGNED_VISIT_FORM",
     entityType: ENTITE_BON_VISITE,
     entityId: candidat.id,
+    enQuarantaineActive: candidat.enQuarantaineActive,
   } as const;
 
   if (!STATUTS_BON_VISITE_CONNUS.has(candidat.statut)) {
@@ -185,7 +197,13 @@ export function statutPolitique(politique: PolitiqueConservation): StatutPolitiq
         //
         // Retirer un blocage n'autorise RIEN : chacun suffit seul à interdire d'agir, et
         // `APPLY_SUPPORTED` reste false.
-        blocagesAvantSuppression: ["FILE_DELETE_PRIMITIVE_MISSING", "DELETE_PATH_MISSING"],
+        blocagesAvantSuppression: [
+          "FILE_DELETE_PRIMITIVE_MISSING",
+          "DELETE_PATH_MISSING",
+          // ADR-069 — ajouté par le lot quarantaine : le modèle d'état existe, sa DURÉE n'est pas
+          // décidée. Un blocage de plus, jamais un de moins.
+          "QUARANTINE_POLICY_MISSING",
+        ],
       };
 
     case "PROSPECT_MARKETING":
@@ -239,6 +257,10 @@ export interface AgregatPolitiqueRetention {
   // incohérence de données ne se lisent pas de la même façon : la première se lève par une décision
   // documentée, la seconde se corrige. Les additionner rendrait le journal muet sur les deux.
   readonly legalHoldCount: number;
+  // ADR-069 — lignes déjà prises en charge par une quarantaine active. Compteur INFORMATIF : ces
+  // lignes sont aussi comptées dans `eligibleCount` (ou `legalHoldCount` si un hold est apparu
+  // depuis), car la quarantaine n'est pas un verdict d'éligibilité mais l'étape suivante.
+  readonly quarantineCount: number;
   readonly oldestEligibleAt?: Date;
   readonly newestEligibleAt?: Date;
 }
@@ -253,10 +275,17 @@ export function agregerEvaluations(evaluations: readonly EvaluationEntiteRetenti
   let outOfScopeCount = 0;
   let notYetEligibleCount = 0;
   let legalHoldCount = 0;
+  let quarantineCount = 0;
   let oldestEligibleAt: Date | undefined;
   let newestEligibleAt: Date | undefined;
 
   for (const evaluation of evaluations) {
+    // Compté HORS du switch, et c'est voulu : une ligne en quarantaine peut être ÉLIGIBLE ou
+    // BLOCKED_BY_LEGAL_HOLD (un hold posé après l'entrée), et le compteur doit la voir dans les deux
+    // cas. L'imbriquer dans une branche ferait disparaître du décompte précisément les lignes dont
+    // la situation est la plus délicate.
+    if (evaluation.enQuarantaineActive) quarantineCount += 1;
+
     switch (evaluation.statut) {
       case "ELIGIBLE": {
         eligibleCount += 1;
@@ -290,6 +319,7 @@ export function agregerEvaluations(evaluations: readonly EvaluationEntiteRetenti
     outOfScopeCount,
     notYetEligibleCount,
     legalHoldCount,
+    quarantineCount,
     oldestEligibleAt,
     newestEligibleAt,
   };

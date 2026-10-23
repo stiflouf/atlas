@@ -1221,11 +1221,20 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   (`legal_holds`, migration 0061) : poser un hold, le lever, détecter qu'une ressource est protégée,
   et un verdict `BLOCKED_BY_LEGAL_HOLD` dans le dry-run. Lui aussi **sans aucune surface** — ni
   route, ni action serveur, ni écran, ni cron — donc aucun geste du produit ne peut encore poser de
-  hold, et un contentieux survenant aujourd'hui se gérerait hors produit. Il ne reste qu'un blocage
-  avant qu'une suppression soit techniquement possible, et il suffit :
-  `DELETE_PATH_MISSING` — `bons_visite.document_id` est en SET NULL (supprimer le bon laisserait la
-  ligne `documents_bien` du PDF et son fichier) et `evenements_metier.bon_visite_id` en NO ACTION
-  bloque la suppression dès qu'un événement référence le bon.
+  hold, et un contentieux survenant aujourd'hui se gérerait hors produit. ADR-069 a livré l'ÉTAT DE
+  QUARANTAINE (`retention_quarantines`, migration 0062) : une phase persistante et auditable entre
+  « éligible » et une future purge, avec revalidation obligatoire à l'échéance. Là encore **sans
+  aucune surface** — ni route, ni action serveur, ni écran, ni cron — et avec deux limites
+  explicites : **aucune durée de quarantaine n'est décidée**
+  (`QUARANTINE_DURATION_POLICY = UNDECIDED`, à ne pas confondre avec la durée de CONSERVATION de cinq
+  ans), donc aucun chemin ne peut calculer une échéance ; et l'échéance atteinte ne signifie
+  **jamais** « supprimable » mais `REVALIDATION_REQUISE` — aucune valeur d'aucun vocabulaire du lot
+  ne peut exprimer une autorisation de purge, un test structurel le verrouille.
+  Deux blocages subsistent donc avant qu'une suppression soit techniquement possible, et chacun
+  suffit seul : `DELETE_PATH_MISSING` — `bons_visite.document_id` est en SET NULL (supprimer le bon
+  laisserait la ligne `documents_bien` du PDF et son fichier) et `evenements_metier.bon_visite_id` en
+  NO ACTION bloque la suppression dès qu'un événement référence le bon — et
+  `QUARANTINE_POLICY_MISSING` (durée non décidée).
   `PROSPECT_MARKETING` et `CUSTOMER_MARKETING` restent bloquées faute de
   déclencheur fiable — `dernier_contact_le` est explicitement interdit comme dernier contact
   entrant, un test le verrouille.
