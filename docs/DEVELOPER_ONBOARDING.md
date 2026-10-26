@@ -124,6 +124,41 @@ npx tsc --noEmit -p tsconfig.json
 pnpm build
 ```
 
+### Sessions Claude Code Cloud
+
+Une session Claude Code Cloud (conteneur distant éphémère) n'a pas de daemon Docker. Le hook
+`SessionStart` versionné dans `.claude/hooks/session-start.sh` (déclaré dans
+`.claude/settings.json`) remplace la séquence ci-dessus à chaque démarrage ou reprise de session :
+
+1. `pnpm install --frozen-lockfile` depuis la racine ;
+2. démarrage du cluster PostgreSQL 16 préinstallé (`pg_ctlcluster 16 main start`), sans Docker ;
+3. création idempotente du rôle `atlas` et des bases `atlas` et `atlas_test`, selon la convention
+   locale publique de `infra/docker-compose.yml` ;
+4. vérification de la cible (hôte `127.0.0.1`, port `5432`, base `atlas_test`, contrôlée dans
+   l'URL puis côté serveur), puis application des migrations commitées sur `atlas_test`
+   uniquement ;
+5. export de `ATLAS_TEST_DATABASE_URL` pour la session.
+
+Garanties :
+
+- le hook sort immédiatement hors Cloud (`CLAUDE_CODE_REMOTE` différent de `true`) : il ne touche
+  jamais un poste local ;
+- il est idempotent (relancé à chaque reprise, durée d'environ 4 s une fois l'environnement prêt) ;
+- il ignore toute `DATABASE_URL` présente dans l'environnement et ne lit ni ne requiert aucun
+  secret. Aucune variable ni aucun secret n'est à configurer dans l'environnement Cloud : les
+  tests qui en ont besoin fixent eux-mêmes des valeurs factices, et les smoke E2E injectent les
+  leurs (`e2e/env.ts`) ;
+- la base `atlas` n'est pas migrée automatiquement. Pour `pnpm dev`, la migrer explicitement et
+  créer un `.env.local` avec des valeurs factices.
+
+`.claude/settings.json` refuse en outre `git push` vers `main` ou `develop` et tout force-push.
+Ce garde-fou est déclaratif : seule une protection de branche côté GitHub l'impose réellement.
+
+Limitation Playwright : le conteneur ne peut pas télécharger de navigateur (CDN Playwright bloqué
+par le proxy réseau). Le seul Chromium disponible est préinstallé dans `/opt/pw-browsers`
+(révision 1243, Chrome 153), alors que `@playwright/test` 1.62.1 attend la révision 1234
+(Chrome 151). `pnpm test:e2e` échoue donc tel quel dans une session Cloud.
+
 ---
 
 ## Partie 3 — Architecture
