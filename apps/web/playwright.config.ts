@@ -19,6 +19,12 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL_E2E,
     trace: "retain-on-failure",
+    // Sessions Claude Code Cloud : le CDN Playwright est inaccessible, le hook SessionStart désigne
+    // le Chromium préinstallé du conteneur (.claude/hooks/session-start.sh). Variable absente :
+    // comportement standard inchangé (navigateur téléchargé par `playwright install`).
+    ...(process.env.ATLAS_E2E_CHROMIUM_PATH
+      ? { launchOptions: { executablePath: process.env.ATLAS_E2E_CHROMIUM_PATH } }
+      : {}),
   },
   webServer: {
     command: "npx next dev --turbopack -p " + PORT_E2E,

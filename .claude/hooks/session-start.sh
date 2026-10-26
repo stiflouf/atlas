@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Hook SessionStart Claude Code : prépare un environnement de développement et de test autonome
-# dans une session Claude Code Cloud (dépendances pnpm, PostgreSQL 16 local, base de test migrée).
+# dans une session Claude Code Cloud (dépendances pnpm, PostgreSQL 16 local, base de test migrée,
+# Chromium préinstallé pour les smoke E2E).
 #
 # Principes non négociables :
 # - n'agit QUE dans une session Cloud (CLAUDE_CODE_REMOTE=true) : sur un poste local, sortie
@@ -95,10 +96,36 @@ rm -f "$journal"
 appliquees="$(psql -X -tA "$URL_TEST" -c "SELECT count(*) FROM drizzle.__drizzle_migrations")"
 etape "${appliquees} migrations appliquées sur ${BASE_TEST}"
 
-# --- 4. Variables de session (base de test explicite, jamais une DATABASE_URL applicative) ---
-if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  ligne="export ATLAS_TEST_DATABASE_URL=${URL_TEST}"
-  grep -qxF "$ligne" "$CLAUDE_ENV_FILE" 2>/dev/null || echo "$ligne" >> "$CLAUDE_ENV_FILE"
+# --- 4. Chromium pour les smoke E2E ---
+# Le conteneur ne peut pas télécharger de navigateur (CDN Playwright bloqué). Si la révision
+# attendue par @playwright/test est absente, désigner le headless shell préinstallé le plus récent
+# via ATLAS_E2E_CHROMIUM_PATH (lue par apps/web/playwright.config.ts).
+CHROMIUM_E2E=""
+revision_attendue="$(cd apps/web && node -e '
+  const pt = require.resolve("@playwright/test/package.json");
+  const pc = require.resolve("playwright-core/package.json", { paths: [pt] });
+  const b = require(require("node:path").join(require("node:path").dirname(pc), "browsers.json"));
+  console.log(b.browsers.find((x) => x.name === "chromium-headless-shell").revision);
+')"
+repertoire_navigateurs="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
+if [ -d "${repertoire_navigateurs}/chromium_headless_shell-${revision_attendue}" ]; then
+  etape "Chromium ${revision_attendue} attendu par Playwright présent : aucune substitution"
+else
+  CHROMIUM_E2E="$(ls -d "${repertoire_navigateurs}"/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell 2>/dev/null | sort -V | tail -n 1 || true)"
+  if [ -n "$CHROMIUM_E2E" ] && [ -x "$CHROMIUM_E2E" ]; then
+    etape "Chromium ${revision_attendue} absent : E2E sur $("$CHROMIUM_E2E" --version 2>/dev/null | head -n 1) (${CHROMIUM_E2E})"
+  else
+    CHROMIUM_E2E=""
+    etape "AVERTISSEMENT : aucun Chromium utilisable, pnpm test:e2e échouera (pnpm test non concerné)"
+  fi
 fi
+
+# --- 5. Variables de session (base de test explicite, jamais une DATABASE_URL applicative) ---
+ecrire_env() {
+  [ -n "${CLAUDE_ENV_FILE:-}" ] || return 0
+  grep -qxF "$1" "$CLAUDE_ENV_FILE" 2>/dev/null || echo "$1" >> "$CLAUDE_ENV_FILE"
+}
+ecrire_env "export ATLAS_TEST_DATABASE_URL=${URL_TEST}"
+[ -z "$CHROMIUM_E2E" ] || ecrire_env "export ATLAS_E2E_CHROMIUM_PATH=${CHROMIUM_E2E}"
 
 etape "environnement prêt (pnpm test utilisera ${BASE_TEST})"

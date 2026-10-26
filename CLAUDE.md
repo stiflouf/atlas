@@ -49,12 +49,12 @@ Depuis `apps/web` :
 npx tsc --noEmit -p tsconfig.json   # typecheck
 pnpm test                           # Vitest, base atlas_test
 pnpm build                          # build Next.js
-pnpm test:e2e                       # 2 smoke Playwright (voir limitation Cloud dans l'onboarding)
+pnpm test:e2e                       # 2 smoke Playwright (Chromium Cloud : ATLAS_E2E_CHROMIUM_PATH)
 ```
 
 ## Sessions Claude Code Cloud
 
 Le hook `.claude/hooks/session-start.sh` (déclaré dans `.claude/settings.json`) prépare
 automatiquement l'environnement : dépendances, PostgreSQL 16 local sans Docker, base `atlas_test`
-migrée. Il ne s'exécute que si `CLAUDE_CODE_REMOTE=true`. Détail et limitations :
+migrée, Chromium préinstallé pour les smoke E2E. Il ne s'exécute que si `CLAUDE_CODE_REMOTE=true`. Détail et limitations :
 `docs/DEVELOPER_ONBOARDING.md`, Partie 2, section « Sessions Claude Code Cloud ».
