@@ -28,6 +28,30 @@ const CHEMINS_TECHNIQUES = new Set([
   "/api/compatibilite/baseline",
 ]);
 
+// RETOUR D'AUTORISATION OAUTH MÉTIER (Calendar et Gmail partagent ce seul callback, via
+// GOOGLE_REDIRECT_URI). C'est GOOGLE qui redirige le NAVIGATEUR ici : le Proxy ne peut donc pas être
+// ce qui décide du sort de la requête, parce qu'il n'a aucun moyen de répondre quoi que ce soit
+// d'utile à une personne qui revient d'un écran de consentement.
+//
+// Ni CHEMINS_PUBLICS, ni CHEMINS_TECHNIQUES, et ce n'est pas une nuance : CHEMINS_PUBLICS désigne
+// les points qui permettent d'OBTENIR une session (ce callback n'en établit aucune), et
+// CHEMINS_TECHNIQUES ceux dont la garde est un secret Bearer (ce callback n'en a pas). Son modèle
+// de sécurité est un triplet, et il vit entièrement dans son Route Handler : state à usage unique
+// (cookie httpOnly), session Atlas exigée, et égalité entre le `sub` scellé dans le state et celui
+// de la session. Les trois sont conservés — voir api/auth/google/callback/route.ts et ses tests.
+//
+// Pourquoi laisser passer : intercepté ici, un retour sans session recevait un `401 {"erreur":
+// "Non authentifié."}` en JSON brut. Aucune redirection vers /connexion, aucun log, et le handler
+// n'avait jamais la main pour nommer la cause — l'échec était à la fois invisible côté serveur et
+// inexploitable côté utilisateur (constat de production : connexions_google restait à 0 sans
+// qu'aucune ligne de journal n'existe). Laisser passer ne retire aucun contrôle, cela les déplace
+// là où ils peuvent produire une réponse honnête.
+//
+// Même raisonnement que /api/auth/atlas/callback, déjà public ci-dessus pour ce motif exact : un
+// callback OAuth est un point d'entrée dont l'autorisation se prouve APRÈS, sur le contenu de la
+// requête, jamais avant.
+const CHEMINS_RETOUR_OAUTH_METIER = new Set(["/api/auth/google/callback"]);
+
 async function possedeSessionValide(request: NextRequest): Promise<boolean> {
   try {
     // `NextRequest.cookies` (RequestCookies, lecture) et l'interface CookieStore d'iron-session
@@ -52,7 +76,11 @@ async function possedeSessionValide(request: NextRequest): Promise<boolean> {
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
-  if (CHEMINS_PUBLICS.has(pathname) || CHEMINS_TECHNIQUES.has(pathname)) {
+  if (
+    CHEMINS_PUBLICS.has(pathname) ||
+    CHEMINS_TECHNIQUES.has(pathname) ||
+    CHEMINS_RETOUR_OAUTH_METIER.has(pathname)
+  ) {
     return NextResponse.next();
   }
 

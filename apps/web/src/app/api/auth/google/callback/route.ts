@@ -13,6 +13,25 @@ import { lireSessionAtlas } from "@/lib/auth/sessionAtlas";
 // cross-site, ce cas précis. Session absente ici (ex. session expirée pendant le consentement
 // Google) → refus explicite, jamais une connexion Google silencieusement acceptée sans conseiller
 // identifié.
+// OBSERVABILITÉ des sorties de refus (FIX_GOOGLE_OAUTH_CALLBACK_PROXY_V1). Trois des quatre sorties
+// de cette fonction étaient muettes : une reconnexion Google qui échouait ne laissait AUCUNE trace,
+// et diagnostiquer revenait à deviner entre quatre causes indistinguables.
+//
+// Vocabulaire FERMÉ, et un code technique générique est tout ce qui sort : jamais le code OAuth,
+// jamais le state (ni brut ni comparé), jamais un cookie, jamais un token, jamais l'email, jamais
+// l'`identite_sub`, jamais le corps de réponse de Google. Un journal d'échec d'authentification est
+// précisément l'endroit où une donnée personnelle ne doit pas atterrir — le code dit CE QUI a
+// échoué, pas À QUI.
+type CodeEchecCallbackGoogle =
+  | "GOOGLE_OAUTH_CALLBACK_NO_SESSION"
+  | "GOOGLE_OAUTH_CALLBACK_PROVIDER_ERROR"
+  | "GOOGLE_OAUTH_CALLBACK_STATE_INVALID"
+  | "GOOGLE_OAUTH_CALLBACK_IDENTITY_MISMATCH";
+
+function journaliserEchecCallback(code: CodeEchecCallbackGoogle): void {
+  console.error(`[google-oauth] callback refusé : ${code}`);
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const origine = origineMetierPublique();
@@ -26,10 +45,22 @@ export async function GET(request: Request) {
   const sessionAtlas = await lireSessionAtlas();
 
   if (!sessionAtlas) {
+    journaliserEchecCallback("GOOGLE_OAUTH_CALLBACK_NO_SESSION");
     return NextResponse.redirect(new URL("/connexion?erreur=connexion_echouee", origine));
   }
 
-  if (erreur || !code || !state || !chargeState || state !== chargeState.state) {
+  // Erreur FOURNISSEUR séparée des problèmes de state, alors qu'elles partageaient une seule
+  // condition : la redirection reste identique (c'est le même refus pour l'utilisateur), mais les
+  // deux causes n'appellent pas la même action — un `access_denied` est un choix de la personne,
+  // un state invalide est un cookie expiré ou un flux rejoué. Les confondre dans le journal
+  // reviendrait à n'avoir rien journalisé.
+  if (erreur) {
+    journaliserEchecCallback("GOOGLE_OAUTH_CALLBACK_PROVIDER_ERROR");
+    return NextResponse.redirect(new URL("/?google=erreur", origine));
+  }
+
+  if (!code || !state || !chargeState || state !== chargeState.state) {
+    journaliserEchecCallback("GOOGLE_OAUTH_CALLBACK_STATE_INVALID");
     return NextResponse.redirect(new URL("/?google=erreur", origine));
   }
 
@@ -41,6 +72,7 @@ export async function GET(request: Request) {
   // par A serait écrit sous l'identité de B, qui hériterait silencieusement de son agenda et de sa
   // boîte Gmail. Refus, et le token n'est même pas demandé à Google.
   if (chargeState.identiteSub !== sessionAtlas.sub) {
+    journaliserEchecCallback("GOOGLE_OAUTH_CALLBACK_IDENTITY_MISMATCH");
     return NextResponse.redirect(new URL("/?google=erreur", origine));
   }
 

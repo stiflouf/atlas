@@ -184,6 +184,99 @@ describe("Deux flux OAuth concurrents — les identités ne se mélangent pas", 
   });
 });
 
+// FIX_GOOGLE_OAUTH_CALLBACK_PROXY_V1 — les quatre sorties de refus nomment désormais leur cause.
+// Trois d'entre elles étaient totalement muettes : un échec de reconnexion ne laissait aucune trace
+// serveur, et quatre causes indistinguables restaient ouvertes au diagnostic.
+describe("Observabilité des refus du callback — un code technique, et aucune donnée personnelle", () => {
+  const CODE_OAUTH = "code-secret-oauth";
+  const STATE = "state-abc";
+
+  function espionnerJournal() {
+    return vi.spyOn(console, "error").mockImplementation(() => {});
+  }
+
+  function journalComplet(espion: ReturnType<typeof espionnerJournal>): string {
+    return espion.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
+  }
+
+  it("aucune session : journalise GOOGLE_OAUTH_CALLBACK_NO_SESSION", async () => {
+    const espion = espionnerJournal();
+    await semerState(STATE, SUB_A);
+
+    await appelerCallback({ code: CODE_OAUTH, state: STATE });
+
+    expect(journalComplet(espion)).toContain("GOOGLE_OAUTH_CALLBACK_NO_SESSION");
+    espion.mockRestore();
+  });
+
+  it("erreur renvoyée par Google : journalise GOOGLE_OAUTH_CALLBACK_PROVIDER_ERROR", async () => {
+    const espion = espionnerJournal();
+    await ouvrirSession(SUB_A);
+    await semerState(STATE, SUB_A);
+
+    await appelerCallback({ error: "access_denied", state: STATE });
+
+    expect(journalComplet(espion)).toContain("GOOGLE_OAUTH_CALLBACK_PROVIDER_ERROR");
+    espion.mockRestore();
+  });
+
+  it("state absent : journalise GOOGLE_OAUTH_CALLBACK_STATE_INVALID", async () => {
+    const espion = espionnerJournal();
+    await ouvrirSession(SUB_A);
+
+    await appelerCallback({ code: CODE_OAUTH, state: STATE });
+
+    expect(journalComplet(espion)).toContain("GOOGLE_OAUTH_CALLBACK_STATE_INVALID");
+    espion.mockRestore();
+  });
+
+  it("identité changée pendant le consentement : journalise GOOGLE_OAUTH_CALLBACK_IDENTITY_MISMATCH", async () => {
+    const espion = espionnerJournal();
+    await semerState(STATE, SUB_A);
+    await ouvrirSession(SUB_B);
+
+    await appelerCallback({ code: CODE_OAUTH, state: STATE });
+
+    expect(journalComplet(espion)).toContain("GOOGLE_OAUTH_CALLBACK_IDENTITY_MISMATCH");
+    espion.mockRestore();
+  });
+
+  // LA garantie qui compte autant que les quatre précédentes : un journal d'échec
+  // d'authentification est précisément l'endroit où une donnée personnelle ne doit pas atterrir.
+  it("aucun refus ne journalise le code OAuth, le state, un sub ni un email", async () => {
+    const espion = espionnerJournal();
+
+    await semerState(STATE, SUB_A);
+    await appelerCallback({ code: CODE_OAUTH, state: STATE });
+
+    await ouvrirSession(SUB_B);
+    await appelerCallback({ code: CODE_OAUTH, state: STATE });
+
+    await appelerCallback({ error: "access_denied", state: STATE });
+    await appelerCallback({ code: CODE_OAUTH, state: "state-sans-cookie" });
+
+    const journal = journalComplet(espion);
+    expect(journal).not.toContain(CODE_OAUTH);
+    expect(journal).not.toContain(STATE);
+    expect(journal).not.toContain(SUB_A);
+    expect(journal).not.toContain(SUB_B);
+    expect(journal).not.toContain("@example.com");
+    espion.mockRestore();
+  });
+
+  it("un succès ne journalise rien", async () => {
+    const espion = espionnerJournal();
+    await ouvrirSession(SUB_A);
+    await semerState(STATE, SUB_A);
+
+    const reponse = await appelerCallback({ code: CODE_OAUTH, state: STATE });
+
+    expect(reponse.headers.get("location")).toBe(`${ORIGINE}/`);
+    expect(journalComplet(espion)).not.toContain("GOOGLE_OAUTH_CALLBACK");
+    espion.mockRestore();
+  });
+});
+
 describe("T5 (route) — la déconnexion ne révoque que son propre token", () => {
   it("logout sous la session A lit, révoque et supprime la connexion de A", async () => {
     await ouvrirSession(SUB_A);

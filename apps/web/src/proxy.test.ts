@@ -92,6 +92,54 @@ describe("proxy (ADR-047) — PRIVATE BY DEFAULT", () => {
     expect(reponse.headers.get("location")).toBeNull();
   });
 
+  // FIX_GOOGLE_OAUTH_CALLBACK_PROXY_V1 — LE cas de ce lot. Google redirige le navigateur sur ce
+  // callback ; intercepté ici, un retour sans session recevait un 401 JSON brut, sans redirection
+  // et sans log, et le handler n'avait jamais la main pour nommer la cause.
+  it("le callback OAuth métier atteint son handler sans session — le Proxy ne pose ni 401 ni redirection", async () => {
+    getIronSessionMock.mockResolvedValue({});
+    const { proxy } = await import("./proxy");
+    const reponse = await proxy(requete("/api/auth/google/callback"));
+
+    expect(reponse.status).toBe(200);
+    expect(reponse.status).not.toBe(401);
+    expect(reponse.headers.get("location")).toBeNull();
+  });
+
+  it("le callback OAuth métier passe aussi avec une session valide", async () => {
+    getIronSessionMock.mockResolvedValue({ sub: "google-sub-123", email: "conseiller@example.com" });
+    const { proxy } = await import("./proxy");
+    const reponse = await proxy(requete("/api/auth/google/callback"));
+
+    expect(reponse.status).toBe(200);
+    expect(reponse.headers.get("location")).toBeNull();
+  });
+
+  // Ce lot ouvre le RETOUR, jamais le DÉPART : initier une autorisation Google reste réservé à un
+  // conseiller déjà authentifié (ADR-047). Si l'un de ces deux chemins devenait public, un visiteur
+  // anonyme pourrait déclencher un flux de consentement pour l'instance.
+  it.each(["/api/auth/google/login", "/api/auth/google/gmail/login", "/api/auth/google/logout"])(
+    "%s reste privé : le Proxy refuse un anonyme",
+    async (chemin) => {
+      getIronSessionMock.mockResolvedValue({});
+      const { proxy } = await import("./proxy");
+      const reponse = await proxy(requete(chemin));
+
+      expect(reponse.status).toBe(401);
+    }
+  );
+
+  // Épinglage délibéré : /api/retention/dry-run souffre du même défaut de câblage, et ce lot ne le
+  // corrige PAS (périmètre explicite — un endpoint machine Bearer n'a pas le modèle de sécurité
+  // d'un retour OAuth utilisateur). Ce test échouera le jour où ce sera traité, et c'est voulu :
+  // il force à le faire sciemment, dans le lot prévu pour cela.
+  it("/api/retention/dry-run reste refusé par le Proxy — hors périmètre de ce lot", async () => {
+    getIronSessionMock.mockResolvedValue({});
+    const { proxy } = await import("./proxy");
+    const reponse = await proxy(requete("/api/retention/dry-run"));
+
+    expect(reponse.status).toBe(401);
+  });
+
   it("session absente à cause d'une configuration manquante (ATLAS_SESSION_PASSWORD) reste fail-closed", async () => {
     vi.unstubAllEnvs();
     vi.stubEnv("ATLAS_SESSION_PASSWORD", "");
@@ -132,4 +180,12 @@ describe("config.matcher (ADR-052) — /brand/* public, routes privées inchang�
       expect(await matcherDeclenchePourLeProxy(chemin)).toBe(true);
     }
   );
+
+  // FIX_GOOGLE_OAUTH_CALLBACK_PROXY_V1 — le callback est laissé passer PAR LA LOGIQUE du Proxy, pas
+  // en l'excluant du matcher. La distinction compte : une exclusion de matcher le rendrait
+  // invisible au Proxy pour toujours, y compris pour une garde future, alors qu'une entrée dans un
+  // ensemble nommé reste lisible et révocable à un seul endroit.
+  it("/api/auth/google/callback reste couvert par le matcher (laissé passer par la logique, non par exclusion)", async () => {
+    expect(await matcherDeclenchePourLeProxy("/api/auth/google/callback")).toBe(true);
+  });
 });
