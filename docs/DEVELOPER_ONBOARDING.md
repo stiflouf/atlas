@@ -55,7 +55,7 @@ semble manquant, vérifier que ce n'est pas déjà documenté comme volontaire.
 - Next.js 16 (App Router, Server Components, Server Actions), React 19, TypeScript strict.
 - PostgreSQL via Drizzle ORM.
 - Vitest (tests unitaires + intégration Postgres réelle).
-- Playwright (2 smoke E2E seulement).
+- Playwright (3 fichiers de smoke E2E seulement, 5 scénarios).
 - `iron-session` (session Atlas), Google OAuth (identité Atlas + Calendar/Gmail métier, deux flux
   distincts).
 - Stockage documentaire filesystem, chemin configurable (`ATLAS_DOCUMENT_STORAGE_DIR`).
@@ -110,7 +110,7 @@ docker exec <conteneur-postgres> psql -U atlas -d atlas -c "CREATE DATABASE atla
 DATABASE_URL=postgresql://atlas:atlas@localhost:5432/atlas_test pnpm db:migrate
 
 pnpm test          # vitest run — utilise atlas_test automatiquement, jamais la base de dev
-pnpm test:e2e      # 2 smoke Playwright — démarre son propre serveur Next.js dédié (port 3100)
+pnpm test:e2e      # 3 fichiers de smoke Playwright — démarre son propre serveur Next.js dédié (port 3100)
 ```
 
 **`pnpm test` ne peut jamais utiliser implicitement une `DATABASE_URL` de production** même si elle
@@ -256,12 +256,17 @@ sauvegarde** — voir ADR-050 et `docs/PILOT_RUNBOOK.md`.
 - **Vitest** — mélange de tests purs et de tests d'intégration Postgres réelle (jamais mockée). La
   RC1 (`v1.0.0-rc1`) a été validée avec 1198 tests Vitest, 100 % verts sur 3 exécutions complètes
   consécutives — ce nombre évoluera, ne pas le considérer figé.
-- **Playwright** — exactement 2 smoke E2E, jamais une suite étendue :
+- **Playwright** — 3 fichiers de smoke E2E (5 scénarios), jamais une suite étendue :
   - `e2e/coeur.smoke.spec.ts` — prouve le câblage réel navigateur → Proxy → session → SSR →
     Server Action → Postgres (session sans cookie → `/connexion`, création Bien/Acquéreur/Compromis,
     déconnexion réelle).
   - `e2e/documents-adr049.smoke.spec.ts` — prouve le parcours documentaire complet en navigateur
     (upload, téléchargement ZIP du Pack, enregistrement de transmission, historique, manifeste).
+  - `e2e/visite-signature.smoke.spec.ts` — prouve visite → bon de visite → signature manuscrite →
+    PDF → hash → téléchargement, en 3 scénarios : tracé à la souris, tracé AU DOIGT sur viewport
+    tablette (événements tactiles réels via CDP), et refus d'un brouillon annulé.
+  - Budget de 180 s par test (`playwright.config.ts`) : sous `next dev`, chaque route est compilée
+    au premier passage. Mesuré, jamais un confort — voir `docs/KNOWN_LIMITATIONS.md`.
   - Jamais exécutés par `pnpm test`, jamais dans une CI (absente à ce jour).
 
 ### Definition of Done d'une modification
@@ -361,6 +366,8 @@ Aucune valeur n'est jamais recopiée dans un document.
 | Google métier | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GOOGLE_TOKEN_ENCRYPTION_KEY` |
 | Jobs périodiques (Bearer machine) | `AUTOMATISATIONS_SCAN_SECRET`, `AUTOMATISATIONS_REPRISE_SECRET`, `COMPATIBILITE_SCAN_SECRET`, `COMPATIBILITE_BASELINE_SECRET` |
 | Documents | `ATLAS_DOCUMENT_STORAGE_DIR` |
+| Identité affichée | `ATLAS_ADVISOR_DISPLAY_NAME` (facultative, repli « Conseiller DOMIORA ») |
+| Fournisseurs externes facultatifs | `PRIM_API_KEY` (transports Île-de-France), `DOMIORA_REDACTION_*` (reformulation LLM) — absents de la production, à ne pas activer sans qualification du sous-traitant |
 
 Configuration exhaustive de production : `docs/PILOT_RUNBOOK.md` + checklist ADR-047.
 

@@ -57,8 +57,9 @@ touche une décision structurante, en écrire une avant de coder (voir `docs/adr
 ## Tests attendus
 
 - `pnpm test` (Vitest) doit passer avant toute PR touchant `apps/web/src/`.
-- `pnpm test:e2e` (Playwright, 2 smoke) doit être rejoué si le changement touche l'authentification,
-  le câblage navigateur, ou le parcours documentaire/Pack Notaire.
+- `pnpm test:e2e` (Playwright, 3 fichiers de smoke) doit être rejoué si le changement touche
+  l'authentification, le câblage navigateur, le parcours documentaire/Pack Notaire, ou le parcours
+  visite → bon de visite → signature.
 - Jamais de test contre une base de production — voir le garde-fou décrit dans
   `docs/DEVELOPER_ONBOARDING.md`, Partie 4.
 
