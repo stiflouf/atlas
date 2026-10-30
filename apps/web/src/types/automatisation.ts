@@ -127,6 +127,56 @@ export const CODES_REGLE_AUTOMATISATION: CodeRegleAutomatisation[] = [
   "visite_sans_compte_rendu",
 ];
 
+// Règles TEMPORELLES (ADR-033, généralisé AUTOMATION_ENGINE_GENERALIZATION_V1, étendu
+// VISIT_AUTOMATION_V1) — SOURCE DE VÉRITÉ UNIQUE, consommée par l'écran `/automatisations` ET par
+// la Server Action d'activation. Avant PILOT_PRODUCTION_HARDENING_V1 chacun des deux portait sa
+// propre liste écrite à la main : elles ont divergé (4 côté écran, 6 côté action), ce qui rendait
+// `visite_j_1` et `visite_sans_compte_rendu` IMPOSSIBLES à configurer — aucun champ de seuil rendu,
+// donc `seuil_jours` restait NULL, donc l'action refusait l'activation. Déclarer la liste ici une
+// fois ferme ce mode de panne : l'écart ne peut plus exister, il n'y a plus deux listes.
+//
+// « Temporelle » et « exige un seuil » sont la MÊME propriété, pas deux listes qui coïncideraient :
+// chaque scanner (src/lib/automatisations/scanners/*.ts) commence par refuser de s'exécuter si
+// `seuilJours == null`. Une règle temporelle sans seuil ne produit donc jamais rien — l'activer
+// serait un mensonge d'interface, d'où le refus explicite côté action.
+//
+// Cohérence avec le registre d'exécution (`SCANNERS_TEMPORELS`) verrouillée par une garde
+// structurelle : src/lib/automatisations/reglesTemporelles.coherence.test.ts.
+export const CODES_REGLE_TEMPORELLE = [
+  "inactivite_prospect_vendeur",
+  "mandat_expire_bientot",
+  "offre_sans_decision",
+  "offre_acceptee_sans_compromis",
+  "visite_j_1",
+  "visite_sans_compte_rendu",
+] as const satisfies readonly CodeRegleAutomatisation[];
+
+export type CodeRegleTemporelle = (typeof CODES_REGLE_TEMPORELLE)[number];
+
+export function estRegleTemporelle(code: CodeRegleAutomatisation): code is CodeRegleTemporelle {
+  return (CODES_REGLE_TEMPORELLE as readonly CodeRegleAutomatisation[]).includes(code);
+}
+
+// Libellé du seuil, propre à chaque règle temporelle : le sens de `seuil_jours` se lit au niveau de
+// la LIGNE, jamais de la colonne (voir db/schema.ts) — « après N jours sans contact », « N jours
+// avant l'échéance », « dans exactement N jours »... jamais un texte générique unique qui perdrait
+// le sens métier, et jamais un repli sur « Après / jours » qui en inventerait un faux.
+//
+// `Record` COMPLET et non `Partial` : c'est le compilateur, pas un test, qui refuse désormais
+// d'ajouter une 7e règle temporelle sans dire à l'utilisateur ce que son seuil signifie.
+export const LIBELLE_SEUIL_REGLE_TEMPORELLE: Record<CodeRegleTemporelle, { prefixe: string; suffixe: string }> = {
+  inactivite_prospect_vendeur: { prefixe: "Après", suffixe: "jours sans contact" },
+  mandat_expire_bientot: { prefixe: "Dans les", suffixe: "jours avant l'échéance du mandat" },
+  offre_sans_decision: { prefixe: "Après", suffixe: "jours sans décision sur l'offre" },
+  offre_acceptee_sans_compromis: { prefixe: "Après", suffixe: "jours depuis l'acceptation, sans compromis" },
+  // Fenêtre d'un SEUL jour civil, pas un intervalle : le scanner compare `datePrevue` à
+  // `aujourd'hui + seuilJours` par ÉGALITÉ (`visitesPlanifieesPourDate`). Le libellé doit donc dire
+  // « dans exactement », sinon un conseiller qui saisit 3 croirait couvrir J-1, J-2 et J-3.
+  visite_j_1: { prefixe: "Visite prévue dans exactement", suffixe: "jours (1 = la veille)" },
+  // Seuil d'ancienneté, lui bien cumulatif : `datePrevue <= aujourd'hui - seuilJours`.
+  visite_sans_compte_rendu: { prefixe: "Après", suffixe: "jours depuis la date prévue, sans compte rendu" },
+};
+
 // Snapshot d'exécution d'une règle pour un événement précis. Trois états dérivés, jamais un
 // troisième "incertain" (créer une tâche est une écriture Postgres locale, sans ambiguïté réseau
 // contrairement à un envoi Gmail, ADR-031-bis) — `a_traiter` est l'état normal juste après le
@@ -161,10 +211,10 @@ export type ConfigurationAutomatisation = {
   active: boolean;
   // Seuil produit explicite (ADR-033), jamais une constante cachée — GÉNÉRALISÉ par
   // AUTOMATION_ENGINE_GENERALIZATION_V1 (colonne db renommée `seuil_jours`, plus de nom lié à une
-  // seule règle) : n'a de sens que pour les règles temporelles à seuil
-  // (`inactivite_prospect_vendeur`, `mandat_expire_bientot`, `offre_sans_decision`,
-  // `offre_acceptee_sans_compromis`), `undefined` pour les autres règles ET par défaut. `undefined`
-  // interdit l'activation de la règle (validée côté Server Action) : jamais de valeur implicite.
+  // seule règle) : n'a de sens que pour les règles temporelles à seuil — liste canonique
+  // `CODES_REGLE_TEMPORELLE` ci-dessus, jamais recopiée ici —, `undefined` pour les autres règles
+  // ET par défaut. `undefined` interdit l'activation de la règle (validée côté Server Action) :
+  // jamais de valeur implicite.
   seuilJours?: number;
   modifieLe: string;
 };

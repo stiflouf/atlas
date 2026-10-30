@@ -332,6 +332,19 @@ réévaluer si une prochaine Function doit être créée en CLI.
 
 ## 6. Stockage documentaire et backup
 
+> **Depuis `PILOT_PRODUCTION_HARDENING_V1` : les commandes manuelles décrites plus bas sont
+> scriptées.** `ops/backup/backup-db.sh`, `ops/backup/backup-volume.sh` et
+> `ops/backup/restore-test.sh` — voir **`ops/backup/README.md`** (source canonique de la procédure,
+> des variables et de l'automatisation). Les scripts prouvent la cible avant toute commande
+> distante, refusent `domiora-demo`, n'ouvrent jamais `DATABASE_PUBLIC_URL`, n'impriment aucun
+> secret, et vérifient le SHA-256 dans le conteneur ET sur le poste. La section ci-dessous reste la
+> référence du RAISONNEMENT et de la validation d'août 2026 ; elle n'est plus le mode opératoire.
+>
+> Ce qui n'est **pas** résolu : la destination reste le poste de l'exploitant
+> (`~/domiora-backups/railway/`), aucune planification n'est posée, et aucune destination hors site
+> n'est choisie — `OFFSITE_BACKUP_DESTINATION = DECISION_REQUIRED`, motifs dans
+> `ops/backup/README.md`.
+
 - Attacher/vérifier le volume persistant et `ATLAS_DOCUMENT_STORAGE_DIR` — voir checklist ADR-047.
 - **Un volume persistant n'est pas une sauvegarde.** Recommandation pilote (échelle mono-conseiller,
   faible volume) : procédure **manuelle documentée**, pas un moteur de backup automatisé —
@@ -449,17 +462,40 @@ déclenchée par défaut.
 
 ## 9. Incidents simples
 
+**Premier geste de diagnostic, depuis `PILOT_PRODUCTION_HARDENING_V1` : `GET /api/health`.** Sonde
+publique, sans session ni secret (une sonde n'a ni cookie ni en-tête), qui ne renvoie que trois
+états et jamais un détail système :
+
+```
+curl -s -o /dev/null -w '%{http_code}\n' https://domiora-production.up.railway.app/api/health
+curl -s https://domiora-production.up.railway.app/api/health
+# 200 {"application":"UP","database":"UP","documentStorage":"UP"}
+# 503 dès qu'une des deux dépendances est DOWN — le corps dit laquelle
+```
+
+`documentStorage: "DOWN"` = volume détaché ou `ATLAS_DOCUMENT_STORAGE_DIR` perdue (la vérification
+exige l'écriture : un volume seulement lisible n'est pas UP). `database: "DOWN"` = base injoignable.
+Le diagnostic précis reste dans les logs du service, jamais dans la réponse.
+
 | Symptôme | Piste de diagnostic |
 |---|---|
-| Atlas inaccessible | Logs de la plateforme d'hébergement + état du service (crash, redémarrage en boucle). |
+| Atlas inaccessible | `GET /api/health` d'abord, puis logs de la plateforme + état du service (crash, redémarrage en boucle). |
 | Login impossible | Vérifier `GOOGLE_ATLAS_REDIRECT_URI` et son enregistrement exact côté Google Cloud Console ; vérifier `ATLAS_ALLOWED_EMAIL`. |
 | Documents en erreur 503 | Volume détaché, `ATLAS_DOCUMENT_STORAGE_DIR` absente/incorrecte, ou permissions insuffisantes — voir checklist ADR-047, section Stockage documentaire. |
 | Jobs inactifs / non déclenchés | Vérifier la configuration du scheduler externe (aucun cron interne à Atlas) et la validité des secrets Bearer. |
 | Google déconnecté (Calendar/Gmail) | Vérifier le badge de connexion sur `/` ; reconnexion via les liens `/api/auth/google/login` — la révocation Google est globale (Calendar + Gmail), voir `docs/KNOWN_LIMITATIONS.md`. |
 
 Pas de système d'observabilité complexe en V1 — ces vérifications reposent sur les logs de la
-plateforme d'hébergement et un contrôle manuel direct, cohérent avec un pilote à un seul
-utilisateur actif qui constate lui-même une anomalie.
+plateforme d'hébergement et un contrôle manuel direct.
+
+**Ce qui a changé, et ce qui n'a pas changé** (`PILOT_PRODUCTION_HARDENING_V1`) : la
+*disponibilité* est désormais constatable sans intervention humaine (`/api/health`, à brancher sur
+une sonde). La *détection d'erreur applicative*, elle, reste entièrement manuelle : aucun
+agrégateur, aucune alerte, aucun compteur. Une erreur serveur produit un écran portant une
+`Référence technique` (le `digest` Next) que l'utilisateur doit transmettre pour qu'elle soit
+retrouvée dans les logs. Tant que `ERROR_ALERTING_PROVIDER` n'est pas tranché
+(`docs/KNOWN_LIMITATIONS.md`), **une erreur qui n'est pas signalée reste invisible** — c'est à dire
+honnêtement, pas à sous-entendre comme couvert par la sonde.
 
 ## 10. Code freeze (à partir de la validation V1 Candidate)
 

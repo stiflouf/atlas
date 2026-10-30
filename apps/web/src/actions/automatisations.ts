@@ -6,22 +6,20 @@ import {
   definirSeuilAutomatisation,
   getConfigurationAutomatisation,
 } from "@/lib/automatisations/configurationAutomatisationRepository";
-import { CODES_REGLE_AUTOMATISATION, type CodeRegleAutomatisation } from "@/types/automatisation";
+import {
+  CODES_REGLE_AUTOMATISATION,
+  estRegleTemporelle,
+  type CodeRegleAutomatisation,
+} from "@/types/automatisation";
 import { exigerSessionAtlas } from "@/lib/auth/sessionAtlas";
 import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 
 // Règles dont l'activation exige un paramètre produit explicite (ADR-033, point 4 ; généralisé
-// AUTOMATION_ENGINE_GENERALIZATION_V1 aux 3 nouvelles règles temporelles à seuil). Vérifié ici
-// (Server Action), jamais dans le repository (ADR-007 : la validation métier ne vit jamais dans la
-// couche IO).
-const REGLES_AVEC_SEUIL_OBLIGATOIRE: CodeRegleAutomatisation[] = [
-  "inactivite_prospect_vendeur",
-  "mandat_expire_bientot",
-  "offre_sans_decision",
-  "offre_acceptee_sans_compromis",
-  "visite_j_1",
-  "visite_sans_compte_rendu",
-];
+// AUTOMATION_ENGINE_GENERALIZATION_V1, étendu VISIT_AUTOMATION_V1) = exactement les règles
+// temporelles, dérivées de `CODES_REGLE_TEMPORELLE` (types/automatisation.ts) et jamais recopiées
+// ici : PILOT_PRODUCTION_HARDENING_V1 a supprimé la liste locale de ce fichier, qui avait divergé de
+// celle de l'écran. La validation reste ici (Server Action), jamais dans le repository (ADR-007 :
+// la validation métier ne vit jamais dans la couche IO).
 
 // Bascule explicite (ADR-032, point 7) — jamais un état implicite. `active` vient d'une case à
 // cocher/valeur de formulaire, jamais deviné. Refuse explicitement d'activer une règle qui exige
@@ -40,7 +38,7 @@ export async function basculerAutomatisationAction(formData: FormData): Promise<
   // refusé) une activation ici sur la foi du seuil renseigné dans un AUTRE workspace.
   const workspaceId = await exigerWorkspaceCourant();
 
-  if (active && REGLES_AVEC_SEUIL_OBLIGATOIRE.includes(regleCode as CodeRegleAutomatisation)) {
+  if (active && estRegleTemporelle(regleCode as CodeRegleAutomatisation)) {
     const configuration = await getConfigurationAutomatisation(regleCode as CodeRegleAutomatisation, workspaceId);
     if (configuration.seuilJours == null) {
       throw new Error("Impossible d'activer cette règle sans seuil configuré.");

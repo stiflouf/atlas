@@ -9,7 +9,8 @@ import { exigerWorkspaceCourant } from "@/lib/auth/workspaceCourant";
 import {
   deriverEtatExecutionAutomatisation,
   deriverEtatRunScanAutomatisation,
-  type CodeRegleAutomatisation,
+  estRegleTemporelle,
+  LIBELLE_SEUIL_REGLE_TEMPORELLE,
   type EtatExecutionAutomatisation,
   type EtatRunScanAutomatisation,
 } from "@/types/automatisation";
@@ -38,25 +39,14 @@ const COULEUR_ETAT_RUN: Record<EtatRunScanAutomatisation, string> = {
   echoue: "text-danger",
 };
 
-// Règles temporelles (ADR-033, généralisées AUTOMATION_ENGINE_GENERALIZATION_V1) — les seules à
-// exposer un seuil et un dernier passage de scanner, distinct de la dernière exécution ADR-032 (qui
-// n'existe que si une occurrence a été trouvée).
-const REGLES_TEMPORELLES: CodeRegleAutomatisation[] = [
-  "inactivite_prospect_vendeur",
-  "mandat_expire_bientot",
-  "offre_sans_decision",
-  "offre_acceptee_sans_compromis",
-];
-
-// Libellé du seuil, propre à chaque règle temporelle (le sens de `seuil_jours` se lit au niveau de
-// la ligne, jamais de la colonne — voir db/schema.ts) : "Après N jours sans contact",
-// "N jours avant l'échéance"... jamais un seul texte générique qui perdrait le sens métier.
-const LIBELLE_SEUIL: Partial<Record<CodeRegleAutomatisation, { prefixe: string; suffixe: string }>> = {
-  inactivite_prospect_vendeur: { prefixe: "Après", suffixe: "jours sans contact" },
-  mandat_expire_bientot: { prefixe: "Dans les", suffixe: "jours avant l'échéance du mandat" },
-  offre_sans_decision: { prefixe: "Après", suffixe: "jours sans décision sur l'offre" },
-  offre_acceptee_sans_compromis: { prefixe: "Après", suffixe: "jours depuis l'acceptation, sans compromis" },
-};
+// Règles temporelles (ADR-033, généralisées AUTOMATION_ENGINE_GENERALIZATION_V1, étendues
+// VISIT_AUTOMATION_V1) — les seules à exposer un seuil et un dernier passage de scanner, distinct de
+// la dernière exécution ADR-032 (qui n'existe que si une occurrence a été trouvée).
+//
+// PILOT_PRODUCTION_HARDENING_V1 — `estRegleTemporelle` et `LIBELLE_SEUIL_REGLE_TEMPORELLE` viennent
+// de types/automatisation.ts : cet écran ne tient plus sa propre liste. L'ancienne liste locale en
+// comptait 4 là où la Server Action en exigeait 6, ce qui privait `visite_j_1` et
+// `visite_sans_compte_rendu` de champ de seuil — donc rendait leur activation impossible.
 
 // Une requête Postgres seule n'empêche pas la génération statique (voir app/page.tsx, app/biens/page.tsx) :
 // sans ce flag, next build tente de pré-générer cette page en interrogeant la DB au moment du build —
@@ -88,7 +78,7 @@ export default async function PageAutomatisations() {
       regle,
       config: configParCode.get(regle.code),
       derniereExecution: await getDerniereExecutionPourRegle(regle.code, workspaceId),
-      dernierRun: REGLES_TEMPORELLES.includes(regle.code)
+      dernierRun: estRegleTemporelle(regle.code)
         ? await getDernierRunScanPourRegle(regle.code, workspaceId)
         : undefined,
     }))
@@ -114,7 +104,11 @@ export default async function PageAutomatisations() {
           const active = config?.active ?? false;
           const etat = derniereExecution ? deriverEtatExecutionAutomatisation(derniereExecution) : undefined;
           const etatRun = dernierRun ? deriverEtatRunScanAutomatisation(dernierRun) : undefined;
-          const estTemporelle = REGLES_TEMPORELLES.includes(regle.code);
+          const estTemporelle = estRegleTemporelle(regle.code);
+          // Narrowing explicite : le libellé n'existe QUE pour une règle temporelle, et il
+          // existe alors forcément (Record complet). Plus aucun `?? "Après"` : un repli
+          // générique inventerait un sens métier faux pour une règle oubliée.
+          const libelleSeuil = estRegleTemporelle(regle.code) ? LIBELLE_SEUIL_REGLE_TEMPORELLE[regle.code] : undefined;
           return (
             <div key={regle.code} className="bg-surface border border-border rounded-lg shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4">
               <div className="flex items-start justify-between gap-3">
@@ -140,14 +134,14 @@ export default async function PageAutomatisations() {
                 </form>
               </div>
 
-              {estTemporelle && (
+              {libelleSeuil && (
                 <form
                   action={definirSeuilAutomatisationAction}
                   className="flex items-center gap-2 mt-3 pt-3 border-t border-border"
                 >
                   <input type="hidden" name="regleCode" value={regle.code} />
                   <label className="text-[12px] text-text-2">
-                    {LIBELLE_SEUIL[regle.code]?.prefixe ?? "Après"}
+                    {libelleSeuil.prefixe}
                     <input
                       type="number"
                       name="seuilJours"
@@ -156,7 +150,7 @@ export default async function PageAutomatisations() {
                       defaultValue={config?.seuilJours ?? ""}
                       className="w-16 mx-1.5 border border-border-md rounded px-2 py-1 text-[12px] text-text-1 focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
                     />
-                    {LIBELLE_SEUIL[regle.code]?.suffixe ?? "jours"}
+                    {libelleSeuil.suffixe}
                   </label>
                   <button type="submit" className="text-[12px] font-medium text-accent hover:text-accent-hover transition-colors">
                     Enregistrer

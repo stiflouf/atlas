@@ -90,6 +90,62 @@ describe("basculerAutomatisationAction — garde du seuil obligatoire (inactivit
   });
 });
 
+// PILOT_PRODUCTION_HARDENING_V1 — régression de l'asymétrie écran/action. Ces deux règles étaient
+// IMPOSSIBLES à configurer : l'écran ne leur rendait aucun champ de seuil (sa liste locale n'en
+// comptait que 4), donc `seuil_jours` restait NULL, donc cette action levait à chaque clic sur
+// « Désactivée ». Le parcours complet — poser un seuil, puis activer — est désormais vérifié de
+// bout en bout pour chacune, exactement comme pour `inactivite_prospect_vendeur` ci-dessus.
+//
+// La cohérence STRUCTURELLE (plus aucune liste locale à faire divergier) est verrouillée à part :
+// src/lib/automatisations/reglesTemporelles.coherence.test.ts.
+describe.each(["visite_j_1", "visite_sans_compte_rendu"] as const)(
+  "règles temporelles Visite — %s est réellement configurable",
+  (regle) => {
+    async function etatDeLaRegle() {
+      const [ligne] = await getDb()
+        .select()
+        .from(configurationsAutomatisationTable)
+        .where(eq(configurationsAutomatisationTable.regleCode, regle));
+      return { active: ligne?.active ?? false, seuilJours: ligne?.seuilJours ?? null };
+    }
+
+    afterAll(async () => {
+      // Remise à l'état seedé (inactive, sans seuil) : ce lot n'active aucune règle, nulle part.
+      await getDb()
+        .update(configurationsAutomatisationTable)
+        .set({ active: false, seuilJours: null })
+        .where(eq(configurationsAutomatisationTable.regleCode, regle));
+    });
+
+    it("sans seuil, l'activation reste refusée explicitement et n'écrit rien", async () => {
+      await getDb()
+        .update(configurationsAutomatisationTable)
+        .set({ active: false, seuilJours: null })
+        .where(eq(configurationsAutomatisationTable.regleCode, regle));
+
+      await expect(basculerAutomatisationAction(formData({ regleCode: regle, active: "1" }))).rejects.toThrow(
+        /seuil/
+      );
+      expect(await etatDeLaRegle()).toEqual({ active: false, seuilJours: null });
+    });
+
+    it("un seuil valide est accepté, puis l'activation passe sans lever", async () => {
+      await definirSeuilAutomatisationAction(formData({ regleCode: regle, seuilJours: "2" })).catch(() => {});
+      expect((await etatDeLaRegle()).seuilJours).toBe(2);
+
+      // `.catch()` absorbe uniquement le NEXT_REDIRECT levé par `redirect()` en fin d'action —
+      // c'est l'état en base qui prouve le succès, jamais l'absence d'exception seule.
+      await basculerAutomatisationAction(formData({ regleCode: regle, active: "1" })).catch(() => {});
+      expect(await etatDeLaRegle()).toEqual({ active: true, seuilJours: 2 });
+    });
+
+    it("la désactivation reste possible ensuite", async () => {
+      await basculerAutomatisationAction(formData({ regleCode: regle, active: "0" })).catch(() => {});
+      expect((await etatDeLaRegle()).active).toBe(false);
+    });
+  }
+);
+
 describe("definirSeuilAutomatisationAction — validation", () => {
   it("refuse explicitement (throw) un seuil non entier ou négatif, ne modifie rien", async () => {
     await getDb()

@@ -1258,6 +1258,44 @@ workspace dans toutes les lectures, trancher les appartenances laissées ouverte
   traitements, conditions contractuelles, évaluation des données transmises, mise à jour de la
   notice.
 
+## Observabilité de production (`PILOT_PRODUCTION_HARDENING_V1`)
+
+Angle mort documentaire comblé ici : ce sujet n'était jusqu'alors tracé que par une phrase de
+`docs/PILOT_RUNBOOK.md` (§9).
+
+- **Disponibilité : couverte.** `GET /api/health` (`src/app/api/health/route.ts`) vérifie
+  l'application, la base (un `select 1`, jamais une lecture métier) et le stockage documentaire
+  (`verifierDisponibiliteStockageDocuments({ecriture:true})`, donc `stat` + `access(W_OK)` et, en
+  production, **jamais** de création de la racine — ADR-050 §32). 200 si les deux dépendances
+  nécessaires au pilote répondent, 503 sinon, `Cache-Control: no-store`, et aucune panne n'en masque
+  une autre (les deux sondes sont toujours évaluées). Route **publique** par nécessité — une sonde
+  n'a ni session ni en-tête — donc tenue à ne divulguer que trois états : jamais un chemin de
+  volume, un nom d'hôte, un message système ni un compteur métier. Cinquième catégorie de
+  `src/proxy.ts` (`CHEMINS_SANTE`, égalité exacte : `/api/healthz` reste privé), classée
+  `ROUTES_SANTE` dans la garde structurelle des Route Handlers.
+- **Détection d'erreur applicative : TOUJOURS ABSENTE.** `ERROR_ALERTING_PROVIDER =
+  DECISION_REQUIRED`. Ni Sentry, ni agrégateur, ni webhook, ni alerte : la boucle reste entièrement
+  humaine — `error.tsx` affiche le `digest` Next (jamais `message`/`stack`/`cause`), que
+  l'utilisateur doit recopier pour qu'il soit retrouvé dans les logs de la plateforme (rétention
+  limitée). **Une erreur non signalée reste invisible**, et la sonde de disponibilité ne corrige pas
+  cela : une instance parfaitement UP peut échouer sur chaque action d'un conseiller. Ce n'est pas
+  un retard mais une décision en attente : toute solution réelle suppose une DESTINATION
+  (fournisseur SaaS, webhook, email), donc un choix de sous-traitance et de données transmises —
+  jamais une dépendance ajoutée au passage dans un lot technique. 39 fichiers de production
+  journalisent par `console.error` préfixé par domaine : base acceptable, non interrogeable.
+- **Supervision externe continue : à configurer, pas à construire.** `EXTERNAL_HEALTH_MONITOR =
+  READY_TO_CONFIG` pour le healthcheck natif de la plateforme (il n'a besoin que du chemin
+  `/api/health` : aucun fournisseur nouveau, aucune donnée transmise) — **non posé par ce lot**, une
+  écriture Railway étant un geste à part entière (PILOT_RUNBOOK §0). À noter honnêtement : un
+  healthcheck de plateforme ne garde qu'un DÉPLOIEMENT, il ne surveille pas en continu ; une
+  surveillance continue avec notification suppose un tiers, donc la même décision que
+  `ERROR_ALERTING_PROVIDER`.
+- **Sauvegarde : scriptée et restaurable, pas hors site.** `ops/backup/` (voir son README) —
+  deux sauvegardes consécutives horodatées et un test de restauration réussi ont été produits.
+  Destination : le poste de l'exploitant, point de défaillance unique ; aucune planification posée ;
+  `OFFSITE_BACKUP_DESTINATION = DECISION_REQUIRED` (aucun fournisseur de stockage objet approuvé
+  n'existe dans ce projet, et en choisir un est une décision de sous-traitance RGPD).
+
 ## Dette technique identifiée dans le code
 
 - **Filtrage par département dans `lib/patrimoine/merimeeClient.ts`** : dérivé du préfixe à 2

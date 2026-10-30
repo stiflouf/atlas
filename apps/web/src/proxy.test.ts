@@ -140,6 +140,35 @@ describe("proxy (ADR-047) — PRIVATE BY DEFAULT", () => {
     expect(reponse.status).toBe(401);
   });
 
+  // PILOT_PRODUCTION_HARDENING_V1 — la sonde doit atteindre son handler SANS session : une sonde
+  // externe, ou le healthcheck natif de la plateforme, n'envoie ni cookie ni en-tête. Un 401 ici
+  // rendrait la supervision impossible, et pire : un moniteur recevant systématiquement 401
+  // signalerait une panne permanente, donc serait débranché, donc ne signalerait plus rien.
+  it("/api/health atteint son handler sans session — ni 401, ni redirection", async () => {
+    getIronSessionMock.mockResolvedValue({});
+    const { proxy } = await import("./proxy");
+    const reponse = await proxy(requete("/api/health"));
+
+    expect(reponse.status).not.toBe(401);
+    expect(reponse.status).not.toBe(307);
+    expect(reponse.headers.get("location")).toBeNull();
+    // Jamais consultée : le Proxy sort avant toute lecture de session pour ce chemin.
+    expect(getIronSessionMock).not.toHaveBeenCalled();
+  });
+
+  // Le pendant du test ci-dessus : ouvrir /api/health n'ouvre QUE /api/health. Un préfixe laissé
+  // large aurait rendu publique toute route commençant par le même segment.
+  it.each(["/api/health/detail", "/api/healthz", "/api/health-check"])(
+    "%s reste privé : l'exception de santé est une égalité exacte, jamais un préfixe",
+    async (chemin) => {
+      getIronSessionMock.mockResolvedValue({});
+      const { proxy } = await import("./proxy");
+      const reponse = await proxy(requete(chemin));
+
+      expect(reponse.status).toBe(401);
+    }
+  );
+
   it("session absente à cause d'une configuration manquante (ATLAS_SESSION_PASSWORD) reste fail-closed", async () => {
     vi.unstubAllEnvs();
     vi.stubEnv("ATLAS_SESSION_PASSWORD", "");

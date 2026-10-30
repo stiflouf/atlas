@@ -28,6 +28,20 @@ const CHEMINS_TECHNIQUES = new Set([
   "/api/compatibilite/baseline",
 ]);
 
+// SONDE DE DISPONIBILITÉ (PILOT_PRODUCTION_HARDENING_V1). Cinquième catégorie, et non un ajout
+// dans l'une des précédentes : aucune ne la décrit honnêtement. `CHEMINS_PUBLICS` désigne les
+// points qui permettent d'OBTENIR une session — /api/health n'en établit aucune ;
+// `CHEMINS_TECHNIQUES` ceux dont la garde est un secret Bearer — /api/health n'en a pas, et ne peut
+// pas en avoir : une sonde externe ou le healthcheck natif de la plateforme n'envoient ni cookie ni
+// en-tête d'autorisation. La ranger dans une catégorie dont elle ne respecte pas le modèle de
+// sécurité aurait rendu ce fichier menteur sur la seule question qu'il traite.
+//
+// Ce qui rend ce choix acceptable n'est pas le Proxy, c'est le CONTENU de la réponse : trois états
+// UP/DOWN, aucun chemin, aucun nom d'hôte, aucun message système, aucune donnée métier (voir
+// app/api/health/route.ts, dont la discipline est verrouillée par un test structurel). Si cette
+// route devait un jour exposer un détail de diagnostic, elle devrait changer de catégorie d'abord.
+const CHEMINS_SANTE = new Set(["/api/health"]);
+
 // RETOUR D'AUTORISATION OAUTH MÉTIER (Calendar et Gmail partagent ce seul callback, via
 // GOOGLE_REDIRECT_URI). C'est GOOGLE qui redirige le NAVIGATEUR ici : le Proxy ne peut donc pas être
 // ce qui décide du sort de la requête, parce qu'il n'a aucun moyen de répondre quoi que ce soit
@@ -79,6 +93,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (
     CHEMINS_PUBLICS.has(pathname) ||
     CHEMINS_TECHNIQUES.has(pathname) ||
+    CHEMINS_SANTE.has(pathname) ||
     CHEMINS_RETOUR_OAUTH_METIER.has(pathname)
   ) {
     return NextResponse.next();

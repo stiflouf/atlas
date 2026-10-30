@@ -69,6 +69,12 @@ const ROUTES_AUTH = [
 // Ne touche aucune donnée du produit : relais vers une API publique.
 const ROUTES_PROXY = ["api/geocodage/communes/route.ts"];
 
+// PILOT_PRODUCTION_HARDENING_V1 — sonde de disponibilité : publique (une sonde n'a ni session ni
+// en-tête), donc tenue à une discipline de contenu stricte, vérifiée ci-dessous : trois états
+// UP/DOWN, aucune donnée métier, aucun lecteur de repository, et surtout jamais un message
+// d'erreur système (ils portent le chemin du volume ou l'hôte de la base).
+const ROUTES_SANTE = ["api/health/route.ts"];
+
 // Lecteurs qui portent eux-mêmes la preuve d'appartenance (filtre `workspace_id` direct ou
 // jointure vers une racine). Une route de données utilisateur est conforme si elle résout le
 // workspace ET n'appelle que des lecteurs de cette liste.
@@ -85,7 +91,13 @@ describe("Frontière workspace — classification des Route Handlers", () => {
   );
 
   it("chaque route d'API est classée exactement une fois (une route non classée échoue ici)", () => {
-    const classees = [...ROUTES_DONNEES_UTILISATEUR, ...ROUTES_MACHINE, ...ROUTES_AUTH, ...ROUTES_PROXY];
+    const classees = [
+      ...ROUTES_DONNEES_UTILISATEUR,
+      ...ROUTES_MACHINE,
+      ...ROUTES_AUTH,
+      ...ROUTES_PROXY,
+      ...ROUTES_SANTE,
+    ];
     expect([...routes].sort()).toEqual([...classees].sort());
     expect(new Set(classees).size).toBe(classees.length);
   });
@@ -104,6 +116,33 @@ describe("Frontière workspace — classification des Route Handlers", () => {
       for (const interdit of ["getDocumentBienById", "getBienById", "getClientById"]) {
         expect(source.includes(interdit), `${route} → ${interdit}`).toBe(false);
       }
+    }
+  });
+
+  it("la route de SANTÉ reste muette : aucun secret, aucune donnée métier, aucun détail système", () => {
+    for (const route of ROUTES_SANTE) {
+      const chemin = join(SRC, "app", ...route.split("/"));
+      const source = codeSeul(chemin);
+      // Ni session ni périmètre : une sonde n'en a pas, et prétendre le contraire la rendrait
+      // inutilisable (401 à chaque passage) tout en donnant une fausse impression de protection.
+      expect(source, route).not.toContain("exigerWorkspaceCourant");
+      expect(source, route).not.toContain("exigerSessionAtlas");
+      // Aucun secret partagé : ce n'est pas une route machine, et un Bearer la rendrait
+      // incompatible avec le healthcheck natif de la plateforme.
+      expect(source.toLowerCase(), route).not.toContain("authorization");
+      // Aucun lecteur métier : la santé de l'infrastructure ne se mesure jamais sur le
+      // portefeuille du conseiller.
+      for (const interdit of ["getBienById", "getClientById", "getDocumentBienById", "Repository"]) {
+        expect(source.includes(interdit), `${route} → ${interdit}`).toBe(false);
+      }
+      // LE point sensible : les messages d'erreur portent le chemin du volume
+      // (ErreurStockageDocumentsIndisponible) ou l'hôte de la base. Ils vont dans les logs du
+      // serveur, jamais dans le corps d'une réponse anonyme.
+      expect(source, route).not.toMatch(/erreur\s*(instanceof\s+\w+\s*\?\s*)?\.?message/);
+      expect(source, route).not.toContain("ATLAS_DOCUMENT_STORAGE_DIR");
+      expect(source, route).not.toContain("DATABASE_URL");
+      // Et la réponse ne doit jamais pouvoir être servie depuis un cache.
+      expect(source, route).toContain("no-store");
     }
   });
 
