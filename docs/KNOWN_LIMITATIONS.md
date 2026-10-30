@@ -1334,11 +1334,35 @@ Angle mort documentaire comblé ici : ce sujet n'était jusqu'alors tracé que p
   lieu d'un `setTimeout` arbitraire dans `clientRepository.test.ts`/`bienRepository.test.ts`,
   fixture de `page.test.tsx` (cockpit) rendue unique par exécution. Validé par 3 exécutions
   complètes consécutives 100 % vertes + stress ciblé (10 exécutions supplémentaires, 0 échec).
-- **Infrastructure E2E minimale ajoutée** (Playwright, `apps/web/e2e/`) : deux smoke tests
-  (tunnel cœur Atlas ; documents/Pack Notaire/transmission ADR-049), jamais exécutés par `pnpm
-  test`, jamais dans une CI (absente, voir ci-dessus). Session Atlas injectée via les vraies
-  primitives `iron-session`/`optionsSessionAtlas()`, jamais un contournement d'authentification.
-  Commandes : `pnpm test:e2e` / `pnpm test:e2e:ui`.
+- **Infrastructure E2E** (Playwright, `apps/web/e2e/`) : **trois** fichiers de smoke depuis
+  `PILOT_VISIT_SIGNATURE_E2E_V1` — tunnel cœur Atlas ; documents/Pack Notaire/transmission ADR-049 ;
+  **visite → bon de visite → signature manuscrite → PDF → hash → téléchargement** (3 scénarios :
+  souris, tactile tablette, refus). Jamais exécutés par `pnpm test`, jamais dans une CI (absente,
+  voir ci-dessus). Session Atlas injectée via les vraies primitives
+  `iron-session`/`optionsSessionAtlas()`, jamais un contournement d'authentification. Commandes :
+  `pnpm test:e2e` / `pnpm test:e2e:ui`.
+- **Ce que l'absence de CI a réellement coûté, constaté** (`PILOT_VISIT_SIGNATURE_E2E_V1`) : les deux
+  smoke historiques étaient **cassés depuis ADR-060** et personne ne le savait. `typeMandat` y est
+  devenu obligatoire à la création d'un bien ; le formulaire refusait donc proprement (message local
+  `role="alert"`, saisie conservée) et la navigation attendue n'avait jamais lieu. Le produit était
+  correct, les tests périmés — exactement le défaut qu'une CI aurait signalé le jour même. Réparés
+  dans ce lot. **L'absence de CI reste la dette la plus coûteuse de ce dépôt** : rien ne garantit que
+  ces trois fichiers ne seront pas à nouveau périmés sans que personne ne s'en aperçoive.
+- **Nettoyage E2E — deux chemins de suppression rencontrés en vrai** (`e2e/nettoyage.ts`) : créer un
+  bien crée désormais un **mandat canonique** (ADR-060, `mandats.bien_id` sans cascade), et signer un
+  bon émet `bon_visite_signe`, seul événement métier dont la seule cible est `bon_visite_id` (NO
+  ACTION). Pire, `bons_visite.document_id` est en SET NULL : supprimer le bien d'abord déclenche un
+  UPDATE qui vide le document d'un bon **signé**, refusé par
+  `bons_visite_coherence_statut_check`. C'est le `DELETE_PATH_MISSING` d'ADR-069 observé
+  concrètement. L'ordre de purge le respecte au lieu d'affaiblir les contraintes — et c'est un
+  avant-goût du travail réel qu'exigera une purge de rétention.
+- **Budget des tests E2E porté de 60 s à 180 s** (`playwright.config.ts`, mesuré) : sous
+  `next dev --turbopack`, chaque route est compilée au premier passage, et les trois specs
+  dépassaient 60 s à des endroits variables — jamais pour une raison produit. Durées observées une
+  fois le budget suffisant : 2,5 min / 2,3 min / 1,7 min / 45 s / 36 s. Le correctif de fond, non
+  fait, serait de servir un **build de production** aux E2E plutôt que `next dev` : plus aucune
+  compilation à la volée, suite nettement plus rapide et plus proche de la production. Décision
+  d'infrastructure à prendre séparément.
 - **Ordre du journal de scan : limite LEVÉE** (migration `0040`). Le tie-break posé par la
   stabilisation V1 Candidate était `ORDER BY demarre_le DESC, id DESC` : déterministe, mais fondé
   sur un uuid aléatoire — à `demarre_le` égal, c'était le plus grand uuid qui passait pour « le

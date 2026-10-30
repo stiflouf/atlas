@@ -48,6 +48,13 @@ test("tunnel cœur Atlas : session, Bien, Acquéreur, Compromis, déconnexion", 
   await page.locator('[name="pieces"]').fill("3");
   await page.locator('[name="prix"]').fill("333333");
   await page.locator('[name="dateMandat"]').fill("2026-01-01");
+  // PILOT_VISIT_SIGNATURE_E2E_V1 — RÉPARATION. Ce smoke échouait depuis ADR-060 (cycle de vie du
+  // mandat) : `typeMandat` est devenu obligatoire, l'action refusait donc proprement
+  // (« Le type de mandat est obligatoire… », message local role="alert", saisie conservée) et
+  // aucune navigation n'avait lieu — `waitForURL` expirait. Le produit se comportait correctement ;
+  // c'est le test qui était périmé, et rien ne l'avait signalé puisque les E2E ne sont joués ni par
+  // `pnpm test` ni par une CI (aucune, voir docs/KNOWN_LIMITATIONS.md).
+  await page.locator('select[name="typeMandat"]').selectOption("simple");
   await page.getByRole("button", { name: "Créer le bien" }).click();
   await page.waitForURL(/\/biens\/[0-9a-f-]{36}$/);
   bienId = page.url().split("/biens/")[1];
