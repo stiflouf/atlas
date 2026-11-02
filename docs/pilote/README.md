@@ -22,6 +22,7 @@ ni la plateforme d'hébergement, ni la production, ni la base de production ne s
 | [PROCEDURE_LEGAL_HOLD.md](PROCEDURE_LEGAL_HOLD.md) | procédure manuelle | testée sur base jetable (13 contrôles) |
 | [PROCEDURE_SAUVEGARDE_RESTAURATION.md](PROCEDURE_SAUVEGARDE_RESTAURATION.md) | procédure d'exploitation | scripts préexistants, inchangés |
 | [GUIDE_INCIDENT_PILOTE.md](GUIDE_INCIDENT_PILOTE.md) | guide du conseiller | une page |
+| [GATE_DONNEES_REELLES.md](GATE_DONNEES_REELLES.md) | gate opérationnel d'entrée des données réelles | `CLOSED` |
 
 ## Ce que ces documents ne remplacent pas
 
@@ -66,4 +67,15 @@ requises`. Les points bloquants pour l'entrée en pilote avec données réelles 
 
 ## Chantier suivant
 
-`PILOT_INSTANCE_PROVISIONING_V1`
+`PILOT_INSTANCE_PROVISIONING_V1` — **bloqué sur une décision d'architecture non prise.** Le dépôt ne
+documente aucun modèle d'instance dédiée par conseiller, et ADR-054 laisse explicitement ouverte la
+question « une instance par conseiller, ou un déploiement partagé ? » (questions ouvertes n°1 et
+n°2), qualifiée de décision d'exploitation. L'audit stratégique de septembre 2026 demandait qu'elle
+soit écrite noir sur blanc ; elle ne l'est pas.
+
+```
+PILOT_RAILWAY_PLACEMENT = DECISION_REQUIRED
+```
+
+Aucune ressource d'hébergement n'a donc été créée : le garde-fou de `docs/PILOT_RUNBOOK.md` §0
+impose un arrêt lorsque la cible n'est pas explicitement autorisée par la documentation.
