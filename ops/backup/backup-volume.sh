@@ -45,11 +45,33 @@ journal "Construction du manifeste (chemins et empreintes, jamais de contenu)…
 # Deuxième aller-retour, délibéré : le manifeste décrit l'ÉTAT DU VOLUME, pas l'archive. C'est
 # précisément ce qui permet, lors du test de restauration, de comparer un fichier restauré à
 # l'empreinte de son original côté production — et non à lui-même.
+#
+# DEUX ÉTAPES SÉPARÉES, et c'est la correction d'un défaut constaté lors du provisionnement de la
+# première instance pilote. `grep` rend 1 lorsqu'il ne trouve AUCUNE ligne, et un volume vide est
+# exactement ce cas — un état normal, pas une panne. Tant que la commande distante et le filtrage
+# partageaient un pipeline sous `pipefail`, ce 1 était indistinguable de l'échec de la commande
+# distante : un volume vide faisait donc échouer la sauvegarde AVANT d'atteindre l'avertissement
+# prévu quelques lignes plus bas, qui était par conséquent inatteignable.
+BRUT="$(mktemp "${TMPDIR:-/tmp}/domiora-manifeste.XXXXXXXX")"
+trap 'rm -f "$BRUT"' EXIT INT TERM HUP
+
+# Étape 1 — la commande distante. Son échec reste une erreur franche : rien ici n'est toléré.
 "$RAILWAY_BIN" ssh --service "$SERVICE_WEB" --environment "$ENVIRONNEMENT" -- sh -c \
   "cd \"$RACINE_DISTANTE\" && find . -type f ! -path './lost+found/*' -print0 | sort -z | xargs -0 -r sha256sum" \
-  2>/dev/null | grep -E '^[0-9a-f]{64}  \./' >"$MANIFESTE" || {
+  >"$BRUT" 2>/dev/null \
+  || echec "Construction du manifeste a échoué (commande distante)."
+
+# Étape 2 — le filtrage, dont les trois issues sont distinguées plutôt que confondues :
+#   0   des lignes correspondent      — volume peuplé
+#   1   aucune ligne ne correspond    — volume vide, cas NORMAL
+#   >=2 erreur réelle de grep         — seul échec
+# Un `|| true` aurait réglé le volume vide en masquant aussi le troisième cas : ce n'est pas la
+# même chose que de le traiter.
+CODE_FILTRE=0
+grep -E '^[0-9a-f]{64}  \./' "$BRUT" >"$MANIFESTE" || CODE_FILTRE=$?
+[ "$CODE_FILTRE" -le 1 ] || {
   rm -f "$MANIFESTE"
-  echec "Construction du manifeste a échoué."
+  echec "Filtrage du manifeste a échoué (grep a rendu $CODE_FILTRE)."
 }
 
 chmod 600 "$MANIFESTE"

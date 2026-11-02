@@ -23,6 +23,31 @@ ops/backup/restore-test.sh
 
 Aucun argument. Aucune interaction. Code de sortie non nul = échec réel, jamais un avertissement.
 
+## Tests
+
+```bash
+node --test ops/backup/backup-volume.test.mjs
+```
+
+Runner natif Node, aucune dépendance ajoutée — même choix que `ops/railway/functions/wrappers.test.mjs`.
+`backup-volume.sh` y est lancé comme un vrai sous-processus, avec un stub `railway` en tête de `PATH`
+qui exécute la commande distante localement contre un faux volume : le transfert base64 et la
+vérification d'empreinte sont donc exercés pour de bon, sans toucher à aucune instance.
+
+Quatre cas, dont trois volumes : plusieurs fichiers avec sous-répertoire, exactement un fichier,
+**volume réellement vide**, et une commande distante en échec. Le test vérifie aussi que le script
+ne dépose, ne retire ni ne modifie rien dans le volume source — un fichier ajouté pour « faire
+passer » la sauvegarde serait une sauvegarde qui ne prouve rien.
+
+### Volume vide : un état normal, pas une panne
+
+Corrigé après le provisionnement de la première instance pilote, dont le volume était vide. Le
+script prévoyait ce cas (« AVERTISSEMENT : volume vide ») mais ne l'atteignait jamais : `grep` rend
+1 quand il ne trouve aucune ligne, et tant que la commande distante et le filtrage partageaient un
+pipeline sous `pipefail`, ce 1 était indistinguable d'une vraie panne. Les deux étapes sont
+désormais séparées, et les trois issues de `grep` distinguées — 0 des lignes, 1 aucune ligne, 2 ou
+plus une erreur réelle, seule à faire échouer le script.
+
 ## Ce qui est garanti par construction
 
 - **La cible est prouvée avant toute commande distante.** `railway status --json` est interrogé et
