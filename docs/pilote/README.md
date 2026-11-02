@@ -67,15 +67,15 @@ requises`. Les points bloquants pour l'entrée en pilote avec données réelles 
 
 ## Chantier suivant
 
-`PILOT_INSTANCE_PROVISIONING_V1` — **bloqué sur une décision d'architecture non prise.** Le dépôt ne
-documente aucun modèle d'instance dédiée par conseiller, et ADR-054 laisse explicitement ouverte la
-question « une instance par conseiller, ou un déploiement partagé ? » (questions ouvertes n°1 et
-n°2), qualifiée de décision d'exploitation. L'audit stratégique de septembre 2026 demandait qu'elle
-soit écrite noir sur blanc ; elle ne l'est pas.
+`PILOT_INSTANCE_PROVISIONING_V1` — le modèle d'exploitation est désormais tranché par
+[ADR-070](../adr/070-modele-instance-pilote-dediee.md) : **un projet d'hébergement entièrement dédié
+par conseiller**, sans aucune ressource métier ni de stockage partagée avec la production personnelle
+ni avec le showroom.
 
 ```
-PILOT_RAILWAY_PLACEMENT = DECISION_REQUIRED
+PILOT_RAILWAY_PLACEMENT = DEDICATED_PROJECT
 ```
 
-Aucune ressource d'hébergement n'a donc été créée : le garde-fou de `docs/PILOT_RUNBOOK.md` §0
-impose un arrêt lorsque la cible n'est pas explicitement autorisée par la documentation.
+ADR-070 tranche la question ouverte n°2 d'ADR-054 pour le pilote et le modèle d'exploitation initial
+seulement ; elle ne décide rien de l'architecture multi-tenant future. Elle ne crée aucune ressource :
+le provisioning reprend après elle.
